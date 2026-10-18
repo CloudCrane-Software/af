@@ -1,0 +1,32 @@
+Execution Info:
+  WorkflowId            kill-a4
+  RunId                 01a15149-0694-739b-bd61-4a0cd5e26778
+  Type                  KillTestWorkflow
+  Namespace             default
+  TaskQueue             verify-kill-queue
+  AssignedBuildId        
+  StartTime             8 seconds ago
+  ExecutionTime         8 seconds ago
+  SearchAttributes      map[BuildIds:metadata:{key:"encoding"  value:"json/plain"}  metadata:{key:"type"  value:"KeywordList"}  data:"[\"unversioned\",\"unversioned:d13ad76f3e53c2a045c33d4f218a52be\"]"]
+  StateTransitionCount  6
+  HistoryLength         11
+  HistorySize           1644
+  RootWorkflowId        kill-a4
+  RootRunId             01a15149-0694-739b-bd61-4a0cd5e26778
+Extended Execution Info:
+  CancelRequested    false
+  OriginalStartTime  8 seconds ago
+
+Pending Activities: 1
+
+  ActivityId          2
+  Type                trace_activity
+  State               Started
+  Attempt             1
+  MaximumAttempts     10
+  ScheduledTime       6 seconds ago
+  LastStartedTime     6 seconds ago
+  LastWorkerIdentity  3862587@PanDeveopComp
+
+Pending Child Workflows: 0
+Pending Nexus Operations: 0

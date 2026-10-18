@@ -1,0 +1,36 @@
+[07:16:02.553] WF[v1] run wid=patch-run-old replaying=False
+[07:16:07.749] OPS kill -9 v1 worker pid=3869707
+[07:16:07.799] OPS v2 worker joined (run-old timer fires t+20)
+[07:16:22.588] WF[v2] run wid=patch-run-old replaying=True
+[07:16:22.591] WF[v2] patched('add-fastpath') -> True wid=patch-run-old replaying=False
+[07:16:22.606] ACT started path=v2-fastpath attempt=1 worker=pv2 pid=3871403 workflow_id=patch-run-old
+[07:16:23.609] ACT completed path=v2-fastpath attempt=1 worker=pv2 pid=3871403
+[07:16:23.645] WF[v2] branch-taken=v2-fastpath wid=patch-run-old
+[07:17:53.044] WF[v1] run wid=patch-run-old2 replaying=False
+[07:18:11.072] ACT started path=v1-path attempt=1 worker=pv1b pid=3875129 workflow_id=patch-run-old2
+[07:18:12.762] OPS kill -9 v1 worker pid=3875129 MID-BRANCH-ACTIVITY
+[07:18:12.778] OPS v2 worker joined
+[07:18:16.100] ACT started path=v1-path attempt=2 worker=pv2b pid=3875991 workflow_id=patch-run-old2
+[07:18:20.112] ACT completed path=v1-path attempt=2 worker=pv2b pid=3875991
+[07:18:30.138] WF[v2] run wid=patch-run-old2 replaying=True
+[07:18:30.141] WF[v2] patched('add-fastpath') -> False wid=patch-run-old2 replaying=True
+[07:18:30.145] WF[v2] branch-taken=v1-path(old-run) wid=patch-run-old2
+[07:19:32.927] WF[v2] run wid=patch-run-new replaying=False
+[07:19:34.957] WF[v2] patched('add-fastpath') -> True wid=patch-run-new replaying=False
+[07:19:34.975] ACT started path=v2-fastpath attempt=1 worker=pv2b pid=3875991 workflow_id=patch-run-new
+[07:19:35.977] ACT completed path=v2-fastpath attempt=1 worker=pv2b pid=3875991
+[07:19:36.005] WF[v2] branch-taken=v2-fastpath wid=patch-run-new
+[07:19:51.607] WF[v3] run wid=patch-run-v3 replaying=False
+[07:19:53.631] WF[v3] deprecate_patch('add-fastpath') called wid=patch-run-v3 replaying=False
+[07:19:53.647] ACT started path=v2-fastpath attempt=1 worker=pv3 pid=3879247 workflow_id=patch-run-v3
+[07:19:54.648] ACT completed path=v2-fastpath attempt=1 worker=pv3 pid=3879247
+[07:19:54.681] WF[v3] branch-taken=v2-fastpath(unconditional) wid=patch-run-v3
+[07:20:17.117] WF[v1] run wid=patch-run-mix replaying=False
+[07:20:29.143] ACT started path=v1-path attempt=1 worker=pv1c pid=3880215 workflow_id=patch-run-mix
+[07:20:30.859] OPS kill -9 v1 worker pid=3880215 MID-BRANCH-ACTIVITY; v3 worker will take over (VIOLATES deprecate precondition)
+[07:20:30.866] OPS v3 worker joined
+[07:20:34.155] ACT started path=v1-path attempt=2 worker=pv3b pid=3880868 workflow_id=patch-run-mix
+[07:20:38.163] ACT completed path=v1-path attempt=2 worker=pv3b pid=3880868
+[07:20:48.221] WF[v3] run wid=patch-run-mix replaying=True
+[07:20:48.231] WF[v3] deprecate_patch('add-fastpath') called wid=patch-run-mix replaying=True
+[07:20:48.233] WF[v3] branch-taken=v2-fastpath(unconditional) wid=patch-run-mix

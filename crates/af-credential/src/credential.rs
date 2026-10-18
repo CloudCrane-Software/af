@@ -1,10 +1,22 @@
 //! biscuit 凭证：签发、衰减、反序列化验签、事实提取、单凭证判定。
 
 use std::collections::HashSet;
+use std::time::Duration;
 
 use anyhow::Result;
 use biscuit_auth::builder as dlog;
-use biscuit_auth::{Authorizer, Biscuit, BlockBuilder, KeyPair, PublicKey};
+use biscuit_auth::{Authorizer, AuthorizerLimits, Biscuit, BlockBuilder, KeyPair, PublicKey};
+
+/// Datalog 执行限额：事实数/迭代数维持 biscuit 默认，墙钟上限从默认 1ms 放宽到 50ms。
+/// 默认 1ms 在满载并行（cargo test -j 6）下会被 CPU 争用挤爆，把正常判定炸成
+/// "Reached Datalog execution limits" 硬错误——授权判定不能押在库默认值上。
+fn verify_limits() -> AuthorizerLimits {
+    AuthorizerLimits {
+        max_facts: 1000,
+        max_iterations: 100,
+        max_time: Duration::from_millis(50),
+    }
+}
 
 /// 事实词表。biscuit 6 没有词表绑定机制（无 schema），谓词名是自由字符串，
 /// 词表只能在这里用常量钉死，靠 code review 保证签发/验证两端一致。
@@ -102,16 +114,18 @@ pub struct TokenCaps {
 /// 反序列化后的 token 上跑 authorizer query，结构化提取凭证事实。
 pub fn inspect(token: &Biscuit) -> Result<TokenCaps> {
     let mut auth: Authorizer = token.authorizer()?;
-    let pairs: Vec<(String, String)> = auth
-        .query(
-            format!("cap($ns, $t) <- {F_NAMESPACE}($ns), {F_TOOL}($t)").as_str(),
-        )?;
+    let pairs: Vec<(String, String)> = auth.query_with_limits(
+        format!("cap($ns, $t) <- {F_NAMESPACE}($ns), {F_TOOL}($t)").as_str(),
+        verify_limits(),
+    )?;
     let mut tools = HashSet::new();
     for (_, t) in pairs {
         tools.insert(t);
     }
-    let nb: Vec<(String, i64)> = auth
-        .query(format!("nb($ns, $v) <- {F_NAMESPACE}($ns), {F_BUDGET_CENTS}($v)").as_str())?;
+    let nb: Vec<(String, i64)> = auth.query_with_limits(
+        format!("nb($ns, $v) <- {F_NAMESPACE}($ns), {F_BUDGET_CENTS}($v)").as_str(),
+        verify_limits(),
+    )?;
     let (namespace, budget_cents) =
         nb.into_iter().next().map(|(a, v)| (Some(a), Some(v))).unwrap_or((None, None));
 
@@ -138,7 +152,8 @@ pub fn authorize(token: &Biscuit, tool: &str, namespace: &str, spend_cents: i64)
         .fact(dlog::fact(F_REQUEST_TOOL, &[dlog::string(tool)]))?
         .fact(dlog::fact(F_REQUEST_NS, &[dlog::string(namespace)]))?
         .fact(dlog::fact(F_SPEND_CENTS, &[dlog::int(spend_cents)]))?
-        .policy(allow_policy.as_str())?;
+        .policy(allow_policy.as_str())?
+        .set_limits(verify_limits());
     match ab.build(token)?.authorize() {
         Ok(_) => Ok(true),
         // 「拒绝」是正常判定结果：无 allow 命中，或某条 check 失败。

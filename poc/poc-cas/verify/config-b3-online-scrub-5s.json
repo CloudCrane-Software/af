@@ -1,0 +1,20 @@
+{
+ "distSpecVersion": "1.1.1",
+ "storage": {
+  "rootDirectory": "/home/pan-ding/workspace/\u4e34\u65f6\u5de5\u4f5c\u533a/temp2/af/poc/poc-cas/verify/data-b3",
+  "gc": false
+ },
+ "http": {
+  "address": "127.0.0.1",
+  "port": "5155"
+ },
+ "extensions": {
+  "scrub": {
+   "enable": true,
+   "interval": "5s"
+  }
+ },
+ "log": {
+  "level": "debug"
+ }
+}

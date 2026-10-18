@@ -1,0 +1,21 @@
+{
+  "distSpecVersion": "1.1.1",
+  "storage": {
+    "rootDirectory": "/home/pan-ding/workspace/临时工作区/temp2/af/poc/poc-cas/verify/data-a-mgmt",
+    "gc": true,
+    "gcDelay": "1s",
+    "gcInterval": "2s"
+  },
+  "http": {
+    "address": "127.0.0.1",
+    "port": "5152"
+  },
+  "extensions": {
+    "mgmt": {
+      "enable": true
+    }
+  },
+  "log": {
+    "level": "debug"
+  }
+}

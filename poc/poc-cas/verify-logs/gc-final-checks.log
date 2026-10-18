@@ -1,0 +1,11 @@
+=== 1. pull back all long-lived tags (digest-verified download)
+PULL c0 OK
+PULL c20 OK
+PULL c40 OK
+PULL c60 OK
+PULL c80 OK
+PULL c100 OK
+=== 2. expected blob set (union over surviving tags) vs on-disk set
+expected(unique reachable from 6 tags): 18
+on-disk:                                18
+BLOB SET EXACT MATCH

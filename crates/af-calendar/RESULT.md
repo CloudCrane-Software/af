@@ -63,8 +63,59 @@ test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured
 
 ## ⑤ 遗留问题
 
-- **跨午夜班次(夜班 22:00-06:00)不支持**:`Shift` 强制 start<end,夜班需拆两天两窗口;最终方案若要夜班,建议 Shift 增加跨日标志并在推进算法按小时切片。
-- **DST 时区未实测**:Asia/Shanghai 无夏令时,`local_dt` 的歧义取早/间隙跳过逻辑未经真实 DST 日历验证(chrono-tz 自带数据,理论上正确);接海外工厂前补一条 New York 日历测试。
+- ~~**跨午夜班次(夜班 22:00-06:00)不支持**:`Shift` 强制 start<end,夜班需拆两天两窗口;最终方案若要夜班,建议 Shift 增加跨日标志并在推进算法按小时切片。~~ **已补测(2026-10-19,见⑥)**:按"两天两窗口"建模实测了夜班跨午夜的正逆向派生、假日/调休交互,接缝损耗 1 tick/晚已量化记录;"Shift 加跨日标志"的建议保留。
+- ~~**DST 时区未实测**:Asia/Shanghai 无夏令时,`local_dt` 的歧义取早/间隙跳过逻辑未经真实 DST 日历验证(chrono-tz 自带数据,理论上正确);接海外工厂前补一条 New York 日历测试。~~ **已补测(2026-10-19,见⑥)**:Europe/Berlin 春跳/秋拨逐点实测 + America/New_York 多年扫描,语义裁决=流逝时间推进、歧义取较早偏移,与原设计一致。
 - **半日假/按小时的窗口级假日**:假日表粒度是"整日";半天假需用 day_overrides 写全窗口,可表达但啰嗦。
 - **与 af-workorder 的衔接**:其 RESULT 已指出 deadline 现为字符串比较;衔接时由 af-workorder 持有 `Calendar` 实例(注入),`Sla.deadline` 改存本 crate 输出的 `DateTime<Utc>`。
 - **性能未压测**:O(视界天数×窗口数) 对 10 年视界也只需万次循环,单次计算微秒级;若未来要做大批量订单排程,可预展开工作窗口索引。
+
+## ⑥ 2026-10-19 补测:DST/夜班(⑤节前两项遗留)
+
+新增 `tests/dst_night_shift.rs`(11 个常规测试 + 1 个 `#[ignore]` 密集扫描),未改任何 src 语义。
+
+### 结论
+
+**夜班跨午夜**:`Shift` 仍不支持跨午夜窗口(start<end 构造期即拒绝),按文档建议用"两天两窗口"建模:当天 `[22:00, 24:00)`(用 23:59:59.999999999 逼近 24:00)+ 次日 `[00:00, 06:00)`。实测:周五 22:00 + 4 工时 → 周六 02:00:00.000000001;周六 23:30 + 1 工时跨到周日 00:30:00.000000001;连续两晚(4h/12h)正反互逆成立,截单点恰回到原始起点周五 22:00;假日(该日全部窗口取消)与调休(非空覆盖=上班)对正向推进和逆向截单一致生效,与④-5 的二元假日表语义自洽。上海(无 DST)同模型同结果,证明行为与 DST 无关。
+
+**DST 语义裁决(全部实测,非推理)**:窗口按本地钟面定义,工时按**流逝时间**(elapsed/绝对时间)推进——chrono 的 `DateTime + TimeDelta` 是 UTC 流逝算术,crate 的 `avail = we − entry`、`done = entry + remaining` 全部继承:
+- **春跳**(Berlin 2026-03-29 02:00→03:00):跳失的小时**不计工时**。凌晨窗 `[00:00,06:00)` 钟面 6h、流逝容量只有 5h;整晚名义 8h 实际 7h−1ns。跨缺失段的加法不落在不存在的 02:xx 钟面,直接落到 **03:00**(01:00+1 工时 → 03:00:钟面 +2h、流逝恰好 1h)。
+- **秋拨**(Berlin 2026-10-25 03:00→02:00):重复的一小时是真实时间,容量**计入一次**。凌晨窗钟面 6h、流逝 7h;周六 22:00 + 8 工时 → 周日 05:00:00.000000001 CET(钟面只走 7h+1ns,流逝 8h+1ns)。
+- **歧义时刻消歧**:班次边界落在歧义钟面时取**较早偏移**(`local_dt` 的 `.earliest()`,与原设计一致)——实测窗口末 02:30 按第一次出现(CEST)计,窗口容量 2.5h 而非 3.5h,2h40m 即溢出;`is_working_instant` 是纯钟面判定**不消歧**,歧义时刻两次出现同答"班次内";工时算术从任一出现出发按流逝推进(第一次 02:30 + 1 工时 → 第二次的 02:30)。
+
+**多年扫描稳定性**:2024-01-01T00:00Z 起按步进扫 3 年(至 2027-01-01),Europe/Berlin 与 America/New_York 各覆盖 3 次春跳 + 3 次秋拨;每个点做"逆向派生 8 工时 → 正向回算 8 工时"。6h UTC 网格 4384 点/时区 × (夜班日历 + 24×7 日历);`#[ignore]` 密集 1h 网格 26304 点/时区 × 2 日历 × 2 时区 = 105,216 点已实跑(1.35s)。结果:**回算从未超过交付点(back ≤ p 恒成立);不互逆点只落在下述已记录的两类(班次外交付点=已知坑④-3、开工点=新边界坑),24×7 日历 6h 网格全部严格互逆(含全部 DST 边界日与转换时刻),无任何新不一致**。
+
+### 证据
+
+`cargo test -j 6 -p af-calendar`:
+
+```text
+running 12 tests   (tests/dst_night_shift.rs)
+test fall_back_ambiguous_instant_resolution ... ok
+test due_at_window_start_is_not_completion_reachable ... ok
+test fall_back_repeated_hour_counts_once_as_elapsed_time ... ok
+test night_shift_friday_22h_plus_4h_lands_saturday_02h ... ok
+test night_shift_semantics_identical_without_dst ... ok
+test night_shift_saturday_2330_plus_1h_crosses_to_sunday ... ok
+test night_shift_with_holiday_and_makeup_override ... ok
+test spring_forward_addition_into_missing_hour_lands_after_gap ... ok
+test spring_forward_gap_hour_not_counted_as_working_time ... ok
+test three_year_scan_6h_grid_berlin_and_new_york ... ok
+test two_consecutive_nights_forward_reverse_roundtrip ... ok
+test dense_hourly_scan_3y_berlin_and_new_york ... ignored(慢速全表扫描)
+test result: ok. 11 passed; 0 failed; 1 ignored
+   (tests/sla.rs 原 18 个亦全绿,未受影响)
+```
+
+`cargo test -p af-calendar --test dst_night_shift -- --ignored`(密集扫描实跑):
+
+```text
+test dense_hourly_scan_3y_berlin_and_new_york ... ok
+test result: ok. 1 passed; 0 failed; finished in 1.35s
+```
+
+### 新发现坑(只记录,修不修由人拍板)
+
+1. **两窗口夜班在午夜接缝丢 1 tick**:半开区间 `[22:00, 23:59:59.999999999)` ∪ `[00:00, 06:00)` 之间恰好空出一个纳秒,每跨一夜完工点晚 1ns(已精确断言);连续 n 晚累计 n ns。若用秒粒度 end=23:59:59 则每晚丢 1s。根因:`Shift` 无跨日标志、chrono 的 `NaiveTime` 无 24:00(`NaiveTime::MAX` 还是私有项,公开 API 只能 `from_hms_nano_opt` 构造)。建议最终方案给 `Shift` 加跨日标志或允许 end=24:00,推进算法按小时切片。
+2. **开工点不可作为完工时刻(互逆的新边界例外)**:交付承诺恰在开工点时 `is_working_instant = true`(窗口左闭),但"恰在该时刻完工"不可达——逆向派生把该班次整窗跳过(`ws >= bound` 即 continue),回算点 < due;≤ 交付与最晚性(+1ns 即不可行)均保持,已定点测试记录。lib.rs/advance.rs 中"due 在班次内恒互逆"的措辞在开工点不成立,建议改为"due 在工时可达时刻(即严格晚于某开工点)时恒互逆"。该坑与 DST 无关,上海日历同样触发。
+3. **`is_working_instant` 对 DST 歧义时刻不消歧**:两次出现同答(钟面判定)。需要区分"第一次/第二次"的消费者(如时间窗放置)须在日历外用 `.earliest()`/`.latest()` 自行规约,建议 API 文档明示。
+4. 扫描结论:除坑 2 与已知坑④-3 两类外,3 年 × 2 时区 × 2 日历、最密 1h 网格上无其他不互逆点,亦无"回算超期"。

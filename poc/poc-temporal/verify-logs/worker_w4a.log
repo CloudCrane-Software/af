@@ -1,0 +1,1 @@
+worker up role=w4a pid=3862587 queue=verify-kill-queue

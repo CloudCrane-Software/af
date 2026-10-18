@@ -1,0 +1,8 @@
+=== GC long run start 2026-10-19T07:01:22+08:00 ===
+CYCLE 0 KEEP long-lived tag c0 (blobs_on_disk=3)
+CYCLE 20 KEEP long-lived tag c20 (blobs_on_disk=6)
+CYCLE 40 KEEP long-lived tag c40 (blobs_on_disk=9)
+CYCLE 60 KEEP long-lived tag c60 (blobs_on_disk=12)
+CYCLE 80 KEEP long-lived tag c80 (blobs_on_disk=15)
+CYCLE 100 KEEP long-lived tag c100 (blobs_on_disk=18)
+=== LOOP DONE 2026-10-19T07:29:43+08:00: leftover blob files in repo=18 ===

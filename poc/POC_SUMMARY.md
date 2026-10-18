@@ -104,4 +104,24 @@
 
 1. **一次 workspace 全量 `cargo build -j4` + `cargo test -j4`**：了结 af-graph E0106 的交叉矛盾（2.5-2），并顺势统一 `[workspace.dependencies]`（2.5-3）。
 2. **安装 clippy 补静态检查**：minimal profile 未装，af-graph/af-sampling 明确留了欠账。
-3. **各 PoC 的"未测"清单勿带入正式方案当已验证**：DBOS 未实测、`cuengine`/Go CUE 库未测、Temporal worker 被杀重投递未测、`workflow.patched()` 未测、zot 周期 GC 长跑未测、DST 日历未实测——均已在各 RESULT.md ⑤ 节如实登记。
+3. **各 PoC 的"未测"清单已全部补验清零（2026-10-19 验证轮，见 §四）**：DBOS、cuengine FFI、Temporal worker 重投递、workflow.patched()、zot 周期 GC 长跑/scrub/http.compat、cosign --trusted-root、DST/夜班日历——报告见各 `VERIFY*.md`、`poc-dbos/RESULT.md`、`crates/af-calendar/RESULT.md` ⑥节。
+
+---
+
+## 四、诚实清单验证轮（2026-10-19 补验，9/9 清零）
+
+主代理派 5 个并行子代理 + 全量复验。时间依赖项全部用加速法：GC 周期压到秒级跑 101 周期、日历扫描注入 3 年×2 时区 10.5 万采样点、patched 用秒级 sleep 窗口内换代码、cosign 离线用 `unshare -n` 网络隔离。
+
+| # | 项 | 结论 | 报告 |
+|---|---|---|---|
+| 1 | DBOS 对照实测 | ✅ 裁决维持（修正：DBOS 纪律前移到部署期=源码哈希版本+晾 PENDING+显式报错；无 update 返回值/CAN 续接/事件审计对等物；包名已改 `dbos` 3.3.0） | `poc-dbos/RESULT.md` |
+| 2 | Temporal worker kill -9 重投递 | ✅ 心跳路径 2.4-5.8s attempt+1；双 worker 2.38s 接管；step 间被杀不重跑；坑：粘性队列 failover 吃满 10s、SLC 必须≫耗时 | `poc-temporal/VERIFY.md` |
+| 3 | workflow.patched()/deprecate | ✅ 语义修正：按**决策点**判定非 run 新旧——未定点旧 run 被补丁进新逻辑（marker 入其历史）、已定点安全续跑；Worker Versioning v2 通过；**新坑：deprecate 过早=静默错位**（重放按槽位不比对 args） | `poc-temporal/VERIFY.md` |
+| 4 | zot 在线周期 GC 长跑 | ✅ 101 周期 95/95 回收、0 误删、账目守恒；GC=变更触发非墙钟（时延 1-31s）；在线 retention REST API 二进制级确认不存在 | `poc-cas/VERIFY.md` |
+| 5 | zot scrub | ✅ 三类损坏全检出（含 digest 自洽互换——真解析 config）；**退出码恒 0 必须解析输出**；在线 scrub 2h 下限 | `poc-cas/VERIFY.md` |
+| 6 | zot http.compat | ✅ `["docker2s2"]` 主端口开关、docker PUT 201、**不转格式**（media type 不归一）；"必须先转 OCI"结论撤销 | `poc-cas/VERIFY.md` |
+| 7 | cosign --trusted-root | ✅ 真断网（unshare -n）Verified OK 且保 tlog 审计（换 tlog 条目仍拒）；TUF 缓存路线=死路；CI 序列定案 | `poc-cas/VERIFY-TRUSTED-ROOT.md` |
+| 8 | DST/夜班日历 | ✅ +12 测；语义钉死：DST=流逝时间、歧义取较早偏移、夜班双窗口成立；两处新边界记录（午夜接缝 1 tick、完工点=开工点互逆不成立） | `crates/af-calendar/RESULT.md` ⑥ |
+| 9 | cuengine FFI | ✅ 可行：真包装 cuelang.org/go（源码实证）、p50 0.55ms≈CLI 1/33、断网可用；代价 Go≥1.25+CGO+45MB；主路线仍预编译 JSON | `poc-cue/VERIFY-FFI.md` |
+
+**附带产出**：修复 af-credential 负载敏感 flake（biscuit 默认 RunLimits max_time=1ms 满载偶发超限→显式 50ms，"授权判定必须显式配限额"入设计输入，见其 RESULT.md ④-6）；workspace 全量 `-j 6` 两轮全绿（174+1 ignored）、零警告（proc-macro-error2 已登记除外）。

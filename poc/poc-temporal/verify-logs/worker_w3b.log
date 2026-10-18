@@ -1,0 +1,1 @@
+worker up role=w3b pid=3858954 queue=verify-kill-queue

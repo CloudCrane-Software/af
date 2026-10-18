@@ -53,8 +53,9 @@ af/                          ← 本目录（仓库根）
 
 | venv | 状态 | 内容 |
 |---|---|---|
-| `poc/poc-dspy/.venv` | ✅ 建成 | dspy 3.4.1 装入成功（Python 3.14.4 上 `import dspy` 通过；pip 走清华镜像，cp314 wheel 齐全，未遇到兼容性失败） |
+| `poc/poc-dspy/.venv` | ✅ 建成 | dspy 3.4.1 装入成功（Python 3.14.4 上 `import dspy` 通过；pip 走清华镜像，cp314 wheel 齐全，未遇到兼容失败） |
 | `poc/poc-temporal/.venv` | ✅ 建成 | temporalio 1.34.0 装入成功，`import temporalio` 通过 |
+| `poc/poc-dbos/.venv` | ✅ 建成 | dbos 3.3.0（原 dbos-transact 包名已消失）；配套 Postgres 18 走 apt（数据目录 /tmp/dbos-pgdata，起服 5544，见 poc-dbos/RESULT.md ②） |
 
 激活方式：`source poc/poc-dspy/.venv/bin/activate`（temporal 同理）。
 

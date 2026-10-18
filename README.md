@@ -29,12 +29,13 @@ af/
 │   ├── af-trace/         # 分级背压 + 缺口计数（14 测试，10 万事件洪峰验证）
 │   ├── af-stop/          # 失败指纹止损（12 测试）
 │   └── af-station/       # 人工任务账本（8 测试，含并发竞争）
-├── poc/                  # 四项外部 PoC（各带 RESULT.md）
-│   ├── poc-cas/          # zot+crane+cosign 实测（含 GC 实测与离线验签）
-│   ├── poc-temporal/     # Temporal 语义验证（含 kill -9 恢复与 Rust SDK smoke）
-│   ├── poc-cue/          # CUE 产线定义与配方可行性
+├── poc/                  # 五项外部 PoC（各带 RESULT.md；VERIFY*.md = 诚实清单补验报告）
+│   ├── poc-cas/          # zot+crane+cosign 实测（含 GC 实测与离线验签；VERIFY.md=周期GC长跑/scrub/http.compat，VERIFY-TRUSTED-ROOT.md=离线tlog审计）
+│   ├── poc-temporal/     # Temporal 语义验证（含 kill -9 恢复与 Rust SDK smoke；VERIFY.md=worker重投递/patched/Worker Versioning）
+│   ├── poc-cue/          # CUE 产线定义与配方可行性（VERIFY-FFI.md=cuengine 运行时求值）
 │   ├── poc-dspy/         # DSPy IR 结构验证（36 断言）
-│   └── POC_SUMMARY.md    # 15 项汇总
+│   ├── poc-dbos/         # DBOS 对照实测（裁决维持 Temporal）
+│   └── POC_SUMMARY.md    # 15 项汇总 + §四补验轮（9/9 清零）
 └── bin/                  # 第三方二进制（.gitignore，见 BOOTSTRAP.md）
 ```
 

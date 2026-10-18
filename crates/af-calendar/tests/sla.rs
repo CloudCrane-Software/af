@@ -4,7 +4,7 @@
 //! (2026 国庆周 10-01..10-07 停工;09-26 周六调休上班),非官方放假安排。
 
 use af_calendar::{Calendar, CalendarError, Shift};
-use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, Duration, NaiveDate, TimeZone, Utc};
 use chrono_tz::{Asia::Shanghai, Tz};
 
 /// 题设日历 + 测试夹具假日表(黄金周与调休)。

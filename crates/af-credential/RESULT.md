@@ -54,6 +54,7 @@ denied test@line-a: ... Check n°0 in block n°0: check if spend_cents($s), budg
 3. **biscuit check 是存在性查询**：验证方若注入多个 `request_tool`，有一个落在白名单即通过。af-effect-gateway 必须保证一次请求恰好一个 request 事实（本 PoC 按约定实现，biscuit 层无法强制）。
 4. **接口建议**：对外只暴露 `issue_root / attenuate / serialize / deserialize_verify / evaluate`（bytes + PublicKey 进出，KeyPair 不出 crate）；Cedar 策略文本应作为可独立演进产物（文件/配置）而非代码内 const；词表加一致性测试（Cedar action 名 ⊆ biscuit tool 值域）。
 5. 工程坑备忘：builder 的 check/policy 只收 `&str` 不收 `String`（`TryFrom<&str>`）；biscuit 6 无 Float → 预算词表统一 `*_cents: i64`，需与 af-meter 对齐；`authorize()` 的“拒绝”= `Err(Token::FailedLogic)`，与其他错误要分流（本 PoC 已分）。
+6. **biscuit 默认执行限额不可依赖（2026-10-19 补测发现）**：默认 `RunLimits{max_facts:1000, max_iterations:100, max_time:1ms}`——**1ms 墙钟**在满载并行（`cargo test -j 6` 全 workspace）下被 CPU 争用挤爆，`budget_attenuation_caps_spend` 间歇性以 "Reached Datalog execution limits" 硬错误 panic（单跑必过、满载偶挂的负载敏感 flake；根因经 biscuit 6.0.0 源码 `datalog/mod.rs` Default 实现定位）。已修：`credential.rs` 显式 `verify_limits()`（facts/iterations 维持默认，max_time 放宽 50ms），`authorize()` 走 `set_limits`、`inspect()` 走 `query_with_limits`。修复后满载全量两轮全绿。设计输入：**内核一切授权判定必须显式配置执行限额**，限额超限是“真错误”不是“拒绝”（fail-closed 但会炸调用方），这条写进波次 1 的词表对齐评审。
 
 ## ⑤ 遗留问题
 
