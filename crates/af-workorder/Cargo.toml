@@ -1,0 +1,11 @@
+[package]
+name = "af-workorder"
+version = "0.1.0"
+edition.workspace = true
+
+# PoC 依赖从简:serde/serde_json(序列化与 payload 规范化)、thiserror(类型化门控错误)。
+# 不引入 tokio/chrono/sha2:时钟与真哈希在最终方案再接,接口已按占位预留。
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"

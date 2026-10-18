@@ -1,0 +1,13 @@
+{
+  "distSpecVersion": "1.1.1",
+  "storage": {
+    "rootDirectory": "./data"
+  },
+  "http": {
+    "address": "127.0.0.1",
+    "port": "5050"
+  },
+  "log": {
+    "level": "debug"
+  }
+}

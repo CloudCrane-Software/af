@@ -1,0 +1,8 @@
+/target
+/bin
+poc/poc-cas/data
+poc/poc-temporal/logs
+poc/*/.venv
+*.tar.gz
+*.db
+__pycache__/
