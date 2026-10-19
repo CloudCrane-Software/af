@@ -1,6 +1,6 @@
-step1  PASS  172ms  cargo fmt --check
-step2  PASS  3606ms  cargo clippy + clippy_gate
-step3  PASS  5134ms  cargo test -j4 --workspace
-step4  PASS  53ms  cue recipe vet+export+断言
-step5  PASS  322ms  parse_scrub × 7 真实日志
-step6  PASS  100ms  cosign 断网 verify-blob
+step1  PASS  174ms  cargo fmt --check
+step2  PASS  2504ms  cargo clippy + clippy_gate
+step3  PASS  16920ms  cargo test -j4 --workspace
+step4  PASS  43ms  cue recipe vet+export+断言
+step5  PASS  306ms  parse_scrub × 7 真实日志
+step6  PASS  88ms  cosign 断网 verify-blob

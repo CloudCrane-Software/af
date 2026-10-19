@@ -38,6 +38,7 @@ bench = false
 [[bin]]
 name = "af_effect_gateway_idempotency"
 path = "fuzz_targets/af_effect_gateway_idempotency.rs"
+
 test = false
 doc = false
 bench = false

@@ -3,6 +3,7 @@
 version = 4
 
 [[package]]
+<<<<<<< HEAD
 name = "af-calendar"
 version = "0.1.0"
 dependencies = [
@@ -67,6 +68,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae221649c9976a6f6c56ae1facf410f3ddb33cc661c4b7b61020a912d4237fbc"
 dependencies = [
  "libc",
+=======
+name = "af-fuzz"
+version = "0.0.0"
+dependencies = [
+ "libfuzzer-sys",
+>>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
 ]
 
 [[package]]
@@ -76,6 +83,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
 
 [[package]]
+<<<<<<< HEAD
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -113,6 +121,12 @@ name = "cc"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6651c9ed80effdc7db0ff72512157f901af5e3549e341e24b1dd4887d836d838"
+=======
+name = "cc"
+version = "1.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "877bf67ac8e52449eb2f9e98a344ea163beb70dd1f9eebe3cc5357dcfeaee4df"
+>>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -127,6 +141,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
+<<<<<<< HEAD
 name = "chrono"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -321,6 +336,12 @@ dependencies = [
  "libc",
  "wasi",
 ]
+=======
+name = "find-msvc-tools"
+version = "0.1.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
+>>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
 
 [[package]]
 name = "getrandom"
@@ -334,6 +355,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -382,16 +404,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
+=======
+>>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
 name = "jobserver"
 version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c00acbd29eabad4a2392fa0e921c874934dbbf4194312ad20f04a0ed67a3cb3"
 dependencies = [
+<<<<<<< HEAD
  "getrandom 0.4.3",
+=======
+ "getrandom",
+>>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
  "libc",
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "js-sys"
 version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -403,6 +432,8 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -419,6 +450,7 @@ dependencies = [
 ]
 
 [[package]]
+<<<<<<< HEAD
 name = "libsqlite3-sys"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -515,12 +547,15 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
 name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
+<<<<<<< HEAD
 name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -619,10 +654,13 @@ dependencies = [
 ]
 
 [[package]]
+=======
+>>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+<<<<<<< HEAD
 
 [[package]]
 name = "signature"
@@ -894,3 +932,5 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+=======
+>>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
