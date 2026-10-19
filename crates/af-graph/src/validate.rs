@@ -30,17 +30,77 @@ impl Rule {
     }
 }
 
-/// 一条违例。`scope` 标明发生在根图还是哪个子图。
+/// 稳定错误码：编译期违例的外部契约码，与内核/装载器日志对齐。
+///
+/// E2001–E2004 与 `verify-load` 装载器分类学（`REPORT.md` ④-3）语义一致——尤其
+/// **E2001 悬空引用是跨域共享码**：装载器里是 combo→规则 id / andon→评估函数，
+/// 这里同强度覆盖图模板的 节点/子图/工件(map.over)/安全点 引用。E2005–E2007 是
+/// 图模板域专属扩展（配方装载器无对应项），不占用装载器已定义的码位。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorCode {
+    /// E2001 悬空引用：引用的目标（节点/子图/工件/安全点）不存在 → 拒绝编译。
+    DanglingReference,
+    /// E2002 值域/约束违约：循环预算、携带状态有界性、安全点类型不符。
+    ValueOutOfRange,
+    /// E2003 id 重复：同一作用域内节点 id 重复声明。
+    DuplicateId,
+    /// E2004 非空违约：受控循环未声明安全点（safety_points 为空）。
+    EmptyCollection,
+    /// E2005 静态图存在环（graph 域专属扩展）。
+    CyclicGraph,
+    /// E2006 孤立节点：从入口不可达（graph 域专属扩展）。
+    UnreachableNode,
+    /// E2007 map 体子图未版本化（graph 域专属扩展）。
+    UnversionedMapBody,
+}
+
+impl ErrorCode {
+    /// 稳定错误码字符串（测试与内核日志按此断言）。
+    pub fn code(&self) -> &'static str {
+        match self {
+            ErrorCode::DanglingReference => "E2001",
+            ErrorCode::ValueOutOfRange => "E2002",
+            ErrorCode::DuplicateId => "E2003",
+            ErrorCode::EmptyCollection => "E2004",
+            ErrorCode::CyclicGraph => "E2005",
+            ErrorCode::UnreachableNode => "E2006",
+            ErrorCode::UnversionedMapBody => "E2007",
+        }
+    }
+
+    /// 错误大类名（结构化日志用，对齐装载器 `kind_name`）。
+    pub fn name(&self) -> &'static str {
+        match self {
+            ErrorCode::DanglingReference => "DANGLING_REFERENCE",
+            ErrorCode::ValueOutOfRange => "VALUE_OUT_OF_RANGE",
+            ErrorCode::DuplicateId => "DUPLICATE_ID",
+            ErrorCode::EmptyCollection => "EMPTY_COLLECTION",
+            ErrorCode::CyclicGraph => "CYCLIC_GRAPH",
+            ErrorCode::UnreachableNode => "UNREACHABLE_NODE",
+            ErrorCode::UnversionedMapBody => "UNVERSIONED_MAP_BODY",
+        }
+    }
+}
+
+/// 一条违例。`scope` 标明发生在根图还是哪个子图；`error_code` 是外部契约码。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Violation {
     pub rule: Rule,
     pub scope: String,
     pub message: String,
+    pub error_code: ErrorCode,
 }
 
 impl std::fmt::Display for Violation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "[{}] {}: {}", self.rule.name(), self.scope, self.message)
+        write!(
+            f,
+            "[{} {}] {}: {}",
+            self.error_code.code(),
+            self.error_code.name(),
+            self.scope,
+            self.message
+        )
     }
 }
 
@@ -139,6 +199,7 @@ fn check_scope(s: &ScopeView, out: &mut Vec<Violation>) {
             out.push(Violation {
                 rule: Rule::UndeclaredReference,
                 scope: s.path.clone(),
+                error_code: ErrorCode::DuplicateId,
                 message: format!("节点 id 重复声明: {}", n.id),
             });
         }
@@ -148,6 +209,7 @@ fn check_scope(s: &ScopeView, out: &mut Vec<Violation>) {
         out.push(Violation {
             rule: Rule::UndeclaredReference,
             scope: s.path.clone(),
+            error_code: ErrorCode::DanglingReference,
             message: format!("入口节点未声明: {}", s.entry),
         });
     }
@@ -163,11 +225,44 @@ fn check_scope(s: &ScopeView, out: &mut Vec<Violation>) {
             out.push(Violation {
                 rule: Rule::UndeclaredReference,
                 scope: s.path.clone(),
+                error_code: ErrorCode::DanglingReference,
                 message: format!("边 {} 引用了未声明节点: {}", e, bad),
             });
             continue;
         }
         adj.entry(e.from.as_str()).or_default().push(e.to.as_str());
+    }
+
+    // ---- 规则③（工件名级）：map.over 的 "节点.工件" 前缀节点必须已声明 ----
+    // 收口 RESULT.md ⑤ 遗留"工件名级引用完整性未做"里可判定的那一半：edge.output/input
+    // 的工件存在性需要"节点产出/消费工件表"（模型未建，仍遗留），但 map.over 的前缀是
+    // 对某节点产出的引用——前缀节点必须存在于本作用域，否则 E2001 拒绝。
+    for n in s.nodes {
+        let Some(mp) = &n.map_spec else { continue };
+        match mp.over.split_once('.') {
+            Some((node, artifact)) if !node.is_empty() && !artifact.is_empty() => {
+                if !ids.contains(node) {
+                    out.push(Violation {
+                        rule: Rule::UndeclaredReference,
+                        scope: s.path.clone(),
+                        error_code: ErrorCode::DanglingReference,
+                        message: format!(
+                            "map.over `{}` 引用的节点 `{}` 未声明（应为 '节点.工件名'，前缀节点须在本作用域）",
+                            mp.over, node
+                        ),
+                    });
+                }
+            }
+            _ => out.push(Violation {
+                rule: Rule::UndeclaredReference,
+                scope: s.path.clone(),
+                error_code: ErrorCode::DanglingReference,
+                message: format!(
+                    "map.over `{}` 格式非法：必须形如 '节点.工件名'（节点与工件名均非空）",
+                    mp.over
+                ),
+            }),
+        }
     }
 
     // ---- 规则①：环检测（循环体子图豁免）----
@@ -176,6 +271,7 @@ fn check_scope(s: &ScopeView, out: &mut Vec<Violation>) {
             out.push(Violation {
                 rule: Rule::Cycle,
                 scope: s.path.clone(),
+                error_code: ErrorCode::CyclicGraph,
                 message: format!("静态图存在环: {}", cycle.join(" -> ")),
             });
         }
@@ -189,6 +285,7 @@ fn check_scope(s: &ScopeView, out: &mut Vec<Violation>) {
                 out.push(Violation {
                     rule: Rule::Reachability,
                     scope: s.path.clone(),
+                    error_code: ErrorCode::UnreachableNode,
                     message: format!("孤立节点（从入口不可达）: {id}"),
                 });
             }
@@ -200,11 +297,12 @@ fn check_scope(s: &ScopeView, out: &mut Vec<Violation>) {
 fn check_loops(t: &GraphTemplate, out: &mut Vec<Violation>) {
     for (scope, n) in scoped_nodes(t) {
         let Some(lp) = &n.loop_spec else { continue };
-        // 循环体子图必须已声明（归入规则③的"未声明引用"）。
+        // 循环体子图必须已声明（归入规则③的"未声明引用" = E2001）。
         if !t.subgraphs.contains_key(&lp.body) {
             out.push(Violation {
                 rule: Rule::UndeclaredReference,
                 scope: scope.clone(),
+                error_code: ErrorCode::DanglingReference,
                 message: format!("循环体子图未声明: {}", lp.body),
             });
             continue; // 体都没有，安全点无从查起
@@ -214,7 +312,8 @@ fn check_loops(t: &GraphTemplate, out: &mut Vec<Violation>) {
             out.push(Violation {
                 rule: Rule::LoopNotControlled,
                 scope: scope.clone(),
-                message: format!("循环 max_iterations 必须为正，当前为 0"),
+                error_code: ErrorCode::ValueOutOfRange,
+                message: "循环 max_iterations 必须为正，当前为 0".to_string(),
             });
         }
         // 携带状态必须有界。
@@ -222,6 +321,7 @@ fn check_loops(t: &GraphTemplate, out: &mut Vec<Violation>) {
             out.push(Violation {
                 rule: Rule::LoopNotControlled,
                 scope: scope.clone(),
+                error_code: ErrorCode::ValueOutOfRange,
                 message: format!(
                     "循环携带状态 `{}` 无界：max_items 与 max_bytes 至少声明一个",
                     lp.carried_state.name
@@ -233,6 +333,7 @@ fn check_loops(t: &GraphTemplate, out: &mut Vec<Violation>) {
             out.push(Violation {
                 rule: Rule::LoopNotControlled,
                 scope: scope.clone(),
+                error_code: ErrorCode::EmptyCollection,
                 message: "受控循环未声明安全点（safety_points 为空），拒绝编译".to_string(),
             });
         }
@@ -244,6 +345,7 @@ fn check_loops(t: &GraphTemplate, out: &mut Vec<Violation>) {
                 out.push(Violation {
                     rule: Rule::UndeclaredReference,
                     scope: scope.clone(),
+                    error_code: ErrorCode::DanglingReference,
                     message: format!(
                         "安全点 {} 指向的节点不在循环体子图 `{}` 中（体中节点: {:?}）",
                         sp.node,
@@ -262,6 +364,7 @@ fn check_loops(t: &GraphTemplate, out: &mut Vec<Violation>) {
                 out.push(Violation {
                     rule: Rule::LoopNotControlled,
                     scope: scope.clone(),
+                    error_code: ErrorCode::ValueOutOfRange,
                     message: format!(
                         "安全点 {} 类型不符：要求 {:?}，但体中该节点 kind=`{}` 且 human 标记={}",
                         sp.node,
@@ -283,11 +386,13 @@ fn check_maps(t: &GraphTemplate, out: &mut Vec<Violation>) {
             None => out.push(Violation {
                 rule: Rule::UndeclaredReference,
                 scope: scope.clone(),
+                error_code: ErrorCode::DanglingReference,
                 message: format!("map 体子图未声明: {}", mp.body),
             }),
             Some(sg) if sg.graph_version.is_none() => out.push(Violation {
                 rule: Rule::MapSubgraphUnversioned,
                 scope: scope.clone(),
+                error_code: ErrorCode::UnversionedMapBody,
                 message: format!(
                     "map 体子图 `{}` 未版本化（graph_version 缺失）：运行时实例化 N 份等于现场改拓扑，必须先审定",
                     mp.body

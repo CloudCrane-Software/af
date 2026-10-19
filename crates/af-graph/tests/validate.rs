@@ -1,7 +1,8 @@
 //! 校验器判定断言：3 个合法样例应通过；非法样例各踩一条规则且不踩别的。
 
 use af_graph::{
-    validate, CarriedState, Edge, GraphTemplate, Node, Rule, SafetyPoint, SafetyPointKind,
+    validate, CarriedState, Edge, ErrorCode, GraphTemplate, Node, Rule, SafetyPoint,
+    SafetyPointKind,
 };
 use std::path::Path;
 
@@ -243,5 +244,84 @@ fn loop_body_must_be_declared_subgraph() {
     assert!(
         !refs.is_empty() && refs.iter().any(|v| v.message.contains("循环体子图未声明")),
         "循环体子图未声明应触发规则③，实际:\n{r}"
+    );
+}
+
+// ---------- E2001 引用完整性（错误码语义） ----------
+// 总纲裁决：引用完整性检查移入装载器、错误码 E2001；CUE 侧去掉 or() 组合。
+// 这里验证 af-graph 装载/校验层的 E2001：引用的目标（节点/子图/工件/安全点）必须存在。
+
+#[test]
+fn legal_templates_have_no_e2001() {
+    // 正例：合法模板不得产出任何 E2001 悬空引用。
+    for name in LEGAL {
+        let r = validate(&load(name));
+        assert!(
+            r.violations
+                .iter()
+                .all(|v| v.error_code != ErrorCode::DanglingReference),
+            "{name} 不应有 E2001 悬空引用，实际:\n{r}"
+        );
+    }
+}
+
+#[test]
+fn dangling_edge_ref_is_e2001() {
+    // E2001 拒绝例：边端点引用未声明节点。
+    let r = validate(&load("illegal-3-undeclared-ref"));
+    let v = r.of_rule(Rule::UndeclaredReference)[0];
+    assert_eq!(v.error_code, ErrorCode::DanglingReference);
+    assert_eq!(v.error_code.code(), "E2001");
+    assert_eq!(v.error_code.name(), "DANGLING_REFERENCE");
+}
+
+#[test]
+fn map_over_dangling_node_is_e2001() {
+    // E2001 拒绝例（工件名级，收口 RESULT.md ⑤ 遗留）：map.over "节点.工件" 的
+    // 前缀节点必须已声明——把合法样例的 over 前缀改成幽灵节点。
+    let mut t = load("legal-3-full");
+    t.nodes[1].map_spec.as_mut().unwrap().over = "ghost_node.chunks".into();
+    let r = validate(&t);
+    assert!(
+        r.only_rule(Rule::UndeclaredReference),
+        "map.over 前缀节点悬空应只触发规则③，实际:\n{r}"
+    );
+    let v = r.of_rule(Rule::UndeclaredReference)[0];
+    assert_eq!(v.error_code, ErrorCode::DanglingReference);
+    assert!(
+        v.message.contains("ghost_node"),
+        "应点名悬空节点，实际: {}",
+        v.message
+    );
+}
+
+#[test]
+fn map_over_malformed_is_e2001() {
+    // E2001 拒绝例：map.over 缺 '.' 分隔（无法解析出目标节点）。
+    let mut t = load("legal-3-full");
+    t.nodes[1].map_spec.as_mut().unwrap().over = "reader_no_dot".into();
+    let r = validate(&t);
+    assert!(
+        r.violations.iter().any(|v| v.error_code == ErrorCode::DanglingReference
+            && v.message.contains("格式非法")),
+        "map.over 缺 '.' 应报 E2001 格式非法，实际:\n{r}"
+    );
+}
+
+#[test]
+fn duplicate_node_id_is_e2003_not_e2001() {
+    // 反例：重复 id 是 E2003，不是 E2001——证明 E2001 只归"引用的目标不存在"这一类。
+    let mut t = load("legal-1-pipeline-human");
+    t.nodes.push(t.nodes[0].clone()); // 复制首节点 → id 重复
+    let r = validate(&t);
+    let refs = r.of_rule(Rule::UndeclaredReference);
+    assert_eq!(refs.len(), 1, "应恰好一条规则③违例，实际:\n{r}");
+    assert_eq!(refs[0].error_code, ErrorCode::DuplicateId);
+    assert_eq!(refs[0].error_code.code(), "E2003");
+    assert!(
+        r.violations
+            .iter()
+            .all(|v| v.error_code != ErrorCode::DanglingReference),
+        "重复 id 不应被算作 E2001 悬空引用"
     );
 }

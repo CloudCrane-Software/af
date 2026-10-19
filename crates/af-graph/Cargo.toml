@@ -6,3 +6,7 @@ edition.workspace = true
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+# 内嵌谓词求值（数据相关运行时条件）。crates.io 最新稳定 = 0.10.0。
+# 依据 poc-cue RESULT.md ④-6：CEL 在 Rust 内嵌求值，CUE 只管表达式串的静态校验。
+# 只加在本 crate 自己的 manifest：根 workspace.dependencies 正被另一任务重构，不动其写法结构。
+cel-interpreter = "0.10"

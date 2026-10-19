@@ -9,7 +9,9 @@
 //! （遍历工件集合，运行时定基数，子图必须已版本化）。
 
 pub mod model;
+pub mod predicate;
 pub mod validate;
 
 pub use model::*;
-pub use validate::{validate, Report, Rule, Violation};
+pub use predicate::{Predicate, PredicateError};
+pub use validate::{validate, ErrorCode, Report, Rule, Violation};
