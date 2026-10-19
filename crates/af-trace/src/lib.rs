@@ -19,9 +19,9 @@
 //!   OTel lane 离线时（默认），`gap_counter` 仍等于磁盘丢弃数。
 //!   该计数写入 `trace.db`，与 critical 文件里的缺口合计一致；重开时对不上则启动失败。
 //!
-//! [`Trace::open`] 首启返回 [`OpenOutcome::Created`]（建表并写入声明），重入返回
-//! [`OpenOutcome::AlreadyDeclared`] 并核对 schema 版本、JSONL、critical 同步耐久性。
-//! 声明与已存状态不符则失败，不静默迁就。
+//! [`Trace::open`] 首启只接受空库，返回 [`OpenOutcome::Created`]（建表并写入声明）。
+//! 重入返回 [`OpenOutcome::AlreadyDeclared`]，并核对 schema 版本、JSONL、critical 同步耐久性。
+//! 外来 SQLite 对象或声明缺行都拒绝，不建表、不补行。声明与已存状态不符则失败，不静默迁就。
 //!
 //! 时刻经 [`Clock`] 注入，写入事件的 `ts_ms`。测试用 [`ManualClock`]。
 //!

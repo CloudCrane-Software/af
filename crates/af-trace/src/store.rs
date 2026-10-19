@@ -3,12 +3,14 @@
 //! 单文件 `trace.db`：WAL、`busy_timeout=5000`、`synchronous=NORMAL`、`foreign_keys=ON`。
 //! 事件正文在 JSONL 里；这里只保存「这份目录是什么」以及与 critical 文件对齐的缺口计数。
 //!
-//! [`Store::open`] 首启返回 [`OpenOutcome::Created`]（建表并写入声明与零计数）。
-//! 重入返回 [`OpenOutcome::AlreadyDeclared`]，并核对 schema 版本、行格式、critical 耐久性。
-//! 对不上就失败，不改已有行、不按调用方声明静默迁就。
+//! [`Store::open`] 在 `BEGIN IMMEDIATE` 里看用户对象。
+//! 空库才建表并写入声明与零计数，返回 [`OpenOutcome::Created`]。
+//! 恰好是 `declaration` 与 `gap_state` 两张表时核对声明，返回 [`OpenOutcome::AlreadyDeclared`]。
+//! 外来对象，或两张表在但声明行缺失，都拒绝：不建表、不补行。
+//! 声明对不上就失败，不改已有行。
 
 use crate::error::TraceError;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -17,13 +19,13 @@ pub const LINE_FORMAT: &str = "jsonl";
 pub const CRITICAL_DURABILITY: &str = "sync";
 
 const SCHEMA: &str = "
-CREATE TABLE IF NOT EXISTS declaration (
+CREATE TABLE declaration (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     schema_version INTEGER NOT NULL,
     line_format TEXT NOT NULL,
     critical_durability TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS gap_state (
+CREATE TABLE gap_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     gap_counter INTEGER NOT NULL,
     gap_reported INTEGER NOT NULL,
@@ -31,10 +33,13 @@ CREATE TABLE IF NOT EXISTS gap_state (
 );
 ";
 
+/// 已声明库里允许出现的用户对象，按 `type, name` 排序。
+const EXPECTED_OBJECTS: &[(&str, &str)] = &[("table", "declaration"), ("table", "gap_state")];
+
 /// 打开落盘目录的结果。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenOutcome {
-    /// 目录里还没有声明。本次建表并写入初始缺口计数 0。
+    /// 库是空的。本次建表并写入初始缺口计数 0。
     Created,
     /// 声明已在，且与本进程认识的 schema / 格式 / 耐久性一致。
     AlreadyDeclared,
@@ -56,7 +61,9 @@ pub fn store_path(dir: &Path) -> PathBuf {
 }
 
 impl Store {
-    /// 打开（必要时创建）`dir/trace.db`。调用方负责先建好目录。
+    /// 打开 `dir/trace.db`。调用方负责先建好目录。
+    ///
+    /// 空库建表。已有 trace 两张表则只核对声明。其他对象拒绝，不把声明表建进去。
     pub fn open(dir: &Path) -> Result<(Self, OpenOutcome), TraceError> {
         let path = store_path(dir);
         let mut conn = Connection::open(&path).map_err(sql_err)?;
@@ -119,39 +126,87 @@ fn apply_pragmas(conn: &Connection) -> Result<(), TraceError> {
 }
 
 fn init_or_check(conn: &mut Connection) -> Result<OpenOutcome, TraceError> {
-    let tx = conn.transaction().map_err(sql_err)?;
-    tx.execute_batch(SCHEMA).map_err(sql_err)?;
-    let row: Option<(i64, String, String)> = tx
-        .query_row(
-            "SELECT schema_version, line_format, critical_durability
-             FROM declaration WHERE id = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-        )
-        .optional()
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(sql_err)?;
-    let outcome = match row {
-        None => {
-            tx.execute(
-                "INSERT INTO declaration (id, schema_version, line_format, critical_durability)
-                 VALUES (1, ?1, ?2, ?3)",
-                params![SCHEMA_VERSION, LINE_FORMAT, CRITICAL_DURABILITY],
-            )
-            .map_err(sql_err)?;
-            tx.execute(
-                "INSERT INTO gap_state (id, gap_counter, gap_reported) VALUES (1, 0, 0)",
+    let objects = user_objects(&tx)?;
+    let outcome = if objects.is_empty() {
+        tx.execute_batch(SCHEMA).map_err(sql_err)?;
+        tx.execute(
+            "INSERT INTO declaration (id, schema_version, line_format, critical_durability)
+             VALUES (1, ?1, ?2, ?3)",
+            params![SCHEMA_VERSION, LINE_FORMAT, CRITICAL_DURABILITY],
+        )
+        .map_err(sql_err)?;
+        tx.execute(
+            "INSERT INTO gap_state (id, gap_counter, gap_reported) VALUES (1, 0, 0)",
+            [],
+        )
+        .map_err(sql_err)?;
+        OpenOutcome::Created
+    } else if is_trace_schema(&objects) {
+        let row: Option<(i64, String, String)> = tx
+            .query_row(
+                "SELECT schema_version, line_format, critical_durability
+                 FROM declaration WHERE id = 1",
                 [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
+            .optional()
             .map_err(sql_err)?;
-            OpenOutcome::Created
+        match row {
+            None => {
+                return Err(TraceError::DeclarationMismatch(
+                    "declaration 缺少 id=1 的行，拒绝补写".into(),
+                ));
+            }
+            Some((version, format, durability)) => {
+                check_declaration(version, &format, &durability)?;
+                OpenOutcome::AlreadyDeclared
+            }
         }
-        Some((version, format, durability)) => {
-            check_declaration(version, &format, &durability)?;
-            OpenOutcome::AlreadyDeclared
-        }
+    } else {
+        return Err(TraceError::DeclarationMismatch(format!(
+            "库必须是空的，或只含 table declaration 与 table gap_state，实际: {}",
+            format_objects(&objects)
+        )));
     };
     tx.commit().map_err(sql_err)?;
     Ok(outcome)
+}
+
+fn user_objects(conn: &Connection) -> Result<Vec<(String, String)>, TraceError> {
+    let mut stmt = conn
+        .prepare(
+            "SELECT type, name FROM sqlite_master
+             WHERE name NOT LIKE 'sqlite_%'
+             ORDER BY type, name",
+        )
+        .map_err(sql_err)?;
+    let rows = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .map_err(sql_err)?;
+    let mut objects = Vec::new();
+    for row in rows {
+        objects.push(row.map_err(sql_err)?);
+    }
+    Ok(objects)
+}
+
+fn is_trace_schema(objects: &[(String, String)]) -> bool {
+    objects.len() == EXPECTED_OBJECTS.len()
+        && objects
+            .iter()
+            .zip(EXPECTED_OBJECTS.iter())
+            .all(|((ty, name), (expect_ty, expect_name))| ty == expect_ty && name == expect_name)
+}
+
+fn format_objects(objects: &[(String, String)]) -> String {
+    objects
+        .iter()
+        .map(|(ty, name)| format!("{ty} {name}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn check_declaration(version: i64, format: &str, durability: &str) -> Result<(), TraceError> {
@@ -309,5 +364,72 @@ mod tests {
         let (store, outcome) = Store::open(dir.path()).unwrap();
         assert_eq!(outcome, OpenOutcome::AlreadyDeclared);
         assert_eq!(store.gap_state().unwrap().gap_counter, 3);
+    }
+
+    #[test]
+    fn finding_c_foreign_sqlite_is_not_adopted() {
+        let dir = TempDir::new("foreign");
+        let path = store_path(dir.path());
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);
+             INSERT INTO notes (id, body) VALUES (1, 'keep');",
+        )
+        .unwrap();
+        drop(conn);
+
+        let err = match Store::open(dir.path()) {
+            Ok((_, outcome)) => panic!("外来库必须拒绝打开，实际 {outcome:?} 且已建声明"),
+            Err(err) => err,
+        };
+        match err {
+            TraceError::DeclarationMismatch(msg) => {
+                assert!(msg.contains("notes"), "应点名外来对象，实际: {msg}");
+            }
+            other => panic!("期望 DeclarationMismatch，实际 {other:?}"),
+        }
+
+        let conn = Connection::open(&path).unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT name FROM sqlite_master
+                 WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+                 ORDER BY name",
+            )
+            .unwrap();
+        let names: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(names, vec!["notes".to_string()]);
+        let body: String = conn
+            .query_row("SELECT body FROM notes WHERE id = 1", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(body, "keep");
+    }
+
+    #[test]
+    fn finding_c_torn_tables_without_declaration_row_are_not_filled() {
+        let dir = TempDir::new("torn");
+        let path = store_path(dir.path());
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(SCHEMA).unwrap();
+        drop(conn);
+
+        let err = match Store::open(dir.path()) {
+            Ok((_, outcome)) => panic!("缺声明行必须拒绝补写，实际 {outcome:?}"),
+            Err(err) => err,
+        };
+        assert!(
+            matches!(err, TraceError::DeclarationMismatch(_)),
+            "期望 DeclarationMismatch，实际 {err:?}"
+        );
+
+        let conn = Connection::open(&path).unwrap();
+        let rows: i64 = conn
+            .query_row("SELECT COUNT(*) FROM declaration", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(rows, 0, "拒绝打开时不得补上声明行");
     }
 }
