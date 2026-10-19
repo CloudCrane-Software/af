@@ -11,10 +11,15 @@
 
 use af_stop::{
     Decision, EscalateReason, Event, Fingerprint, FingerprintAction, FingerprintEntry,
-    FingerprintStore, StopEngine, StopPolicy, StopReason,
+    FingerprintLedger, FingerprintStore, LedgerDeclaration, ManualClock, OpenStatus, StopEngine,
+    StopPolicy, StopReason,
 };
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Duration;
 
 const TARGET_TOOL: &str = "search";
 const TARGET_CODE: &str = "E_TIMEOUT";
@@ -758,5 +763,211 @@ proptest! {
                 decision
             );
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum Step {
+    Event(Event),
+    AdvanceMs(u16),
+}
+
+fn arb_step() -> impl Strategy<Value = Step> {
+    prop_oneof![
+        arb_event().prop_map(Step::Event),
+        (0u16..=4_000).prop_map(Step::AdvanceMs),
+    ]
+}
+
+fn restart_config() -> ProptestConfig {
+    ProptestConfig {
+        cases: 64,
+        failure_persistence: Some(Box::new(FileFailurePersistence::Off)),
+        ..ProptestConfig::default()
+    }
+}
+
+struct TempDb {
+    path: PathBuf,
+}
+
+impl TempDb {
+    fn new() -> Self {
+        static SEQ: AtomicU64 = AtomicU64::new(0);
+        let n = SEQ.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("af-stop-prop-{}-{n}.db", std::process::id()));
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDb {
+    fn drop(&mut self) {
+        for suffix in ["", "-wal", "-shm", "-journal"] {
+            let path = if suffix.is_empty() {
+                self.path.clone()
+            } else {
+                PathBuf::from(format!("{}{suffix}", self.path.display()))
+            };
+            let _ = std::fs::remove_file(path);
+        }
+    }
+}
+
+fn streak_key(ledger: &FingerprintLedger) -> Option<(String, String, usize)> {
+    ledger
+        .current_streak()
+        .map(|(fp, len)| (fp.tool.clone(), fp.error_code.clone(), len))
+}
+
+/// 在 `cut` 处关掉账本再打开。行、连击、普通错误计数必须原样回来，计数不得变小。
+fn reopen_same(
+    ledger: FingerprintLedger,
+    path: &Path,
+    decl: &LedgerDeclaration,
+    clock: &ManualClock,
+) -> std::result::Result<FingerprintLedger, String> {
+    let before = ledger.records().map_err(|err| err.to_string())?;
+    let streak = streak_key(&ledger);
+    let normal = ledger.normal_error_count();
+    drop(ledger);
+    let (ledger, status) = FingerprintLedger::open_with_clock(path, decl.clone(), clock.clone())
+        .map_err(|err| err.to_string())?;
+    if status != OpenStatus::AlreadyDeclared {
+        return Err(format!("重入状态是 {status:?}"));
+    }
+    let after = ledger.records().map_err(|err| err.to_string())?;
+    if after != before {
+        return Err(format!(
+            "重启后指纹行变化 before={before:?} after={after:?}"
+        ));
+    }
+    if streak_key(&ledger) != streak || ledger.normal_error_count() != normal {
+        return Err(format!(
+            "重启后引擎计数变化 streak={streak:?}->{:?} normal={normal}->{}",
+            streak_key(&ledger),
+            ledger.normal_error_count()
+        ));
+    }
+    for row in &after {
+        if let Some(prev) = before
+            .iter()
+            .find(|item| item.tool == row.tool && item.error_code == row.error_code)
+        {
+            if row.count < prev.count {
+                return Err(format!(
+                    "指纹计数回退 {}/{} {} -> {}",
+                    row.tool, row.error_code, prev.count, row.count
+                ));
+            }
+        }
+    }
+    Ok(ledger)
+}
+
+fn run_restart(
+    streak_limit: u8,
+    threshold: u8,
+    window_ms: u64,
+    registry: &[Slot],
+    steps: &[Step],
+    cut: usize,
+) -> std::result::Result<(), String> {
+    let policy = policy_from_slots(streak_limit, threshold, registry);
+    let decl = LedgerDeclaration::from_policy(&policy, window_ms).map_err(|err| err.to_string())?;
+    let clock = ManualClock::new(0, 1_700_000_000_000);
+    let db = TempDb::new();
+    let (mut ledger, status) =
+        FingerprintLedger::open_with_clock(db.path(), decl.clone(), clock.clone())
+            .map_err(|err| err.to_string())?;
+    if status != OpenStatus::Created {
+        return Err(format!("首启状态是 {status:?}"));
+    }
+    let mut control = StopEngine::new(policy);
+    let cut = cut.min(steps.len());
+    let mut restarted = false;
+    for (index, step) in steps.iter().enumerate() {
+        if index == cut {
+            ledger = reopen_same(ledger, db.path(), &decl, &clock)?;
+            restarted = true;
+        }
+        match step {
+            Step::AdvanceMs(ms) => clock.advance(Duration::from_millis(u64::from(*ms))),
+            Step::Event(event) => {
+                let expected = control.feed(event.clone());
+                let actual = ledger.feed(event.clone()).map_err(|err| err.to_string())?;
+                if actual != expected {
+                    return Err(format!(
+                        "重启路径的裁决偏离引擎 index={index} event={event:?} ledger={actual:?} engine={expected:?}"
+                    ));
+                }
+            }
+        }
+    }
+    if !restarted {
+        ledger = reopen_same(ledger, db.path(), &decl, &clock)?;
+    }
+    let rows = ledger.records().map_err(|err| err.to_string())?;
+    let mut expected: BTreeMap<(String, String), u64> = BTreeMap::new();
+    for step in steps {
+        if let Step::Event(Event::ToolError { tool, error_code }) = step {
+            *expected
+                .entry((tool.clone(), error_code.clone()))
+                .or_insert(0) += 1;
+        }
+    }
+    if rows.len() != expected.len() {
+        return Err(format!(
+            "指纹行数 {} 与工具错误种类 {} 不一致 rows={rows:?} expected={expected:?}",
+            rows.len(),
+            expected.len()
+        ));
+    }
+    for row in &rows {
+        let count = expected
+            .get(&(row.tool.clone(), row.error_code.clone()))
+            .copied();
+        if count != Some(row.count) {
+            return Err(format!(
+                "指纹计数与事件数不一致 {}/{} row={} expected={count:?}",
+                row.tool, row.error_code, row.count
+            ));
+        }
+        if row.v != 1 {
+            return Err(format!("行版本不是 1：{row:?}"));
+        }
+    }
+    Ok(())
+}
+
+proptest! {
+    #![proptest_config(restart_config())]
+
+    /// 任意事件与注入钟推进之后，中途关掉再打开：指纹计数不回退，且等于工具错误次数。
+    /// 重启后的裁决仍与从未落盘的引擎一致（时间窗不改三条规则）。
+    #[test]
+    fn fingerprint_count_does_not_regress_across_restart(
+        streak_limit in 0u8..=8,
+        threshold in 0u8..=8,
+        window_ms in 0u64..=2_000,
+        registry in arb_registry(),
+        steps in prop::collection::vec(arb_step(), 0..=12),
+        cut in 0usize..=12,
+    ) {
+        let result = run_restart(streak_limit, threshold, window_ms, &registry, &steps, cut);
+        prop_assert!(
+            result.is_ok(),
+            "重启后指纹计数回退或裁决偏离 streak_limit={} threshold={} window_ms={} cut={} registry={:?} steps={:?} err={}",
+            streak_limit,
+            threshold,
+            window_ms,
+            cut,
+            registry,
+            steps,
+            result.err().unwrap_or_default()
+        );
     }
 }
