@@ -22,9 +22,9 @@ use thiserror::Error;
 
 use crate::clock::{Clock, SystemClock};
 use crate::gate::{
-    AdmitError, CanaryCursor, CanaryPredicate, CanaryStatus, CompletedItem, ConfigError,
-    GateConfig, GateError, GateEvent, InProcessItem, Item, MinuteOfDay, NightView, NightWindow,
-    ReleaseGate, RestoreError, RuntimeSnapshot, Ticket,
+    sum_weights, AdmitError, CanaryCursor, CanaryPredicate, CanaryStatus, CompletedItem,
+    ConfigError, GateConfig, GateError, GateEvent, InProcessItem, Item, MinuteOfDay, NightView,
+    NightWindow, ReleaseGate, RestoreError, RuntimeSnapshot, Ticket,
 };
 
 /// 账本 schema。对不上就拒绝启动，不在这里迁移。
@@ -660,7 +660,9 @@ fn load_runtime(conn: &Connection, meta: &Meta) -> Result<RuntimeSnapshot, Persi
             detail: "wip".to_string(),
         });
     }
-    let sum = items.iter().fold(0.0, |acc, item| acc + item.weight);
+    // wip_bits 必须是在制权重按 seq 的左折叠，与内存闸同一条定义。
+    // 增量累加的 f64 与这条重求和会差 1 ULP，那是写入错误，不是这里放宽比较。
+    let sum = sum_weights(items.iter().map(|item| item.weight));
     if sum.to_bits() != wip.to_bits() {
         return Err(PersistError::Corrupt {
             detail: format!(

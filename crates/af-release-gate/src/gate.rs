@@ -2,7 +2,8 @@
 //!
 //! 核心模型:
 //! - 队列按"标准审阅分钟"计量:每件(工单)带工时权重 `review_minutes`,
-//!   WIP = 队列中所有已准入、未完成件的权重之和。
+//!   WIP = 队列中所有已准入、未完成件的权重按队列顺序的左折叠。
+//!   不保留增量累加器:分数权重上 `+=` / `-=` 与重求和会差 1 ULP。
 //! - 上限 `wip_upper_minutes`:`try_admit` 在 `wip + weight > upper` 时拒绝(WipCap);
 //!   `admit_blocking` 则阻塞等待,直到有件完成释放容量。
 //! - 下限 `wip_lower_minutes`:WIP 跌破下限时触发 NeedRefill 事件(断粮预警),
@@ -296,10 +297,16 @@ pub(crate) enum RestoreError {
     InconsistentWip,
 }
 
+/// 权重按给定顺序左折叠。在制队列是 WIP 的唯一真相，调用方与账本都用这个和。
+///
+/// 空序列得到 `+0.0`。`Iterator::sum` 对 `f64` 从 `-0.0` 加起，空和的位型与 `0.0` 不同。
+pub(crate) fn sum_weights(weights: impl IntoIterator<Item = f64>) -> f64 {
+    weights.into_iter().fold(0.0, |acc, weight| acc + weight)
+}
+
 pub struct ReleaseGate {
     cfg: GateConfig,
     queue: VecDeque<QueuedItem>,
-    wip: f64,
     night: NightRuntime,
     canary: Option<CanaryState>,
     refill_active: bool,
@@ -334,7 +341,6 @@ impl ReleaseGate {
             },
             cfg,
             queue: VecDeque::new(),
-            wip: 0.0,
             canary: None,
             refill_active: false,
             prev_in_window: None,
@@ -347,7 +353,7 @@ impl ReleaseGate {
     }
 
     pub fn wip_minutes(&self) -> f64 {
-        self.wip
+        sum_weights(self.queue.iter().map(|queued| queued.ticket.weight))
     }
 
     pub fn in_process_count(&self) -> usize {
@@ -356,7 +362,7 @@ impl ReleaseGate {
 
     /// WIP 是否已跌破下限(断粮预警)。
     pub fn refill_needed(&self) -> bool {
-        self.wip < self.cfg.wip_lower_minutes
+        self.wip_minutes() < self.cfg.wip_lower_minutes
     }
 
     /// `now` 是否处于夜间窗口(纯查询,不改状态)。
@@ -441,7 +447,6 @@ impl ReleaseGate {
 
     /// 直接注入在制(换日结转/热迁移等场景),不走准入策略;不衡上限(调用方保证)。
     pub fn seed_wip(&mut self, item: &Item) {
-        self.wip += item.review_minutes;
         self.queue.push_back(QueuedItem {
             ticket: Ticket {
                 item_id: item.id,
@@ -509,17 +514,17 @@ impl ReleaseGate {
             }
         }
 
-        // 3) WIP 上限:放入后不得超过。
-        if self.wip + item.review_minutes > self.cfg.wip_upper_minutes + 1e-9 {
+        // 3) WIP 上限:放入后不得超过。比较用的是当前队列的左折叠，入队后的和就是再加这一件。
+        let wip = self.wip_minutes();
+        if wip + item.review_minutes > self.cfg.wip_upper_minutes + 1e-9 {
             return Err(AdmitError::WipCap {
-                wip: self.wip,
+                wip,
                 weight: item.review_minutes,
                 cap: self.cfg.wip_upper_minutes,
             });
         }
 
-        // 通过 → 准入。
-        self.wip += item.review_minutes;
+        // 通过 → 准入。WIP 随队列重算，不在这里累加。
         let ticket = Ticket {
             item_id: item.id,
             config: item.config.clone(),
@@ -550,7 +555,6 @@ impl ReleaseGate {
             return Err(GateError::UnknownItem(item_id));
         };
         let q = self.queue.remove(idx).expect("idx validated above");
-        self.wip -= q.ticket.weight;
         let completed = CompletedItem {
             ticket: q.ticket,
             completed_at: now,
@@ -587,11 +591,12 @@ impl ReleaseGate {
 
     /// WIP 跌破下限 → 边沿触发 NeedRefill。
     fn check_refill_needed(&mut self, now: MinuteOfDay) {
-        if !self.refill_active && self.wip < self.cfg.wip_lower_minutes {
+        let wip = self.wip_minutes();
+        if !self.refill_active && wip < self.cfg.wip_lower_minutes {
             self.refill_active = true;
             self.events.push(GateEvent::NeedRefill {
                 at: now,
-                wip: self.wip,
+                wip,
                 lower: self.cfg.wip_lower_minutes,
             });
         }
@@ -599,12 +604,11 @@ impl ReleaseGate {
 
     /// WIP 回到下限之上 → RefillSatisfied。
     fn check_refill_cleared(&mut self, now: MinuteOfDay) {
-        if self.refill_active && self.wip >= self.cfg.wip_lower_minutes {
+        let wip = self.wip_minutes();
+        if self.refill_active && wip >= self.cfg.wip_lower_minutes {
             self.refill_active = false;
-            self.events.push(GateEvent::RefillSatisfied {
-                at: now,
-                wip: self.wip,
-            });
+            self.events
+                .push(GateEvent::RefillSatisfied { at: now, wip });
         }
     }
 
@@ -615,7 +619,7 @@ impl ReleaseGate {
 
     pub(crate) fn runtime_snapshot(&self) -> RuntimeSnapshot {
         RuntimeSnapshot {
-            wip: self.wip,
+            wip: self.wip_minutes(),
             items: self
                 .queue
                 .iter()
@@ -651,7 +655,7 @@ impl ReleaseGate {
         if snap.canary.is_some() != predicate.is_some() {
             return Err(RestoreError::PredicateMismatch);
         }
-        let sum = snap.items.iter().fold(0.0, |acc, item| acc + item.weight);
+        let sum = sum_weights(snap.items.iter().map(|item| item.weight));
         if sum.to_bits() != snap.wip.to_bits() {
             return Err(RestoreError::InconsistentWip);
         }
@@ -666,7 +670,6 @@ impl ReleaseGate {
                 },
             });
         }
-        self.wip = snap.wip;
         self.night = NightRuntime {
             credit: snap.night_credit,
             requests: snap.night_requests,
@@ -876,7 +879,6 @@ impl ReleaseGate {
         let Some(queued) = self.queue.remove(idx) else {
             return;
         };
-        self.wip -= queued.ticket.weight;
         if let Some(canary) = &mut self.canary {
             if !canary.open && canary.config == queued.ticket.config && canary.released > 0 {
                 canary.released -= 1;
