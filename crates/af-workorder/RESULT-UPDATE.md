@@ -1,4 +1,90 @@
-# RESULT-UPDATE — C5 · insta 快照接入 af-workorder
+# RESULT-UPDATE — W3D · WorkOrder 稳定身份与分片映射
+
+日期：2026-10-19。分支 `task-W3D`。业务语义沿用已合流的 T4 / T56 / C5：门控两层、`graph_version` 无 setter、SLA 截止是 `DateTime<Utc>`、`payload_hash` 是 SHA-256 小写十六进制、变更单签名是注入种子的 ed25519。`CHANGE_ORDER_SIGNING_DOMAIN` 字节未改。
+
+源码只动 `crates/af-workorder/**`。没有新的第三方 crate，`Cargo.lock` 没有改。
+
+提交：`06dbdb1`（stable_id 与分片）、`b10d613`（拒绝式信封）、`f883eb0`（决策哈希与签名域回归）。
+
+## 结论
+
+通过。`WorkOrder` 增加稳定身份 `stable_id`。`WorkOrder::new` 用域前缀 `af-workorder/stable-id/v1\0` 接订单 id 做 SHA-256，写成 `sid-` 加 64 位小写十六进制。不读系统熵，也不读引擎 run。`continue_as_new` 只替换 `run_id`。`stable_id`、`id`、`graph_version`、状态和履历都不变。换 run 不是状态机边，不写入 `HistoryRecord`。
+
+`with_stable_id` 原样带回已有身份，不按订单 id 重算。同一 `stable_id`、不同 run，`same_identity` 为真。后继工单是新单，按新 id 生成新的 `stable_id`，不继承原单。
+
+分片键 `shard_key = sha256(stable_id 的字符串) mod shard_count`。摘要按大端 256 位整数取模。`shard_count` 是调用方传入的配方层值，不存在工单上。0 返回 `ShardError::ZeroShardCount`。同一身份与同一分片数多次调用结果相同，换 run 不改变分片。
+
+serde 不给 `stable_id` / `run_id` 填默认值。`decode_work_order` 与 `WorkOrder` 的 `Deserialize` 共用同一道门禁：缺字段、JSON null、空串或类型不对，都返回 `RejectionEnvelope`，`field` 点名是哪一个。两个都缺时先点名 `stable_id`。空 `run_id` 表示尚未绑定，允许；缺键不允许。
+
+决策工件四层校验顺序没变。订单路径 `decision_payload` / `seal_decision` 把 `stable_id` 写进被签字符串，`run_id` 不写进去。回归测试钉死原文与哈希。变更单签名域仍是 `b"af-workorder/change-order/v1\0"`，被签字节仍是该前缀接变更单自己的 JSON，不含 `stable_id`。
+
+## 步骤
+
+1. `src/identity.rs`：`StableId`、`RunContext`、`shard_key`、`decision_payload`。`src/order.rs` 增加私有字段 `stable_id` 与 `run_id`，以及 `continue_as_new` / `same_identity` / `with_stable_id`。`WorkOrder::new` 的参数没变。
+2. `decode_work_order` 先查身份字段，再读入同形的 `WorkOrderWire`。`Deserialize` 走同一函数，所以 `serde_json::from_str::<WorkOrder>` 也不会补默认身份。错误类型是 `OrderDecodeError::Rejected(RejectionEnvelope)`。
+3. `WorkOrder::seal_decision` 对 `decision_payload` 调用原来的 `DecisionArtifact::seal`。自由字符串的 `seal` 没改。`change.rs` 只加了签名域回归测试，签发与验签代码没动。
+
+测试数字（相对 C5 记录的 42 个单测、9 个集成测试）：
+
+| 提交 | 新增 | 之后 |
+|---|---|---|
+| `06dbdb1` | 单测 4：生成向量、空白拒绝、分片向量、生命周期内身份不随 run 变。集成 2：不同 run 身份连续、分片确定性 | 单测 46，集成 11 |
+| `b10d613` | 单测 1：老载荷拒绝式信封。集成 1：缺 `stable_id`、缺 `run_id`、空 `stable_id`、完整往返 | 单测 47，集成 12 |
+| `f883eb0` | 单测 1：签名域字节与签名体不含 `stable_id`。集成 1：决策哈希纳入 `stable_id` | 单测 48，集成 13 |
+
+已有测试没有改断言。集成测试仍是 calendar 3、json 快照 3、lifecycle 3，另加 identity 4。
+
+## 证据
+
+```text
+source /data/af-factory/env.sh
+cargo check -j 4 -p af-workorder
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.70s
+# exit 0
+
+cargo fmt -p af-workorder
+
+cargo clippy --all-targets -j 4 -p af-workorder -- -D warnings
+# Checking af-workorder
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.73s
+# exit 0，无警告
+
+cargo test -j 4 -p af-workorder
+# unittests src/lib.rs: ok. 48 passed; 0 failed
+# tests/calendar_sla.rs: ok. 3 passed; 0 failed
+# tests/identity.rs: ok. 4 passed; 0 failed
+# tests/json_snapshots.rs: ok. 3 passed; 0 failed
+# tests/lifecycle.rs: ok. 3 passed; 0 failed
+# Doc-tests af_workorder: ok. 0 passed; 0 failed
+```
+
+钉死的向量（测试内断言，运行通过）：
+
+- `StableId::generate("wo-1")` = `sid-f905c3b464315a0a05fe2682f64a93aa2194016459b62a5b554f8d60692f451f`
+- `shard_key("sid-fixed", 64)` = 32，`shard_key("sid-fixed", 100)` = 36，`shard_key("sid-other", 64)` = 11，`shard_key(_, 1)` = 0
+- 决策 payload `af-workorder/decision-payload/v1|9|sid-fixed|15|release-request` 的 SHA-256 = `18d638628bd06103e7138ac40e673dee658d184f65965834b3a96c60e519754c`
+- `CHANGE_ORDER_SIGNING_DOMAIN` = `af-workorder/change-order/v1\0`
+
+## 反馈
+
+1. 身份的权威值是落在工单上的 `stable_id`，不是每次用订单 id 重算。`new` 只在创建时算一次。CAN 续接用 `with_stable_id` 或反序列化后再 `continue_as_new`。若按 id 重算，调用方改了业务 id 就会被看成另一张单。
+2. 变更单的后继单不继承 `stable_id`。换版是新工单（`supersedes` 指回原单），和引擎换 run 不是一回事。若产品要求换版也保持同一身份，需要另定规则。
+3. 分片数留在配方层。本 crate 不保存它，也不读取配方文件。算法是整段 SHA-256 的大端取模，不是只取前 8 字节。换配方的分片数会改变 `shard_key`，这是参数变化，不是身份变化。
+4. 拒绝式信封是结构化对象（`kind` / `field` / `detail`），`Display` 以「拒绝式信封」开头并带字段名。直接 `serde_json::from_str::<WorkOrder>` 的错误字符串同样包含这两点。不要用 `#[serde(default)]` 把老载荷补成空身份。
+5. `DecisionArtifact::seal` 仍对调用方给出的字符串做哈希，四层顺序没动。订单决策要带上身份，走 `WorkOrder::seal_decision`。自由 payload 的旧测试因此不用改。
+6. `WorkOrder` 的 `Deserialize` 先收成 `serde_json::Value` 再查字段。这是本 crate 的 JSON 边界。非对象（例如数组）仍由 serde 报类型错误，不伪装成缺 `stable_id`。
+
+## 遗留
+
+- 决策工件仍是占位验签（`ed25519-placeholder`）。本次没有改 `seal` / `validate_against` 的四层顺序。
+- 没有稳定身份注册表。调用方自己保存 `stable_id`，续接时原样带回。
+- 分片数的配方校验不在本 crate。传入 0 会拒绝，其它正整数照取模。
+- `fuzz/fuzz_targets/af_workorder_order_parse.rs` 不在本任务改动范围。`WorkOrder::new` 的参数没变，旧的、没有 `stable_id` 的 JSON 现在解析失败，fuzzer 本来就把解析失败当成跳过。
+- 预算凭证仍只看 `signed` 布尔位。履历仍没有时间戳。
+
+---
+
+# 历史 · C5 · insta 快照接入 af-workorder
 
 日期：2026-10-19。分支 `task-C5`。业务语义沿用已合流的 T4 / T56：SLA 截止是日历解析出的 `DateTime<Utc>`，`payload_hash` 是 SHA-256 小写十六进制，变更单签名是注入种子的 ed25519。本任务只加 JSON 快照，不改这些语义。
 
