@@ -11,7 +11,8 @@ use af_workorder::{
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Barrier};
+use std::thread;
 use std::time::Duration;
 
 const WALL0: i64 = 1_700_000_000_000;
@@ -740,6 +741,76 @@ fn t8_order_state_transitions_drive_intent_lifecycle() {
         declare_ok,
     );
     assert!(gw.snapshot_intent(&k_c).unwrap().is_none());
+}
+
+// ===========================================================================
+// F2：同纪元两条连接并发 execute 同一意图，外呼只能发生一次
+// ===========================================================================
+#[test]
+fn t9_same_epoch_concurrent_execute_calls_out_once() {
+    let db = temp_db("t9");
+    let clock = manual_clock();
+    let window = Duration::from_millis(30);
+    // 两条连接在推进钟之前打开，逻辑毫秒的起点相同，窗口才能一起关上。
+    let gw_a = Gateway::open_with_clock(&db, window, clock.clone()).unwrap();
+    let gw_b = Gateway::open_with_clock(&db, window, clock.clone()).unwrap();
+    let s_a = gw_a.attach().unwrap();
+    let s_b = gw_b.attach().unwrap();
+    assert_eq!(s_a.epoch, s_b.epoch, "同库同纪元");
+    let wo = in_progress_order("WO-F2");
+    let k = key("WO-F2", "pay_vendor", 1);
+    let payload = json!({ "amount": 1, "to_account": "ACCT-A" });
+    gw_a.declare_intent(&s_a, &k, &payload, &wo).unwrap();
+    clock.advance(window);
+
+    let counter = Arc::new(AtomicUsize::new(0));
+    let barrier = Arc::new(Barrier::new(2));
+    let mut handles = Vec::new();
+    for (gw, session) in [(gw_a, s_a), (gw_b, s_b)] {
+        let barrier = Arc::clone(&barrier);
+        let counter = Arc::clone(&counter);
+        let k = k.clone();
+        let wo = in_progress_order("WO-F2");
+        handles.push(thread::spawn(move || {
+            barrier.wait();
+            gw.execute(&session, &k, &wo, move |_payload: &Value| {
+                let n = counter.fetch_add(1, Ordering::SeqCst) + 1;
+                // 把“已读到 declared、尚未落回执”的窗口留住，让对端也能走进外呼。
+                // 不睡眠：有界让出。抢占修好之后对端进不了这个闭包，循环会走完。
+                let mut spins = 0;
+                while counter.load(Ordering::SeqCst) < 2 && spins < 20_000 {
+                    thread::yield_now();
+                    spins += 1;
+                }
+                Ok(json!({ "txn_id": format!("T-{}", n), "provider": "mock-pay" }))
+            })
+        }));
+    }
+
+    let mut ran_fresh = 0usize;
+    let mut others = Vec::new();
+    for handle in handles {
+        match handle.join().unwrap() {
+            Ok(ExecuteOutcome::RanFresh { .. }) => ran_fresh += 1,
+            other => others.push(format!("{other:?}")),
+        }
+    }
+    assert_eq!(
+        call_count(&counter),
+        1,
+        "F2: 同纪元双连接并发 execute 外呼计数必须为 1，其他结果 {others:?}"
+    );
+    assert_eq!(ran_fresh, 1, "F2: 恰好一方 RanFresh，其他结果 {others:?}");
+
+    let gw = Gateway::open_with_clock(&db, window, clock).unwrap();
+    let s = gw.attach().unwrap();
+    let again = gw
+        .execute(&s, &k, &wo, counting_effect(counter.clone()))
+        .unwrap();
+    assert!(again.is_replay(), "回执落库后只能重放");
+    assert_eq!(call_count(&counter), 1, "重放不得再外呼");
+
+    let _ = std::fs::remove_file(&db);
 }
 
 fn assert_order_state_rejected(
