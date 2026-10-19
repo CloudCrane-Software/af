@@ -10,3 +10,9 @@ cedar-policy = "4"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# 快照。yaml feature 打开 assert_yaml_snapshot!（serde_yaml）。
+insta = { version = "1.49.0", features = ["yaml"] }
+# 测试里的快照视图要 Serialize。版本用 workspace 已钉的 1.0.229。
+serde = { workspace = true }
