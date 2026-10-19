@@ -40,7 +40,10 @@ fn ssh(host: &str, script: &str, timeout_sec: u32) -> Result<(bool, String), Str
         .arg("-o")
         .arg("BatchMode=yes")
         .arg(host)
-        .arg(format!("timeout {timeout_sec} bash -c {}", shell_quote(script)))
+        .arg(format!(
+            "timeout {timeout_sec} bash -c {}",
+            shell_quote(script)
+        ))
         .output()
         .map_err(|err| format!("ssh 启动失败: {err}"))?;
     let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
@@ -186,7 +189,10 @@ impl TbEnv {
                 match reward {
                     "1" => (Some(true), tail(&run_log, 600)),
                     "0" => (Some(false), tail(&run_log, 600)),
-                    _ => (None, format!("无 reward.txt；验证器输出: {}", tail(&run_log, 400))),
+                    _ => (
+                        None,
+                        format!("无 reward.txt；验证器输出: {}", tail(&run_log, 400)),
+                    ),
                 }
             }
             Err(err) => (None, format!("读 reward 失败: {err}")),
@@ -194,11 +200,7 @@ impl TbEnv {
     }
 
     pub fn cleanup(&self) {
-        let _ = ssh(
-            &self.host,
-            &format!("docker rm -f {}", self.container),
-            60,
-        );
+        let _ = ssh(&self.host, &format!("docker rm -f {}", self.container), 60);
     }
 }
 

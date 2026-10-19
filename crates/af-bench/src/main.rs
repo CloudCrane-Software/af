@@ -24,8 +24,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
-mod tb;
 mod swev;
+mod tb;
 
 fn main() {
     if let Err(err) = run() {
@@ -65,14 +65,24 @@ impl Args {
         while let Some(arg) = it.next() {
             match arg.as_str() {
                 "--suite" => suite = Some(it.next().ok_or("--suite 缺值")?),
-                "--data-root" => data_root = Some(PathBuf::from(it.next().ok_or("--data-root 缺值")?)),
+                "--data-root" => {
+                    data_root = Some(PathBuf::from(it.next().ok_or("--data-root 缺值")?))
+                }
                 "--profile" => profile = Some(it.next().ok_or("--profile 缺值")?),
                 "--case-file" => case_file = it.next().ok_or("--case-file 缺值")?,
                 "--limit" => {
-                    limit = it.next().ok_or("--limit 缺值")?.parse().map_err(|_| "--limit 不是整数")?
+                    limit = it
+                        .next()
+                        .ok_or("--limit 缺值")?
+                        .parse()
+                        .map_err(|_| "--limit 不是整数")?
                 }
                 "--offset" => {
-                    offset = it.next().ok_or("--offset 缺值")?.parse().map_err(|_| "--offset 不是整数")?
+                    offset = it
+                        .next()
+                        .ok_or("--offset 缺值")?
+                        .parse()
+                        .map_err(|_| "--offset 不是整数")?
                 }
                 "--out" => out = PathBuf::from(it.next().ok_or("--out 缺值")?),
                 "--trial" => trial = true,
@@ -125,6 +135,18 @@ fn profile(name: &str) -> Result<Profile, String> {
             },
             key_cmd: "ssh anolis 'python3 ~/.local/bin/mcode-token.py get'",
         }),
+        "mavis-m3" => Ok(Profile {
+            endpoint: EndpointSpec {
+                protocol: Protocol::AnthropicMessages,
+                base_url: "https://agent.minimaxi.com/mavis/api/v1/llm".into(),
+                model: "MiniMax-M3".into(),
+                key_ref: "mcode-oauth".into(),
+                reasoning_tier: ReasoningTier::Off,
+                stream: false,
+                auth: Some(AuthStyle::Bearer),
+            },
+            key_cmd: "ssh anolis 'python3 ~/.local/bin/mcode-token.py get'",
+        }),
         "glm-cp" => Ok(Profile {
             endpoint: EndpointSpec {
                 protocol: Protocol::AnthropicMessages,
@@ -137,7 +159,45 @@ fn profile(name: &str) -> Result<Profile, String> {
             },
             key_cmd: "RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key",
         }),
-        other => Err(format!("未知档案 {other}（可选 mavis-m31f / glm-cp）")),
+        "glm-cp-max" => Ok(Profile {
+            endpoint: EndpointSpec {
+                protocol: Protocol::AnthropicMessages,
+                base_url: "https://open.bigmodel.cn/api/anthropic".into(),
+                model: "GLM-5.3".into(),
+                key_ref: "zhipu-coding-plan".into(),
+                reasoning_tier: ReasoningTier::Off,
+                stream: false,
+                auth: Some(AuthStyle::Bearer),
+            },
+            key_cmd: "RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key",
+        }),
+        "step-5" => Ok(Profile {
+            endpoint: EndpointSpec {
+                protocol: Protocol::OpenaiChatCompletions,
+                base_url: "https://api.stepfun.com/step_plan/v1".into(),
+                model: "step-5-preview".into(),
+                key_ref: "stepfun-plan".into(),
+                reasoning_tier: ReasoningTier::Off,
+                stream: false,
+                auth: None,
+            },
+            key_cmd: "jq -r '.config.providerConfigRules.providerRules[] | select(.providerId==\"new-provider\") | .config.access.apiKey' ~/.zcode/v2/provider_config.json",
+        }),
+        "kimi-k3" => Ok(Profile {
+            endpoint: EndpointSpec {
+                protocol: Protocol::OpenaiChatCompletions,
+                base_url: "https://api.kimi.com/coding/v1".into(),
+                model: "kimi-k3".into(),
+                key_ref: "kimi-coding".into(),
+                reasoning_tier: ReasoningTier::Off,
+                stream: false,
+                auth: None,
+            },
+            key_cmd: "jq -r '.config.providerConfigRules.providerRules[] | select(.providerId==\"moonshot-kimi\") | .config.access.apiKey' ~/.zcode/v2/provider_config.json",
+        }),
+        other => Err(format!(
+            "未知档案 {other}（可选 mavis-m31f / mavis-m3 / glm-cp / glm-cp-max / step-5 / kimi-k3）"
+        )),
     }
 }
 
@@ -151,7 +211,10 @@ fn resolve_key(cmd: &str) -> Result<String, String> {
         return Err(format!(
             "密钥解析器退出 {}: {}",
             output.status,
-            String::from_utf8_lossy(&output.stderr).chars().take(160).collect::<String>()
+            String::from_utf8_lossy(&output.stderr)
+                .chars()
+                .take(160)
+                .collect::<String>()
         ));
     }
     let key = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -196,23 +259,51 @@ fn load_tools_json(path: &Path) -> Result<Value, String> {
 fn find_tool_decl(toolkits: &Value, full_name: &str) -> Result<ToolDecl, String> {
     for kit in toolkits.as_array().ok_or("tools.json 顶层不是数组")? {
         let kit_name = kit.get("toolkit").and_then(Value::as_str).unwrap_or("");
-        for tool in kit.get("tools").and_then(Value::as_array).cloned().unwrap_or_default() {
+        for tool in kit
+            .get("tools")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+        {
             let tool_name = tool.get("name").and_then(Value::as_str).unwrap_or("");
             if format!("{kit_name}{tool_name}") == full_name {
                 let mut properties = Map::new();
                 let mut required = Vec::new();
-                for param in tool.get("parameters").and_then(Value::as_array).cloned().unwrap_or_default() {
-                    let pname = param.get("name").and_then(Value::as_str).unwrap_or("").to_string();
-                    let ptype = param.get("type").and_then(Value::as_str).unwrap_or("string");
-                    let pdesc = param.get("description").and_then(Value::as_str).unwrap_or("");
+                for param in tool
+                    .get("parameters")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default()
+                {
+                    let pname = param
+                        .get("name")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string();
+                    let ptype = param
+                        .get("type")
+                        .and_then(Value::as_str)
+                        .unwrap_or("string");
+                    let pdesc = param
+                        .get("description")
+                        .and_then(Value::as_str)
+                        .unwrap_or("");
                     properties.insert(pname.clone(), json!({"type": ptype, "description": pdesc}));
-                    if param.get("required").and_then(Value::as_bool).unwrap_or(false) {
+                    if param
+                        .get("required")
+                        .and_then(Value::as_bool)
+                        .unwrap_or(false)
+                    {
                         required.push(json!(pname));
                     }
                 }
                 return Ok(ToolDecl {
                     name: full_name.into(),
-                    description: tool.get("summary").and_then(Value::as_str).unwrap_or("").into(),
+                    description: tool
+                        .get("summary")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .into(),
                     parameters: json!({
                         "type": "object",
                         "properties": Value::Object(properties),
@@ -228,7 +319,8 @@ fn find_tool_decl(toolkits: &Value, full_name: &str) -> Result<ToolDecl, String>
 
 fn load_injec_cases(root: &Path, case_file: &str) -> Result<Vec<InjecCase>, String> {
     let path = root.join("data").join(case_file);
-    let text = std::fs::read_to_string(&path).map_err(|err| format!("读 {} 失败: {err}", path.display()))?;
+    let text = std::fs::read_to_string(&path)
+        .map_err(|err| format!("读 {} 失败: {err}", path.display()))?;
     serde_json::from_str(&text).map_err(|err| format!("{} 不是 JSON: {err}", path.display()))
 }
 
@@ -296,7 +388,11 @@ fn judge(report: &RunReport, task: &BenchTask) -> JudgeOutcome {
 // ---------- 运行 ----------
 
 fn bench_order(run_id: &str) -> Result<WorkOrder, String> {
-    let mut order = WorkOrder::new(run_id, GraphVersion::new("bench"), Sla::new(None, Priority::Normal));
+    let mut order = WorkOrder::new(
+        run_id,
+        GraphVersion::new("bench"),
+        Sla::new(None, Priority::Normal),
+    );
     order
         .bind_line(LineBinding {
             line_id: "bench-line".into(),
@@ -333,7 +429,9 @@ fn run() -> Result<(), String> {
         "injecagent" => run_injec(&args),
         "terminal-bench" => run_tb(&args),
         "swe-v" => run_swev(&args),
-        other => Err(format!("未知套件 {other}（可选 injecagent / terminal-bench / swe-v）")),
+        other => Err(format!(
+            "未知套件 {other}（可选 injecagent / terminal-bench / swe-v）"
+        )),
     }
 }
 
@@ -452,7 +550,9 @@ fn run_swev(args: &Args) -> Result<(), String> {
         });
         use std::io::Write as _;
         writeln!(results, "{row}").map_err(|err| format!("写 results 失败: {err}"))?;
-        results.flush().map_err(|err| format!("flush 失败: {err}"))?;
+        results
+            .flush()
+            .map_err(|err| format!("flush 失败: {err}"))?;
         eprintln!(
             "[{}/{}] {} status={} resolved={:?} tokens(in={},out={}) agent={}ms",
             index + 1,
@@ -587,7 +687,9 @@ fn run_tb(args: &Args) -> Result<(), String> {
         });
         use std::io::Write as _;
         writeln!(results, "{row}").map_err(|err| format!("写 results 失败: {err}"))?;
-        results.flush().map_err(|err| format!("flush 失败: {err}"))?;
+        results
+            .flush()
+            .map_err(|err| format!("flush 失败: {err}"))?;
         eprintln!(
             "[{}/{}] {} status={} reward={:?} tokens(in={},out={}) agent={}ms",
             index + 1,
@@ -612,7 +714,11 @@ fn run_injec(args: &Args) -> Result<(), String> {
     let prof = profile(&args.profile)?;
     let tasks = build_tasks(&args.data_root, &args.case_file)?;
     let total = tasks.len();
-    let picked: Vec<BenchTask> = tasks.into_iter().skip(args.offset).take(args.limit).collect();
+    let picked: Vec<BenchTask> = tasks
+        .into_iter()
+        .skip(args.offset)
+        .take(args.limit)
+        .collect();
     if picked.is_empty() {
         return Err(format!("offset {} 超出 {} 条用例", args.offset, total));
     }
@@ -717,7 +823,9 @@ fn run_injec(args: &Args) -> Result<(), String> {
         });
         use std::io::Write as _;
         writeln!(results, "{row}").map_err(|err| format!("写 results 失败: {err}"))?;
-        results.flush().map_err(|err| format!("flush 失败: {err}"))?;
+        results
+            .flush()
+            .map_err(|err| format!("flush 失败: {err}"))?;
         eprintln!(
             "[{done}/{}] {} status={} inj={} tokens(in={},out={}) wall={}ms",
             picked.len(),
@@ -731,7 +839,11 @@ fn run_injec(args: &Args) -> Result<(), String> {
     }
     println!(
         "af-bench 完成: {done} 题, 注入成功 {injected} ({:.1}%), results → {}",
-        if done == 0 { 0.0 } else { injected as f64 * 100.0 / done as f64 },
+        if done == 0 {
+            0.0
+        } else {
+            injected as f64 * 100.0 / done as f64
+        },
         results_path.display()
     );
     Ok(())

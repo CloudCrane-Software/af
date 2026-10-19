@@ -41,8 +41,8 @@ pub fn load_swev_tasks(root: &Path, names: &[String]) -> Result<Vec<SwevTask>, S
         let path = root.join(format!("{name}.json"));
         let text = std::fs::read_to_string(&path)
             .map_err(|err| format!("读 {} 失败: {err}", path.display()))?;
-        let task: SwevTask =
-            serde_json::from_str(&text).map_err(|err| format!("{} 不是 JSON: {err}", path.display()))?;
+        let task: SwevTask = serde_json::from_str(&text)
+            .map_err(|err| format!("{} 不是 JSON: {err}", path.display()))?;
         out.push(task);
     }
     Ok(out)
@@ -50,7 +50,10 @@ pub fn load_swev_tasks(root: &Path, names: &[String]) -> Result<Vec<SwevTask>, S
 
 /// 起容器。sweb.eval 镜像自带 /testbed 与全部测试资产，无需 build。
 pub fn setup(host: &str, task: &SwevTask, profile: &str) -> Result<tb::TbEnv, String> {
-    let container = format!("afbench-swev-{}-{profile}", task.instance_id.replace("__", "-"));
+    let container = format!(
+        "afbench-swev-{}-{profile}",
+        task.instance_id.replace("__", "-")
+    );
     let _ = tb_ssh(host, &format!("docker rm -f {container}"), 30);
     let script = format!(
         "docker run -d --name {container} \
@@ -66,7 +69,10 @@ pub fn setup(host: &str, task: &SwevTask, profile: &str) -> Result<tb::TbEnv, St
             task: task.instance_id.clone(),
             host: host.into(),
         }),
-        Ok((false, log)) => Err(format!("起容器失败: {}", log.chars().take(400).collect::<String>())),
+        Ok((false, log)) => Err(format!(
+            "起容器失败: {}",
+            log.chars().take(400).collect::<String>()
+        )),
         Err(err) => Err(err),
     }
 }
@@ -131,7 +137,13 @@ pub fn verify(
                     let resolved = row.get("resolved").and_then(serde_json::Value::as_bool);
                     (resolved, format!("judge: {}", text.trim()))
                 }
-                Err(err) => (None, format!("judge 输出不是 JSON: {err}: {}", &text[..text.len().min(200)])),
+                Err(err) => (
+                    None,
+                    format!(
+                        "judge 输出不是 JSON: {err}: {}",
+                        &text[..text.len().min(200)]
+                    ),
+                ),
             }
         }
         Ok(output) => (
@@ -139,7 +151,10 @@ pub fn verify(
             format!(
                 "judge 退出 {}: {}",
                 output.status,
-                String::from_utf8_lossy(&output.stderr).chars().take(300).collect::<String>()
+                String::from_utf8_lossy(&output.stderr)
+                    .chars()
+                    .take(300)
+                    .collect::<String>()
             ),
         ),
         Err(err) => (None, format!("judge 启动失败: {err}")),
@@ -151,7 +166,10 @@ fn tb_ssh(host: &str, script: &str, timeout_sec: u32) -> Result<(bool, String), 
         .arg("-o")
         .arg("BatchMode=yes")
         .arg(host)
-        .arg(format!("timeout {timeout_sec} bash -c '{}'", script.replace('\'', "'\\''")))
+        .arg(format!(
+            "timeout {timeout_sec} bash -c '{}'",
+            script.replace('\'', "'\\''")
+        ))
         .output()
         .map_err(|err| format!("ssh 启动失败: {err}"))?;
     let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
