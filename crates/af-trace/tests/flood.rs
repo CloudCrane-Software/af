@@ -67,6 +67,8 @@ fn flood_100k_normal_events() {
         critical_consume_delay_us: 0, // critical 落盘不拖后腿
         normal_consume_delay_us: 200, // normal 慢消费者：200µs/条
         dir: dir.path().to_path_buf(),
+        otel_endpoint: None,
+        otel_batch_size: 512,
     };
     let (trace, outcome) = Trace::open(cfg.clone()).unwrap();
     assert_eq!(outcome, OpenOutcome::Created);

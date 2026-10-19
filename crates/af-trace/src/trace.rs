@@ -1,6 +1,7 @@
 use crate::clock::{Clock, SystemClock};
 use crate::error::TraceError;
 use crate::event::{sum_gap_counts, GapInfo, Level, TraceEvent};
+use crate::otel::{self, OtelMode};
 use crate::store::{store_path, OpenOutcome, Store};
 use serde_json::json;
 use std::fs::{self, File, OpenOptions};
@@ -29,6 +30,12 @@ pub struct TraceConfig {
     pub normal_consume_delay_us: u64,
     /// JSONL 与 `trace.db` 的目录，由调用方给出。空路径会在打开时失败。
     pub dir: PathBuf,
+    /// OTLP HTTP 端点，由配方层写入，原样交给 `with_endpoint`（完整 URL，含路径）。
+    /// `None` 或空白表示非关键 lane 离线，只计数。
+    /// 例：`http://127.0.0.1:4318/v1/traces`。feature `otel` 关闭时忽略该值，lane 仍离线。
+    pub otel_endpoint: Option<String>,
+    /// OTLP 批大小，由配方层写入。`0` 按 512。在线时也是该 lane 的有界队列容量。
+    pub otel_batch_size: usize,
 }
 
 impl Default for TraceConfig {
@@ -39,8 +46,17 @@ impl Default for TraceConfig {
             critical_consume_delay_us: 0,
             normal_consume_delay_us: 0,
             dir: PathBuf::new(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
         }
     }
+}
+
+fn configured_endpoint(cfg: &TraceConfig) -> Option<&str> {
+    cfg.otel_endpoint
+        .as_deref()
+        .map(str::trim)
+        .filter(|endpoint| !endpoint.is_empty())
 }
 
 /// 本次进程的镜像：各存 JSON line（一条事件一行）。
@@ -66,6 +82,10 @@ pub struct ShutdownReport {
     /// 本次进程写入 normal 镜像的行数（不含重开前的历史）
     pub normal_persisted: usize,
     pub sinks: TraceSinks,
+    /// 关闭时非关键 lane 的形态。
+    pub otel_mode: OtelMode,
+    /// 离线：只计数的 normal 条数。在线：导出成功的条数。失败进 `gap_counter`。
+    pub otel_counted: u64,
 }
 
 /// [`Trace::hold_consumers`] 的守卫。drop 之后落盘线程继续排空队列。
@@ -108,12 +128,20 @@ struct Inner {
     store: Mutex<Store>,
     fail_critical_after: AtomicU64,
     fail_normal_after: AtomicU64,
+    otel_mode: OtelMode,
+    otel_counted: Arc<AtomicU64>,
+    otel_offline_reason: Mutex<Option<String>>,
+    otel_tx: Mutex<Option<SyncSender<TraceEvent>>>,
+    /// `try_send` 成功的次数。单测用来确认批次已经进队列，再放开被挡住的 exporter。
+    #[cfg(all(test, feature = "otel"))]
+    otel_queued: AtomicU64,
 }
 
 pub struct Trace {
     inner: Arc<Inner>,
     critical_handle: Mutex<Option<JoinHandle<()>>>,
     normal_handle: Mutex<Option<JoinHandle<()>>>,
+    otel_handle: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Trace {
@@ -134,6 +162,27 @@ impl Trace {
     pub fn open_with_clock(
         cfg: TraceConfig,
         clock: impl Clock + 'static,
+    ) -> Result<(Arc<Self>, OpenOutcome), TraceError> {
+        let prepared = otel::prepare(configured_endpoint(&cfg), cfg.otel_batch_size);
+        Self::open_prepared(cfg, Arc::new(clock), prepared)
+    }
+
+    /// 用 mock exporter 代替 OTLP。端点配置不参与安装；lane 视为在线。
+    #[cfg(all(test, feature = "otel"))]
+    fn open_with_mock(
+        cfg: TraceConfig,
+        clock: impl Clock + 'static,
+        mock: crate::otel::MockExporter,
+    ) -> Result<(Arc<Self>, OpenOutcome), TraceError> {
+        let prepared = otel::prepare_with_mock(mock, cfg.otel_batch_size);
+        Self::open_prepared(cfg, Arc::new(clock), prepared)
+    }
+
+    #[allow(clippy::result_large_err)]
+    fn open_prepared(
+        cfg: TraceConfig,
+        clock: Arc<dyn Clock>,
+        mut prepared: otel::Prepared,
     ) -> Result<(Arc<Self>, OpenOutcome), TraceError> {
         if cfg.dir.as_os_str().is_empty() {
             return Err(TraceError::Open(
@@ -178,10 +227,26 @@ impl Trace {
             pending_gap: Mutex::new(None),
             persist_error: Mutex::new(None),
             unpersisted: Mutex::new(Vec::new()),
-            clock: Arc::new(clock),
+            clock,
             store: Mutex::new(store),
             fail_critical_after: AtomicU64::new(NO_INJECTED_FAIL),
             fail_normal_after: AtomicU64::new(NO_INJECTED_FAIL),
+            otel_mode: prepared.mode,
+            otel_counted: Arc::new(AtomicU64::new(0)),
+            otel_offline_reason: Mutex::new(prepared.reason),
+            otel_tx: Mutex::new(prepared.tx),
+            #[cfg(all(test, feature = "otel"))]
+            otel_queued: AtomicU64::new(0),
+        });
+        let otel_handle = prepared.spawn.take().map(|spawn| {
+            let counted = Arc::clone(&inner.otel_counted);
+            let hook_inner = Arc::downgrade(&inner);
+            let on_fail: otel::FailHook = Arc::new(move |seq| {
+                if let Some(inner) = hook_inner.upgrade() {
+                    inner.record_gap(seq);
+                }
+            });
+            spawn(counted, on_fail)
         });
         let critical_handle = spawn_consumer(
             Lane::Critical,
@@ -204,6 +269,7 @@ impl Trace {
                 inner,
                 critical_handle: Mutex::new(Some(critical_handle)),
                 normal_handle: Mutex::new(Some(normal_handle)),
+                otel_handle: Mutex::new(otel_handle),
             }),
             outcome,
         ))
@@ -227,8 +293,24 @@ impl Trace {
     }
 
     /// 当前丢弃计数（含本次打开时从 `trace.db` 恢复的基数）。
+    ///
+    /// OTel lane 离线时只含磁盘丢弃。lane 在线时还含导出失败和该 lane 队列满。
     pub fn gap_counter(&self) -> u64 {
         self.inner.gap_counter.load(Ordering::Relaxed)
+    }
+
+    pub fn otel_mode(&self) -> OtelMode {
+        self.inner.otel_mode
+    }
+
+    /// 离线：只计数的 normal 条数。在线：导出成功的条数。
+    pub fn otel_counted(&self) -> u64 {
+        self.inner.otel_counted.load(Ordering::Relaxed)
+    }
+
+    /// 离线原因。在线时为 `None`。
+    pub fn otel_offline_reason(&self) -> Option<String> {
+        self.inner.otel_offline_reason.lock().unwrap().clone()
     }
 
     /// **critical：移交同步，落盘线程同步写盘后再确认。fail-closed。**
@@ -276,9 +358,10 @@ impl Trace {
 
     /// 关闭流程（必须在所有生产者结束后调用）：
     /// 1) 关 normal 通道，等 normal 消费线程清空队列退出；
-    /// 2) 强制补发 pending 的合并 gap span；
-    /// 3) 关 critical 通道，等 critical 落盘线程清空退出；
-    /// 4) 把缺口计数写成与 critical 文件一致的值。
+    /// 2) 关 OTel lane，等已接受的 span 导出完（失败只记缺口）；
+    /// 3) 强制补发 pending 的合并 gap span；
+    /// 4) 关 critical 通道，等 critical 落盘线程清空退出；
+    /// 5) 把缺口计数写成与 critical 文件一致的值。
     ///
     /// 干净关闭时 `Ok` 的报告满足 `gap_counter == gap_reported == Σ(文件内 gap.count)`。
     /// critical 写盘失败时返回 [`TraceError::PersistFailed`]，事件在错误里。
@@ -288,12 +371,17 @@ impl Trace {
             drop(tx);
         }
         let normal_join = join_consumer(&self.normal_handle, "normal");
+        if let Some(tx) = self.inner.otel_tx.lock().unwrap().take() {
+            drop(tx);
+        }
+        let otel_join = join_consumer(&self.otel_handle, "otel");
         self.inner.flush_pending_gap();
         if let Some(tx) = self.inner.critical_tx.lock().unwrap().take() {
             drop(tx);
         }
         let critical_join = join_consumer(&self.critical_handle, "critical");
         normal_join?;
+        otel_join?;
         critical_join?;
 
         let critical_persisted = self.inner.sinks.critical.lock().unwrap().len();
@@ -304,6 +392,8 @@ impl Trace {
             critical_persisted,
             normal_persisted,
             sinks: self.inner.sinks.clone(),
+            otel_mode: self.inner.otel_mode,
+            otel_counted: self.inner.otel_counted.load(Ordering::Relaxed),
         };
         self.checkpoint(&report)
     }
@@ -411,6 +501,34 @@ impl Inner {
 
     fn take_unpersisted(&self) -> Vec<TraceEvent> {
         std::mem::take(&mut *self.unpersisted.lock().unwrap())
+    }
+
+    /// 落盘成功的 normal 事件交给非关键 lane。离线只计数；在线 `try_send`，满了记缺口。
+    fn submit_normal_persisted(&self, event: TraceEvent) {
+        if event.level != Level::Normal {
+            return;
+        }
+        if self.otel_mode == OtelMode::Offline {
+            self.otel_counted.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        let guard = self.otel_tx.lock().unwrap();
+        match guard.as_ref() {
+            Some(tx) => match tx.try_send(event) {
+                Ok(()) => {
+                    #[cfg(all(test, feature = "otel"))]
+                    self.otel_queued.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(TrySendError::Full(event) | TrySendError::Disconnected(event)) => {
+                    drop(guard);
+                    self.record_gap(event.seq);
+                }
+            },
+            None => {
+                drop(guard);
+                self.record_gap(event.seq);
+            }
+        }
     }
 
     fn injected_fail(&self, lane: Lane, written: u64) -> bool {
@@ -618,6 +736,10 @@ fn spawn_consumer(
                             Ok(()) => {
                                 guard.push(line);
                                 written = written.saturating_add(1);
+                                drop(guard);
+                                if matches!(lane, Lane::Normal) {
+                                    inner.submit_normal_persisted(event);
+                                }
                             }
                             Err(detail) => {
                                 drop(guard);
@@ -646,6 +768,7 @@ mod tests {
     use crate::clock::ManualClock;
     use crate::error::TraceError;
     use crate::event::Level;
+    use crate::otel::OtelMode;
     use crate::store::store_path;
     use rusqlite::Connection;
     use std::collections::HashSet;
@@ -684,6 +807,16 @@ mod tests {
             critical_consume_delay_us: 0,
             normal_consume_delay_us: 0,
             dir: dir.to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
+        }
+    }
+
+    fn cfg_with(dir: &Path, endpoint: Option<&str>, batch: usize) -> TraceConfig {
+        TraceConfig {
+            otel_endpoint: endpoint.map(str::to_string),
+            otel_batch_size: batch,
+            ..cfg_in(dir)
         }
     }
 
@@ -713,6 +846,8 @@ mod tests {
             critical_consume_delay_us: 500_000,
             normal_consume_delay_us: 0,
             dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
         })
         .unwrap();
         let mut errs = Vec::new();
@@ -773,6 +908,8 @@ mod tests {
             critical_consume_delay_us: 0,
             normal_consume_delay_us: 200_000,
             dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
         })
         .unwrap();
         for i in 0..20 {
@@ -811,6 +948,8 @@ mod tests {
             critical_consume_delay_us: 500_000,
             normal_consume_delay_us: 200_000,
             dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
         })
         .unwrap();
         for i in 0..30 {
@@ -845,6 +984,8 @@ mod tests {
         let dir = TempDir::new("zero-loss");
         let cfg = TraceConfig {
             dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
             ..TraceConfig::default()
         };
         let t = Trace::spawn(cfg).unwrap();
@@ -884,6 +1025,8 @@ mod tests {
             critical_consume_delay_us: 0,
             normal_consume_delay_us: 0,
             dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
         };
         let clock = ManualClock::new(1_700_000_000_042);
         let (trace, outcome) = Trace::open_with_clock(cfg.clone(), clock.clone()).unwrap();
@@ -987,6 +1130,8 @@ mod tests {
             critical_consume_delay_us: 0,
             normal_consume_delay_us: 0,
             dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
         })
         .unwrap();
         trace.inject_normal_fail_after(0);
@@ -1095,5 +1240,264 @@ mod tests {
         let mut file = OpenOptions::new().write(true).open("/dev/full").unwrap();
         let err = append_line(&mut file, "{}", true).unwrap_err();
         assert!(!err.is_empty());
+    }
+
+    /// 端点空白：lane 离线，只计落盘成功的 normal，critical 不计数，缺口不变。
+    #[test]
+    fn offline_lane_counts_persisted_normals_and_skips_critical() {
+        let dir = TempDir::new("otel-off");
+        let clock = ManualClock::new(50);
+        let (trace, outcome) =
+            Trace::open_with_clock(cfg_with(dir.path(), Some("  "), 4), clock).unwrap();
+        assert_eq!(outcome, OpenOutcome::Created);
+        assert_eq!(trace.otel_mode(), OtelMode::Offline);
+        let reason = trace.otel_offline_reason().expect("离线要有原因");
+        assert!(!reason.is_empty(), "{reason}");
+        let audit = trace.write_critical("audit", json!({ "k": 1 })).unwrap();
+        for i in 0..3 {
+            trace.write_normal("step", json!({ "i": i }));
+        }
+        let report = trace.shutdown().unwrap();
+        assert_eq!(report.otel_mode, OtelMode::Offline);
+        assert_eq!(report.normal_persisted, 3);
+        assert_eq!(report.otel_counted, 3);
+        assert_eq!(report.gap_counter, 0);
+        assert_eq!(report.gap_reported, 0);
+        let crit = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        assert!(crit
+            .iter()
+            .any(|event| event.seq == audit && event.level == Level::Critical));
+    }
+
+    #[cfg(not(feature = "otel"))]
+    #[test]
+    fn configured_endpoint_without_feature_stays_offline() {
+        let dir = TempDir::new("otel-nofeature");
+        let clock = ManualClock::new(7);
+        let (trace, _) = Trace::open_with_clock(
+            cfg_with(dir.path(), Some("http://127.0.0.1:4318"), 3),
+            clock,
+        )
+        .unwrap();
+        assert_eq!(trace.otel_mode(), OtelMode::Offline);
+        trace.write_normal("step", json!(1));
+        trace.write_critical("audit", json!(1)).unwrap();
+        let report = trace.shutdown().unwrap();
+        assert_eq!(report.otel_counted, 1);
+        assert_eq!(report.normal_persisted, 1);
+        assert_eq!(report.gap_counter, 0);
+    }
+
+    #[cfg(feature = "otel")]
+    fn spin_until(mut ready: impl FnMut() -> bool, message: &str) {
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while !ready() {
+            assert!(std::time::Instant::now() < deadline, "{message}");
+            std::thread::yield_now();
+        }
+    }
+
+    #[cfg(feature = "otel")]
+    fn span_attr(span: &opentelemetry_sdk::trace::SpanData, key: &str) -> String {
+        span.attributes
+            .iter()
+            .find(|kv| kv.key.as_str() == key)
+            .map(|kv| kv.value.as_str().into_owned())
+            .unwrap_or_default()
+    }
+
+    #[cfg(feature = "otel")]
+    #[test]
+    fn normal_events_map_to_spans_and_critical_never_enters() {
+        let dir = TempDir::new("otel-map");
+        let clock = ManualClock::new(1_700_000_000_042);
+        let mock = crate::otel::MockExporter::new();
+        // 先挡住 exporter：第一条进 export 后批次已封口，再把后两条放进容量为 2 的队列。
+        let hold = mock.gate.lock().unwrap();
+        let (trace, _) = Trace::open_with_mock(
+            cfg_with(dir.path(), Some("http://127.0.0.1:9"), 2),
+            clock,
+            mock.clone(),
+        )
+        .unwrap();
+        assert_eq!(trace.otel_mode(), OtelMode::Online);
+        let audit = trace
+            .write_critical("audit", json!({ "keep": true }))
+            .unwrap();
+        trace.write_normal("step", json!({ "i": 0 }));
+        spin_until(
+            || mock.entered.load(Ordering::SeqCst) >= 1,
+            "worker 没有进入 export",
+        );
+        trace.write_normal("step", json!({ "i": 1 }));
+        trace.write_normal("step", json!({ "i": 2 }));
+        spin_until(
+            || trace.inner.otel_queued.load(Ordering::Relaxed) >= 3,
+            "前三笔 normal 没有进 OTel 队列",
+        );
+        drop(hold);
+        spin_until(
+            || mock.spans.lock().unwrap().len() >= 3,
+            "前三笔 normal 没有导出",
+        );
+        trace.write_normal("step", json!({ "i": 3 }));
+        let report = trace.shutdown().unwrap();
+        assert_eq!(report.gap_counter, 0);
+        assert_eq!(report.gap_reported, 0);
+        assert_eq!(report.normal_persisted, 4);
+        assert_eq!(report.otel_counted, 4);
+        let spans = mock.spans.lock().unwrap().clone();
+        assert_eq!(spans.len(), 4);
+        let batches = mock.batches.lock().unwrap().clone();
+        assert_eq!(batches, vec![1, 2, 1], "批大小 2，实际 {batches:?}");
+        let normals = read_trace_log(&normal_log_path(dir.path())).unwrap();
+        assert_eq!(normals.len(), 4);
+        let trace_id = spans[0].span_context.trace_id();
+        for (span, event) in spans.iter().zip(normals.iter()) {
+            assert_eq!(event.level, Level::Normal);
+            assert_eq!(span.name.as_ref(), event.kind);
+            assert_eq!(span_attr(span, "af.seq"), event.seq.to_string());
+            assert_eq!(span_attr(span, "af.level"), "normal");
+            assert_eq!(span_attr(span, "af.kind"), "step");
+            assert_eq!(span_attr(span, "af.payload"), event.payload.to_string());
+            assert_eq!(span_attr(span, "af.ts_ms"), event.ts_ms.to_string());
+            assert_eq!(event.ts_ms, 1_700_000_000_042);
+            assert_eq!(span.span_context.trace_id(), trace_id);
+            assert!(span.span_context.is_valid());
+            assert_ne!(span_attr(span, "af.seq"), audit.to_string());
+        }
+        let crit = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        assert!(crit.iter().any(|event| event.seq == audit));
+        for event in &crit {
+            assert!(
+                spans
+                    .iter()
+                    .all(|span| span_attr(span, "af.seq") != event.seq.to_string()),
+                "critical seq {} 进入了 OTel",
+                event.seq
+            );
+        }
+    }
+
+    #[cfg(feature = "otel")]
+    #[test]
+    fn export_failure_only_increments_gap_and_keeps_disk() {
+        let dir = TempDir::new("otel-fail");
+        let clock = ManualClock::new(9);
+        let mock = crate::otel::MockExporter::new();
+        mock.fail.store(true, Ordering::SeqCst);
+        let (trace, _) =
+            Trace::open_with_mock(cfg_with(dir.path(), None, 8), clock, mock.clone()).unwrap();
+        let audit = trace.write_critical("audit", json!({ "k": 1 })).unwrap();
+        for i in 0..3 {
+            trace.write_normal("step", json!({ "i": i }));
+        }
+        let report = trace.shutdown().unwrap();
+        assert_eq!(report.normal_persisted, 3);
+        assert_eq!(report.gap_counter, 3);
+        assert_eq!(report.gap_reported, 3);
+        assert_eq!(report.otel_counted, 0);
+        assert!(mock.spans.lock().unwrap().is_empty());
+        let attempted = mock.attempted.lock().unwrap().clone();
+        assert_eq!(attempted, vec!["step".to_string(); 3]);
+        let normals = read_trace_log(&normal_log_path(dir.path())).unwrap();
+        assert_eq!(normals.len(), 3);
+        let crit = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        assert!(crit
+            .iter()
+            .any(|event| event.seq == audit && event.kind == "audit"));
+        assert_eq!(sum_gap_counts(&crit), 3);
+        assert!(attempted.iter().all(|name| name != "audit"));
+    }
+
+    #[cfg(feature = "otel")]
+    #[test]
+    fn wedged_export_does_not_block_writes_and_overflow_counts_gap() {
+        let dir = TempDir::new("otel-wedge");
+        let clock = ManualClock::new(11);
+        let mock = crate::otel::MockExporter::new();
+        let _hold = mock.gate.lock().unwrap();
+        let (trace, _) =
+            Trace::open_with_mock(cfg_with(dir.path(), None, 1), clock, mock.clone()).unwrap();
+        let audit = trace.write_critical("audit", json!(1)).unwrap();
+        for i in 0..3 {
+            trace.write_normal("step", json!({ "i": i }));
+        }
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while mock.entered.load(Ordering::SeqCst) == 0 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "worker 没有进入 export"
+            );
+            std::thread::yield_now();
+        }
+        let started = std::time::Instant::now();
+        trace.write_critical("audit", json!(2)).unwrap();
+        trace.write_normal("step", json!({ "i": 3 }));
+        assert!(
+            started.elapsed() < Duration::from_secs(1),
+            "导出被堵住时写入仍应立即返回"
+        );
+        let deadline = std::time::Instant::now() + Duration::from_secs(2);
+        while trace.gap_counter() == 0 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "OTel 队列满应立刻记缺口"
+            );
+            std::thread::yield_now();
+        }
+        drop(_hold);
+        let report = trace.shutdown().unwrap();
+        assert_eq!(report.normal_persisted, 4);
+        assert_eq!(report.gap_counter + report.otel_counted, 4);
+        assert!(report.gap_counter >= 1);
+        let spans = mock.spans.lock().unwrap();
+        assert_eq!(spans.len() as u64, report.otel_counted);
+        assert!(spans.iter().all(|span| span.name.as_ref() == "step"));
+        assert!(spans
+            .iter()
+            .all(|span| span_attr(span, "af.seq") != audit.to_string()));
+    }
+
+    #[cfg(feature = "otel")]
+    #[test]
+    fn missing_collector_does_not_fail_startup() {
+        let dir = TempDir::new("otel-missing");
+        let clock = ManualClock::new(3);
+        let (trace, outcome) =
+            Trace::open_with_clock(cfg_with(dir.path(), Some("http://127.0.0.1:9"), 4), clock)
+                .unwrap();
+        assert_eq!(outcome, OpenOutcome::Created);
+        match trace.otel_mode() {
+            OtelMode::Online => assert!(trace.otel_offline_reason().is_none()),
+            OtelMode::Offline => {
+                let reason = trace.otel_offline_reason().expect("离线要有原因");
+                assert!(!reason.is_empty(), "{reason}");
+            }
+        }
+        let report = trace.shutdown().unwrap();
+        assert_eq!(report.gap_counter, 0);
+        assert_eq!(report.otel_counted, 0);
+    }
+
+    #[cfg(feature = "otel")]
+    #[test]
+    fn unbuildable_exporter_degrades_to_pure_count() {
+        let dir = TempDir::new("otel-bad-endpoint");
+        let clock = ManualClock::new(4);
+        let (trace, _) =
+            Trace::open_with_clock(cfg_with(dir.path(), Some("http://"), 2), clock).unwrap();
+        assert_eq!(
+            trace.otel_mode(),
+            OtelMode::Offline,
+            "reason={:?}",
+            trace.otel_offline_reason()
+        );
+        trace.write_normal("step", json!({ "i": 1 }));
+        trace.write_critical("audit", json!(1)).unwrap();
+        let report = trace.shutdown().unwrap();
+        assert_eq!(report.otel_counted, 1);
+        assert_eq!(report.normal_persisted, 1);
+        assert_eq!(report.gap_counter, 0);
     }
 }

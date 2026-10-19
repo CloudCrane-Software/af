@@ -4,11 +4,22 @@ version = "0.1.0"
 edition.workspace = true
 license = "Apache-2.0"
 
+[features]
+default = []
+# 非关键 OTel lane。默认关闭：不编译 opentelemetry，也不连 collector。
+otel = ["dep:opentelemetry", "dep:opentelemetry_sdk", "dep:opentelemetry-otlp"]
+
 [dependencies]
 rusqlite = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+# 版本钉死。opentelemetry_sdk 是 otlp 0.33.1 的 SpanExporter / SpanData 所在 crate，
+# mock exporter 与批导出都要直接依赖它。
+# 传输用 HTTP protobuf + reqwest blocking client（本 crate 是同步的，不启用 grpc-tonic）。
+opentelemetry = { version = "=0.33.1", optional = true, default-features = false, features = ["trace"] }
+opentelemetry_sdk = { version = "=0.33.1", optional = true, default-features = false, features = ["trace"] }
+opentelemetry-otlp = { version = "=0.33.1", optional = true, default-features = false, features = ["trace", "http-proto", "reqwest-blocking-client"] }
 
 # 基准只在 `cargo bench` 下编译运行；`harness = false` 且不设 test=true，
 # `cargo test` 默认不会执行本 target。

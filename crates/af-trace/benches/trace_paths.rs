@@ -60,6 +60,8 @@ fn steady_cfg(dir: &Path) -> TraceConfig {
         critical_consume_delay_us: 0,
         normal_consume_delay_us: 0,
         dir: dir.to_path_buf(),
+        otel_endpoint: None,
+        otel_batch_size: 512,
     }
 }
 
@@ -70,6 +72,8 @@ fn flood_cfg(dir: &Path) -> TraceConfig {
         critical_consume_delay_us: 0,
         normal_consume_delay_us: 0,
         dir: dir.to_path_buf(),
+        otel_endpoint: None,
+        otel_batch_size: 512,
     }
 }
 
