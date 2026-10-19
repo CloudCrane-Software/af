@@ -51,7 +51,11 @@ name = "af-meter"
 version = "0.1.0"
 dependencies = [
  "af-credential",
+<<<<<<< HEAD
  "criterion",
+=======
+ "proptest",
+>>>>>>> af-meter: 引入 proptest 1.12.0 作为 dev-dependency
  "serde",
  "serde_json",
  "thiserror 1.0.69",
