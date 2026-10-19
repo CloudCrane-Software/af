@@ -165,8 +165,23 @@ impl FingerprintLedger {
         decl: LedgerDeclaration,
         clock: impl Clock + 'static,
     ) -> Result<(Self, OpenStatus)> {
-        let conn = Connection::open(path)?;
-        Self::connect(conn, decl, Arc::new(clock))
+        // 首开竞态：多连接同时首开同一新库时，输家在事务内会撞 "already exists"
+        // 或 WAL 转换期 "database is locked"（不走 busy handler）。注入退避重试，
+        // 用尽仍败原样返回（fail-closed），与 af-meter 的 COLD_START 纪律同款。
+        let path = path.as_ref();
+        let clock = Arc::new(clock);
+        let mut attempt = 0u32;
+        loop {
+            let conn = Connection::open(path)?;
+            match Self::connect(conn, decl.clone(), clock.clone()) {
+                Ok(ok) => return Ok(ok),
+                Err(err) if cold_start_conflict(&err) && attempt + 1 < COLD_START_ATTEMPTS => {
+                    cold_start_pause(attempt);
+                    attempt += 1;
+                }
+                Err(err) => return Err(err),
+            }
+        }
     }
 
     /// 内存账本。没有跨进程恢复的意义，返回 [`OpenStatus::Created`]。
@@ -737,6 +752,25 @@ fn mismatch(stored: &LedgerDeclaration, decl: &LedgerDeclaration) -> Error {
         "声明与已落盘状态不符".to_string()
     };
     Error::DeclarationMismatch { detail }
+}
+
+/// 首开窗口里对锁冲突与建表撞车的重试上限。
+const COLD_START_ATTEMPTS: u32 = 16;
+
+fn cold_start_conflict(err: &Error) -> bool {
+    let text = err.to_string().to_ascii_lowercase();
+    text.contains("database is locked")
+        || text.contains("database is busy")
+        || text.contains("database table is locked")
+        || text.contains("already exists")
+}
+
+fn cold_start_pause(attempt: u32) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static LANES: AtomicU64 = AtomicU64::new(0);
+    let lane = LANES.fetch_add(1, Ordering::Relaxed) % 8;
+    let millis = u64::from(attempt.saturating_add(1)).saturating_add(lane);
+    std::thread::sleep(Duration::from_millis(millis));
 }
 
 #[cfg(test)]

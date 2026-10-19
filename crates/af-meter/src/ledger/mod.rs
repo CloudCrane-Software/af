@@ -348,10 +348,10 @@ fn open_once(path: &Path, decl: &Declaration, tz: Tz, capacity_i64: i64) -> Resu
     // SQLite 禁止在事务里改 WAL，所以这一步紧挨在 BEGIN IMMEDIATE 之前。
     ensure_journal_mode(&conn)?;
     assert_recipe(&conn)?;
+    // ② 建库：建表与 user_version 同一个 IMMEDIATE 事务。
+    // foreign_keys/synchronous 是连接态 pragma，已在 connection_pragmas 设置；
+    // SQLite 禁止在事务内改 synchronous——F4 修复的核心纪律。
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    // ② 建库：连接态 pragma、建表、user_version 同一个 IMMEDIATE 事务。
-    tx.pragma_update(None, "foreign_keys", "ON")?;
-    tx.pragma_update(None, "synchronous", "NORMAL")?;
     let version = user_version(&tx)?;
     if version == SCHEMA_VERSION {
         tx.rollback()?;
@@ -395,7 +395,12 @@ fn open_once(path: &Path, decl: &Declaration, tz: Tz, capacity_i64: i64) -> Resu
     }))
 }
 
-fn finish_declared(mut conn: Connection, decl: &Declaration, tz: Tz, capacity_i64: i64) -> Result<Opened> {
+fn finish_declared(
+    mut conn: Connection,
+    decl: &Declaration,
+    tz: Tz,
+    capacity_i64: i64,
+) -> Result<Opened> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let version = user_version(&tx)?;
     if version != SCHEMA_VERSION {
@@ -470,7 +475,8 @@ fn ensure_journal_mode(conn: &Connection) -> Result<()> {
     if mode.eq_ignore_ascii_case("wal") {
         return Ok(());
     }
-    let mode: String = conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
+    let mode: String =
+        conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
     if mode.eq_ignore_ascii_case("wal") {
         Ok(())
     } else {

@@ -587,8 +587,6 @@ fn bootstrap(
     now_ms: i64,
 ) -> Result<OpenFork, SamplingError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    tx.pragma_update(None, "foreign_keys", "ON")?;
-    tx.pragma_update(None, "synchronous", "NORMAL")?;
     let version = user_version(&tx)?;
     if version == SCHEMA_VERSION {
         let tables = list_tables(&tx)?;

@@ -409,8 +409,6 @@ fn open_prepared(
     // delete→WAL 要排他锁。SQLite 禁止在事务里改 WAL，所以这一步紧挨在 BEGIN 之前。
     ensure_journal_mode(&conn)?;
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    tx.pragma_update(None, "foreign_keys", "ON")?;
-    tx.pragma_update(None, "synchronous", "NORMAL")?;
     let version = read_user_version(&tx)?;
     if version == SCHEMA_VERSION {
         tx.rollback()?;
