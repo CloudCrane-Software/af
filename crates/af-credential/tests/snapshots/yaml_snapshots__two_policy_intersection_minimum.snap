@@ -1,0 +1,181 @@
+---
+source: crates/af-credential/tests/yaml_snapshots.rs
+expression: snapshot
+---
+kind: two_policy_intersection_minimum
+cedar_policies: "\npermit(principal == Role::\"reviewer\", action == Action::\"test\", resource == Line::\"line-a\");\npermit(principal == Role::\"builder\", action == Action::\"git\", resource == Line::\"line-a\");\n"
+root_tools:
+  - git
+  - test
+root_namespace: line-a
+root_budget_cents: 1000
+child_tools:
+  - test
+child_spend_cap_cents: 500
+tool_intersection:
+  - test
+declared_spend_cap_cents: 500
+attenuated_facts_tools:
+  - git
+  - test
+attenuated_namespace: line-a
+attenuated_budget_cents: 1000
+probes:
+  - name: reviewer_test_inside_cap
+    role: reviewer
+    tool: test
+    namespace: line-a
+    spend_cents: 100
+    root:
+      allow: true
+      cedar_allow: true
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=true, token_carries(test @ line-a)=true, blocks=1"
+    attenuated:
+      allow: true
+      cedar_allow: true
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=true, token_carries(test @ line-a)=true, blocks=2"
+  - name: reviewer_test_at_child_cap
+    role: reviewer
+    tool: test
+    namespace: line-a
+    spend_cents: 500
+    root:
+      allow: true
+      cedar_allow: true
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=true, token_carries(test @ line-a)=true, blocks=1"
+    attenuated:
+      allow: true
+      cedar_allow: true
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=true, token_carries(test @ line-a)=true, blocks=2"
+  - name: reviewer_test_just_over_child_cap
+    role: reviewer
+    tool: test
+    namespace: line-a
+    spend_cents: 501
+    root:
+      allow: true
+      cedar_allow: true
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=true, token_carries(test @ line-a)=true, blocks=1"
+    attenuated:
+      allow: false
+      cedar_allow: true
+      biscuit_allow: false
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=false, token_carries(test @ line-a)=true, blocks=2"
+  - name: reviewer_test_at_root_budget
+    role: reviewer
+    tool: test
+    namespace: line-a
+    spend_cents: 1000
+    root:
+      allow: true
+      cedar_allow: true
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=true, token_carries(test @ line-a)=true, blocks=1"
+    attenuated:
+      allow: false
+      cedar_allow: true
+      biscuit_allow: false
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=false, token_carries(test @ line-a)=true, blocks=2"
+  - name: reviewer_test_over_root_budget
+    role: reviewer
+    tool: test
+    namespace: line-a
+    spend_cents: 1001
+    root:
+      allow: false
+      cedar_allow: true
+      biscuit_allow: false
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=false, token_carries(test @ line-a)=true, blocks=1"
+    attenuated:
+      allow: false
+      cedar_allow: true
+      biscuit_allow: false
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=false, token_carries(test @ line-a)=true, blocks=2"
+  - name: builder_git
+    role: builder
+    tool: git
+    namespace: line-a
+    spend_cents: 100
+    root:
+      allow: true
+      cedar_allow: true
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=true, token_carries(git @ line-a)=true, blocks=1"
+    attenuated:
+      allow: false
+      cedar_allow: true
+      biscuit_allow: false
+      token_carries_capability: true
+      reason: "cedar=true, biscuit=false, token_carries(git @ line-a)=true, blocks=2"
+  - name: reviewer_git
+    role: reviewer
+    tool: git
+    namespace: line-a
+    spend_cents: 100
+    root:
+      allow: false
+      cedar_allow: false
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=false, biscuit=true, token_carries(git @ line-a)=true, blocks=1"
+    attenuated:
+      allow: false
+      cedar_allow: false
+      biscuit_allow: false
+      token_carries_capability: true
+      reason: "cedar=false, biscuit=false, token_carries(git @ line-a)=true, blocks=2"
+  - name: builder_test
+    role: builder
+    tool: test
+    namespace: line-a
+    spend_cents: 100
+    root:
+      allow: false
+      cedar_allow: false
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=false, biscuit=true, token_carries(test @ line-a)=true, blocks=1"
+    attenuated:
+      allow: false
+      cedar_allow: false
+      biscuit_allow: true
+      token_carries_capability: true
+      reason: "cedar=false, biscuit=true, token_carries(test @ line-a)=true, blocks=2"
+  - name: reviewer_deploy
+    role: reviewer
+    tool: deploy
+    namespace: line-a
+    spend_cents: 100
+    root:
+      allow: false
+      cedar_allow: false
+      biscuit_allow: false
+      token_carries_capability: false
+      reason: "cedar=false, biscuit=false, token_carries(deploy @ line-a)=false, blocks=1"
+    attenuated:
+      allow: false
+      cedar_allow: false
+      biscuit_allow: false
+      token_carries_capability: false
+      reason: "cedar=false, biscuit=false, token_carries(deploy @ line-a)=false, blocks=2"
+minimum_grants:
+  - role: reviewer
+    tool: test
+    namespace: line-a
+    max_spend_cents: 500

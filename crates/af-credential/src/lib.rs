@@ -21,9 +21,9 @@ mod judge;
 mod policy;
 
 pub use credential::{
-    attenuate, authorize, deserialize_verify, inspect, issue_root, serialize, Cents, ChildSpec,
-    RootSpec, TokenCaps, F_BUDGET_CENTS, F_NAMESPACE, F_REQUEST_NS, F_REQUEST_TOOL, F_SPEND_CENTS,
-    F_TOOL,
+    attenuate, authorize, denial, deserialize_verify, inspect, issue_root, serialize, Cents,
+    ChildSpec, Denial, DenialBody, DenialCheck, DenialEffect, DenialPolicy, RootSpec, TokenCaps,
+    F_BUDGET_CENTS, F_NAMESPACE, F_REQUEST_NS, F_REQUEST_TOOL, F_SPEND_CENTS, F_TOOL,
 };
 pub use judge::{evaluate, AccessQuery, Verdict};
 pub use policy::{cedar_allows, CEDAR_POLICIES};

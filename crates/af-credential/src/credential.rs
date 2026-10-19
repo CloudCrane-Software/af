@@ -165,17 +165,10 @@ pub fn inspect(token: &Biscuit) -> Result<TokenCaps> {
 /// 语义坑：biscuit 的 check 是**存在性**查询——若验证方注入多个 request_tool 事实，
 /// 只要有一个落在白名单 check 就过。因此网关必须保证“一次请求只声明一个
 /// request_tool”（此处按约定实现，未在 biscuit 内强制）。
+///
+/// `FailedLogic` 折成 `Ok(false)` 并写 stderr。同一条路径的结构见 [`denial`]。
 pub fn authorize(token: &Biscuit, tool: &str, namespace: &str, spend_cents: Cents) -> Result<bool> {
-    let allow_policy = format!(
-        "allow if {F_REQUEST_TOOL}($t), {F_TOOL}($t), {F_REQUEST_NS}($n), {F_NAMESPACE}($n)"
-    );
-    let ab = biscuit_auth::AuthorizerBuilder::new()
-        .fact(dlog::fact(F_REQUEST_TOOL, &[dlog::string(tool)]))?
-        .fact(dlog::fact(F_REQUEST_NS, &[dlog::string(namespace)]))?
-        .fact(dlog::fact(F_SPEND_CENTS, &[dlog::int(spend_cents)]))?
-        .policy(allow_policy.as_str())?
-        .set_limits(verify_limits());
-    match ab.build(token)?.authorize() {
+    match run_authorize(token, tool, namespace, spend_cents) {
         Ok(_) => Ok(true),
         // 「拒绝」是正常判定结果：无 allow 命中，或某条 check 失败。
         Err(e @ biscuit_auth::error::Token::FailedLogic(_)) => {
@@ -184,6 +177,133 @@ pub fn authorize(token: &Biscuit, tool: &str, namespace: &str, spend_cents: Cent
         }
         // 其余（超限、执行错误等）按真错误上抛。
         Err(e) => Err(e.into()),
+    }
+}
+
+/// 一次拒绝的结构化记录。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Denial {
+    /// `Token` 的 Display，与 `authorize` 打到 stderr 的正文一致（不含日志前缀）。
+    pub display: String,
+    pub body: DenialBody,
+}
+
+/// `FailedLogic` 的四种形态。前两种是正常拒绝；后两种 biscuit 同样归进 `FailedLogic`，
+/// `authorize` 也把它们当成拒绝而不是真错误。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DenialBody {
+    /// 有策略命中，但至少一条 check 失败。
+    Unauthorized {
+        policy: DenialPolicy,
+        failed_checks: Vec<DenialCheck>,
+    },
+    /// 没有命中任何策略。checks 仍可能失败。
+    NoMatchingPolicy { failed_checks: Vec<DenialCheck> },
+    /// 块内规则产生了未绑定变量。
+    InvalidBlockRule { block_id: u32, rule: String },
+    /// authorizer 里已经绑过 token。
+    AuthorizerNotEmpty,
+}
+
+/// 命中的那条 authorizer 策略。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DenialPolicy {
+    pub effect: DenialEffect,
+    pub index: usize,
+}
+
+/// 命中策略的效果。`Allow` 表示 allow 策略命中（拒绝来自 check）；`Deny` 表示 deny 策略命中。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DenialEffect {
+    Allow,
+    Deny,
+}
+
+/// 一条失败的 check。`block_id == None` 表示 check 写在 authorizer 上，不在 token 块里。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DenialCheck {
+    pub block_id: Option<u32>,
+    pub check_id: u32,
+    pub rule: String,
+}
+
+/// 与 [`authorize`] 走同一条判定。
+///
+/// 放行是 `Ok(None)`。`FailedLogic` 是 `Ok(Some(_))`，不写 stderr。
+/// 执行限额、格式错误等仍是 `Err`（真错误，不是拒绝）。限额与 [`authorize`] 相同。
+pub fn denial(
+    token: &Biscuit,
+    tool: &str,
+    namespace: &str,
+    spend_cents: Cents,
+) -> Result<Option<Denial>> {
+    match run_authorize(token, tool, namespace, spend_cents) {
+        Ok(_) => Ok(None),
+        Err(biscuit_auth::error::Token::FailedLogic(logic)) => {
+            let display = biscuit_auth::error::Token::FailedLogic(logic.clone()).to_string();
+            Ok(Some(denial_from_logic(display, logic)))
+        }
+        Err(e) => Err(e.into()),
+    }
+}
+
+fn run_authorize(
+    token: &Biscuit,
+    tool: &str,
+    namespace: &str,
+    spend_cents: Cents,
+) -> std::result::Result<usize, biscuit_auth::error::Token> {
+    let allow_policy = format!(
+        "allow if {F_REQUEST_TOOL}($t), {F_TOOL}($t), {F_REQUEST_NS}($n), {F_NAMESPACE}($n)"
+    );
+    let authorizer = biscuit_auth::AuthorizerBuilder::new()
+        .fact(dlog::fact(F_REQUEST_TOOL, &[dlog::string(tool)]))?
+        .fact(dlog::fact(F_REQUEST_NS, &[dlog::string(namespace)]))?
+        .fact(dlog::fact(F_SPEND_CENTS, &[dlog::int(spend_cents)]))?
+        .policy(allow_policy.as_str())?
+        .set_limits(verify_limits());
+    authorizer.build(token)?.authorize()
+}
+
+fn denial_from_logic(display: String, logic: biscuit_auth::error::Logic) -> Denial {
+    use biscuit_auth::error::{Logic, MatchedPolicy};
+
+    let body = match logic {
+        Logic::Unauthorized { policy, checks } => DenialBody::Unauthorized {
+            policy: match policy {
+                MatchedPolicy::Allow(index) => DenialPolicy {
+                    effect: DenialEffect::Allow,
+                    index,
+                },
+                MatchedPolicy::Deny(index) => DenialPolicy {
+                    effect: DenialEffect::Deny,
+                    index,
+                },
+            },
+            failed_checks: checks.into_iter().map(denial_check).collect(),
+        },
+        Logic::NoMatchingPolicy { checks } => DenialBody::NoMatchingPolicy {
+            failed_checks: checks.into_iter().map(denial_check).collect(),
+        },
+        Logic::InvalidBlockRule(block_id, rule) => DenialBody::InvalidBlockRule { block_id, rule },
+        Logic::AuthorizerNotEmpty => DenialBody::AuthorizerNotEmpty,
+    };
+    Denial { display, body }
+}
+
+fn denial_check(check: biscuit_auth::error::FailedCheck) -> DenialCheck {
+    use biscuit_auth::error::FailedCheck;
+    match check {
+        FailedCheck::Block(block) => DenialCheck {
+            block_id: Some(block.block_id),
+            check_id: block.check_id,
+            rule: block.rule,
+        },
+        FailedCheck::Authorizer(authorizer) => DenialCheck {
+            block_id: None,
+            check_id: authorizer.check_id,
+            rule: authorizer.rule,
+        },
     }
 }
 
