@@ -22,6 +22,9 @@ af-credential = { path = "../af-credential" }
 proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
 # 基准(每事件记账/窗口滚转),与 af-trace/af-sampling 对齐。
 criterion = "0.8.2"
+# Bifrost 配置片段金标。1.49.0 已在锁内（af-graph、af-workorder、af-credential）。
+# 只开 json。不走 cargo-insta review，.snap 直接入库。
+insta = { version = "1.49.0", default-features = false, features = ["json"] }
 
 [lints]
 workspace = true

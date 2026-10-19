@@ -67,6 +67,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "criterion",
+ "insta",
  "proptest",
  "rusqlite",
  "serde",
