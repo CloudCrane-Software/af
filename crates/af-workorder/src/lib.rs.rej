@@ -1,0 +1,29 @@
+diff a/crates/af-workorder/src/lib.rs b/crates/af-workorder/src/lib.rs	(rejected hunks)
+@@ -11,19 +11,25 @@
+ //!
+ //! payload_hash 为 SHA-256 小写十六进制([`hash`]),跨进程确定。
+ //! 决策工件签名仍是 ed25519 占位结构(算法标签 + key_id + 字节,只验非空)。
++//! 变更单签名是真 ed25519([`sign`]):在本 crate 内签发与验签,不经过 af-credential。
+ 
+ pub mod change;
+ pub mod decision;
+ pub mod error;
+ pub mod hash;
+ pub mod order;
++pub mod sign;
+ pub mod sla;
+ pub mod state;
+ 
+-pub use change::{ChangeOrder, DrainStrategy, RelayStrategy};
++pub use change::{ChangeOrder, DrainStrategy, RelayStrategy, SignedChangeOrder};
+ pub use decision::{Decision, DecisionArtifact, Permission, Role, Signature};
+-pub use error::{ChangeError, DecisionError, GateError, Missing};
++pub use error::{ChangeError, DecisionError, GateError, Missing, SignError};
+ pub use hash::{sha256, sha256_hex, SHA256_HEX_LEN, SHA256_LEN};
+ pub use order::{BudgetVoucher, GraphVersion, HistoryRecord, LineBinding, WorkArtifact, WorkOrder};
++pub use sign::{
++    Ed25519Keypair, Ed25519PublicKey, ED25519_PUBLIC_KEY_LEN, ED25519_SEED_LEN,
++    ED25519_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ED25519,
++};
+ pub use sla::{Priority, Sla};
+ pub use state::{OrderState, Transition};

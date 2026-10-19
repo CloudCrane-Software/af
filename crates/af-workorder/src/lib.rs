@@ -9,22 +9,28 @@
 //! 4. **变更单**:差异描述 + 排水/接力策略字段;换版 = 生成后继工单,原单封存([`change`])。
 //! 5. **多参与者决策工件**:[`decision::DecisionArtifact`],只读角色签发 approve → 拒绝。
 //!
-//! 占位声明:payload_hash 用 FNV-1a64、签名是 ed25519 占位结构(不做真实密码学),
-//! 均为 PoC 简化,接口形状已按最终方案预留。SLA 截止已接 af-calendar,不再是字符串占位。
+//! payload_hash 为 SHA-256 小写十六进制([`hash`]),跨进程确定。
+//! 变更单签名是真 ed25519([`sign`]):在本 crate 内签发与验签,不经过 af-credential。
+//! SLA 截止已接 af-calendar,不再是字符串占位。
 
 pub mod change;
 pub mod decision;
 pub mod error;
 pub mod hash;
 pub mod order;
+pub mod sign;
 pub mod sla;
 pub mod state;
 
 pub use af_calendar::{Calendar, CalendarError};
-pub use change::{ChangeOrder, DrainStrategy, RelayStrategy};
+pub use change::{ChangeOrder, DrainStrategy, RelayStrategy, SignedChangeOrder};
 pub use decision::{Decision, DecisionArtifact, Permission, Role, Signature};
-pub use error::{ChangeError, DecisionError, GateError, Missing};
-pub use hash::{fnv1a64, fnv1a64_hex};
+pub use error::{ChangeError, DecisionError, GateError, Missing, SignError};
+pub use hash::{sha256, sha256_hex, SHA256_HEX_LEN, SHA256_LEN};
 pub use order::{BudgetVoucher, GraphVersion, HistoryRecord, LineBinding, WorkArtifact, WorkOrder};
+pub use sign::{
+    Ed25519Keypair, Ed25519PublicKey, ED25519_PUBLIC_KEY_LEN, ED25519_SEED_LEN,
+    ED25519_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ED25519,
+};
 pub use sla::{Priority, Sla};
 pub use state::{OrderState, Transition};

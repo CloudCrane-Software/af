@@ -82,6 +82,21 @@ pub enum DecisionError {
     InvalidSignature { reason: String },
 }
 
+/// ed25519 签发/验签错误。变更单本地闭环使用,不经过 af-credential。
+#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
+pub enum SignError {
+    #[error("ed25519 公钥不是合法曲线点,或是小阶公钥")]
+    InvalidPublicKey,
+    #[error("签名算法不匹配:期望 {expected},实际 {actual}")]
+    AlgorithmMismatch { expected: String, actual: String },
+    #[error("key_id 与验签公钥不一致:期望 {expected},实际 {actual}")]
+    KeyIdMismatch { expected: String, actual: String },
+    #[error("签名长度非法:ed25519 需要 {expected} 字节,实际 {actual}")]
+    MalformedSignature { expected: usize, actual: usize },
+    #[error("ed25519 验签失败")]
+    VerificationFailed,
+}
+
 /// 变更单校验错误。
 #[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
 pub enum ChangeError {
@@ -93,4 +108,8 @@ pub enum ChangeError {
         "策略组合矛盾:DrainAllInflight(排空全部在制才切)与 HotTakeover(在制立即由新版接管)互斥"
     )]
     ConflictingDrainRelay,
+    #[error("变更单签名载荷编码失败:{0}")]
+    SigningPayload(String),
+    #[error("变更单签名无效:{0}")]
+    SignatureInvalid(SignError),
 }

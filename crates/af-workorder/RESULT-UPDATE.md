@@ -1,91 +1,119 @@
-# RESULT-UPDATE.md — T4 af-workorder 接 af-calendar
+# RESULT-UPDATE — T5 + T6 · af-workorder 哈希与签名
 
-## ① 结论
+日期：2026-10-19。分支 `task-T56`。未改 `af-credential` 源码与其公共 API。`Cargo.lock` 只给 `af-workorder` 补了直接依赖边（`sha2 0.10.9`、`ed25519-dalek`，版本都是锁里已有的），没有升版本。
 
-**完成**。`Sla.deadline` 从 `Option<String>` 一次性切换为 `Option<DateTime<Utc>>`。截止由注入的 `af_calendar::Calendar::sla_deadline` 解析后归一到 UTC,订单逾期判定(`Sla::is_overdue` / `WorkOrder::is_overdue`)只比较这个绝对时刻。
+`cargo fmt` 使用 `cargo fmt -p af-workorder`，避免格式化其他 crate。
 
-`cargo test -p af-workorder` 全绿:36 单测 + 6 集成测试(原 34 单测 + 3 集成测试都在,另加 2 单测、3 集成测试)。本 crate `clippy --all-targets --no-deps -D warnings` 零警告。
+## T5 · FNV-1a64 → SHA-256
 
-字面命令 `cargo clippy --all-targets -p af-workorder -- -D warnings` **退出码 101**,但失败点不在本 crate:clippy 默认连 path 依赖一起 lint,打到 `af-calendar` 里既有的 `clippy::needless_range_loop`(`calendar.rs:114`,已在 `ci/clippy-baseline.txt`)。本任务不许改 af-calendar,所以没有去修它。详见证据与遗留。
+提交：`c535ac3`
 
-## ② 步骤
+### ① 结论
 
-1. 读了 `crates/af-workorder/RESULT.md` 与 `crates/af-calendar/RESULT.md`。沿用已验证语义:日历只答时间;工时按流逝时间;春跳间隙不计工时;秋拨重复小时只计一次;歧义取较早偏移;恰在 deadline 不算逾期。
-2. **一次性切换,不留 deprecated 字符串字段**。理由:
-   - `deadline` 这个槽位就是"完成时限"。旧的 `Option<String>` 是 PoC 占位(workorder RESULT ⑤ 写明最终方案接时间类型或由 af-calendar 出时间),不是需要并存的第二份数据。
-   - chrono 0.4 的 `DateTime<Utc>` serde 线格式就是 RFC3339(UTC 用 `Z`)。旧 JSON `"deadline":"2026-10-20T00:00:00Z"` 能直接读入;带非零偏移的文本折成同一绝对时刻(单测锁了 `+08:00` → UTC)。
-   - 再留一个字符串字段会有两个源,和"内部判定用 `DateTime<Utc>`"冲突。
-   - 全部调用点都在本 crate,已一次改完。
-3. 依赖:`af-calendar`(path);`chrono` 0.4 feature `serde`(锁定 **0.4.45**,与 af-calendar 相同)。必须直接依赖 chrono,否则本 crate 无法在公开签名里写出 `DateTime<Utc>`(传递依赖不能 `use`)。提交 `549cb42`。
-4. 解析入口 `Sla::from_calendar(calendar, placed_at, promised_working, priority)`:输入时区原样交给日历,返回前 `with_timezone(Utc)`。日历不嵌进 `WorkOrder`(日历不是 `Eq`,每个订单复制一份配置也没有判定用途)。判定用订单上已经写死的绝对时刻,状态迁移不改 deadline。负时长原样返回 `CalendarError::NegativeDuration`。
-5. 集成测试 `tests/calendar_sla.rs`(提交 `e7a19c5`)。dev-dependency `chrono-tz` 0.10(锁定 **0.10.4**,与 af-calendar 相同):`Calendar::weekday_single_shift` 的时区参数是 `chrono_tz::Tz`,DST 用例要构造 `Europe/Berlin`。时刻全部注入,无 sleep。
-6. `Cargo.lock` 只给 `af-workorder` 补上 `af-calendar` / `chrono` / `chrono-tz` 三条边。这三个包原本就在锁文件里,没有新的 crates.io 版本。锁文件在 crate 目录外,但是路径依赖不写锁文件就不完整。未改任何其他 crate 的源码。
+通过。`payload_hash` 改为 SHA-256 小写十六进制。`DecisionArtifact` 的字段没变，仍是 `payload_hash: String`。四层校验顺序没变。
 
-## ③ 证据
+选型：直接依赖 `sha2 = "0.10"`，解析为锁文件里已有的 **0.10.9**（`ed25519-dalek` 的传递依赖，`af-credential` 经 biscuit-auth 带入）。不引入 blake3。
 
-命令均在仓库根、先 `source /data/af-factory/env.sh`。`cargo fmt` 用了 `-p af-workorder`,避免全仓 fmt 改到别的 crate。
+### ② 步骤
 
-`cargo check -p af-workorder`(类型切换后):
+1. `src/hash.rs`：删除 `fnv1a64` / `fnv1a64_hex`，改为 `sha256` / `sha256_hex`（`SHA256_LEN = 32`，`SHA256_HEX_LEN = 64`）。
+2. `src/decision.rs`：签发与校验改走 `sha256_hex`。长度断言从 16 改为 64，并断言等于 `sha256_hex(payload)`。
+3. `src/lib.rs`：公开导出改为 `sha256` / `sha256_hex`。crate 内不再有 FNV 调用点。
+4. `Cargo.toml` 增加 `sha2 = "0.10"`。
 
-```text
-Finished `dev` profile [unoptimized + debuginfo] target(s) in 6.39s
-```
+测试：hash 模块原 2 个 FNV 占位测试替换为 2 个新测试，单测总数仍是 34，集成测试仍是 3。
 
-`cargo fmt -p af-workorder -- --check` → 退出码 0。
+- `nist_sha256_known_vectors`：空串与 `"abc"` 的 FIPS 180-4 向量，并断言重复计算相同。
+- `distinct_inputs_have_distinct_hashes`：7 个不同输入（含 `"abc"` 与 `"abb"` 的单比特差异）哈希两两不同，hex 为 64 位小写。
 
-`cargo clippy --all-targets --no-deps -p af-workorder -- -D warnings` → `Finished dev profile`,退出码 0(含 example 与 tests)。
-
-`cargo test -p af-workorder`:
+### ③ 证据
 
 ```text
-running 36 tests
-test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured
-     Running tests/calendar_sla.rs
-running 3 tests
-test calendar_deadline_enters_lifecycle_and_judges_by_absolute_instant ... ok
-test fall_back_order_deadline_is_post_fold_utc_instant ... ok
-test spring_forward_order_deadline_is_post_gap_utc_instant ... ok
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured
-     Running tests/lifecycle.rs
-running 3 tests
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured
-   Doc-tests af_workorder
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured
+source /data/af-factory/env.sh
+cargo fmt -p af-workorder
+cargo clippy --all-targets --offline -p af-workorder -- -D warnings
+# Finished `dev` profile ... af-workorder, exit 0, 无警告
+cargo test --offline -p af-workorder
+# unittests: ok. 34 passed; 0 failed
+# tests/lifecycle.rs: ok. 3 passed; 0 failed
+# doc-tests: ok. 0 passed; 0 failed
 ```
 
-测试数:原 34 单测仍在;新增 `order_overdue_uses_stored_absolute_deadline`、`from_calendar_rejects_negative_duration`。原 3 个 `tests/lifecycle.rs` 仍在;新增上述 3 个集成测试。
+已知向量（测试内断言，运行通过）：
 
-`cargo run -p af-workorder --example gate_demo` 仍打印原来的门控拒绝原因,并以 `Closed` 结束。
+- `sha256("")` = `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`
+- `sha256("abc")` = `ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad`
 
-字面 clippy(退出码 101,未改 af-calendar):
+### ④ 反馈
+
+RESULT 里「换哈希时 `DecisionArtifact` 接口不变，只动 `hash.rs`」仍然成立：结构体字段与四层校验顺序没动。调用点必须从 `fnv1a64_hex` 改到 `sha256_hex`，否则还会算出 16 位 hex。公开导出里的 `fnv1a64` / `fnv1a64_hex` 已删除；仓库内没有其他 crate 引用它们。
+
+`sha2` 0.10 与 effect-gateway 的载荷指纹同一主版本，两边十六进制都是小写 64 字符。
+
+### ⑤ 遗留
+
+- 决策工件的签名在 T5 结束时仍是占位校验。T6 没有把它改成真签名，见 T6 ⑤。
+- `RESULT.md` 仍记录 PoC 当时的 FNV 结论，作为历史证据保留，没有改写。
+
+## T6 · ed25519 下沉到变更单
+
+提交：`120c013`
+
+### ① 结论
+
+通过。变更单的签发与验签在 `af-workorder` 内闭环，不调用 `af-credential`，也不把订单签名绕进 biscuit token。
+
+原语是 `ed25519-dalek = "2.2"`，解析为锁文件里已有的 **2.2.0**（biscuit-auth 使用的同一版本）。没有启用 `rand_core`：种子由调用方注入，本 crate 不读系统熵。没有 `sleep`。
+
+`Signature` 字段保持 RESULT 已对齐的形状：算法标签 + `key_id` + 64 字节。真签名的算法标签是 `ed25519`，与决策工件的 `ed25519-placeholder` 分开。
+
+### ② 步骤
+
+1. 新增 `src/sign.rs`：`Ed25519Keypair::from_seed`、`Ed25519PublicKey::from_bytes` / `verify`。验签顺序：算法标签 → `key_id`（公钥字节的小写 hex）→ 长度 → `verify_strict`（拒绝可锻签名）。小阶公钥与不在曲线上的字节在 `from_bytes` 拒绝。`Debug` 只打印公钥标识。
+2. `ChangeOrder::signing_message`：`b"af-workorder/change-order/v1\0"` 接 `serde_json` 编码。本结构没有 Map，编码由字段声明顺序决定。
+3. `ChangeOrder::sign` 先 `validate` 再签名，非法变更单签不出去。`verify` 先验签再做业务校验。
+4. `SignedChangeOrder`：`sign` / `verify` / `spawn_successor`。后继单只在验签通过后生成。原来的 `ChangeOrder::spawn_successor` 没改，未签名路径的已有测试保持原语义。
+5. `SignError` 与 `ChangeError::SigningPayload` / `SignatureInvalid`。
+
+新增 6 个测试，单测 34 → 40，集成测试仍是 3：
+
+| 测试 | 覆盖 |
+|---|---|
+| `sign::sign_verify_roundtrip_is_deterministic_and_debug_hides_seed` | 同一种子两次签名字节相同；公钥字节能还原并验过；Debug 不含种子 hex |
+| `sign::rejects_tamper_wrong_key_bad_algorithm_and_invalid_public_key` | 翻签名字节、错钥、只改 key_id、占位算法标签、空签名、离曲线公钥、全零小阶公钥、改消息 |
+| `change::signed_change_order_roundtrip_verifies` | 域前缀、签名确定性、64 字节、serde 往返后仍验过 |
+| `change::tampered_order_or_signature_fails_verify_and_spawn` | 改差异描述、翻签名字节、另一把钥；验签失败则不生成后继单 |
+| `change::invalid_change_order_is_not_signed` | from = to 时 `SignedChangeOrder::sign` 返回 `FromEqualsTo` |
+| `change::verified_signature_spawns_successor` | 验签通过后后继单绑定 `g-4` 且 `supersedes = wo-1` |
+
+### ③ 证据
 
 ```text
-error: the loop variable `day` is used to index `WEEKDAY_NAMES`
- --> crates/af-calendar/src/calendar.rs:114:20
- = note: `-D clippy::needless-range-loop` implied by `-D warnings`
-error: could not compile `af-calendar` (lib) due to 1 previous error
+source /data/af-factory/env.sh
+cargo fmt -p af-workorder
+cargo clippy --all-targets --offline -p af-workorder -- -D warnings
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.40s
+# exit 0, 无警告
+cargo test --offline -p af-workorder
+# unittests src/lib.rs: ok. 40 passed; 0 failed; 0 ignored; 0 measured
+# tests/lifecycle.rs: ok. 3 passed; 0 failed
+# Doc-tests af_workorder: ok. 0 passed; 0 failed
 ```
 
-集成测试锁住的绝对时刻(与 af-calendar 已验证的班次规则一致,不是新算法):
+`git diff` 相对 T5 提交，`Cargo.lock` 只多了一行 `af-workorder` 依赖 `ed25519-dalek`。`crates/af-credential` 无 diff。
 
-| 场景 | 下单 | 承诺 | 订单上的 deadline |
-|---|---|---|---|
-| 上海工作日 08:00–17:00 | 2026-10-23 16:00+08(周五) | 4 工时 | 2026-10-26 03:00:00Z(周一 11:00+08) |
-| 柏林春跳(03-29 02:00→03:00) | 2026-03-27 16:00 CET | 4 工时 | 2026-03-30 09:00:00Z(周一 11:00 CEST)。固定 +01 会误成 10:00Z |
-| 柏林秋拨(10-25 03:00→02:00) | 2026-10-23 16:00 CEST | 4 工时 | 2026-10-26 10:00:00Z(周一 11:00 CET)。残留 +02 会误成 09:00Z |
+### ④ 反馈
 
-判定:恰在 deadline 不算逾期;deadline 之后 1 秒算逾期。春跳用例在 09:30Z(周一 11:30 CEST)判逾期——这个时刻早于错误的 10:00Z。秋拨用例在 09:30Z(周一 10:30 CET)判未逾期——这个时刻晚于错误的 09:00Z。两条都在 Created → Released → InProgress → Closed 之后仍是同一个 `DateTime<Utc>`。上海用例另外锁了 `10:59+08`(绝对时刻 02:59Z)不算逾期;旧字典序会把 `"…T03:00:00Z" < "…T10:59:00+08:00"` 判成已逾期。
+1. 下沉方式是复制原语，不是依赖 `af-credential`。凭证 crate 的公共面是 biscuit 签发/衰减/求交，没有可复用的「给任意字节签 ed25519」trait。若 workorder 依赖它，变更单签名会绕进 token。dalek 2.2.0 已在锁里，直接用即可。
+2. `key_id` 用公钥字节的 hex，验签时和给出的公钥比对。只改 `key_id` 不改签名字节会走到密码学校验并失败，不能靠标签蒙混。
+3. 域分离前缀避免同一把钥以后签决策工件时和变更单串单。被签字节不要手写拼接业务字段，以 `signing_message()` 为准。
+4. 未签名的 `ChangeOrder::spawn_successor` 仍可用。要「先验签再生成后继单」走 `SignedChangeOrder::spawn_successor`。这是加出来的路径，没有改 RESULT 已验证的未签名生成语义。
+5. 种子注入、不启用 `rand_core`，测试不依赖系统熵，签名按 RFC 8032 确定性重复。
 
-## ④ 反馈
+### ⑤ 遗留
 
-1. **判定与解析分开**。日历只在建 SLA 时把承诺工时折成绝对时刻;之后逾期只比 `DateTime<Utc>`。这样 DST 偏移不会在每次查询时被重新解释,也和日历 RESULT ④-1"日历只答时间"一致。
-2. **不要把 `Calendar` 嵌进每张工单**。判定不需要它,而且 `Calendar` 没有 `Eq`,塞进去会拆掉 `WorkOrder` 的相等性。日历作为配置注入给 `Sla::from_calendar` 即可。
-3. **线格式兼容靠 chrono 的 RFC3339,不靠双字段**。若上游还有非 RFC3339 的旧字符串,那是另一类数据,本切换覆盖不了。
-4. **字面 `clippy -p af-workorder -D warnings` 会 lint path 依赖**。af-calendar 的既有警告因此变成硬错误。建议这条质量阶梯写成 `--no-deps`,或者继续用仓库的基线门(只拦新增签名)。否则每个"只许改一个 crate、但要依赖另一个已有警告的 crate"的任务都会在 clippy 步被既有警告挡住。
-
-## ⑤ 遗留
-
-- 字面 clippy 命令因 af-calendar 既有 `needless_range_loop` 不能退出 0。本 crate 自身无警告。修不修那两条循环由 af-calendar 的主人决定(基线里该文件记了 2 次,本次只露出第 1 个就停了)。
-- `payload_hash` 仍是 FNV-1a64,签名仍是占位结构。与本次 SLA 无关,workorder RESULT ⑤ 的原遗留还在。
-- 预算凭证、权限法定人数、`dyn Clock` 仍未做。逾期判定的 `now` 由调用方注入,没有默认系统钟。
-- 夜班两窗口的 1ns 接缝、开工点不可作为完工时刻,仍是 af-calendar 已记录的坑。本 crate 原样保存日历返回的绝对时刻,没有再取整。
+- **决策工件仍是占位验签**（算法标签 `ed25519-placeholder`，只查非空）。RESULT 已验证的四层校验和现有测试把这个行为钉死；本次任务卡要求的是变更单闭环。若决策工件也改成真签名，要改 `DecisionArtifact::seal` / `validate_against` 并替换占位测试，应单独做。
+- 没有密钥标识注册表或轮换。调用方自己保管种子，验签方拿公钥字节。
+- 预算凭证仍只看 `signed` 布尔位，没有接这套 ed25519。
+- `Sla.deadline` 仍是 RFC3339 字符串比较。本次未接入 af-calendar。
+- 根 `README.md` 里「FNV / ed25519 下沉」那条清单未改（不在改动范围）。

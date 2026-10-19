@@ -1,0 +1,192 @@
+diff a/crates/af-workorder/src/change.rs b/crates/af-workorder/src/change.rs	(rejected hunks)
+@@ -1,14 +1,23 @@
+-//! 变更单:差异描述 + 排水/接力策略。
++//! 变更单:差异描述 + 排水/接力策略 + ed25519 签名。
+ //!
+ //! 语义定位:工单的 graph_version 不可变,所以"改版本"不是改原单,而是
+ //! 生成一张绑定新版本的**后继工单**(`supersedes` 指回原单),原单封存留痕。
++//!
++//! 签名在本 crate 内闭环([`crate::sign`]),不调用 af-credential。
++//! 被签字节 = [`CHANGE_ORDER_SIGNING_DOMAIN`] || `serde_json` 编码。
++//! 本结构没有 Map,字段顺序按声明固定,同一张单的编码跨进程一致。
+ 
+ use serde::{Deserialize, Serialize};
+ 
++use crate::decision::Signature;
+ use crate::error::ChangeError;
+ use crate::order::{GraphVersion, WorkOrder};
++use crate::sign::{Ed25519Keypair, Ed25519PublicKey};
+ use crate::sla::Sla;
+ 
++/// 变更单签名的域分离前缀。签发与验签必须使用同一前缀。
++pub const CHANGE_ORDER_SIGNING_DOMAIN: &[u8] = b"af-workorder/change-order/v1\0";
++
+ /// 排水策略:切版本时,旧版本上的在制品(in-flight)怎么清场。
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+ pub enum DrainStrategy {
+@@ -88,6 +97,61 @@ impl ChangeOrder {
+             self.work_order_id.clone(),
+         ))
+     }
++
++    /// 被签字节:域分离前缀接 serde_json 编码。不在这里做业务校验。
++    pub fn signing_message(&self) -> Result<Vec<u8>, ChangeError> {
++        let body =
++            serde_json::to_vec(self).map_err(|err| ChangeError::SigningPayload(err.to_string()))?;
++        let mut message = Vec::with_capacity(CHANGE_ORDER_SIGNING_DOMAIN.len() + body.len());
++        message.extend_from_slice(CHANGE_ORDER_SIGNING_DOMAIN);
++        message.extend_from_slice(&body);
++        Ok(message)
++    }
++
++    /// 校验通过后签名。非法变更单(from=to、空差异、策略矛盾)不会被签上。
++    pub fn sign(&self, key: &Ed25519Keypair) -> Result<Signature, ChangeError> {
++        self.validate()?;
++        let message = self.signing_message()?;
++        Ok(key.sign(&message))
++    }
++
++    /// 先验签,再做业务校验。签名不匹配时返回签名错误,即使变更单本身也不合法。
++    pub fn verify(&self, signature: &Signature, key: &Ed25519PublicKey) -> Result<(), ChangeError> {
++        let message = self.signing_message()?;
++        key.verify(&message, signature)
++            .map_err(ChangeError::SignatureInvalid)?;
++        self.validate()?;
++        Ok(())
++    }
++}
++
++/// 已签名的变更单。验签通过后才能 [`Self::spawn_successor`]。
++#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
++pub struct SignedChangeOrder {
++    pub order: ChangeOrder,
++    pub signature: Signature,
++}
++
++impl SignedChangeOrder {
++    pub fn sign(order: ChangeOrder, key: &Ed25519Keypair) -> Result<Self, ChangeError> {
++        let signature = order.sign(key)?;
++        Ok(Self { order, signature })
++    }
++
++    pub fn verify(&self, key: &Ed25519PublicKey) -> Result<(), ChangeError> {
++        self.order.verify(&self.signature, key)
++    }
++
++    /// 验签通过后生成后继工单。验签失败不产生后继单。
++    pub fn spawn_successor(
++        &self,
++        key: &Ed25519PublicKey,
++        new_id: impl Into<String>,
++        sla: Sla,
++    ) -> Result<WorkOrder, ChangeError> {
++        self.verify(key)?;
++        self.order.spawn_successor(new_id, sla)
++    }
+ }
+ 
+ #[cfg(test)]
+@@ -205,4 +269,103 @@ mod tests {
+             .spawn_successor("wo-1b", Sla::new(None, Priority::Low))
+             .is_err());
+     }
++
++    const SEED: [u8; 32] = [0x7a; 32];
++    const OTHER_SEED: [u8; 32] = [0x19; 32];
++
++    fn sample() -> ChangeOrder {
++        change(
++            "g-3",
++            "g-4",
++            DrainStrategy::DrainWithCap { max_inflight: 5 },
++            RelayStrategy::WarmHandover {
++                overlap_budget: 120,
++            },
++        )
++    }
++
++    #[test]
++    fn signed_change_order_roundtrip_verifies() {
++        let order = sample();
++        let key = Ed25519Keypair::from_seed(&SEED);
++        let public_key = key.public_key();
++        let message = order.signing_message().unwrap();
++        assert!(message.starts_with(CHANGE_ORDER_SIGNING_DOMAIN));
++        assert_eq!(message, order.clone().signing_message().unwrap());
++
++        let signed = SignedChangeOrder::sign(order.clone(), &key).unwrap();
++        let again = SignedChangeOrder::sign(order, &key).unwrap();
++        assert_eq!(signed.signature.bytes, again.signature.bytes);
++        assert_eq!(
++            signed.signature.bytes.len(),
++            crate::sign::ED25519_SIGNATURE_LEN
++        );
++        signed.verify(&public_key).unwrap();
++
++        let json = serde_json::to_string(&signed).unwrap();
++        let restored: SignedChangeOrder = serde_json::from_str(&json).unwrap();
++        assert_eq!(restored, signed);
++        let public_key_again = Ed25519PublicKey::from_bytes(&public_key.to_bytes()).unwrap();
++        restored.verify(&public_key_again).unwrap();
++    }
++
++    #[test]
++    fn tampered_order_or_signature_fails_verify_and_spawn() {
++        let key = Ed25519Keypair::from_seed(&SEED);
++        let public_key = key.public_key();
++        let mut signed = SignedChangeOrder::sign(sample(), &key).unwrap();
++        signed.order.diff_summary = "N12 阈值改成另一处".into();
++        assert!(matches!(
++            signed.verify(&public_key),
++            Err(ChangeError::SignatureInvalid(
++                crate::error::SignError::VerificationFailed
++            ))
++        ));
++        assert!(signed
++            .spawn_successor(&public_key, "wo-1b", Sla::new(None, Priority::Low))
++            .is_err());
++
++        let mut signed = SignedChangeOrder::sign(sample(), &key).unwrap();
++        signed.signature.bytes[10] ^= 0xff;
++        assert!(matches!(
++            signed.verify(&public_key),
++            Err(ChangeError::SignatureInvalid(
++                crate::error::SignError::VerificationFailed
++            ))
++        ));
++
++        let other = Ed25519Keypair::from_seed(&OTHER_SEED);
++        let signed = SignedChangeOrder::sign(sample(), &key).unwrap();
++        assert!(matches!(
++            signed.verify(&other.public_key()),
++            Err(ChangeError::SignatureInvalid(
++                crate::error::SignError::KeyIdMismatch { .. }
++            ))
++        ));
++    }
++
++    #[test]
++    fn invalid_change_order_is_not_signed() {
++        let order = change(
++            "g-3",
++            "g-3",
++            DrainStrategy::NoDrain,
++            RelayStrategy::ColdHandover,
++        );
++        let err = SignedChangeOrder::sign(order, &Ed25519Keypair::from_seed(&SEED)).unwrap_err();
++        assert!(matches!(err, ChangeError::FromEqualsTo(_)));
++    }
++
++    #[test]
++    fn verified_signature_spawns_successor() {
++        let key = Ed25519Keypair::from_seed(&SEED);
++        let public_key = key.public_key();
++        let signed = SignedChangeOrder::sign(sample(), &key).unwrap();
++        let successor = signed
++            .spawn_successor(&public_key, "wo-1b", Sla::new(None, Priority::High))
++            .unwrap();
++        assert_eq!(successor.graph_version().as_str(), "g-4");
++        assert_eq!(successor.supersedes(), Some("wo-1"));
++        assert_eq!(successor.state(), crate::state::OrderState::Created);
++    }
+ }

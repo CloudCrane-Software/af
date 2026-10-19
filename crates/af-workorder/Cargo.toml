@@ -3,18 +3,19 @@ name = "af-workorder"
 version = "0.1.0"
 edition.workspace = true
 
-# 依赖:serde/serde_json(序列化)、thiserror(类型化门控错误)、af-calendar(班次日历解析 SLA 截止)。
-# chrono 0.4 + feature serde:Sla.deadline 的类型是 DateTime<Utc>(与 af-calendar 同一主版本,解析为 0.4.45)。
-# serde 特性使 DateTime 的线格式保持 RFC3339,旧字符串载荷可直接读入。
-# 不引入 tokio/sha2:时刻由调用方注入,哈希仍是 FNV 占位。
+# serde/serde_json:序列化与 payload 规范化。thiserror:类型化门控错误。
+# sha2 0.10:payload_hash(锁文件已有 0.10.9,af-credential 经 biscuit-auth 带入),不另选 blake3。
+# ed25519-dalek 2.2:变更单签名,与 biscuit-auth 的锁版本相同;不启用 rand_core,种子由调用方注入。
+# af-calendar + chrono 0.4(serde):Sla.deadline 为 DateTime<Utc>,线格式保持 RFC3339 兼容旧载荷。
 [dependencies]
 af-calendar = { path = "../af-calendar" }
 chrono = { version = "0.4", features = ["serde"] }
+ed25519-dalek = "2.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = "0.10"
 thiserror = { workspace = true }
 
 [dev-dependencies]
 # 集成测试构造 Europe/Berlin 日历以覆盖 DST。版本与 af-calendar 的 chrono-tz 0.10 一致(锁定 0.10.4)。
 chrono-tz = "0.10"
-

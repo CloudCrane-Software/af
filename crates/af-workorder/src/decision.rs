@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::DecisionError;
-use crate::hash::fnv1a64_hex;
+use crate::hash::sha256_hex;
 
 /// 权限位。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -107,7 +107,7 @@ pub struct DecisionArtifact {
     pub role: Role,
     pub permissions: Vec<Permission>,
     pub decision: Decision,
-    /// 被签 payload 的哈希(hex)。占位算法 FNV-1a64,见 hash 模块说明。
+    /// 被签 payload 的哈希(SHA-256 小写 hex)。见 [`crate::hash`]。
     pub payload_hash: String,
     pub signature: Signature,
 }
@@ -126,7 +126,7 @@ impl DecisionArtifact {
             permissions: role.default_permissions(),
             role,
             decision,
-            payload_hash: fnv1a64_hex(payload.as_bytes()),
+            payload_hash: sha256_hex(payload.as_bytes()),
             signature: Signature::placeholder(key_id, vec![0xde; 64]),
         }
     }
@@ -134,7 +134,7 @@ impl DecisionArtifact {
     /// 四层校验(顺序固定,便于错误可复现):hash → 角色能力上限 → 决策权限 → 占位签名。
     pub fn validate_against(&self, payload: &str) -> Result<(), DecisionError> {
         // ① payload 锚定
-        let expected = fnv1a64_hex(payload.as_bytes());
+        let expected = sha256_hex(payload.as_bytes());
         if self.payload_hash != expected {
             return Err(DecisionError::PayloadHashMismatch {
                 expected,
@@ -201,7 +201,7 @@ mod tests {
             role: Role::Reader,
             permissions: vec![Permission::Read, Permission::Approve],
             decision: Decision::Approve,
-            payload_hash: fnv1a64_hex(PAYLOAD.as_bytes()),
+            payload_hash: sha256_hex(PAYLOAD.as_bytes()),
             signature: Signature::placeholder("k1", vec![1; 64]),
         };
         let err = art.validate_against(PAYLOAD).unwrap_err();
@@ -213,7 +213,8 @@ mod tests {
         let art =
             DecisionArtifact::seal("user-a", Role::Approver, Decision::Approve, PAYLOAD, "k2");
         assert_eq!(art.validate_against(PAYLOAD), Ok(()));
-        assert!(art.payload_hash.len() == 16);
+        assert_eq!(art.payload_hash.len(), crate::hash::SHA256_HEX_LEN);
+        assert_eq!(art.payload_hash, sha256_hex(PAYLOAD.as_bytes()));
         assert_eq!(art.signature.algorithm, "ed25519-placeholder");
     }
 
