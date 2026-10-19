@@ -45,6 +45,7 @@ dependencies = [
 name = "af-meter"
 version = "0.1.0"
 dependencies = [
+ "af-credential",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

@@ -1,6 +1,8 @@
 //! af-meter —— 供给计量组合表达式（PoC，id=poc-meter）。
 //!
 //! 模型：`Meter` 树。数量是 [`Count`]（u64：调用次数、令牌个数、配额）。
+//! 金额是 [`Cents`]（i64 美分），记在 [`BudgetLedger`] 上。
+//! `budget_cents` / `spend_cap_cents` / `spend_cents` 与 af-credential 同词同型。
 //! 时钟 [`Time`] 是自任选纪元起的整数秒，由调用方注入。
 //!
 //! - 叶子：[`Meter::Stock`]（剩余额度池）、[`Meter::Window`]（固定窗口配额）、
@@ -19,7 +21,10 @@
 //! - 令牌桶按整数秒回填：推进 `elapsed` 秒增加 `elapsed * per_second` 个整令牌，封顶 `burst`。
 //!   `recovers_at` 是令牌数实际回到 `burst` 的那个整数秒。
 
+mod budget;
 pub mod demo;
+
+pub use budget::{BudgetError, BudgetLedger};
 
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +33,13 @@ pub type Time = u64;
 
 /// 计数最小单位：调用次数、令牌个数、窗口配额。无符号。
 pub type Count = u64;
+
+/// 金额最小单位：美分，有符号。
+///
+/// 与 `af_credential::Cents` 一样是 `i64` 的别名。
+/// `budget_cents`、`spend_cap_cents`、`spend_cents` 在两个 crate 里都是这个类型，
+/// 凭证签发的限额可以原样交给 [`BudgetLedger`]。
+pub type Cents = i64;
 
 /// `given(now)` 的读数：剩余可用量 + 最早恢复时刻。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,7 +66,7 @@ pub enum MeterError {
 
 /// 计量树：叶子 = 原子供给计量，分支 = 组合子。
 ///
-/// 这棵树上的数量全是 [`Count`]。金额（美分）不进这棵树。
+/// 这棵树上的数量全是 [`Count`]。金额走 [`BudgetLedger`]（[`Cents`]）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Meter {
     /// 一次性额度池：用多少扣多少，用完不会自动恢复（按量付费余额）。
