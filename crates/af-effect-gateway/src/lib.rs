@@ -22,6 +22,10 @@
 //! 同键不同载荷：指纹不一致 → [`GatewayError::PayloadConflict`]，要求人工
 //! 升级处理，网关绝不替调用方二选一。
 
+mod clock;
+
+pub use clock::{Clock, ManualClock, SystemClock};
+
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
