@@ -3,6 +3,20 @@
 version = 4
 
 [[package]]
+name = "af-bench"
+version = "0.1.0"
+dependencies = [
+ "af-credential",
+ "af-harness",
+ "af-meter",
+ "af-stop",
+ "af-workorder",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "af-calendar"
 version = "0.1.0"
 dependencies = [
