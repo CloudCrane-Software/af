@@ -54,6 +54,16 @@ impl Lineage {
             Lineage::Deterministic => "deterministic",
         }
     }
+
+    /// 与 [`Lineage::name`] 互逆。无法识别时返回 None，调用方应拒绝该状态。
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "agent" => Some(Lineage::Agent),
+            "hybrid" => Some(Lineage::Hybrid),
+            "deterministic" => Some(Lineage::Deterministic),
+            _ => None,
+        }
+    }
 }
 
 /// 升迁判据配方：**全部参数由外部传入**（JSON 注入）。
@@ -174,6 +184,13 @@ impl Engine {
 
     pub fn clean_streak(&self) -> u32 {
         self.clean_streak
+    }
+
+    /// 尚未清空的判据窗口（只读）。
+    ///
+    /// 熔断会清空；判据评估在积满后清空。连净回升不清窗口，因此这里的长度可以等于配方窗口。
+    pub fn pending_window(&self) -> &[RunOutcome] {
+        &self.window
     }
 
     /// 记录一次运行结果，返回处置动作。
