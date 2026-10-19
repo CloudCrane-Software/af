@@ -13,3 +13,9 @@ cel-interpreter = "0.10"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# 快照测试（违规清单文本 + 决策工件 YAML）。crates.io 最新稳定 = 1.49.0。
+# 显式打开 yaml，供 insta::assert_yaml_snapshot!。关掉 default features，
+# 不拉只服务终端上色的 console。不走 cargo-insta review：.snap 直接入库。
+insta = { version = "1.49.0", default-features = false, features = ["yaml"] }
