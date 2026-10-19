@@ -3,7 +3,7 @@
 //! 用法：`afg validate <template.json> [more.json ...]`
 //! 全部通过退出码 0，任一违例退出码 1。
 
-use af_graph::{validate, GraphTemplate};
+use af_graph::{format_validate_stdout, validate, GraphTemplate};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
@@ -32,22 +32,10 @@ fn main() -> ExitCode {
             }
         };
         let report = validate(&t);
-        if report.is_ok() {
-            println!(
-                "PASS {path}  graph_version={} name=`{}` nodes={} edges={} subgraphs={}",
-                t.graph_version,
-                t.name,
-                t.nodes.len(),
-                t.edges.len(),
-                t.subgraphs.len()
-            );
-        } else {
+        if !report.is_ok() {
             all_ok = false;
-            println!("FAIL {path}  ({} 条违例)", report.violations.len());
-            for v in &report.violations {
-                println!("  - {v}");
-            }
         }
+        print!("{}", format_validate_stdout(path, &t, &report));
     }
     if all_ok {
         ExitCode::SUCCESS

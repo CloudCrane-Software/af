@@ -7,6 +7,7 @@
 //! ⑤ `MapSubgraphUnversioned`  —— map 的子图必须已版本化（graph_version 有值）
 
 use crate::model::*;
+use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -134,6 +135,100 @@ impl std::fmt::Display for Report {
             Ok(())
         }
     }
+}
+
+/// `afg validate` 对单个模板的标准输出（违规清单）。
+///
+/// `label` 是调用方给出的模板标识（CLI 里是用户传入的路径）。通过与失败的
+/// 文案只在这里实现，`src/bin/afg.rs` 直接打印它，快照钉住的就是 CLI 实际清单。
+pub fn format_validate_stdout(label: &str, t: &GraphTemplate, report: &Report) -> String {
+    if report.is_ok() {
+        format!(
+            "PASS {label}  graph_version={} name=`{}` nodes={} edges={} subgraphs={}\n",
+            t.graph_version,
+            t.name,
+            t.nodes.len(),
+            t.edges.len(),
+            t.subgraphs.len()
+        )
+    } else {
+        let mut out = format!("FAIL {label}  ({} 条违例)\n", report.violations.len());
+        for v in &report.violations {
+            out.push_str(&format!("  - {v}\n"));
+        }
+        out
+    }
+}
+
+/// 一条违例在决策工件里的稳定形状（错误码是外部契约，不暴露 Rust 枚举名）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ValidateDecisionViolation {
+    pub code: &'static str,
+    pub name: &'static str,
+    pub rule: &'static str,
+    pub scope: String,
+    pub message: String,
+}
+
+/// afg validate 的决策工件：编译器对一份图模板的接受/拒绝裁决。
+///
+/// 形状对齐"决策工件"（签发方 + 裁决 + 理由清单），但签发方固定为编译器
+/// `afg-validate`，不带工单域的角色/签名。`unknown_kinds` 只记录不在首发四型
+/// 里的节点 kind——未知 kind 本身不是违例（开放扩展），类型约束另由既有
+/// E200x 表达。字段顺序即 YAML 键序，供快照钉住。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ValidateDecision {
+    pub artifact: &'static str,
+    pub issuer: &'static str,
+    pub subject_name: String,
+    pub graph_version: String,
+    pub nodes: usize,
+    pub edges: usize,
+    pub subgraphs: usize,
+    pub unknown_kinds: Vec<String>,
+    pub verdict: &'static str,
+    pub violation_count: usize,
+    pub violations: Vec<ValidateDecisionViolation>,
+}
+
+impl ValidateDecision {
+    /// 由已校验的模板与报告组装决策工件。不重新跑规则。
+    pub fn from_report(t: &GraphTemplate, report: &Report) -> Self {
+        Self {
+            artifact: "graph-compile-decision",
+            issuer: "afg-validate",
+            subject_name: t.name.clone(),
+            graph_version: t.graph_version.clone(),
+            nodes: t.nodes.len(),
+            edges: t.edges.len(),
+            subgraphs: t.subgraphs.len(),
+            unknown_kinds: extension_kinds(t),
+            verdict: if report.is_ok() { "accept" } else { "reject" },
+            violation_count: report.violations.len(),
+            violations: report
+                .violations
+                .iter()
+                .map(|v| ValidateDecisionViolation {
+                    code: v.error_code.code(),
+                    name: v.error_code.name(),
+                    rule: v.rule.name(),
+                    scope: v.scope.clone(),
+                    message: v.message.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// 不在首发四型里的节点 kind，按字典序去重。只观察，不产生违例。
+fn extension_kinds(t: &GraphTemplate) -> Vec<String> {
+    let mut kinds = BTreeSet::new();
+    for n in all_nodes(t) {
+        if !kind::BUILTIN.contains(&n.kind.as_str()) {
+            kinds.insert(n.kind.clone());
+        }
+    }
+    kinds.into_iter().collect()
 }
 
 /// 一个图作用域（根图或子图）做 DAG/可达性/引用检查所需的视图。

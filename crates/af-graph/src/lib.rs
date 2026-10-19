@@ -14,4 +14,7 @@ pub mod validate;
 
 pub use model::*;
 pub use predicate::{Predicate, PredicateError};
-pub use validate::{validate, ErrorCode, Report, Rule, Violation};
+pub use validate::{
+    format_validate_stdout, validate, ErrorCode, Report, Rule, ValidateDecision,
+    ValidateDecisionViolation, Violation,
+};
