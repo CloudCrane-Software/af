@@ -1,12 +1,13 @@
 //! af-release-gate 属性测试。语义以本 crate 的 RESULT.md 为准，只观察闸门、不改规则。
 //!
-//! 四组：
+//! 五组：
 //! 1. CONWIP：任意操作序列下已准入 WIP 不超过上限，精确等号可以入队。
 //! 2. 渐放：同一批次内探针计数只增不减且不超过封顶；晋升之后本批次不再回到 gated。
 //! 3. 拒绝：失败的准入、完成、重复开启不改写已经提交的准入状态。
 //! 4. 重启：序列中途关账本再打开，在制与渐放游标跟未重启的闸门一致，且 WIP 不超过上限。
+//! 5. 分数权重：既有 `Op` 只出 u16 整分钟。本组补 0.001 级毫分，WIP 必须等于在制条目左折叠，重开不因位差判损坏。
 //!
-//! `seed_wip` 按 RESULT 不走准入、不衡上限，不进入这三组的操作序列。
+//! `seed_wip` 按 RESULT 不走准入、不衡上限，不进入这些操作序列。
 //! 夜间信用在 WIP 判定之前扣减（RESULT 反馈 4）。拒绝断言锁住准入提交，
 //! 并按 canary → 夜间 → WIP 的顺序核对夜间计数。
 //!
@@ -1736,6 +1737,308 @@ fn walk_restart(case: &Case, cut: usize) -> Result<(), TestCaseError> {
     Ok(())
 }
 
+// --- 组 5：0.001 级分数权重，重开不因 f64 位差判损坏 -------------------------
+
+#[derive(Clone, Copy, Debug)]
+enum MilliOp {
+    Admit { milli: u16, minute: u16 },
+    Complete { known: bool, slot: u8, minute: u16 },
+}
+
+#[derive(Clone, Debug)]
+struct MilliCase {
+    upper: u16,
+    ops: Vec<MilliOp>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct MilliHeld {
+    id: u64,
+    weight: f64,
+    admitted_at: MinuteOfDay,
+}
+
+/// 1..=2000 毫分，1 毫分 = 0.001 标准审阅分钟。
+fn milli_minutes(milli: u16) -> f64 {
+    f64::from(milli) * 0.001
+}
+
+fn arb_milli_op() -> impl Strategy<Value = MilliOp> {
+    prop_oneof![
+        3 => (1u16..=2_000, 0u16..1440).prop_map(|(milli, minute)| MilliOp::Admit { milli, minute }),
+        2 => (any::<bool>(), any::<u8>(), 0u16..1440).prop_map(|(known, slot, minute)| {
+            MilliOp::Complete { known, slot, minute }
+        }),
+    ]
+}
+
+fn arb_milli_restart() -> impl Strategy<Value = (MilliCase, usize)> {
+    (1u16..=40, prop::collection::vec(arb_milli_op(), 0..=24)).prop_flat_map(|(upper, ops)| {
+        let len = ops.len();
+        (Just(MilliCase { upper, ops }), 0..=len)
+    })
+}
+
+fn milli_config(upper: u16) -> GateConfig {
+    GateConfig {
+        wip_upper_minutes: f64::from(upper),
+        wip_lower_minutes: 0.0,
+        night_window: None,
+    }
+}
+
+fn fold_weights(weights: impl IntoIterator<Item = f64>) -> f64 {
+    weights.into_iter().fold(0.0, |acc, weight| acc + weight)
+}
+
+fn assert_milli_books(
+    memory: &ReleaseGate,
+    durable: &DurableGate,
+    held: &[MilliHeld],
+    upper: u16,
+    step: usize,
+) -> Result<(), TestCaseError> {
+    let expect = fold_weights(held.iter().map(|item| item.weight));
+    prop_assert_eq!(
+        memory.wip_minutes().to_bits(),
+        expect.to_bits(),
+        "step={} memory wip drifted from items",
+        step
+    );
+    prop_assert_eq!(
+        durable.wip_minutes().to_bits(),
+        expect.to_bits(),
+        "step={} durable wip drifted from items",
+        step
+    );
+    prop_assert_eq!(memory.in_process_count(), held.len(), "step={}", step);
+    prop_assert_eq!(durable.in_process_count(), held.len(), "step={}", step);
+    let mem_items = memory.in_process();
+    let dur_items = durable.in_process();
+    for (index, ((mem_item, dur_item), held_item)) in mem_items
+        .iter()
+        .zip(dur_items.iter())
+        .zip(held.iter())
+        .enumerate()
+    {
+        prop_assert_eq!(mem_item.id, held_item.id, "step={} i={}", step, index);
+        prop_assert_eq!(dur_item.id, held_item.id, "step={} i={}", step, index);
+        prop_assert_eq!(
+            mem_item.weight.to_bits(),
+            held_item.weight.to_bits(),
+            "step={} i={}",
+            step,
+            index
+        );
+        prop_assert_eq!(
+            dur_item.weight.to_bits(),
+            held_item.weight.to_bits(),
+            "step={} i={}",
+            step,
+            index
+        );
+        prop_assert_eq!(
+            mem_item.admitted_at,
+            held_item.admitted_at,
+            "step={} i={}",
+            step,
+            index
+        );
+        prop_assert_eq!(
+            dur_item.admitted_at,
+            held_item.admitted_at,
+            "step={} i={}",
+            step,
+            index
+        );
+    }
+    let cap = f64::from(upper);
+    prop_assert!(
+        durable.wip_minutes() <= cap + 1e-9,
+        "step={} over-release wip={} upper={}",
+        step,
+        durable.wip_minutes(),
+        cap
+    );
+    Ok(())
+}
+
+fn reopen_milli(
+    durable: DurableGate,
+    memory: &mut ReleaseGate,
+    path: &Path,
+    upper: u16,
+    held: &[MilliHeld],
+    clock: &ManualClock,
+    step: usize,
+) -> Result<DurableGate, TestCaseError> {
+    let _ = memory.drain_events();
+    drop(durable);
+    let (mut reloaded, outcome) =
+        DurableGate::open_with_clock(path, &milli_config(upper), None, clock.clone())
+            .map_err(|err| TestCaseError::fail(format!("step={step} reopen {err}")))?;
+    prop_assert!(
+        matches!(outcome, OpenOutcome::AlreadyDeclared),
+        "step={} outcome={:?}",
+        step,
+        outcome
+    );
+    assert_milli_books(memory, &reloaded, held, upper, step)?;
+    prop_assert!(
+        reloaded.drain_events().is_empty(),
+        "step={} restart replayed events",
+        step
+    );
+    Ok(reloaded)
+}
+
+fn apply_milli(
+    memory: &mut ReleaseGate,
+    durable: &mut DurableGate,
+    op: MilliOp,
+    held: &mut Vec<MilliHeld>,
+    next_id: &mut u64,
+    step: usize,
+) -> Result<(), TestCaseError> {
+    match op {
+        MilliOp::Admit { milli, minute } => {
+            let id = *next_id;
+            *next_id += 1;
+            let weight = milli_minutes(milli);
+            let now = u32::from(minute);
+            let pending = item(id, "v1", weight);
+            let mem_result = memory.try_admit(&pending, now);
+            let dur_result = split_admit(durable.try_admit(&pending, now))?;
+            match (mem_result, dur_result) {
+                (Ok(left), Ok(right)) => {
+                    prop_assert_eq!(left.weight.to_bits(), weight.to_bits(), "step={}", step);
+                    prop_assert_eq!(right.weight.to_bits(), weight.to_bits(), "step={}", step);
+                    prop_assert_eq!(left.admitted_at, now, "step={}", step);
+                    prop_assert_eq!(right.admitted_at, now, "step={}", step);
+                    held.push(MilliHeld {
+                        id,
+                        weight,
+                        admitted_at: now,
+                    });
+                }
+                (Err(left), Err(right)) => {
+                    prop_assert!(
+                        matches!(left, AdmitError::WipCap { .. }),
+                        "step={} unexpected admit error {left:?}",
+                        step
+                    );
+                    prop_assert_eq!(left, right, "step={}", step);
+                }
+                (left, right) => {
+                    return Err(TestCaseError::fail(format!(
+                        "step={step} admit diverged {left:?} vs {right:?}"
+                    )));
+                }
+            }
+        }
+        MilliOp::Complete {
+            known,
+            slot,
+            minute,
+        } => {
+            let id = if known && !held.is_empty() {
+                held[usize::from(slot) % held.len()].id
+            } else {
+                let id = *next_id;
+                *next_id += 1;
+                id
+            };
+            let now = u32::from(minute);
+            let mem_result = memory.complete(id, now, 0);
+            let dur_result = split_complete(durable.complete(id, now, 0))?;
+            match (mem_result, dur_result) {
+                (Ok(left), Ok(right)) => {
+                    prop_assert_eq!(left.ticket.item_id, right.ticket.item_id, "step={}", step);
+                    prop_assert_eq!(
+                        left.ticket.weight.to_bits(),
+                        right.ticket.weight.to_bits(),
+                        "step={}",
+                        step
+                    );
+                    if let Some(pos) = held.iter().position(|item| item.id == id) {
+                        held.remove(pos);
+                    }
+                }
+                (Err(GateError::UnknownItem(left_id)), Err(GateError::UnknownItem(right_id))) => {
+                    prop_assert_eq!(left_id, right_id, "step={}", step);
+                    prop_assert_eq!(left_id, id, "step={}", step);
+                }
+                (left, right) => {
+                    return Err(TestCaseError::fail(format!(
+                        "step={step} complete diverged {left:?} vs {right:?}"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn walk_milli(case: &MilliCase, cut: usize) -> Result<(), TestCaseError> {
+    let file = RestartFile::new();
+    let clock = ManualClock::new(1_700_000_000_000);
+    let (mut durable, outcome) =
+        DurableGate::open_with_clock(file.path(), &milli_config(case.upper), None, clock.clone())
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
+    prop_assert!(matches!(outcome, OpenOutcome::Created));
+    let mut memory = ReleaseGate::new(milli_config(case.upper)).expect("milli gate is valid");
+    let mut held = Vec::new();
+    let mut next_id = 1u64;
+    assert_milli_books(&memory, &durable, &held, case.upper, 0)?;
+
+    for (step, op) in case.ops.iter().enumerate() {
+        if step == cut {
+            durable = reopen_milli(
+                durable,
+                &mut memory,
+                file.path(),
+                case.upper,
+                &held,
+                &clock,
+                step,
+            )?;
+        }
+        apply_milli(
+            &mut memory,
+            &mut durable,
+            *op,
+            &mut held,
+            &mut next_id,
+            step,
+        )?;
+        assert_milli_books(&memory, &durable, &held, case.upper, step + 1)?;
+        let mem_events = memory.drain_events();
+        let dur_events = durable.drain_events();
+        prop_assert_eq!(mem_events, dur_events, "step={} events", step);
+    }
+    if cut == case.ops.len() {
+        durable = reopen_milli(
+            durable,
+            &mut memory,
+            file.path(),
+            case.upper,
+            &held,
+            &clock,
+            cut,
+        )?;
+    }
+    let wip = durable.wip_minutes();
+    prop_assert!(
+        wip <= f64::from(case.upper) + 1e-9,
+        "final over-release wip={} upper={}",
+        wip,
+        case.upper
+    );
+    let sum = fold_weights(durable.in_process().iter().map(|item| item.weight));
+    prop_assert_eq!(sum.to_bits(), wip.to_bits(), "final wip vs items");
+    Ok(())
+}
+
 proptest! {
     #![proptest_config(proptest_cfg())]
 
@@ -1766,5 +2069,11 @@ proptest! {
     #[test]
     fn conwip_does_not_over_release_after_restart((case, cut) in arb_restart()) {
         walk_restart(&case, cut)?;
+    }
+
+    /// 组 5。0.001 级权重的准入 / 完成 / 重开：WIP 等于在制条目左折叠，且不超过上限。
+    #[test]
+    fn fractional_milli_weights_survive_restart((case, cut) in arb_milli_restart()) {
+        walk_milli(&case, cut)?;
     }
 }
