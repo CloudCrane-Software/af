@@ -1,0 +1,1 @@
+{"ok":false,"error":{"kind":"Gate","gate":{"IllegalTransition":{"from":"Completed","to":"Cancelled","allowed":["Close"]}}},"engine_version":"0.1.0"}

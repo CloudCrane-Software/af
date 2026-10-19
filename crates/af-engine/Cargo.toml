@@ -11,5 +11,10 @@ af-workorder = { path = "../af-workorder" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+[dev-dependencies]
+# 集成测试用库类型组快照，再和子进程 stdout 对拍。不新增第三方 crate。
+af-workorder = { path = "../af-workorder" }
+serde_json = { workspace = true }
+
 [lints]
 workspace = true

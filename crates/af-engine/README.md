@@ -89,4 +89,4 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 
 ## 样例
 
-`tests/contract/` 下每个 `*.request.json` 是一行请求，同名的 `*.response.json` 是 stdout 的 JSON。
+`tests/contract/` 下每个 `*.request.json` 是一行请求。同名的 `*.response.json` 是 stdout 的那一行原文：紧凑 JSON，字段顺序与 serde 结构体声明一致。`work_order.created.json` 是一张 `WorkOrder` 快照。对象键的顺序不参与判定，解析后比对即可。

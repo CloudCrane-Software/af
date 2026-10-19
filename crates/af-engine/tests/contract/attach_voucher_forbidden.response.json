@@ -1,0 +1,1 @@
+{"ok":false,"error":{"kind":"Gate","gate":{"MutationForbidden":{"state":"Released","op":"attach_budget_voucher"}}},"engine_version":"0.1.0"}

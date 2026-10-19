@@ -1,0 +1,14 @@
+{
+  "id": "wo-1",
+  "state": "Created",
+  "graph_version": "g-3",
+  "line": null,
+  "budget_voucher": null,
+  "artifacts": [],
+  "sla": {
+    "deadline": "2026-11-01T00:00:00Z",
+    "priority": "High"
+  },
+  "supersedes": null,
+  "history": []
+}
