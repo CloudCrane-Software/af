@@ -1,0 +1,21 @@
+---
+source: crates/af-graph/tests/validate_snapshots.rs
+expression: decision
+---
+artifact: graph-compile-decision
+issuer: afg-validate
+subject_name: revise-loop-unknown-kind
+graph_version: "3"
+nodes: 3
+edges: 2
+subgraphs: 1
+unknown_kinds:
+  - rerank
+verdict: reject
+violation_count: 1
+violations:
+  - code: E2002
+    name: VALUE_OUT_OF_RANGE
+    rule: loop-not-controlled(受控循环缺安全点/有界性)
+    scope: graph
+    message: "安全点 human_review 类型不符：要求 Check，但体中该节点 kind=`rerank` 且 human 标记=false"

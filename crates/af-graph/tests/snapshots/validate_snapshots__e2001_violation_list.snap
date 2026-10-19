@@ -1,0 +1,6 @@
+---
+source: crates/af-graph/tests/validate_snapshots.rs
+expression: stdout
+---
+FAIL fixtures/illegal-3-undeclared-ref.json  (1 条违例)
+  - [E2001 DANGLING_REFERENCE] graph: 边 publish.done -> notify_slack.event 引用了未声明节点: notify_slack

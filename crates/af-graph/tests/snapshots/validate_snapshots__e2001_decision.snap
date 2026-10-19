@@ -1,0 +1,20 @@
+---
+source: crates/af-graph/tests/validate_snapshots.rs
+expression: decision
+---
+artifact: graph-compile-decision
+issuer: afg-validate
+subject_name: article-pipeline-with-ghost-ref
+graph_version: "7"
+nodes: 6
+edges: 6
+subgraphs: 0
+unknown_kinds: []
+verdict: reject
+violation_count: 1
+violations:
+  - code: E2001
+    name: DANGLING_REFERENCE
+    rule: undeclared-reference(未声明节点引用)
+    scope: graph
+    message: "边 publish.done -> notify_slack.event 引用了未声明节点: notify_slack"

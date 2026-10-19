@@ -1,0 +1,5 @@
+---
+source: crates/af-graph/tests/validate_snapshots.rs
+expression: stdout
+---
+PASS fixtures/legal-1-pipeline-human.json  graph_version=7 name=`article-pipeline` nodes=6 edges=5 subgraphs=0
