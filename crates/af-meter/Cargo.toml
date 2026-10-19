@@ -14,3 +14,7 @@ af-credential = { path = "../af-credential" }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "meter_paths"
+harness = false
