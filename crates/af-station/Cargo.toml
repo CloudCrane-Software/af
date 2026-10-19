@@ -5,7 +5,13 @@ edition.workspace = true
 license = "Apache-2.0"
 
 [dependencies]
+# 班次窗口由日历驱动。路径依赖，不改 af-calendar 本体。
+af-calendar = { path = "../af-calendar" }
+# 0.4 解析到锁里已有的 0.4.45。deadline 用 DateTime<Utc>，与 af-workorder 的 SLA 同一形态。
+chrono = { version = "0.4", features = ["serde"] }
 rusqlite = { workspace = true }
+# 班次绑定把 Calendar 存成 JSON。版本走 workspace，不新引包。
+serde_json = { workspace = true }
 # 1.0.69。与根上的 thiserror 2.0.21 主版本不同，继承 `thiserror` 会升到 2。
 thiserror = "1.0"
 
@@ -13,6 +19,8 @@ thiserror = "1.0"
 workspace = true
 
 [dev-dependencies]
+# 跨午夜与 DST 班次夹具。版本与 af-calendar 的 chrono-tz 0.10 一致（锁定 0.10.4）。
+chrono-tz = "0.10"
 # 操作序列属性测试。默认特性含 fork/timeout/bit-set；bit-set 会把 borsh derive 统一进工作区。
 # 任务卡允许 proptest =1.12.0，只作 dev-dependency。
 proptest = { version = "=1.12.0", default-features = false, features = ["std"] }

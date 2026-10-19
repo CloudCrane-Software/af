@@ -91,8 +91,12 @@ dependencies = [
 name = "af-station"
 version = "0.1.0"
 dependencies = [
+ "af-calendar",
+ "chrono",
+ "chrono-tz",
  "proptest",
  "rusqlite",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 

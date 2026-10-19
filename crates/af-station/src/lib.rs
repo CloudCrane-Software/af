@@ -11,13 +11,20 @@
 //!    `claim` 入口先惰性回收过期租约（state 置回 queued、清 claimant），他人即可接管。
 //! 3. 幂等键：`idempotency_key` 列 UNIQUE，重复入账返回 `Enqueued::Duplicate`，不产生第二行。
 //! 4. 角色路由：`required_role` 与 worker 角色精确匹配才可被认领。
+//! 5. 班次窗口：角色或工位绑定了 [`af_calendar::Calendar`] 时，只有
+//!    `is_working_instant(now)` 为真才派单。未绑定不设门。非班次 `claim` 返回
+//!    None，任务保持 queued。已认领的任务不因下班被收回；租约回收仍只看 `lease_until`。
 //!
 //! 开库是声明，不是「有表就迁就」：[`OpenStatus::Created`] 为首启（建表并写入
 //! schema 版本与指纹），[`OpenStatus::AlreadyDeclared`] 为重入且库内声明与代码一致。
 //! 版本、指纹或活表结构对不上则失败，不补表、不改已有行。
 //!
 //! 时刻经 [`Clock`] 注入。[`Station::open`] 与 [`Station::open_in_memory`]
-//! 仍读本机墙钟；测试用 [`ManualClock`] 推进租约，不睡眠。
+//! 仍读本机墙钟；测试用 [`ManualClock`] 推进租约，不睡眠。班次判定把这一读数
+//! 换成 [`chrono::DateTime<Utc>`]，不另读墙钟。
+//!
+//! SLA 截止是 [`chrono::DateTime<Utc>`]（与 af-workorder 的 `Sla::deadline` 同一形态），
+//! 落盘为 unix 毫秒。逾期只比较这个绝对时刻。派单不看 deadline。
 
 mod clock;
 mod schema;
@@ -25,9 +32,14 @@ mod schema;
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use schema::OpenStatus;
 
+use af_calendar::Calendar;
+use chrono::{DateTime, TimeZone, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::sync::Arc;
+
+const KIND_ROLE: &str = "role";
+const KIND_WORKER: &str = "worker";
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -38,6 +50,17 @@ pub enum Error {
     /// 库内声明与代码不一致，或库里已有对不上的对象。调用方应停机，而不是接着派单。
     #[error("声明与库内状态不符: {0}")]
     DeclarationMismatch(String),
+    #[error("班次日历无法解析: {0}")]
+    CalendarJson(String),
+    #[error("班次主体不能为空")]
+    EmptyShiftSubject,
+    #[error("无法把 unix 毫秒 {0} 转成 UTC 时刻")]
+    InvalidInstant(i64),
+    /// 纳秒尾巴或越界时刻若截成毫秒再读回，会和调用方给的时刻不是同一个。
+    #[error("deadline 必须是可落盘的毫秒 UTC 时刻，拒绝静默截断或越界: {0}")]
+    DeadlineNotMillis(DateTime<Utc>),
+    #[error("calendar: {0}")]
+    Calendar(#[from] af_calendar::CalendarError),
 }
 
 /// [`Station::open`] 的结果：账本，以及这次是首启还是重入。
@@ -114,6 +137,45 @@ pub struct Task {
     /// unix 毫秒；queued/done 时为 None。
     pub lease_until: Option<i64>,
     pub idempotency_key: Option<String>,
+    /// 绝对截止时刻（UTC）。账本按 unix 毫秒落盘；None 表示未设时限。
+    pub deadline: Option<DateTime<Utc>>,
+}
+
+impl Task {
+    /// 恰在 deadline 不算逾期。无 deadline 恒为 false。
+    ///
+    /// 判定式与 af-workorder `Sla::is_overdue` 相同：`deadline < now`。
+    /// `now` 由调用方注入，本方法不读系统钟，也不问日历。
+    pub fn is_overdue(&self, now: DateTime<Utc>) -> bool {
+        self.deadline.is_some_and(|deadline| deadline < now)
+    }
+}
+
+/// [`Station::enqueue`] 的入参。`deadline` 为 None 时与 [`Station::new_task`] 相同。
+pub struct NewTask<'a> {
+    pub id: &'a str,
+    pub payload_ref: &'a str,
+    pub required_role: &'a str,
+    pub idempotency_key: Option<&'a str>,
+    /// 须对齐到毫秒。带亚毫秒尾巴会拒绝，而不是截断后落盘。
+    pub deadline: Option<DateTime<Utc>>,
+}
+
+/// 用日历把「下单时刻 + 承诺有效工时」解析成 UTC 截止。
+///
+/// 时长语义原样交给 [`Calendar::sla_deadline`]：零时长是下一个可开工时刻，
+/// 负时长与视界耗尽返回 [`Error::Calendar`]。返回值再 `with_timezone(Utc)`。
+pub fn sla_deadline_utc<Tz>(
+    calendar: &Calendar,
+    placed_at: DateTime<Tz>,
+    promised_working: chrono::Duration,
+) -> Result<DateTime<Utc>>
+where
+    Tz: TimeZone + Clone,
+{
+    Ok(calendar
+        .sla_deadline(placed_at, promised_working)?
+        .with_timezone(&Utc))
 }
 
 /// 入账结果：新插入，或命中幂等键返回已有任务 id。
@@ -170,11 +232,16 @@ impl Station {
         self.clock.now_ms()
     }
 
-    /// 入账一条新任务（初始 queued）。
+    /// 注入时钟的当前时刻，UTC。
+    pub fn now_utc(&self) -> Result<DateTime<Utc>> {
+        millis_to_utc(self.now_ms())
+    }
+
+    /// 入账一条新任务（初始 queued，无 deadline）。
     ///
     /// 幂等键语义：`idempotency_key` 上有 UNIQUE 约束。
     /// `ON CONFLICT DO NOTHING` 配合受影响行数判定：撞键时不产生第二行，返回已存在任务的 id。
-    /// `idempotency_key = None` 不参与去重（SQLite UNIQUE 允许多个 NULL）。
+    /// 撞键不改已有行的 deadline。`idempotency_key = None` 不参与去重（SQLite UNIQUE 允许多个 NULL）。
     pub fn new_task(
         &self,
         id: &str,
@@ -182,26 +249,128 @@ impl Station {
         required_role: &str,
         idempotency_key: Option<&str>,
     ) -> Result<Enqueued> {
+        self.enqueue(NewTask {
+            id,
+            payload_ref,
+            required_role,
+            idempotency_key,
+            deadline: None,
+        })
+    }
+
+    /// 入账，并可带 UTC 截止时刻。幂等键语义与 [`Station::new_task`] 相同。
+    pub fn enqueue(&self, task: NewTask<'_>) -> Result<Enqueued> {
+        let deadline_ms = match task.deadline {
+            Some(deadline) => Some(utc_to_millis(deadline)?),
+            None => None,
+        };
         let n = self.conn.execute(
-            "INSERT INTO task (id, payload_ref, required_role, state, claimant, lease_until, idempotency_key)
-             VALUES (?1, ?2, ?3, 'queued', NULL, NULL, ?4)
+            "INSERT INTO task (
+                id, payload_ref, required_role, state, claimant, lease_until, idempotency_key, deadline_ms
+             )
+             VALUES (?1, ?2, ?3, 'queued', NULL, NULL, ?4, ?5)
              ON CONFLICT(idempotency_key) DO NOTHING",
-            params![id, payload_ref, required_role, idempotency_key],
+            params![
+                task.id,
+                task.payload_ref,
+                task.required_role,
+                task.idempotency_key,
+                deadline_ms
+            ],
         )?;
         if n == 1 {
-            return Ok(Enqueued::Inserted { id: id.to_string() });
+            return Ok(Enqueued::Inserted {
+                id: task.id.to_string(),
+            });
         }
         let existing: Option<String> = self
             .conn
             .query_row(
                 "SELECT id FROM task WHERE idempotency_key = ?1",
-                params![idempotency_key],
+                params![task.idempotency_key],
                 |r| r.get(0),
             )
             .optional()?;
         Ok(Enqueued::Duplicate {
-            existing_id: existing.unwrap_or_else(|| id.to_string()),
+            existing_id: existing.unwrap_or_else(|| task.id.to_string()),
         })
+    }
+
+    /// 把角色的可派单时段绑到日历。同一角色再次绑定会替换。空角色名拒绝。
+    ///
+    /// 日历先 `validate()`。未绑定与「绑定一张没有班次的日历」不同：前者不设门，后者永不派单。
+    pub fn bind_role_shift(&self, role: &str, calendar: &Calendar) -> Result<()> {
+        self.bind_shift(KIND_ROLE, role, calendar)
+    }
+
+    /// 把工位的可接单时段绑到日历。与角色日历同时存在时，两边都在班次内才派。
+    pub fn bind_worker_shift(&self, worker_id: &str, calendar: &Calendar) -> Result<()> {
+        self.bind_shift(KIND_WORKER, worker_id, calendar)
+    }
+
+    /// 读回角色班次。没有绑定则 None。JSON 坏了或校验失败则返回错误，不当成「没绑定」。
+    pub fn role_shift(&self, role: &str) -> Result<Option<Calendar>> {
+        self.load_shift(KIND_ROLE, role)
+    }
+
+    /// 读回工位班次。
+    pub fn worker_shift(&self, worker_id: &str) -> Result<Option<Calendar>> {
+        self.load_shift(KIND_WORKER, worker_id)
+    }
+
+    fn bind_shift(&self, kind: &str, subject: &str, calendar: &Calendar) -> Result<()> {
+        if subject.is_empty() {
+            return Err(Error::EmptyShiftSubject);
+        }
+        calendar.validate()?;
+        let json =
+            serde_json::to_string(calendar).map_err(|err| Error::CalendarJson(err.to_string()))?;
+        self.conn.execute(
+            "INSERT INTO shift_binding (kind, subject, calendar_json)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(kind, subject) DO UPDATE SET calendar_json = excluded.calendar_json",
+            params![kind, subject, json],
+        )?;
+        Ok(())
+    }
+
+    fn load_shift(&self, kind: &str, subject: &str) -> Result<Option<Calendar>> {
+        let json: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT calendar_json FROM shift_binding WHERE kind = ?1 AND subject = ?2",
+                params![kind, subject],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(json) = json else {
+            return Ok(None);
+        };
+        let calendar: Calendar =
+            serde_json::from_str(&json).map_err(|err| Error::CalendarJson(err.to_string()))?;
+        calendar.validate()?;
+        Ok(Some(calendar))
+    }
+
+    /// 角色日历与工位日历都要放行。两边都没绑定则放行，保持只按角色匹配的旧语义。
+    fn dispatchable(&self, worker_id: &str, role: &str, now_ms: i64) -> Result<bool> {
+        let role_cal = self.load_shift(KIND_ROLE, role)?;
+        let worker_cal = self.load_shift(KIND_WORKER, worker_id)?;
+        if role_cal.is_none() && worker_cal.is_none() {
+            return Ok(true);
+        }
+        let now = millis_to_utc(now_ms)?;
+        if let Some(calendar) = &role_cal {
+            if !calendar.is_working_instant(now) {
+                return Ok(false);
+            }
+        }
+        if let Some(calendar) = &worker_cal {
+            if !calendar.is_working_instant(now) {
+                return Ok(false);
+            }
+        }
+        Ok(true)
     }
 
     /// 惰性回收：把租约已过期的 claimed 任务打回 queued。
@@ -222,6 +391,9 @@ impl Station {
 
     /// 原子认领一个属于 `role` 的 queued 任务，租约 `lease_ms` 毫秒。
     ///
+    /// 先按注入时刻回收过期租约，再看班次门。非班次返回 None，任务保持 queued
+    /// （过期租约已经回炉）。角色仍是 SQL 里的 `required_role` 精确匹配。
+    ///
     /// 关键点：候选 id 只是"提名"，成败由守卫 UPDATE 的受影响行数裁定 ——
     /// `WHERE ... AND claimant IS NULL` 保证并发下只有一个 worker 能置上 claimant。
     /// 行数为 0（被别人抢先）就换下一个候选重试，全部落空返回 None。
@@ -229,6 +401,9 @@ impl Station {
         // 回收与租约截止共用同一次读数，注入的时刻在这一次认领里不会中途漂移。
         let now = self.now_ms();
         self.reclaim_before(now)?; // 过期租约先回炉，他人即可接管
+        if !self.dispatchable(worker_id, role, now)? {
+            return Ok(None);
+        }
         let mut stmt = self.conn.prepare(
             "SELECT id FROM task
              WHERE state = 'queued' AND required_role = ?1
@@ -257,7 +432,7 @@ impl Station {
 
     /// 心跳续期：把 `lease_until` 重置为 now + `extend_ms`。
     /// 只有"现任 claimant 且租约尚未过期"才续得上 —— 过期后原主人心跳失败，
-    /// 防止僵尸 worker 复活已被接管的任务。
+    /// 防止僵尸 worker 复活已被接管的任务。不看班次：已经领走的任务，下班后仍按租约续期。
     pub fn heartbeat(&self, task_id: &str, worker_id: &str, extend_ms: u64) -> Result<bool> {
         // 截止点与守卫用同一个 now：心跳以该时刻为基准重置，而不是在旧值上累加。
         let now = self.now_ms();
@@ -270,6 +445,7 @@ impl Station {
     }
 
     /// 完成：只有现任 claimant 能把自己的任务置为 done。
+    /// 不看班次，也不看租约是否已过期：回收发生前，现任 claimant 仍可完成。
     pub fn complete(&self, task_id: &str, worker_id: &str) -> Result<bool> {
         let n = self.conn.execute(
             "UPDATE task SET state = 'done'
@@ -282,12 +458,11 @@ impl Station {
     /// 按 id 取一行任务。
     pub fn get(&self, id: &str) -> Result<Option<Task>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, payload_ref, required_role, state, claimant, lease_until, idempotency_key
+            "SELECT id, payload_ref, required_role, state, claimant, lease_until, idempotency_key, deadline_ms
              FROM task WHERE id = ?1",
         )?;
-        stmt.query_row(params![id], row_to_task)
-            .optional()
-            .map_err(Error::from)
+        let row = stmt.query_row(params![id], row_to_parts).optional()?;
+        row.map(task_from_parts).transpose()
     }
 
     /// 某状态的任务数（测试/观测用）。
@@ -300,8 +475,19 @@ impl Station {
     }
 }
 
-fn row_to_task(r: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
-    Ok(Task {
+struct TaskParts {
+    id: String,
+    payload_ref: String,
+    required_role: String,
+    state: State,
+    claimant: Option<String>,
+    lease_until: Option<i64>,
+    idempotency_key: Option<String>,
+    deadline_ms: Option<i64>,
+}
+
+fn row_to_parts(r: &rusqlite::Row<'_>) -> rusqlite::Result<TaskParts> {
+    Ok(TaskParts {
         id: r.get(0)?,
         payload_ref: r.get(1)?,
         required_role: r.get(2)?,
@@ -309,7 +495,37 @@ fn row_to_task(r: &rusqlite::Row<'_>) -> rusqlite::Result<Task> {
         claimant: r.get(4)?,
         lease_until: r.get(5)?,
         idempotency_key: r.get(6)?,
+        deadline_ms: r.get(7)?,
     })
+}
+
+fn task_from_parts(row: TaskParts) -> Result<Task> {
+    let deadline = match row.deadline_ms {
+        Some(ms) => Some(millis_to_utc(ms)?),
+        None => None,
+    };
+    Ok(Task {
+        id: row.id,
+        payload_ref: row.payload_ref,
+        required_role: row.required_role,
+        state: row.state,
+        claimant: row.claimant,
+        lease_until: row.lease_until,
+        idempotency_key: row.idempotency_key,
+        deadline,
+    })
+}
+
+fn millis_to_utc(ms: i64) -> Result<DateTime<Utc>> {
+    DateTime::from_timestamp_millis(ms).ok_or(Error::InvalidInstant(ms))
+}
+
+fn utc_to_millis(dt: DateTime<Utc>) -> Result<i64> {
+    let ms = dt.timestamp_millis();
+    match DateTime::from_timestamp_millis(ms) {
+        Some(restored) if restored == dt => Ok(ms),
+        _ => Err(Error::DeadlineNotMillis(dt)),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -731,5 +947,73 @@ mod tests {
         let _ = std::fs::remove_dir_all(db.parent().unwrap());
         let _ = std::fs::remove_dir_all(db_drop.parent().unwrap());
         let _ = std::fs::remove_dir_all(db_missing.parent().unwrap());
+    }
+
+    /// 2026-10-19 10:00 Asia/Shanghai = 02:00Z，落在默认班次 08:00–17:00 内。
+    fn monday_shift_clock() -> ManualClock {
+        let utc = chrono::Utc.with_ymd_and_hms(2026, 10, 19, 2, 0, 0).unwrap();
+        ManualClock::new(utc.timestamp_millis())
+    }
+
+    #[test]
+    fn overlapping_calendar_is_rejected_and_not_stored() {
+        use af_calendar::Shift;
+
+        let s = Station::open_in_memory_with_clock(monday_shift_clock()).unwrap();
+        let tz = af_calendar::Calendar::weekday_8x5_shanghai().tz;
+        let mut weekly: [Vec<Shift>; 7] = Default::default();
+        weekly[0] = vec![
+            Shift::hm(8, 0, 12, 0).unwrap(),
+            Shift::hm(11, 0, 15, 0).unwrap(),
+        ];
+        let bad = af_calendar::Calendar::from_weekly(tz, weekly);
+        let err = s.bind_role_shift("reviewer", &bad).unwrap_err();
+        assert!(matches!(err, Error::Calendar(_)), "{err}");
+        assert!(s.role_shift("reviewer").unwrap().is_none());
+        s.new_task("t1", "p", "reviewer", None).unwrap();
+        // 绑定失败等于没绑定：班次内仍按角色派单。
+        assert!(s.claim("w", "reviewer", 1_000).unwrap().is_some());
+        assert!(matches!(
+            s.bind_role_shift("", &af_calendar::Calendar::weekday_8x5_shanghai())
+                .unwrap_err(),
+            Error::EmptyShiftSubject
+        ));
+    }
+
+    #[test]
+    fn corrupt_or_invalid_stored_calendar_fails_closed() {
+        use af_calendar::Shift;
+
+        let s = Station::open_in_memory_with_clock(monday_shift_clock()).unwrap();
+        s.new_task("t1", "p", "reviewer", None).unwrap();
+        s.bind_role_shift("reviewer", &af_calendar::Calendar::weekday_8x5_shanghai())
+            .unwrap();
+        s.conn
+            .execute("UPDATE shift_binding SET calendar_json = '{'", [])
+            .unwrap();
+        let err = s.claim("w", "reviewer", 1_000).unwrap_err();
+        assert!(matches!(err, Error::CalendarJson(_)), "{err}");
+        assert_eq!(s.get("t1").unwrap().unwrap().state, State::Queued);
+
+        let tz = af_calendar::Calendar::weekday_8x5_shanghai().tz;
+        let mut weekly: [Vec<Shift>; 7] = Default::default();
+        weekly[0] = vec![
+            Shift::hm(8, 0, 12, 0).unwrap(),
+            Shift::hm(11, 0, 15, 0).unwrap(),
+        ];
+        let bad = af_calendar::Calendar::from_weekly(tz, weekly);
+        let json = serde_json::to_string(&bad).unwrap();
+        s.conn
+            .execute(
+                "UPDATE shift_binding SET calendar_json = ?1 WHERE kind = 'role'",
+                rusqlite::params![json],
+            )
+            .unwrap();
+        let err = s.claim("w", "reviewer", 1_000).unwrap_err();
+        assert!(
+            matches!(err, Error::Calendar(_)),
+            "校验失败不得当成未绑定而放行, got {err}"
+        );
+        assert_eq!(s.get("t1").unwrap().unwrap().state, State::Queued);
     }
 }

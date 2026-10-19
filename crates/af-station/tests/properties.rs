@@ -143,6 +143,7 @@ impl Model {
     }
 
     fn claim(&mut self, worker: &str, role: &str, lease_ms: u64) -> Option<String> {
+        // 本序列不绑定班次。未绑定不设班次门，认领仍只按角色精确匹配。
         let now = self.now;
         self.reclaim_at(now);
         let lease_until = now + lease_ms as i64;
@@ -214,6 +215,7 @@ fn assert_ledger(station: &Station, model: &Model, step: usize) {
                 assert_eq!(task.claimant, row.claimant, "step {step} {key}");
                 assert_eq!(task.lease_until, row.lease_until, "step {step} {key}");
                 assert_eq!(task.idempotency_key, row.key, "step {step} {key}");
+                assert_eq!(task.deadline, None, "step {step} {key}");
             }
             _ => panic!("step {step} id {key}: station {got:?} model {expected:?}"),
         }
