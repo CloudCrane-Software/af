@@ -3,6 +3,7 @@
 //! 一次进程读 stdin 一行请求，向 stdout 写一行响应，然后退出。
 //! 订单快照整单进、整单出。字段形状就是 [`af_workorder`] 派生的 serde，
 //! 本 crate 不重定义工单、门控错误或决策错误。
+//! 拒绝式信封不改写成自由文本：响应 `kind` 为 `RejectionEnvelope`，并带上 `field` 与 `detail`。
 //!
 //! # 判定落点
 //!
@@ -21,10 +22,11 @@
 mod version;
 
 use af_workorder::{
-    BudgetVoucher, DecisionArtifact, DecisionError, GateError, LineBinding, WorkArtifact, WorkOrder,
+    decode_work_order_value, BudgetVoucher, DecisionArtifact, DecisionError, GateError,
+    LineBinding, OrderDecodeError, WorkArtifact, WorkOrder,
 };
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use serde_json::{Map, Value};
 
 /// 编译进二进制的包版本。cargo 在编译时注入 `CARGO_PKG_VERSION`。
@@ -44,10 +46,14 @@ struct Response {
 
 /// 协议错误带 `kind`。领域错误把 af-workorder 的派生 serde 原样放在
 /// `gate` 或 `decision` 里，不改写变体名和字段。
+///
+/// [`WireError::RejectionEnvelope`] 与 [`WireError::BadRequest`] 是两种 kind。
+/// 前者带上拒绝式信封的 `field` 与 `detail`，不再把它们拼进 `message`。
 #[derive(Serialize)]
 #[serde(tag = "kind")]
 enum WireError {
     BadRequest { message: String },
+    RejectionEnvelope { field: String, detail: String },
     Gate { gate: GateError },
     Decision { decision: DecisionError },
 }
@@ -170,11 +176,22 @@ fn parse_op(obj: &Map<String, Value>) -> Result<Op, WireError> {
     }
 }
 
+/// `WorkOrder::deserialize` 只会把拒绝式信封变成一句 serde 文本。
+/// 这里走 [`decode_work_order_value`]，让 `field` 与 `detail` 留在结构里。
 fn parse_order(obj: &Map<String, Value>) -> Result<WorkOrder, WireError> {
     let Some(value) = obj.get("order") else {
         return Err(bad("缺少字段 order"));
     };
-    WorkOrder::deserialize(value).map_err(|e| bad(format!("订单快照无法反序列化: {e}")))
+    match decode_work_order_value(value.clone()) {
+        Ok(order) => Ok(order),
+        Err(OrderDecodeError::Rejected(envelope)) => Err(WireError::RejectionEnvelope {
+            field: envelope.field,
+            detail: envelope.detail,
+        }),
+        Err(err @ (OrderDecodeError::Malformed(_) | OrderDecodeError::Invalid(_))) => {
+            Err(bad(format!("订单快照无法反序列化: {err}")))
+        }
+    }
 }
 
 fn parse_field<T: DeserializeOwned>(obj: &Map<String, Value>, field: &str) -> Result<T, WireError> {

@@ -662,9 +662,8 @@ fn assert_rejection_passthrough(op: &str, order: &Value) -> Value {
     let OrderDecodeError::Rejected(envelope) = err else {
         panic!("库应给出拒绝式信封,实际 {err:?}");
     };
-    let got = invoke(
-        &serde_json::to_string(&json!({"op": op, "order": order})).expect("请求可序列化"),
-    );
+    let got =
+        invoke(&serde_json::to_string(&json!({"op": op, "order": order})).expect("请求可序列化"));
     assert_eq!(got["ok"], false, "{got}");
     assert!(got.get("order").is_none(), "拒绝不能带回有损订单: {got}");
     assert_eq!(got["error"]["kind"], "RejectionEnvelope", "{got}");
@@ -1052,6 +1051,17 @@ fn samples() -> Vec<(&'static str, String)> {
         ),
         ("unknown_op", r#"{"op":"frob"}"#.to_string()),
         ("order_bad_state", flying),
+        ("order_missing_stable_id", {
+            let mut order = serde_json::to_value(created()).unwrap();
+            order.as_object_mut().unwrap().remove("stable_id");
+            serde_json::to_string(&json!({"op":"release","order": order})).unwrap()
+        }),
+        ("order_unknown_fields", {
+            let mut order = serde_json::to_value(bound()).unwrap();
+            order["injected_beta"] = json!("keep-me");
+            order["injected_alpha"] = json!(1);
+            serde_json::to_string(&json!({"op":"release","order": order})).unwrap()
+        }),
         (
             "voucher_amount_type",
             request_line(

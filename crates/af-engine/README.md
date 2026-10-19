@@ -18,7 +18,7 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 {"op":"release","order":{}}
 ```
 
-`order` 是完整的 `WorkOrder` 快照。各 op 的额外参数见下表。除 `engine_version_min` 以外，未列出的顶层字段被忽略。结构体上的未知字段按 `af-workorder` 的 serde 处理（派生实现不拒绝未知字段）。
+`order` 是完整的 `WorkOrder` 快照。各 op 的额外参数见下表。除 `engine_version_min` 以外，未列出的顶层字段被忽略。`order` 上线格式不认识的字段由 `af-workorder` 拒绝，响应是 `RejectionEnvelope`。本进程不把丢掉这些字段之后的快照当成成功结果送回。
 
 可选字段 `engine_version_min`：字符串，semver，形如 `MAJOR.MINOR.PATCH`。可以带预发布标识（`-rc.1`）和 build 元数据（`+build.1`）。build 元数据不参与比较。比较规则与响应里的 `engine_version` 相同：正式版高于同号预发布版；预发布的数字标识按整数比较（`beta.2` 低于 `beta.11`）。
 
@@ -44,7 +44,8 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 
 | 情况 | 形状 |
 |---|---|
-| 未知 op、非法 JSON、缺字段、字段类型错、订单快照反序列化失败 | `{"kind":"BadRequest","message":"..."}` |
+| 未知 op、非法 JSON、缺字段、字段类型错、订单快照除拒绝式信封以外的反序列化失败 | `{"kind":"BadRequest","message":"..."}` |
+| 订单快照被拒绝式信封挡住（身份字段缺失、空白或类型不对，或含不认识的字段） | `{"kind":"RejectionEnvelope","field":"...","detail":"..."}`。`field` 与 `detail` 原样来自 `af-workorder` 的 `RejectionEnvelope`，不压进 `message`。多个不认识的字段名都在这两处。与 `BadRequest` 不是同一种 kind |
 | `engine_version_min` 不是字符串，或不能按 semver 解析 | `{"kind":"BadRequest","message":"..."}`。fail-closed：看不懂的下限按拒绝处理 |
 | 本二进制版本低于 `engine_version_min` | `{"kind":"BadRequest","message":"..."}`。message 含两边版本并提示升级。不进入领域判定 |
 | 状态机、门控、登记窗口拒绝 | `{"kind":"Gate","gate":<GateError 的 serde>}` |
