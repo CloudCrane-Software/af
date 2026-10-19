@@ -9,10 +9,13 @@
 
 use std::collections::VecDeque;
 use std::fmt;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use af_sampling::{
-    Action, Csp1, Csp1Config, Engine, GoldenInjector, GoldenLedger, InjectorConfig, Lineage, Phase,
-    Recipe, Rng as ItemRng, RunOutcome, Tagged,
+    Action, Csp1, Csp1Config, Engine, GoldenInjector, GoldenLedger, InjectorConfig,
+    LedgerDeclaration, Lineage, ManualClock, OpenFork, Phase, Recipe, Rng as ItemRng, RunOutcome,
+    SamplingLedger, Tagged,
 };
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
@@ -350,6 +353,7 @@ fn check_three_invariants(seq: &ItemSeq) -> Result<(), TestCaseError> {
 
 // --- 双水位：只在阈值穿越时升降 ---------------------------------------------
 
+#[derive(Clone)]
 struct OutcomeIn {
     success: bool,
     violations: u32,
@@ -367,6 +371,7 @@ impl fmt::Debug for OutcomeIn {
     }
 }
 
+#[derive(Clone)]
 struct PromoCase {
     window: u32,
     min_successes: u32,
@@ -1139,6 +1144,181 @@ fn check_golden_does_not_change_lineage(case: &GoldenCase) -> Result<(), TestCas
     Ok(())
 }
 
+// --- 重启不丢水位 -----------------------------------------------------------
+
+struct TempDb {
+    path: PathBuf,
+}
+
+impl TempDb {
+    fn new() -> Self {
+        static N: AtomicU64 = AtomicU64::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let path =
+            std::env::temp_dir().join(format!("af-sampling-prop-{}-{n}.db", std::process::id()));
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for TempDb {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+        let mut wal = self.path.clone().into_os_string();
+        wal.push("-wal");
+        let _ = std::fs::remove_file(wal);
+        let mut shm = self.path.clone().into_os_string();
+        shm.push("-shm");
+        let _ = std::fs::remove_file(shm);
+    }
+}
+
+fn arb_restart_case() -> impl Strategy<Value = (PromoCase, usize)> {
+    arb_promo_case().prop_flat_map(|case| {
+        let n = case.outcomes.len();
+        (Just(case), 0..=n)
+    })
+}
+
+fn assert_ledger_matches(
+    disk: &SamplingLedger,
+    oracle: &Engine,
+    split: usize,
+) -> Result<(), TestCaseError> {
+    prop_assert_eq!(
+        disk.current(),
+        oracle.current(),
+        "current 在重启点 split={} 丢失",
+        split
+    );
+    prop_assert_eq!(
+        disk.attained(),
+        oracle.attained(),
+        "attained 在重启点 split={} 丢失",
+        split
+    );
+    prop_assert_eq!(
+        disk.clean_streak(),
+        oracle.clean_streak(),
+        "clean_streak 在重启点 split={} 丢失",
+        split
+    );
+    prop_assert_eq!(
+        disk.events(),
+        oracle.events(),
+        "谱系轨迹在重启点 split={} 丢失",
+        split
+    );
+    prop_assert_eq!(
+        disk.pending_window(),
+        oracle.pending_window(),
+        "判据窗口在重启点 split={} 丢失",
+        split
+    );
+    Ok(())
+}
+
+fn reopen_ledger(
+    path: &Path,
+    decl: &LedgerDeclaration,
+    clock: &ManualClock,
+    oracle: &Engine,
+    split: usize,
+) -> Result<SamplingLedger, TestCaseError> {
+    let (ledger, fork) = SamplingLedger::open(path, decl, clock.clone())
+        .map_err(|err| TestCaseError::fail(format!("重开失败 split={split}: {err}")))?;
+    prop_assert_eq!(
+        fork,
+        OpenFork::AlreadyDeclared,
+        "重开必须走重入 split={}",
+        split
+    );
+    assert_ledger_matches(&ledger, oracle, split)?;
+    Ok(ledger)
+}
+
+fn check_restart_keeps_watermark(case: &PromoCase, split: usize) -> Result<(), TestCaseError> {
+    let decl = LedgerDeclaration {
+        recipe_json: recipe_json(case),
+        injector: InjectorConfig {
+            p: 0.0,
+            defect_share: 0.7,
+        },
+    };
+    // 固定注入时刻。若落盘改读墙钟，轨迹上的毫秒不会是 10000。
+    let clock = ManualClock::new(10_000);
+    let tmp = TempDb::new();
+    let mut oracle = engine_from(case)?;
+    let (mut disk, fork) = SamplingLedger::open(tmp.path(), &decl, clock.clone())
+        .map_err(|err| TestCaseError::fail(format!("首启失败: {err}")))?;
+    prop_assert_eq!(fork, OpenFork::Created, "空库必须是首启");
+
+    for (index, raw) in case.outcomes.iter().enumerate() {
+        if index == split {
+            drop(disk);
+            disk = reopen_ledger(tmp.path(), &decl, &clock, &oracle, split)?;
+        }
+        let outcome = to_outcome(raw);
+        let expect = oracle.record(outcome);
+        let got = disk.record(outcome).map_err(|err| {
+            TestCaseError::fail(format!("step {index} 落盘失败 split={split}: {err}"))
+        })?;
+        prop_assert_eq!(
+            got,
+            expect,
+            "step {} 重启后续判与未重启不一致 split={}",
+            index,
+            split
+        );
+    }
+    drop(disk);
+    let disk = reopen_ledger(tmp.path(), &decl, &clock, &oracle, split)?;
+    let traj = disk
+        .trajectory()
+        .map_err(|err| TestCaseError::fail(format!("读轨迹失败 split={split}: {err}")))?;
+    prop_assert_eq!(
+        traj.len(),
+        oracle.events().len(),
+        "轨迹条数 split={}",
+        split
+    );
+    for (row, event) in traj.iter().zip(oracle.events()) {
+        prop_assert_eq!(row.tick, event.tick, "tick split={}", split);
+        prop_assert_eq!(row.action, event.action, "action split={}", split);
+        prop_assert_eq!(
+            row.current_after,
+            oracle_lineage_after(&oracle, event.tick),
+            "轨迹水位 split={}",
+            split
+        );
+        prop_assert_eq!(
+            row.recorded_at_ms,
+            10_000,
+            "绝对时刻必须来自注入钟 split={}",
+            split
+        );
+    }
+    Ok(())
+}
+
+fn oracle_lineage_after(oracle: &Engine, tick: u64) -> Lineage {
+    let mut level = Lineage::Agent;
+    for event in oracle.events() {
+        if let Action::Promoted(next) | Action::Demoted(next) | Action::Recovered(next) =
+            event.action
+        {
+            level = next;
+        }
+        if event.tick == tick {
+            break;
+        }
+    }
+    level
+}
+
 proptest! {
     #![proptest_config(proptest_cfg())]
 
@@ -1158,5 +1338,11 @@ proptest! {
     #[test]
     fn golden_injection_does_not_change_lineage_counts(case in arb_golden_case()) {
         check_golden_does_not_change_lineage(&case)?;
+    }
+
+    /// 重启不丢水位：任意配方与结果序列，在任意一步落盘重开后，水位、窗口、轨迹与未重启的引擎一致，后续处置也一致。
+    #[test]
+    fn restart_does_not_drop_watermark((case, split) in arb_restart_case()) {
+        check_restart_keeps_watermark(&case, split)?;
     }
 }
