@@ -13,6 +13,11 @@
 //! `bind_line`、`attach_voucher`、`start`、`attach_artifact`、`complete`、`cancel`。
 //!
 //! 线协议、参数和错误形状见 crate 根目录的 `README.md`。
+//!
+//! 请求可以带 `engine_version_min`（semver）。本二进制版本低于它时拒绝，并提示升级。
+//! 字段缺失表示不设下限。字段存在但无法解析时拒绝，不把看不懂的下限当成没有下限。
+
+mod version;
 
 use af_workorder::{
     BudgetVoucher, DecisionArtifact, DecisionError, GateError, LineBinding, WorkArtifact, WorkOrder,
@@ -106,7 +111,8 @@ fn eval(line: &str) -> Response {
     }
 }
 
-/// 检查顺序固定，命中即返回：空行 → JSON → 对象 → op → 订单快照 → 参数 → 领域判定。
+/// 检查顺序固定，命中即返回：空行 → JSON → 对象 → `engine_version_min`（字段存在时）
+/// → op → 订单快照 → 参数 → 领域判定。
 fn eval_inner(line: &str) -> Result<WorkOrder, WireError> {
     let line = line.trim();
     if line.is_empty() {
@@ -116,10 +122,31 @@ fn eval_inner(line: &str) -> Result<WorkOrder, WireError> {
     let obj = value
         .as_object()
         .ok_or_else(|| bad("请求必须是 JSON 对象"))?;
+    enforce_min_version(obj)?;
     let op = parse_op(obj)?;
     let mut order = parse_order(obj)?;
     dispatch(op, &mut order, obj)?;
     Ok(order)
+}
+
+/// 下限门在领域判定之前。版本不够时不返回订单错误，避免旧二进制用旧规则把请求判过去。
+fn enforce_min_version(obj: &Map<String, Value>) -> Result<(), WireError> {
+    let Some(value) = obj.get("engine_version_min") else {
+        return Ok(());
+    };
+    let Some(min) = value.as_str() else {
+        return Err(bad("字段 engine_version_min 必须是字符串"));
+    };
+    match version::check(ENGINE_VERSION, min) {
+        Ok(()) => Ok(()),
+        Err(version::VersionGate::TooOld) => Err(bad(format!(
+            "引擎版本 {ENGINE_VERSION} 低于 engine_version_min {min}，请升级引擎"
+        ))),
+        Err(version::VersionGate::BadMin(reason)) => {
+            Err(bad(format!("字段 engine_version_min 无法解析: {reason}")))
+        }
+        Err(version::VersionGate::BadEngine) => Err(bad("引擎版本无法解析，拒绝判定")),
+    }
 }
 
 fn parse_op(obj: &Map<String, Value>) -> Result<Op, WireError> {

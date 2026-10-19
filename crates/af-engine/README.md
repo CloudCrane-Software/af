@@ -18,9 +18,11 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 {"op":"release","order":{}}
 ```
 
-`order` 是完整的 `WorkOrder` 快照。各 op 的额外参数见下表。未列出的顶层字段被忽略。结构体上的未知字段按 `af-workorder` 的 serde 处理（派生实现不拒绝未知字段）。
+`order` 是完整的 `WorkOrder` 快照。各 op 的额外参数见下表。除 `engine_version_min` 以外，未列出的顶层字段被忽略。结构体上的未知字段按 `af-workorder` 的 serde 处理（派生实现不拒绝未知字段）。
 
-检查顺序固定，命中即返回：空行 → 非法 JSON → 非对象 → `op` → `order` → 该 op 的参数 → 领域判定。
+可选字段 `engine_version_min`：字符串，semver，形如 `MAJOR.MINOR.PATCH`。可以带预发布标识（`-rc.1`）和 build 元数据（`+build.1`）。build 元数据不参与比较。比较规则与响应里的 `engine_version` 相同：正式版高于同号预发布版；预发布的数字标识按整数比较（`beta.2` 低于 `beta.11`）。
+
+检查顺序固定，命中即返回：空行 → 非法 JSON → 非对象 → `engine_version_min`（字段存在时）→ `op` → `order` → 该 op 的参数 → 领域判定。
 
 ## 响应
 
@@ -36,17 +38,30 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 {"ok":false,"error":{},"engine_version":"0.1.0"}
 ```
 
-`order` 与 `error` 不同时出现。
+`order` 与 `error` 不同时出现。任何响应都有 `engine_version`，包括版本门拒绝。
 
 ### error
 
 | 情况 | 形状 |
 |---|---|
 | 未知 op、非法 JSON、缺字段、字段类型错、订单快照反序列化失败 | `{"kind":"BadRequest","message":"..."}` |
+| `engine_version_min` 不是字符串，或不能按 semver 解析 | `{"kind":"BadRequest","message":"..."}`。fail-closed：看不懂的下限按拒绝处理 |
+| 本二进制版本低于 `engine_version_min` | `{"kind":"BadRequest","message":"..."}`。message 含两边版本并提示升级。不进入领域判定 |
 | 状态机、门控、登记窗口拒绝 | `{"kind":"Gate","gate":<GateError 的 serde>}` |
 | 决策工件校验拒绝 | `{"kind":"Decision","decision":<DecisionError 的 serde>}` |
 
 `gate` 与 `decision` 是 `af-workorder` 派生序列化的原样结果（外部标签枚举）。变体名和字段不在本进程里改写。`Missing` 仍是类型化清单，顺序保持库的固定顺序：产线绑定在前，预算凭证在后。
+
+### engine_version_min
+
+| 条件 | 结果 |
+|---|---|
+| 字段不存在 | 不设下限，继续后面的检查 |
+| 本二进制版本大于或等于该值 | 继续后面的检查 |
+| 本二进制版本低于该值 | `BadRequest`，提示升级。不改订单，不返回领域错误 |
+| 类型不是字符串，或 semver 解析失败 | `BadRequest`。不当成字段不存在 |
+
+版本低于下限时，响应仍然带本二进制的 `engine_version`。调用方用它确认是哪一份二进制拒绝的。
 
 ## op
 

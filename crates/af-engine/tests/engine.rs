@@ -245,6 +245,47 @@ fn assert_bad(got: &Value, message_has: &str) {
     );
 }
 
+fn assert_engine_version(got: &Value) {
+    let version = got["engine_version"]
+        .as_str()
+        .expect("engine_version 必须是字符串");
+    assert_eq!(version, env!("CARGO_PKG_VERSION"));
+    assert!(!version.is_empty(), "engine_version 必须非空");
+}
+
+fn assert_upgrade(got: &Value, min: &str) {
+    assert_eq!(got["ok"], false);
+    assert_eq!(got["error"]["kind"], "BadRequest");
+    assert!(got.get("order").is_none(), "版本拒绝不带 order: {got}");
+    assert_engine_version(got);
+    let message = got["error"]["message"]
+        .as_str()
+        .expect("BadRequest.message 是字符串");
+    assert!(message.contains("请升级引擎"), "应提示升级，实际 {message}");
+    assert!(
+        message.contains(min),
+        "message 应包含下限 {min}，实际 {message}"
+    );
+    assert!(
+        message.contains(env!("CARGO_PKG_VERSION")),
+        "message 应包含本二进制版本，实际 {message}"
+    );
+}
+
+fn assert_min_unparseable(got: &Value) {
+    assert_eq!(got["ok"], false);
+    assert_eq!(got["error"]["kind"], "BadRequest");
+    assert!(got.get("order").is_none(), "解析失败不带 order: {got}");
+    assert_engine_version(got);
+    let message = got["error"]["message"]
+        .as_str()
+        .expect("BadRequest.message 是字符串");
+    assert!(
+        message.contains("无法解析"),
+        "看不懂的下限应拒绝，实际 {message}"
+    );
+}
+
 #[test]
 fn bind_line_accepts_created_and_rejects_after_release() {
     let wo = created();
@@ -640,6 +681,117 @@ fn engine_version_ignores_runtime_env() {
     assert_eq!(value["engine_version"], env!("CARGO_PKG_VERSION"));
     assert_ne!(value["engine_version"], "9.9.9");
     assert_eq!(value["engine_version"], "0.1.0");
+}
+
+#[test]
+fn engine_version_min_accepts_current_lower_and_prerelease() {
+    assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
+    let wo = bound();
+    let mut next = wo.clone();
+    next.release().unwrap();
+    for min in [
+        env!("CARGO_PKG_VERSION"),
+        "0.0.0",
+        "0.1.0-rc.1",
+        "0.1.0+build.7",
+    ] {
+        let got = call(
+            "release",
+            &wo,
+            json!({"engine_version_min": min, "tag": "ignored"}),
+        );
+        assert_same_order(&got, &next);
+        assert_engine_version(&got);
+    }
+
+    // 下限满足时，领域错误仍按原样返回。
+    let wo = created();
+    let err = wo.clone().release().unwrap_err();
+    let got = call("release", &wo, json!({"engine_version_min": "0.0.1"}));
+    assert_gate(&got, &err);
+    assert_engine_version(&got);
+}
+
+#[test]
+fn engine_version_min_rejects_when_engine_is_older_or_min_is_unusable() {
+    assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
+    let wo = bound();
+    let mut would_release = wo.clone();
+    would_release.release().unwrap();
+
+    for min in ["0.1.1", "0.2.0", "1.0.0", "99.0.0"] {
+        let got = call("release", &wo, json!({"engine_version_min": min}));
+        assert_upgrade(&got, min);
+    }
+
+    // 版本不够时停在下限门，不进入订单解析，也不返回领域错误。
+    let got =
+        invoke(r#"{"op":"release","engine_version_min":"99.0.0","order":{"state":"Flying"}}"#);
+    assert_upgrade(&got, "99.0.0");
+    let message = got["error"]["message"].as_str().unwrap();
+    assert!(
+        !message.contains("反序列化") && !message.contains("Preconditions"),
+        "版本拒绝不应混入领域错误: {message}"
+    );
+
+    let got = invoke(r#"{"op":"release","engine_version_min":"99.0.0"}"#);
+    assert_upgrade(&got, "99.0.0");
+    assert!(
+        !got["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("缺少字段"),
+        "版本拒绝应先于缺字段"
+    );
+
+    for raw in [
+        r#"{"op":"release","engine_version_min":"latest","order":{}}"#,
+        r#"{"op":"release","engine_version_min":"","order":{}}"#,
+        r#"{"op":"release","engine_version_min":"0.1","order":{}}"#,
+        r#"{"op":"release","engine_version_min":"v0.1.0","order":{}}"#,
+        r#"{"op":"release","engine_version_min":"01.0.0","order":{}}"#,
+        r#"{"op":"release","engine_version_min":"0.1.0-01","order":{}}"#,
+    ] {
+        assert_min_unparseable(&invoke(raw));
+    }
+
+    assert_bad(
+        &invoke(r#"{"engine_version_min":1}"#),
+        "字段 engine_version_min 必须是字符串",
+    );
+    assert_bad(
+        &invoke(r#"{"op":"release","engine_version_min":null}"#),
+        "字段 engine_version_min 必须是字符串",
+    );
+    assert_bad(
+        &invoke(r#"{"engine_version_min":["0.1.0"]}"#),
+        "字段 engine_version_min 必须是字符串",
+    );
+}
+
+#[test]
+fn engine_version_field_is_always_present() {
+    let samples = [
+        invoke(&request_line("release", &bound(), json!({}))),
+        invoke(&request_line(
+            "release",
+            &bound(),
+            json!({"engine_version_min": env!("CARGO_PKG_VERSION")}),
+        )),
+        invoke(r#"{"op":"frob"}"#),
+        invoke(""),
+        invoke("[]"),
+        invoke(r#"{"op":"release","engine_version_min":"99.0.0"}"#),
+        invoke(r#"{"engine_version_min":"not-a-version"}"#),
+        invoke(r#"{"engine_version_min":1}"#),
+    ];
+    for got in &samples {
+        assert_engine_version(got);
+        assert!(got["ok"].is_boolean(), "带版本的响应仍有 ok: {got}");
+    }
+    assert_eq!(samples[0]["ok"], true);
+    assert_eq!(samples[2]["ok"], false);
+    assert_eq!(samples[5]["ok"], false);
 }
 
 #[test]
