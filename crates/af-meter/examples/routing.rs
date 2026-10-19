@@ -4,15 +4,15 @@
 //!
 //! 运行：cargo run -j 4 -p af-meter --example routing
 
-use af_meter::demo::{self, SCHEDULE};
+use af_meter::demo::{self, DAY, SCHEDULE};
 use af_meter::{route, Time};
 
 fn fmt_t(t: Time) -> String {
-    let day = (t / 86400.0).floor() as i64;
-    let rem = t - day as f64 * 86400.0;
-    let h = (rem / 3600.0).floor() as i64;
-    let m = ((rem - h as f64 * 3600.0) / 60.0).floor() as i64;
-    let s = (rem - h as f64 * 3600.0 - m as f64 * 60.0).round() as i64;
+    let day = t / DAY;
+    let rem = t % DAY;
+    let h = rem / 3_600;
+    let m = (rem % 3_600) / 60;
+    let s = rem % 60;
     format!("d{day} {h:02}:{m:02}:{s:02}")
 }
 
@@ -32,8 +32,8 @@ fn main() {
     println!();
     println!("== 任务路由时间线 ==");
     println!(
-        "{:<14} {:>10}  {:<13} {}",
-        "时刻", "预计消耗", "选中供给", "扣后各供给剩余"
+        "{:<14} {:>10}  {:<13} 扣后各供给剩余",
+        "时刻", "预计消耗", "选中供给"
     );
     for &(t, need) in SCHEDULE {
         let decision = route(&mut supplies, need, t);
@@ -47,11 +47,11 @@ fn main() {
                     .map(|(name, _)| name)
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("{}: {:.0} [{}]", s.name, r.available, leaves)
+                format!("{}: {} [{}]", s.name, r.available, leaves)
             })
             .collect();
         println!(
-            "{:<14} {:>10.0}  {:<13} {}",
+            "{:<14} {:>10}  {:<13} {}",
             fmt_t(t),
             need,
             chosen,
