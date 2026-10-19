@@ -9,17 +9,34 @@
 //!
 //! 文档是拒绝式信封。没有 `version`，或 `version` 不是整数 `1`，整份拒绝，不默认成 v1。
 //! 字段清单见 [`V1_FIELDS`]。
+//!
+//! JIT 护栏挂在本 crate 上，不改 schema v1 的校验语义。
+//! best-of-N 之前走 [`Guardrails::screen_before_best_of_n`]。
+//! 时刻用 [`Clock`] 注入，只抄进 [`Ledger`]，不参与放行。
 
 mod archive;
+mod clock;
+mod codes;
 mod error;
 mod fields;
+mod guardrail;
+mod ledger;
 mod model;
 mod parse;
 mod validate;
 
 pub use archive::{apply_dspy_archive, to_dspy_archive};
+pub use clock::{Clock, ManualClock, SystemClock};
+pub use codes::{
+    E_INFRA, E_LOW_SCORE, E_SCORE, E_SUBJECT, JG_BLANK_BATCH, JG_BLANK_CANDIDATE, JG_BLANK_RUN,
+    JG_DUPLICATE_CANDIDATE, JG_LOW_SCORE, JG_NOT_A_CRASH, JG_SCORE_ON_CRASH,
+};
 pub use error::{ErrorCode, IrError, IrFailure};
 pub use fields::{FieldSpec, V1_FIELDS};
+pub use guardrail::{
+    AdmittedCandidate, Candidate, CandidateIr, Guardrails, RejectedCandidate, ScreenBatch,
+};
+pub use ledger::{GuardEvent, GuardReason, Ledger, LedgerEntry, LedgerError, LEDGER_VERSION};
 pub use model::{
     Demo, Field, LmConfig, OptimizationState, OptimizationStatus, Predictor, PredictorConfig,
     Program, Signature,
