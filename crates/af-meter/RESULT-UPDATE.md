@@ -69,3 +69,102 @@ Collecting 10 samples in estimated 3.0039 s (40k iterations)
 - 记账基准固定在一个打开的窗口内。跨界那一下落在滚转基准里，两条路径没有合成同一次调用。
 - 滚转吞吐量按日窗口计数，读的时候要和记账的“每事件”分开看。
 - 未做多消费者、持久化、滑动窗口。与 `RESULT.md` ⑤ 相同，本次范围不含。
+
+---
+
+# RESULT-UPDATE.md — C2 af-meter proptest 补强（波次 1 ⑦/T9-7）
+
+## ① 结论
+
+**通过**。未改 Meter 树、`try_spend`、路由的已验证语义。`proptest =1.12.0` 作为 dev-dependency 引入。新增 `BudgetLedger::merge_consumers`（多消费者已花相加，与顺序无关）和 4 个属性测试。`cargo test -p af-meter` **25 全绿**（原 21：15 单元 + 5 路由 + 1 词表；新增 4 个 proptest；文档测试仍是 0）。`cargo clippy --all-targets -p af-meter -- -D warnings` 无新警告。
+
+## ② 步骤
+
+1. 读完 `crates/af-meter/RESULT.md`、`src/budget.rs`、`tests/vocab.rs`、`src/lib.rs`。计数保持 `Count = u64`，金额保持 `Cents = i64`。`try_spend` 拒绝负数消耗；`remaining_cents` 用 `saturating_sub`。Meter 仍是单消费者 `&mut self` 状态机。这些结论没有改。
+2. `Cargo.toml` 增加 `proptest = "=1.12.0"`，只放 dev-dependencies，与 af-sampling、af-calendar 的版本钉死方式一致。`cargo check -p af-meter` 后 `Cargo.lock` 只在 af-meter 的依赖列表里多了一行已有的 `proptest`，没有新包，也没有改其他 crate。
+3. `BudgetLedger::merge_consumers`：把各消费者的 `spent_cents` 相加，不重放消耗顺序。空切片得到 0/0；总额不一致报 `BudgetMismatch`（low/high 取最小与最大）；负数已花报 `NegativeSpend`（取最小的负数）；和超过总额且和不为 0，或和不进 `i64`，报 `OverBudget`。和为 0 时允许总额为负，负数余额来自总额本身。入参不修改。
+4. `tests/properties.rs` 四组属性，每组 256 例，失败持久化关掉：
+   - `window_quota_conserved_over_any_event_sequence`：任意注入时刻的观察/消耗序列下，已授予 + 剩余 + 已丢弃 = 容量 × 开窗数。跨窗用闭式计数，不复制实现里的 while。错过多个窗口只回到容量。`reset_at` 只前进。`window == 0` 不重置。
+   - `min_windows_conserve_and_grant_the_same_amount`：Min 的两个窗口各自守恒；成功时两边都扣同一份 `need`，失败时两边都不扣。
+   - `budget_spend_never_overdrafts`：拒绝不改账本；成功消耗 `>= 0` 且不超过 cap；已花等于成功消耗之和且不超过非负总额。总额为负时没有任何成功扣减，`remaining_cents == budget_cents`。
+   - `consumer_ledger_merge_is_commutative`：同一组账本的反转、旋转、按已花排序，合并结果相同；成功时已花等于各消费者之和，且不透支。
+5. 提交前跑过 `cargo fmt -p af-meter`、`cargo clippy --all-targets -p af-meter -j 4 -- -D warnings`、`cargo test -p af-meter -j 4`。cargo 命令前都 `source /data/af-factory/env.sh`。
+
+## ③ 证据
+
+```
+$ source /data/af-factory/env.sh && cargo check -p af-meter -j 4
+    Checking af-meter v0.1.0 (/data/af-factory/c2/crates/af-meter)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
+```
+
+`Cargo.lock` 的 diff 只有 af-meter 依赖列表中的 `+ "proptest"`。
+
+```
+$ cargo clippy --all-targets -p af-meter -j 4 -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.40s
+```
+
+exit 0。cargo 另打印了一条既有的 future-incompat：`proc-macro-error2 v2.0.1`，不是本 crate 的 clippy 警告。
+
+```
+$ cargo test -p af-meter -j 4
+
+running 15 tests
+...
+test result: ok. 15 passed; 0 failed
+
+running 4 tests
+test window_quota_conserved_over_any_event_sequence ... ok
+test min_windows_conserve_and_grant_the_same_amount ... ok
+test consumer_ledger_merge_is_commutative ... ok
+test budget_spend_never_overdrafts ... ok
+test result: ok. 4 passed; 0 failed; finished in 0.04s
+
+running 5 tests
+test result: ok. 5 passed; 0 failed
+
+running 1 test
+test credential_limit_consumed_without_unit_conversion ... ok
+test result: ok. 1 passed; 0 failed
+
+Doc-tests af_meter
+test result: ok. 0 passed; 0 failed
+```
+
+反例可读性用一次故意写错的断言确认过（`total_granted == 0`，随后已删，上表是删掉后的全绿结果）。缩小结果是：
+
+```
+故意失败以观察反例 granted=1 at crates/af-meter/tests/properties.rs:294.
+minimal failing input: case = WindowCase {
+    window: 0,
+    capacity: 6,
+    origin: 0,
+    events: [
+        Consume {
+            now: 0,
+            need: 1,
+        },
+    ],
+}
+```
+
+没有留下 `proptest-regressions/`。
+
+提交：
+
+- `a10215f` af-meter: 引入 proptest 1.12.0 作为 dev-dependency
+- `5073454` af-meter: 补三组 proptest，并加上可交换的多消费者账本合并
+
+## ④ 反馈
+
+1. 多消费者若按流水重放，超额时谁先谁后会改变最终已花，合并不可交换。`merge_consumers` 因此只加总已经入账的 `spent_cents`，超额就整体拒绝。这和「记账合并可交换」一致，也没有把 Meter 改成并发状态机。
+2. 负数美分只出现在两处已有语义里：`spend_cents < 0` 被拒绝；`budget_cents < 0` 时 `remaining_cents` 就是这个负总额（`saturating_sub`）。成功扣减不会把已花或非负总额的余额打成负数。
+3. `window == 0` 时 `refresh` 直接返回，但 `read` 在剩余小于容量时仍给出 `recovers_at = Some(reset_at)`。属性测试按这个已有行为钉住，没有改成「真的会恢复」。
+4. 生成器以小整数为主，极端值只有 `0` / `-1` / `i64::MIN` / `i64::MAX`。256 例是抽样，不是穷尽证明。
+
+## ⑤ 遗留
+
+- RESULT.md 里 Meter 的遗留仍在：单消费者、无持久化、固定窗口双倍突发、Max 的 `recovers_at` 是下界、`route` 不拆分任务。本任务不改这些。
+- `merge_consumers` 不是锁，也不是并发扣减。两个消费者要先各自 `try_spend`，再把账本交过来合并。
+- `proptest` 只写在 af-meter 的 dev-dependencies。根 `Cargo.toml` 不在本任务改动范围内，没有收进 `[workspace.dependencies]`。
