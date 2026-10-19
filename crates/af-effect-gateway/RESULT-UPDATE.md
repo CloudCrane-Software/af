@@ -1,4 +1,79 @@
-# RESULT-UPDATE — W3B af-effect-gateway 挂工单状态机
+# RESULT-UPDATE — F2 af-effect-gateway 外呼抢占
+
+## 结论
+
+通过。`execute` 不再在入口 fence 一次之后就调外部闭包。同纪元两条连接并发执行同一意图时，`BEGIN IMMEDIATE` 里先把 `declared` 原子改成 `executing` 并记下纪元，只有抢到的一方外呼；外呼成功后，同一条纪元守卫把回执写成 `executed`。红测复现是双 `RanFresh`、外呼计数 2；修完 t9 为恰好一方 `RanFresh`、外呼计数 1。
+
+崩溃留在 `executing` 且没有回执时不自动重发。`Gateway::resume` 只把纪元 +1，不把行放回 `declared`。人工用 `record_receipt` 补回执，或显式 `resume_execution` 放回 `declared` 后再执行。闭包返回 `Err` 仍把意图放回 `declared`，窗口关闭后可重试（t6 语义保留）。
+
+`cargo test -p af-effect-gateway` 全绿：库内单测 2→3，集成测试 8→11。原 t1–t8 与 2 个时钟单测仍通过。clippy `--all-targets -D warnings` 无警告。未新增第三方 crate。
+
+## 步骤
+
+1. 先提交失败测试 `t9_same_epoch_concurrent_execute_calls_out_once`（`703175e`）。两条连接在同一文件上、同一纪元，`Barrier` 对齐后 `execute` 同一键。修复前外呼计数为 2，两个结果都是 `RanFresh`（失败信息里“其他结果”为空）。
+2. `effect_intent.state` 增加 `executing`，增加 `claim_epoch`。新库直接建新表。已有 W3B 表（有 `declared_order_state`、没有 `claim_epoch`）在打开时的 `BEGIN IMMEDIATE` 里重建并拷贝旧行，`claim_epoch` 填 NULL。早于订单快照列的库不迁，和 W3B 留下的行为一样。
+3. 每条连接设置 `busy_timeout` 5000 ms，写锁冲突时等待，而不是立刻 `SQLITE_BUSY`。抢占事务在调用闭包之前提交，外呼期间不持有写锁。
+4. `execute` 的判定顺序不变：fencing、订单 id、withdrawn、已执行则重放、executing 则 `ExecutionInDoubt`、订单态、窗口，然后才抢占。抢到后闭包返回 `Err` 或载荷解析失败，且纪元仍匹配，则放回 `declared`。成功则 `UPDATE ... WHERE state='executing' AND claim_epoch=会话纪元 AND 当前纪元=会话纪元`。
+5. `record_receipt` 的写入放进同一条 `BEGIN IMMEDIATE`，`WHERE` 带当前纪元。允许 `declared` 或 `executing` → `executed`；已执行保留原回执；已撤回拒绝。`resume_execution` 只把“executing 且无回执”放回 `declared`。
+6. 补测试：t10 崩溃停在 executing 后重入不外呼，`record_receipt` 接管，`resume` 不自动放行，`resume_execution` 之后才再外呼一次。t11 外呼期间另一连接 `resume`，旧会话不能落回执，新会话重入不外呼。库内单测覆盖 W3B 旧表迁移后可抢占一次，第二次打开不再重建。t3 补“撤回后不能 record_receipt”，t4 补“窗口未关的分步回执只记一次、execute 只重放”。
+
+## 证据
+
+工作目录 `/data/af-factory/fx2`，分支 `task-F2`。红测提交 `703175e`，修复提交 `6c28b2f`。
+
+修复前（只跑 t9）：
+
+```text
+source /data/af-factory/env.sh
+cargo test -p af-effect-gateway --test gateway_tests t9_same_epoch_concurrent_execute_calls_out_once -- --test-threads=1
+# assertion `left == right` failed
+# F2: 同纪元双连接并发 execute 外呼计数必须为 1，其他结果 []
+#   left: 2
+#   right: 1
+# “其他结果”为空，两个返回值都是 RanFresh
+# exit 101
+```
+
+修复后：
+
+```text
+source /data/af-factory/env.sh
+cargo fmt -p af-effect-gateway
+cargo clippy --all-targets -p af-effect-gateway -- -D warnings
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.43s
+# exit 0，无警告行
+
+cargo test -p af-effect-gateway
+# unittests src/lib.rs: ok. 3 passed; 0 failed
+#   clock 2 条，schema_tests::w3b_table_migrates_and_declared_row_can_be_claimed ok
+# tests/gateway_tests.rs: ok. 11 passed; 0 failed
+#   t1 … t11 ok
+# Doc-tests af_effect_gateway: ok. 0 passed; 0 failed
+```
+
+计数：库内单测 2→3，多出来的是旧表迁移。集成测试 8→11，多出来的是 t9、t10、t11。t1–t8 仍在。源码和测试里没有 `sleep`；t9 的胜出方在闭包里有界 `yield_now`，用来把“已提交抢占、尚未落回执”的窗口留住，对端在这期间返回且不外呼。
+
+## 反馈
+
+1. 抢占在闭包之前提交。进程死在外呼和回执之间，行停在 `executing`。下一次 `execute` 返回 `ExecutionInDoubt`，不调用闭包。
+2. `Gateway::resume` 不是这条路的自动重发开关。它只让旧会话变成 `StaleEpoch`。要再试一次必须再调 `resume_execution`。
+3. 并发里没抢到的一方，回执还没落时得到 `ExecutionInDoubt`，回执已经落时得到 `Replayed`。两种都不会外呼。t9 接受这两种。
+4. `record_receipt` 补 `executing` 时只要求请求纪元等于当前纪元，不要求 `claim_epoch` 仍是抢占时的纪元。新纪元可以接管已经发生的回执。旧纪元在 `resume` 之后写不进去。
+5. 闭包返回 `Err` 表示调用方确认这次没发出去，行放回 `declared`。这和“结果不明不许重发”不是一条路径。t6 仍然是失败后保持 `declared`、重试成功、再执行只重放。
+6. 连接上的 `busy_timeout` 是 5000 ms。抢占事务不包住外呼，等待的是状态更新那一下，不是外部调用本身。
+7. 已经是 `executing` 的行不能撤回。`withdraw_intent` 只改 `declared`，否则仍是 `WithdrawWindowClosed`，状态文本是 `executing`。
+
+## 遗留
+
+- 早于 `declared_order_state` 列的库仍然不迁移。打开后读写意图会失败。这是 W3B 已经记下的行为，这次没有扩成完整历史迁移。
+- `fuzz/fuzz_targets/af_effect_gateway_idempotency.rs` 仍按旧签名调用 `declare_intent` / `execute`（不递交 `WorkOrder`）。该文件不在本任务改动范围，没有编译。这次没有改这两个方法的参数个数。
+- 库内不 `catch_unwind`。闭包恐慌或进程消失都把行留在 `executing`。测试用 `catch_unwind` 模拟崩溃，生产路径没有把恐慌收成 `Err`。
+- 已知失败后若放回 `declared` 的更新没写上、而纪元仍匹配，调用方可能看到 `ExternalCall`，行却还在 `executing`。下一次 `execute` 是 `ExecutionInDoubt`，不会重发。正常失败路径会写上，t6 覆盖的是这条。
+- 没有重跑整个 workspace。其他 crate 的源码没改。
+
+---
+
+# 历史 · W3B af-effect-gateway 挂工单状态机
 
 ## 结论
 
