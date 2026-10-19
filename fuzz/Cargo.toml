@@ -22,6 +22,12 @@ path = "../crates/af-workorder"
 [dependencies.af-effect-gateway]
 path = "../crates/af-effect-gateway"
 
+[dependencies.af-graph]
+path = "../crates/af-graph"
+
+[dependencies.af-sampling]
+path = "../crates/af-sampling"
+
 # 父目录是虚拟工作区。`cargo fuzz init` 默认不写这张表，
 # 子清单会被判定为“以为自己在工作区里却不是成员”。
 # cargo 给出的修法是补一张空 [workspace]，让 fuzz 自成工作区，
@@ -41,7 +47,6 @@ bench = false
 [[bin]]
 name = "af_effect_gateway_idempotency"
 path = "fuzz_targets/af_effect_gateway_idempotency.rs"
-
 test = false
 doc = false
 bench = false
@@ -49,6 +54,13 @@ bench = false
 [[bin]]
 name = "af_graph_schema_parse"
 path = "fuzz_targets/af_graph_schema_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "af_sampling_invariant_input"
+path = "fuzz_targets/af_sampling_invariant_input.rs"
 test = false
 doc = false
 bench = false

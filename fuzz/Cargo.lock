@@ -3,7 +3,6 @@
 version = 4
 
 [[package]]
-<<<<<<< HEAD
 name = "af-calendar"
 version = "0.1.0"
 dependencies = [
@@ -18,6 +17,7 @@ dependencies = [
 name = "af-effect-gateway"
 version = "0.1.0"
 dependencies = [
+ "af-workorder",
  "rusqlite",
  "serde",
  "serde_json",
@@ -30,10 +30,31 @@ name = "af-fuzz"
 version = "0.0.0"
 dependencies = [
  "af-effect-gateway",
+ "af-graph",
+ "af-sampling",
  "af-workorder",
  "chrono",
  "libfuzzer-sys",
  "serde_json",
+]
+
+[[package]]
+name = "af-graph"
+version = "0.1.0"
+dependencies = [
+ "cel-interpreter",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "af-sampling"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -62,51 +83,21 @@ dependencies = [
 ]
 
 [[package]]
-name = "android_system_properties"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae221649c9976a6f6c56ae1facf410f3ddb33cc661c4b7b61020a912d4237fbc"
-dependencies = [
- "libc",
-=======
-name = "af-fuzz"
-version = "0.0.0"
-dependencies = [
- "af-graph",
- "af-sampling",
- "libfuzzer-sys",
-<<<<<<< HEAD
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
-=======
- "serde_json",
-]
-
-[[package]]
-name = "af-graph"
-version = "0.1.0"
-dependencies = [
- "cel-interpreter",
- "serde",
- "serde_json",
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
-]
-
-[[package]]
-name = "af-sampling"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror 2.0.21",
-]
-
-[[package]]
 name = "aho-corasick"
 version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c982642fa9e8606056828ee9a8505737230110bb1099153c79efe865c59d12ba"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "android_system_properties"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae221649c9976a6f6c56ae1facf410f3ddb33cc661c4b7b61020a912d4237fbc"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
@@ -133,22 +124,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3bc62ac97cc33321f50863d514c3bc38a453947a8f9e781137e47c7401020aed"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
-<<<<<<< HEAD
 name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
-=======
+
+[[package]]
 name = "better_any"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -168,7 +155,6 @@ name = "bit-vec"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 
 [[package]]
 name = "bitflags"
@@ -177,7 +163,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
-<<<<<<< HEAD
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -187,33 +172,22 @@ dependencies = [
 ]
 
 [[package]]
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "bumpalo"
 version = "3.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649"
 
 [[package]]
-<<<<<<< HEAD
-name = "cc"
-version = "1.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6651c9ed80effdc7db0ff72512157f901af5e3549e341e24b1dd4887d836d838"
-=======
-=======
 name = "byteorder"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "cc"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877bf67ac8e52449eb2f9e98a344ea163beb70dd1f9eebe3cc5357dcfeaee4df"
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -253,16 +227,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "chrono"
 version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
 dependencies = [
-<<<<<<< HEAD
  "iana-time-zone",
  "js-sys",
  "num-traits",
@@ -404,9 +373,9 @@ checksum = "28dea519a9695b9977216879a3ebfddf92f1c08c05d984f8996aecd6ecdc811d"
 
 [[package]]
 name = "find-msvc-tools"
-version = "0.1.14"
+version = "0.1.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
+checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
 
 [[package]]
 name = "futures-core"
@@ -452,43 +421,6 @@ dependencies = [
  "libc",
  "wasi",
 ]
-=======
-=======
- "num-traits",
- "serde",
-]
-
-[[package]]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
-name = "find-msvc-tools"
-version = "0.1.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c66915cc5391097de7a2b0b972e8505aa33c0df401fd3a6811dbdb32881ba48"
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
-
-[[package]]
-name = "futures-core"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
-
-[[package]]
-name = "futures-task"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd"
-
-[[package]]
-name = "futures-util"
-version = "0.3.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc"
-dependencies = [
- "futures-core",
- "futures-task",
- "pin-project-lite",
- "slab",
-]
 
 [[package]]
 name = "getrandom"
@@ -502,8 +434,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
 name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -546,37 +476,22 @@ dependencies = [
 ]
 
 [[package]]
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
 name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
 name = "jobserver"
 version = "0.1.35"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1c00acbd29eabad4a2392fa0e921c874934dbbf4194312ad20f04a0ed67a3cb3"
 dependencies = [
-<<<<<<< HEAD
  "getrandom 0.4.3",
-=======
- "getrandom",
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
  "libc",
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "js-sys"
 version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -588,17 +503,12 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
-=======
 name = "lazy_static"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "20870f649af7073d53e38067b2a84312175d56ea15217e1b15bc83506ec50afb"
 
 [[package]]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "libc"
 version = "0.2.191"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -615,9 +525,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 name = "libsqlite3-sys"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -629,15 +536,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "log"
-version = "0.4.34"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
-
-[[package]]
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
-=======
 name = "lock_api"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -647,16 +545,18 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
+name = "log"
+version = "0.4.34"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
+
+[[package]]
 name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -682,7 +582,6 @@ dependencies = [
 ]
 
 [[package]]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -698,26 +597,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-<<<<<<< HEAD
-name = "phf"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "913273894cec178f401a31ec4b656318d95473527be05c0752cc41cdc32be8b7"
-dependencies = [
- "phf_shared",
-]
-
-[[package]]
-name = "phf_shared"
-version = "0.12.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06005508882fb681fd97892ecff4b7fd0fee13ef1aa569f8695dae7ab9099981"
-dependencies = [
- "siphasher",
-]
-
-[[package]]
-=======
 name = "parking_lot"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -747,14 +626,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
+name = "phf"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "913273894cec178f401a31ec4b656318d95473527be05c0752cc41cdc32be8b7"
+dependencies = [
+ "phf_shared",
+]
+
+[[package]]
+name = "phf_shared"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06005508882fb681fd97892ecff4b7fd0fee13ef1aa569f8695dae7ab9099981"
+dependencies = [
+ "siphasher",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-<<<<<<< HEAD
 name = "pkcs8"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -771,10 +666,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "proc-macro2"
 version = "1.0.107"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -793,20 +684,12 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
-=======
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
 name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -816,30 +699,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rusqlite"
-version = "0.32.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7753b721174eb8ff87a9a0e799e2d7bc3749323e773db92e0984debb00019d6e"
-dependencies = [
- "bitflags",
- "fallible-iterator",
- "fallible-streaming-iterator",
- "hashlink",
- "libsqlite3-sys",
- "smallvec",
-]
-
-[[package]]
-name = "rustc_version"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
-dependencies = [
- "semver",
-]
-
-[[package]]
-=======
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -878,30 +737,47 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
+name = "rusqlite"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7753b721174eb8ff87a9a0e799e2d7bc3749323e773db92e0984debb00019d6e"
+dependencies = [
+ "bitflags",
+ "fallible-iterator",
+ "fallible-streaming-iterator",
+ "hashlink",
+ "libsqlite3-sys",
+ "smallvec",
+]
+
+[[package]]
+name = "rustc_version"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
+dependencies = [
+ "semver",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
-<<<<<<< HEAD
-name = "semver"
-version = "1.0.28"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
-
-[[package]]
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
-=======
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
+name = "semver"
+version = "1.0.28"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -928,15 +804,7 @@ checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
 dependencies = [
  "proc-macro2",
  "quote",
-<<<<<<< HEAD
-<<<<<<< HEAD
  "syn 3.0.9",
-=======
- "syn",
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
-=======
- "syn 3.0.9",
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 ]
 
 [[package]]
@@ -953,7 +821,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "sha2"
 version = "0.10.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -965,16 +832,10 @@ dependencies = [
 ]
 
 [[package]]
-=======
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
 name = "shlex"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
-<<<<<<< HEAD
-<<<<<<< HEAD
 
 [[package]]
 name = "signature"
@@ -1029,31 +890,6 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
-
-[[package]]
-name = "slab"
-version = "0.4.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
-
-[[package]]
-name = "smallvec"
-version = "1.16.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5b3dc8af474f516a851ff4bd12db780f948b9250ad37211e4eec0bccea54e01b"
-
-[[package]]
-name = "syn"
-version = "2.0.119"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
-dependencies = [
- "proc-macro2",
- "quote",
- "unicode-ident",
-]
 
 [[package]]
 name = "syn"
@@ -1068,10 +904,6 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
@@ -1081,19 +913,10 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-<<<<<<< HEAD
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 version = "2.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
  "thiserror-impl 2.0.21",
 ]
 
@@ -1106,12 +929,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
-<<<<<<< HEAD
-=======
- "thiserror-impl",
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 ]
 
 [[package]]
@@ -1122,25 +939,6 @@ checksum = "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
 dependencies = [
  "proc-macro2",
  "quote",
-<<<<<<< HEAD
-<<<<<<< HEAD
- "syn 3.0.9",
-]
-
-[[package]]
-name = "typenum"
-version = "1.20.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
-
-[[package]]
-=======
- "syn",
-]
-
-[[package]]
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
-=======
  "syn 3.0.9",
 ]
 
@@ -1151,15 +949,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6af6ae20167a9ece4bcb41af5b80f8a1f1df981f6391189ce00fd257af04126a"
 
 [[package]]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
+name = "typenum"
+version = "1.20.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
 
 [[package]]
-<<<<<<< HEAD
-<<<<<<< HEAD
+name = "uuid"
+version = "1.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "vcpkg"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1176,16 +987,6 @@ name = "wasi"
 version = "0.11.1+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
-=======
-name = "uuid"
-version = "1.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
-dependencies = [
- "js-sys",
- "wasm-bindgen",
-]
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 
 [[package]]
 name = "wasm-bindgen"
@@ -1233,7 +1034,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "windows-core"
 version = "0.62.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1269,15 +1069,12 @@ dependencies = [
 ]
 
 [[package]]
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "windows-link"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
 
 [[package]]
-<<<<<<< HEAD
 name = "windows-result"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1322,16 +1119,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
 
 [[package]]
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
-=======
->>>>>>> af_graph_schema_parse：字节解析图模板并在规模内校验
 name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
-<<<<<<< HEAD
-=======
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列

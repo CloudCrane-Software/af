@@ -1,11 +1,4 @@
 # corpus 入库。artifacts / coverage 是崩溃与覆盖率产物，不入库。
 target
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-corpus
->>>>>>> 建立 fuzz 独立工作区（cargo fuzz init，空 [workspace]）
-=======
->>>>>>> af_sampling_invariant_input：从字节构造配方和观测序列
 artifacts
 coverage
