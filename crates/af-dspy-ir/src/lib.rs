@@ -10,12 +10,14 @@
 //! 文档是拒绝式信封。没有 `version`，或 `version` 不是整数 `1`，整份拒绝，不默认成 v1。
 //! 字段清单见 [`V1_FIELDS`]。
 
+mod archive;
 mod error;
 mod fields;
 mod model;
 mod parse;
 mod validate;
 
+pub use archive::{apply_dspy_archive, to_dspy_archive};
 pub use error::{ErrorCode, IrError, IrFailure};
 pub use fields::{FieldSpec, V1_FIELDS};
 pub use model::{

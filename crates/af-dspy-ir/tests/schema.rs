@@ -3,8 +3,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use af_dspy_ir::{
-    parse_program, to_json, Demo, ErrorCode, Field, IrFailure, LmConfig, OptimizationState,
-    OptimizationStatus, Predictor, PredictorConfig, Program, Signature, IR_VERSION, V1_FIELDS,
+    apply_dspy_archive, parse_program, to_dspy_archive, to_json, Demo, ErrorCode, Field, IrFailure,
+    LmConfig, OptimizationState, OptimizationStatus, Predictor, PredictorConfig, Program,
+    Signature, IR_VERSION, V1_FIELDS,
 };
 use serde_json::{json, Value};
 
@@ -597,4 +598,137 @@ fn constructed_program_with_unknown_version_cannot_be_written() {
     program.version = 2;
     let err = to_json(&program).expect_err("version");
     assert!(err.contains(ErrorCode::UnknownVersion), "{err}");
+}
+
+#[test]
+fn dspy_archive_roundtrip_restores_field_names_from_the_signature_table() {
+    let program = must_parse();
+    let archive = to_dspy_archive(&program).expect("export");
+    let text = archive.to_string();
+    assert!(
+        !text.contains("\"name\""),
+        "DSPy 存档的签名字段不写 name，实际 {text}"
+    );
+    let fields = archive["generate_answer"]["signature"]["fields"]
+        .as_array()
+        .expect("fields");
+    assert_eq!(fields.len(), 2);
+    assert_eq!(fields[0]["prefix"], json!("Question:"));
+    assert_eq!(fields[0]["description"], json!("${question}"));
+    assert!(fields[0].get("name").is_none());
+    assert_eq!(fields[1]["prefix"], json!("Answer:"));
+    assert_eq!(
+        fields[1]["description"],
+        json!("often between 1 and 5 words")
+    );
+    assert_eq!(archive["generate_answer"]["traces"], json!([]));
+    assert_eq!(archive["generate_answer"]["train"], json!([]));
+    assert!(archive.get("metadata").is_none());
+    assert!(archive["generate_answer"]["lm"]
+        .get("_dspy_lm_class")
+        .is_none());
+
+    let restored = apply_dspy_archive(&program, &archive).expect("import");
+    assert_eq!(restored, program);
+    assert_eq!(restored.signatures[0].inputs[0].name, "question");
+    assert_eq!(restored.signatures[0].outputs[0].name, "answer");
+}
+
+#[test]
+fn archive_without_field_names_fills_them_and_ignores_dspy_extras() {
+    let program = must_parse();
+    let mut archive = to_dspy_archive(&program).expect("export");
+    archive["metadata"] = json!({
+        "dependency_versions": {"dspy": "3.4.1", "python": "3.14"}
+    });
+    let lm = archive["generate_answer"]["lm"]
+        .as_object_mut()
+        .expect("lm");
+    lm.insert("_dspy_lm_class".to_string(), json!("dspy.clients.lm.LM"));
+    lm.insert("temperature".to_string(), json!(0.7));
+    archive["generate_answer"]["signature"]["fields"][0]["prefix"] = json!("Q:");
+
+    let restored = apply_dspy_archive(&program, &archive).expect("import");
+    assert_eq!(restored.signatures[0].inputs[0].name, "question");
+    assert_eq!(restored.signatures[0].inputs[0].type_name, "str");
+    assert_eq!(restored.signatures[0].inputs[0].prefix, "Q:");
+    assert_eq!(restored.signatures[0].outputs[0].name, "answer");
+    assert_eq!(restored.predictors[0].config.temperature_millis, Some(700));
+    assert_eq!(restored.optimization, program.optimization);
+    assert_eq!(restored.program_id, program.program_id);
+}
+
+#[test]
+fn archive_rejects_bad_field_names_counts_and_references() {
+    let program = must_parse();
+    let archive = to_dspy_archive(&program).expect("export");
+
+    let mut mismatch = archive.clone();
+    mismatch["generate_answer"]["signature"]["fields"]
+        .as_array_mut()
+        .expect("fields")
+        .pop();
+    let err = apply_dspy_archive(&program, &mismatch).expect_err("count");
+    assert!(err.contains(ErrorCode::ArchiveFieldMismatch), "{err}");
+
+    let mut blank = archive.clone();
+    blank["generate_answer"]["signature"]["fields"][0]["name"] = json!("");
+    let err = apply_dspy_archive(&program, &blank).expect_err("blank name");
+    assert!(err.contains(ErrorCode::MissingFieldName), "{err}");
+
+    let mut conflict = archive.clone();
+    conflict["generate_answer"]["signature"]["fields"][0]["name"] = json!("prompt");
+    let err = apply_dspy_archive(&program, &conflict).expect_err("name");
+    assert!(err.contains(ErrorCode::ArchiveFieldNameConflict), "{err}");
+
+    let mut named = archive.clone();
+    named["generate_answer"]["signature"]["fields"][0]["name"] = json!("question");
+    named["generate_answer"]["signature"]["fields"][1]["name"] = json!("answer");
+    let restored = apply_dspy_archive(&program, &named).expect("matching names");
+    assert_eq!(restored, program);
+
+    let mut unknown = archive.clone();
+    unknown["other"] = unknown["generate_answer"].clone();
+    let err = apply_dspy_archive(&program, &unknown).expect_err("predictor");
+    assert!(err.contains(ErrorCode::UnknownPredictor), "{err}");
+
+    let mut missing = archive.clone();
+    missing
+        .as_object_mut()
+        .expect("root")
+        .remove("generate_answer");
+    let err = apply_dspy_archive(&program, &missing).expect_err("missing predictor");
+    assert!(err.contains(ErrorCode::ArchivePredictorMissing), "{err}");
+
+    let mut demos = archive.clone();
+    demos["generate_answer"]["demos"] = json!([]);
+    let err = apply_dspy_archive(&program, &demos).expect_err("demo count");
+    assert!(err.contains(ErrorCode::ArchiveDemoCount), "{err}");
+
+    let mut traces = archive.clone();
+    traces["generate_answer"]["traces"] = json!({});
+    let err = apply_dspy_archive(&program, &traces).expect_err("traces");
+    assert!(err.contains(ErrorCode::Schema), "{err}");
+}
+
+#[test]
+fn shared_signature_and_demo_conflicts_in_the_archive_are_rejected() {
+    let mut program = must_parse();
+    let mut second = program.predictors[0].clone();
+    second.name = "review".to_string();
+    program.predictors.push(second);
+    program.validate().expect("two predictors, one signature");
+
+    let mut archive = to_dspy_archive(&program).expect("export");
+    let restored = apply_dspy_archive(&program, &archive).expect("same state");
+    assert_eq!(restored, program);
+
+    archive["review"]["signature"]["instructions"] = json!("different");
+    let err = apply_dspy_archive(&program, &archive).expect_err("signature");
+    assert!(err.contains(ErrorCode::ArchiveSignatureConflict), "{err}");
+
+    let mut archive = to_dspy_archive(&program).expect("export");
+    archive["review"]["demos"][0]["answer"] = json!("5");
+    let err = apply_dspy_archive(&program, &archive).expect_err("demo");
+    assert!(err.contains(ErrorCode::ArchiveDemoConflict), "{err}");
 }
