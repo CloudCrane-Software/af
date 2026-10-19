@@ -40,6 +40,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "af-engine"
+version = "0.1.0"
+dependencies = [
+ "af-workorder",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "af-graph"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,15 @@
+[package]
+name = "af-engine"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+
+# 薄壳进程：判定只调用 af-workorder 已有公共 API。
+# serde / serde_json 用 workspace 已钉版本，不另引入第三方 crate。
+[dependencies]
+af-workorder = { path = "../af-workorder" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
