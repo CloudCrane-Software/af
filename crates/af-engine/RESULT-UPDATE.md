@@ -1,3 +1,35 @@
+# RESULT-UPDATE — F5 · approve_decision 绑订单
+
+日期：2026-10-19。分支 `task-F5`。引擎改动只在 `crates/af-engine/**`。编排侧见仓库根 `RESULT-UPDATE.md`。没有新的第三方 crate，没有改 `af-workorder`。
+
+提交：`96a3faa`。
+
+## 结论
+
+`approve_decision` 的 payload 由引擎从订单现算：`WorkOrder::decision_payload(graph_version)`。域分离格式绑住 `stable_id`，subject 绑住 `graph_version`。调用方自带 payload 必须逐字相同，否则 `BadRequest`（message 含「payload 与订单现算的 decision_payload 不一致」）。然后才对这份现算字符串做四层校验。工件对、订单错（另一个 `stable_id` 或另一个 `graph_version`）拒绝。换 `run_id` 仍通过。不修改订单。`release` 门控仍不读决策。
+
+这覆盖 W3A 里「只拿调用方 payload 调用 `validate_against`」的行为。那是 F5 要修的洞。W4F 的版本信封没有改。
+
+## 步骤
+
+失败测试先红：`stable_id` 换成 `sid-other` 时旧实现返回 `ok: true`。再改 `src/lib.rs` 的 `Op::ApproveDecision`，并更新 README、契约请求样例和原有审批测试，使它们使用现算 payload。
+
+测试数字：集成测试 25 → 26，新增 `approve_decision_rejects_matching_artifact_on_the_wrong_order`。单测仍是 4。
+
+## 证据
+
+见仓库根 `RESULT-UPDATE.md` 的命令输出。本 crate：`cargo test -j 4 -p af-engine` 集成测试 26 passed。clippy `--all-targets -D warnings` 无警告。
+
+## 反馈
+
+自带 payload 不一致是 `BadRequest`，不是 `Decision::PayloadHashMismatch`。四层校验只在 payload 已经等于现算值之后进行。
+
+## 遗留
+
+编排是否真的调用本 op，不在本 crate。根 `RESULT-UPDATE.md` 记录了 workflow 侧的实测。
+
+---
+
 # RESULT-UPDATE — W4F · Worker Versioning v2 上线流程化
 
 日期：2026-10-19。分支 `task-W4F`。只改 `crates/af-engine/**`。没有新的第三方 crate，没有改其他 crate，`Cargo.lock` 无变化。
