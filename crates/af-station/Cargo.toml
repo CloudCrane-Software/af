@@ -10,3 +10,8 @@ thiserror = "1.0"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# 操作序列属性测试。默认特性含 fork/timeout/bit-set；bit-set 会把 borsh derive 统一进工作区。
+# 任务卡允许 proptest =1.12.0，只作 dev-dependency。
+proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
