@@ -21,6 +21,12 @@
 //!
 //! 同键不同载荷：指纹不一致 → [`GatewayError::PayloadConflict`]，要求人工
 //! 升级处理，网关绝不替调用方二选一。
+//!
+//! 计时：撤回窗口的开关只看单调钟（[`Clock::monotonic_ms`] 折成库内只增不减的
+//! 逻辑毫秒）。墙钟（[`Clock::wall_ms`]）只写入 `declared_at_ms` /
+//! `executed_at_ms` 这类必须落库的绝对时刻，不参与执行或过期判定。
+//! 生产默认 [`SystemClock`]，测试注入 [`ManualClock`]。进程停机期间不借用
+//! 墙钟补时，避免 NTP 回拨把已关闭的窗口重新打开。
 
 mod clock;
 
@@ -31,9 +37,11 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::cell::Cell;
 use std::fmt;
 use std::path::Path;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
+use std::time::Duration;
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, GatewayError>;
@@ -55,6 +63,9 @@ pub enum GatewayError {
     #[error("intent {key} 已撤回，不发送")]
     Withdrawn { key: String },
     /// 撤回窗口未关闭，execute 拒绝发送（调用方应等待窗口关闭后重试）。
+    ///
+    /// `deadline_ms` 与 `now_ms` 都是单调逻辑毫秒，相减即剩余窗口。
+    /// 它们不是 Unix 墙钟，不能与 `SystemTime` 比较。
     #[error("撤回窗口未关：deadline={deadline_ms}ms now={now_ms}ms，暂不发送")]
     WindowStillOpen { deadline_ms: i64, now_ms: i64 },
     /// 旧纪元请求被 fencing 拒绝。
@@ -67,6 +78,7 @@ pub enum GatewayError {
     #[error("intent {key} 未声明，先 declare_intent")]
     NotDeclared { key: String },
     /// 撤回失败：窗口已关或状态不是 declared。
+    /// `deadline_ms` 是单调逻辑毫秒上的截止点，不是 Unix 墙钟。
     #[error("撤回失败：key={key} state={state} deadline={deadline_ms}ms（窗口已关）")]
     WithdrawWindowClosed {
         key: String,
@@ -138,9 +150,11 @@ impl IntentState {
 /// declare 的结果。
 #[derive(Debug, Clone, Copy)]
 pub enum DeclareOutcome {
-    /// 新登记，撤回窗口从此刻起算。
+    /// 新登记，撤回窗口从当前单调逻辑毫秒起算。
+    /// `withdraw_deadline_ms` 不是 Unix 墙钟。
     Created { withdraw_deadline_ms: i64 },
     /// 同键同载荷的重复声明，幂等接受，不改动原意图。
+    /// `withdraw_deadline_ms` 不是 Unix 墙钟。
     AlreadyDeclared { withdraw_deadline_ms: i64 },
 }
 
@@ -162,6 +176,7 @@ pub enum ExecuteOutcome<T> {
     },
     Replayed {
         result: T,
+        /// 落库时的墙钟 Unix 毫秒，只作审计。窗口判定不读它。
         original_executed_at_ms: i64,
         original_epoch: i64,
     },
@@ -192,6 +207,7 @@ pub enum RecordOutcome {
 pub struct IntentSnapshot {
     pub state: IntentState,
     pub payload_sha256: String,
+    /// 单调逻辑毫秒上的撤回截止点，不是 Unix 墙钟。
     pub withdraw_deadline_ms: i64,
     pub declared_epoch: i64,
     pub receipt_json: Option<String>,
@@ -205,29 +221,60 @@ pub struct IntentSnapshot {
 pub struct Gateway {
     conn: Connection,
     withdraw_window: Duration,
+    clock: Arc<dyn Clock>,
+    /// 打开时库里已提交的单调逻辑毫秒。
+    mono_base: i64,
+    /// 打开时 [`Clock::monotonic_ms`] 的读数，用来把进程内流逝折成逻辑毫秒。
+    clock_at_open: i64,
+    /// 本进程见过的逻辑毫秒高水位，只增不减。
+    observed_mono: Cell<i64>,
 }
 
 impl Gateway {
     /// 打开（或创建）持久化网关。崩溃恢复 = 重新 open + [`Gateway::resume`]。
+    /// 间隔判定用 [`SystemClock`]。
     pub fn open(path: impl AsRef<Path>, withdraw_window: Duration) -> Result<Self> {
+        Self::open_with_clock(path, withdraw_window, SystemClock::new())
+    }
+
+    /// 同 [`Gateway::open`]，间隔判定走调用方注入的钟。
+    pub fn open_with_clock(
+        path: impl AsRef<Path>,
+        withdraw_window: Duration,
+        clock: impl Clock + 'static,
+    ) -> Result<Self> {
         let conn = Connection::open(path)?;
         let _ = conn.pragma_update(None, "journal_mode", "WAL");
         let _ = conn.pragma_update(None, "synchronous", "NORMAL");
-        Self::init(conn, withdraw_window)
+        Self::init(conn, withdraw_window, Arc::new(clock))
     }
 
-    /// 内存网关（纯单测/演示用，无崩溃恢复意义）。
+    /// 内存网关（纯单测/演示用，无崩溃恢复意义）。间隔判定用 [`SystemClock`]。
     pub fn open_in_memory(withdraw_window: Duration) -> Result<Self> {
-        Self::init(Connection::open_in_memory()?, withdraw_window)
+        Self::open_in_memory_with_clock(withdraw_window, SystemClock::new())
     }
 
-    fn init(conn: Connection, withdraw_window: Duration) -> Result<Self> {
+    /// 同 [`Gateway::open_in_memory`]，间隔判定走调用方注入的钟。
+    pub fn open_in_memory_with_clock(
+        withdraw_window: Duration,
+        clock: impl Clock + 'static,
+    ) -> Result<Self> {
+        Self::init(
+            Connection::open_in_memory()?,
+            withdraw_window,
+            Arc::new(clock),
+        )
+    }
+
+    fn init(conn: Connection, withdraw_window: Duration, clock: Arc<dyn Clock>) -> Result<Self> {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS gateway_meta (
                  key   TEXT PRIMARY KEY,
                  value TEXT NOT NULL
              );
              INSERT OR IGNORE INTO gateway_meta(key, value) VALUES ('epoch', '0');
+             -- mono_ms：已提交的单调逻辑毫秒，只增不减。窗口比较用它，不用墙钟。
+             INSERT OR IGNORE INTO gateway_meta(key, value) VALUES ('mono_ms', '0');
              CREATE TABLE IF NOT EXISTS effect_intent (
                  workorder_id         TEXT NOT NULL,
                  step_path            TEXT NOT NULL,
@@ -237,7 +284,9 @@ impl Gateway {
                  state                TEXT NOT NULL
                                       CHECK(state IN ('declared','executed','withdrawn')),
                  declared_epoch       INTEGER NOT NULL,
+                 -- declared_at_ms / executed_at_ms：墙钟 Unix 毫秒，只审计。
                  declared_at_ms       INTEGER NOT NULL,
+                 -- withdraw_deadline_ms：单调逻辑毫秒截止点，只与逻辑 now 比较。
                  withdraw_deadline_ms INTEGER NOT NULL,
                  receipt_json         TEXT,
                  executed_at_ms       INTEGER,
@@ -245,9 +294,21 @@ impl Gateway {
                  PRIMARY KEY (workorder_id, step_path, seq)
              );",
         )?;
+        let persisted: String = conn.query_row(
+            "SELECT value FROM gateway_meta WHERE key='mono_ms'",
+            [],
+            |r| r.get(0),
+        )?;
+        // 与纪元同一坑：meta.value 是 TEXT，不能按 i64 取列。
+        let mono_base = persisted.parse().unwrap_or(0);
+        let clock_at_open = clock.monotonic_ms();
         Ok(Gateway {
             conn,
             withdraw_window,
+            clock,
+            mono_base,
+            clock_at_open,
+            observed_mono: Cell::new(mono_base),
         })
     }
 
@@ -294,6 +355,31 @@ impl Gateway {
         Ok(())
     }
 
+    /// 单调逻辑毫秒。进程内加上注入钟相对打开时刻的流逝；跨进程从库里的高水位接上。
+    /// 高水位只增不减，注入钟若回退也不会把已关闭的窗口重新打开。
+    fn logical_now(&self) -> i64 {
+        let tick = self.clock.monotonic_ms();
+        let delta = tick.saturating_sub(self.clock_at_open);
+        let logical = self.mono_base.saturating_add(delta);
+        let prev = self.observed_mono.get();
+        let now = logical.max(prev);
+        self.observed_mono.set(now);
+        now
+    }
+
+    /// 读逻辑毫秒，并把更高的值写回 `gateway_meta.mono_ms`。
+    fn stamp_mono(&self) -> Result<i64> {
+        let now = self.logical_now();
+        self.conn.execute(
+            "UPDATE gateway_meta
+             SET value = ?1
+             WHERE key = 'mono_ms'
+               AND CAST(value AS INTEGER) < CAST(?1 AS INTEGER)",
+            params![now.to_string()],
+        )?;
+        Ok(now)
+    }
+
     // -- ① declare_intent ----------------------------------------------------
 
     /// 登记意图。幂等：同键同载荷重复声明返回 `AlreadyDeclared`；
@@ -305,8 +391,10 @@ impl Gateway {
         payload: &Value,
     ) -> Result<DeclareOutcome> {
         self.fence(session)?;
-        let now = now_ms();
-        let deadline = now + self.withdraw_window.as_millis() as i64;
+        let now = self.stamp_mono()?;
+        let deadline = now.saturating_add(clock::duration_to_ms(self.withdraw_window));
+        // 声明时刻的墙钟只审计。截止点是单调逻辑毫秒，不由墙钟相加得到。
+        let declared_at_ms = self.clock.wall_ms();
         let fp = fingerprint(payload);
         let payload_json = serde_json::to_string(payload)?;
 
@@ -323,7 +411,7 @@ impl Gateway {
                 payload_json,
                 fp,
                 session.epoch,
-                now,
+                declared_at_ms,
                 deadline
             ],
         )?;
@@ -369,7 +457,7 @@ impl Gateway {
     /// 撤回窗口内撤回：外部操作将不会发生。窗口已关或已执行则失败。
     pub fn withdraw_intent(&self, session: &Session, key: &IntentKey) -> Result<WithdrawOutcome> {
         self.fence(session)?;
-        let now = now_ms();
+        let now = self.stamp_mono()?;
         let n = self.conn.execute(
             "UPDATE effect_intent SET state='withdrawn'
              WHERE workorder_id=?1 AND step_path=?2 AND seq=?3
@@ -414,6 +502,7 @@ impl Gateway {
         T: Serialize + DeserializeOwned,
     {
         self.fence(session)?;
+        let now = self.stamp_mono()?;
         let (state, payload_json, deadline): (String, String, i64) = self
             .conn
             .query_row(
@@ -446,7 +535,6 @@ impl Gateway {
                 })
             }
             IntentState::Declared => {
-                let now = now_ms();
                 if now < deadline {
                     return Err(GatewayError::WindowStillOpen {
                         deadline_ms: deadline,
@@ -455,7 +543,8 @@ impl Gateway {
                 }
                 let payload: Value = serde_json::from_str(&payload_json)?;
                 let result = effect(&payload)?; // 失败则保持 declared，可重试
-                self.store_receipt(key, &result, now, session.epoch)?;
+                let executed_at_ms = self.clock.wall_ms();
+                self.store_receipt(key, &result, executed_at_ms, session.epoch)?;
                 Ok(ExecuteOutcome::RanFresh { result })
             }
         }
@@ -473,8 +562,10 @@ impl Gateway {
         receipt: &T,
     ) -> Result<RecordOutcome> {
         self.fence(session)?;
-        let now = now_ms();
-        let stored = self.store_receipt(key, receipt, now, session.epoch)?;
+        // 回执落库不受窗口约束。墙钟只给审计字段，逻辑毫秒只推进高水位。
+        self.stamp_mono()?;
+        let executed_at_ms = self.clock.wall_ms();
+        let stored = self.store_receipt(key, receipt, executed_at_ms, session.epoch)?;
         Ok(if stored {
             RecordOutcome::Recorded
         } else {
@@ -487,7 +578,7 @@ impl Gateway {
         &self,
         key: &IntentKey,
         receipt: &T,
-        now_ms: i64,
+        executed_at_ms: i64,
         epoch: i64,
     ) -> Result<bool> {
         let receipt_json = serde_json::to_string(receipt)?;
@@ -497,7 +588,7 @@ impl Gateway {
              WHERE workorder_id=?4 AND step_path=?5 AND seq=?6 AND state='declared'",
             params![
                 receipt_json,
-                now_ms,
+                executed_at_ms,
                 epoch,
                 key.workorder_id,
                 key.step_path,
@@ -552,13 +643,6 @@ impl Gateway {
 // ---------------------------------------------------------------------------
 // 工具
 // ---------------------------------------------------------------------------
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock before epoch")
-        .as_millis() as i64
-}
 
 /// 载荷指纹：sha256(规范 JSON 字节)。serde_json 的 Map 默认按 key 排序
 /// （BTreeMap），序列化是确定性的，同载荷必同指纹。
