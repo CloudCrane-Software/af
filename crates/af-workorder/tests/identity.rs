@@ -2,7 +2,10 @@
 //!
 //! 时刻与熵都不读系统:身份由订单 id 或调用方带回的 stable_id 决定。
 
-use af_workorder::{GraphVersion, Priority, RunContext, Sla, StableId, WorkOrder};
+use af_workorder::{
+    decode_work_order, GraphVersion, OrderDecodeError, Priority, RejectionKind, RunContext, Sla,
+    StableId, WorkOrder,
+};
 use chrono::{DateTime, Utc};
 
 fn sla() -> Sla {
@@ -66,4 +69,60 @@ fn shard_key_is_deterministic_for_a_stable_id() {
     let other = StableId::parse("sid-other").unwrap();
     assert_eq!(other.shard_key(64).unwrap(), 11);
     assert_ne!(other.shard_key(64).unwrap(), sid.shard_key(64).unwrap());
+}
+
+#[test]
+fn legacy_payload_without_stable_id_is_rejected() {
+    let legacy = r#"{
+        "id": "wo-legacy",
+        "state": "Created",
+        "graph_version": "g-3",
+        "line": null,
+        "budget_voucher": null,
+        "artifacts": [],
+        "sla": {"deadline": "2026-10-30T00:00:00Z", "priority": "Normal"},
+        "supersedes": null,
+        "history": []
+    }"#;
+    let err = decode_work_order(legacy).unwrap_err();
+    let OrderDecodeError::Rejected(envelope) = err else {
+        panic!("老载荷应被拒绝式信封挡住,不能补一个 stable_id");
+    };
+    assert_eq!(envelope.kind, RejectionKind::MissingField);
+    assert_eq!(envelope.field, "stable_id");
+    assert!(envelope.detail.contains("stable_id"));
+    let rendered = serde_json::to_string(&envelope).unwrap();
+    assert!(rendered.contains("\"field\":\"stable_id\""), "{rendered}");
+    assert!(rendered.contains("missing_field"), "{rendered}");
+
+    let fresh = WorkOrder::with_stable_id(
+        "wo-1",
+        GraphVersion::new("g-3"),
+        sla(),
+        StableId::parse("sid-fixed").unwrap(),
+        RunContext::new("run-1"),
+    );
+    let mut value = serde_json::to_value(&fresh).unwrap();
+    value.as_object_mut().unwrap().remove("run_id");
+    let err = decode_work_order(&value.to_string()).unwrap_err();
+    let OrderDecodeError::Rejected(envelope) = err else {
+        panic!("缺 run_id 也应点名该字段");
+    };
+    assert_eq!(envelope.field, "run_id");
+    assert_eq!(envelope.kind, RejectionKind::MissingField);
+
+    {
+        let obj = value.as_object_mut().unwrap();
+        obj.insert("run_id".into(), serde_json::json!("run-1"));
+        obj.insert("stable_id".into(), serde_json::json!(""));
+    }
+    let err = decode_work_order(&value.to_string()).unwrap_err();
+    let OrderDecodeError::Rejected(envelope) = err else {
+        panic!("空 stable_id 应拒绝");
+    };
+    assert_eq!(envelope.field, "stable_id");
+    assert_eq!(envelope.kind, RejectionKind::BlankField);
+
+    let restored = decode_work_order(&serde_json::to_string(&fresh).unwrap()).unwrap();
+    assert_eq!(restored, fresh);
 }

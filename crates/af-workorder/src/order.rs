@@ -7,10 +7,11 @@
 //! 因此"不可变"是 API 层面的编译期保证,不是运行期约定。
 
 use chrono::{DateTime, Utc};
+use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{GateError, Missing};
-use crate::identity::{RunContext, StableId};
+use crate::error::{GateError, Missing, OrderDecodeError};
+use crate::identity::{inspect_identity_fields, RunContext, StableId};
 use crate::sla::Sla;
 use crate::state::{OrderState, Transition};
 
@@ -63,7 +64,10 @@ pub struct HistoryRecord {
 /// 工单。字段全部私有,只能经方法操作,保证所有变更都过门控。
 ///
 /// `stable_id` 在创建时写入,没有 setter。`run_id` 只由 [`WorkOrder::continue_as_new`] 更换。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// serde 不给这两个字段填默认值。老载荷缺字段时,[`decode_work_order`] 与
+/// `Deserialize` 都返回拒绝式信封,并点名缺的字段。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WorkOrder {
     id: String,
     /// 跨引擎 run 的稳定身份。创建时生成,continue-as-new 不改。
@@ -79,6 +83,64 @@ pub struct WorkOrder {
     /// 本单是哪张单的后继(由变更单生成时填)
     supersedes: Option<String>,
     history: Vec<HistoryRecord>,
+}
+
+/// 与 [`WorkOrder`] 同形的读入结构。身份字段在进入这里之前已经由拒绝式信封查过,
+/// 这里不再给 `stable_id` 或 `run_id` 加默认值。
+#[derive(Debug, Deserialize)]
+struct WorkOrderWire {
+    id: String,
+    stable_id: StableId,
+    run_id: String,
+    state: OrderState,
+    graph_version: GraphVersion,
+    line: Option<LineBinding>,
+    budget_voucher: Option<BudgetVoucher>,
+    artifacts: Vec<WorkArtifact>,
+    sla: Sla,
+    supersedes: Option<String>,
+    history: Vec<HistoryRecord>,
+}
+
+impl WorkOrderWire {
+    fn into_order(self) -> WorkOrder {
+        WorkOrder {
+            id: self.id,
+            stable_id: self.stable_id,
+            run_id: self.run_id,
+            state: self.state,
+            graph_version: self.graph_version,
+            line: self.line,
+            budget_voucher: self.budget_voucher,
+            artifacts: self.artifacts,
+            sla: self.sla,
+            supersedes: self.supersedes,
+            history: self.history,
+        }
+    }
+}
+
+/// 读工单 JSON。缺 `stable_id` 或 `run_id` 时返回拒绝式信封,不生成替补身份。
+pub fn decode_work_order(text: &str) -> Result<WorkOrder, OrderDecodeError> {
+    let value =
+        serde_json::from_str(text).map_err(|err| OrderDecodeError::Malformed(err.to_string()))?;
+    decode_value(value)
+}
+
+fn decode_value(value: serde_json::Value) -> Result<WorkOrder, OrderDecodeError> {
+    if let Err(envelope) = inspect_identity_fields(&value) {
+        return Err(OrderDecodeError::Rejected(envelope));
+    }
+    let wire: WorkOrderWire =
+        serde_json::from_value(value).map_err(|err| OrderDecodeError::Invalid(err.to_string()))?;
+    Ok(wire.into_order())
+}
+
+impl<'de> Deserialize<'de> for WorkOrder {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        decode_value(value).map_err(serde::de::Error::custom)
+    }
 }
 
 impl WorkOrder {
@@ -641,5 +703,51 @@ mod tests {
         assert_ne!(successor.stable_id(), &sid);
         assert_eq!(successor.stable_id(), &StableId::generate("wo-1b"));
         assert_eq!(successor.supersedes(), Some("wo-1"));
+    }
+
+    const LEGACY_ORDER: &str = r#"{
+        "id": "wo-legacy",
+        "state": "Created",
+        "graph_version": "g-3",
+        "line": null,
+        "budget_voucher": null,
+        "artifacts": [],
+        "sla": {"deadline": "2026-10-30T00:00:00Z", "priority": "Normal"},
+        "supersedes": null,
+        "history": []
+    }"#;
+
+    #[test]
+    fn legacy_payload_without_stable_id_is_a_rejection_envelope() {
+        let err = decode_work_order(LEGACY_ORDER).unwrap_err();
+        let crate::error::OrderDecodeError::Rejected(envelope) = err else {
+            panic!("老载荷应走拒绝式信封");
+        };
+        assert_eq!(envelope.field, "stable_id");
+        assert_eq!(envelope.kind, crate::error::RejectionKind::MissingField);
+        let text = envelope.to_string();
+        assert!(text.contains("拒绝式信封"), "{text}");
+        assert!(text.contains("stable_id"), "{text}");
+        let body = serde_json::to_value(&envelope).unwrap();
+        assert_eq!(body["field"], "stable_id");
+        assert_eq!(body["kind"], "missing_field");
+        assert!(body["detail"].as_str().unwrap().contains("stable_id"));
+
+        let direct = serde_json::from_str::<WorkOrder>(LEGACY_ORDER).unwrap_err();
+        let direct = direct.to_string();
+        assert!(direct.contains("拒绝式信封"), "{direct}");
+        assert!(direct.contains("stable_id"), "{direct}");
+
+        let mut current =
+            serde_json::to_value(WorkOrder::new("wo-legacy", GraphVersion::new("g-3"), sla()))
+                .unwrap();
+        current.as_object_mut().unwrap().remove("stable_id");
+        let err = decode_work_order(&current.to_string()).unwrap_err();
+        match err {
+            crate::error::OrderDecodeError::Rejected(envelope) => {
+                assert_eq!(envelope.field, "stable_id");
+            }
+            other => panic!("去掉 stable_id 后应拒绝,实际 {other:?}"),
+        }
     }
 }

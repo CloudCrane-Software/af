@@ -127,3 +127,63 @@ pub enum ShardError {
     #[error("分片数为 0:配方层必须给出正整数")]
     ZeroShardCount,
 }
+
+/// 拒绝式信封的种类。老载荷缺身份字段时用 [`RejectionKind::MissingField`],不补默认值。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RejectionKind {
+    /// 字段不存在,或 JSON null。
+    MissingField,
+    /// 字段在,但是空串或含空白,不能当作身份。
+    BlankField,
+    /// 字段在,但不是字符串。
+    InvalidField,
+}
+
+/// 拒绝载入工单时返回的信封。`field` 点名缺的是哪一个字段。
+///
+/// 序列化后是一个对象,不是一句无法拆开的 serde 报错。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error)]
+#[error("拒绝式信封:{detail}")]
+pub struct RejectionEnvelope {
+    pub kind: RejectionKind,
+    pub field: String,
+    pub detail: String,
+}
+
+impl RejectionEnvelope {
+    pub fn missing(field: &'static str) -> Self {
+        Self {
+            kind: RejectionKind::MissingField,
+            field: field.to_string(),
+            detail: format!("老载荷缺少字段 {field},拒绝补默认值"),
+        }
+    }
+
+    pub fn blank(field: &'static str) -> Self {
+        Self {
+            kind: RejectionKind::BlankField,
+            field: field.to_string(),
+            detail: format!("字段 {field} 为空或含空白,拒绝作为身份"),
+        }
+    }
+
+    pub fn invalid_type(field: &'static str) -> Self {
+        Self {
+            kind: RejectionKind::InvalidField,
+            field: field.to_string(),
+            detail: format!("字段 {field} 类型不对,拒绝载入"),
+        }
+    }
+}
+
+/// 读工单 JSON 的错误。缺 `stable_id` / `run_id` 走 [`OrderDecodeError::Rejected`]。
+#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
+pub enum OrderDecodeError {
+    #[error("工单载荷不是合法 JSON:{0}")]
+    Malformed(String),
+    #[error("{0}")]
+    Rejected(RejectionEnvelope),
+    #[error("工单载荷字段无法读入:{0}")]
+    Invalid(String),
+}

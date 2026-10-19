@@ -9,8 +9,9 @@
 
 use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
+use serde_json::{Map, Value};
 
-use crate::error::{IdentityError, ShardError};
+use crate::error::{IdentityError, RejectionEnvelope, ShardError};
 use crate::hash::{sha256, sha256_hex};
 
 /// 生成稳定身份时的域分离前缀。材料是此前缀接订单 id 的字节,不含 run_id。
@@ -120,6 +121,38 @@ pub fn decision_payload(stable_id: &StableId, subject: &str) -> String {
         sid = stable_id.as_str(),
         subject_len = subject.len(),
     )
+}
+
+/// 老载荷身份字段的门禁。非对象留给 serde 报类型错误。
+///
+/// 先看 `stable_id`,再看 `run_id`。两个都缺时,报错点名 `stable_id`。
+/// 不在这里生成或填入默认身份。
+pub(crate) fn inspect_identity_fields(value: &Value) -> Result<(), RejectionEnvelope> {
+    let Some(obj) = value.as_object() else {
+        return Ok(());
+    };
+    inspect_stable_id(obj)?;
+    inspect_run_id(obj)?;
+    Ok(())
+}
+
+fn inspect_stable_id(obj: &Map<String, Value>) -> Result<(), RejectionEnvelope> {
+    match obj.get("stable_id") {
+        None | Some(Value::Null) => Err(RejectionEnvelope::missing("stable_id")),
+        Some(Value::String(raw)) => match StableId::parse(raw.as_str()) {
+            Ok(_) => Ok(()),
+            Err(IdentityError::EmptyStableId) => Err(RejectionEnvelope::blank("stable_id")),
+        },
+        Some(_) => Err(RejectionEnvelope::invalid_type("stable_id")),
+    }
+}
+
+fn inspect_run_id(obj: &Map<String, Value>) -> Result<(), RejectionEnvelope> {
+    match obj.get("run_id") {
+        None | Some(Value::Null) => Err(RejectionEnvelope::missing("run_id")),
+        Some(Value::String(_)) => Ok(()),
+        Some(_) => Err(RejectionEnvelope::invalid_type("run_id")),
+    }
 }
 
 fn shard_index(stable_id: &str, shard_count: u32) -> Result<u32, ShardError> {

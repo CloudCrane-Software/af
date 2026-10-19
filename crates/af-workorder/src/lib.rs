@@ -10,6 +10,7 @@
 //! 5. **多参与者决策工件**:[`decision::DecisionArtifact`],只读角色签发 approve → 拒绝。
 //! 6. **稳定身份**:[`identity::StableId`] 在创建时生成。引擎 continue-as-new 只换
 //!    `run_id`,不换 `stable_id`。分片键是 `sha256(stable_id)` 对配方层分片数取模。
+//!    老载荷缺 `stable_id` 时走拒绝式信封([`error::RejectionEnvelope`]),不补默认身份。
 //!
 //! payload_hash 为 SHA-256 小写十六进制([`hash`]),跨进程确定。
 //! 变更单签名是真 ed25519([`sign`]):在本 crate 内签发与验签,不经过 af-credential。
@@ -29,13 +30,17 @@ pub use af_calendar::{Calendar, CalendarError};
 pub use change::{ChangeOrder, DrainStrategy, RelayStrategy, SignedChangeOrder};
 pub use decision::{Decision, DecisionArtifact, Permission, Role, Signature};
 pub use error::{
-    ChangeError, DecisionError, GateError, IdentityError, Missing, ShardError, SignError,
+    ChangeError, DecisionError, GateError, IdentityError, Missing, OrderDecodeError,
+    RejectionEnvelope, RejectionKind, ShardError, SignError,
 };
 pub use hash::{sha256, sha256_hex, SHA256_HEX_LEN, SHA256_LEN};
 pub use identity::{
     decision_payload, RunContext, StableId, DECISION_PAYLOAD_DOMAIN, STABLE_ID_DOMAIN,
 };
-pub use order::{BudgetVoucher, GraphVersion, HistoryRecord, LineBinding, WorkArtifact, WorkOrder};
+pub use order::{
+    decode_work_order, BudgetVoucher, GraphVersion, HistoryRecord, LineBinding, WorkArtifact,
+    WorkOrder,
+};
 pub use sign::{
     Ed25519Keypair, Ed25519PublicKey, ED25519_PUBLIC_KEY_LEN, ED25519_SEED_LEN,
     ED25519_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ED25519,
