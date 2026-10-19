@@ -1,3 +1,86 @@
+# RESULT-UPDATE — F6 · WorkOrderWire 未知字段拒绝式信封
+
+日期：2026-10-19。分支 `task-F6`。只改 `crates/af-workorder/**` 与 `crates/af-engine/**`。没有新的第三方 crate，`Cargo.lock` 没有改。
+
+本 crate 的提交：`fa38d87`（红：复现未知字段被吞）、`d5d3ed3`（绿：拒绝并列出字段名）。引擎侧的透传是同一任务的另一半，记在 `crates/af-engine/RESULT-UPDATE.md`。
+
+已验证语义没有推翻：缺 `stable_id` / `run_id`、空白 `stable_id`、类型不对，仍是 `RejectionEnvelope`，两个都缺时先点名 `stable_id`。空 `run_id` 仍表示尚未绑定。非对象仍由 serde 报类型错误，不伪装成缺 `stable_id`。门控两层、`graph_version` 无 setter、决策四层、变更单签名域都没动。
+
+## 结论
+
+通过。`WorkOrderWire` 加了 `#[serde(deny_unknown_fields)]`。解码在身份门禁之后扫描对象的键。不认识的字段名按字典序收齐，返回 `RejectionKind::UnknownField`。`field` 用逗号加空格把名字连起来（只有一个名字时不加分隔符），`detail` 重复这份清单。多字段载荷整单拒绝，不再解码成功后把注入字段丢掉。
+
+`serde` 的 `deny_unknown_fields` 只点名它遇到的第一个未知字段，所以名单由扫描先收齐。属性仍留在结构体上，扫描漏掉的键到不了工单里。
+
+## 步骤
+
+1. 红：`unknown_fields_are_rejected_and_every_name_is_listed`。在完整工单上插入 `injected_beta` 与 `injected_alpha`（插入顺序与字典序相反）。当时 `decode_work_order` 返回 `Ok`，工单值里没有这两个字段。
+2. 绿：`RejectionEnvelope::unknown_fields`，`decode_work_order_value` 先查身份、再查未知字段、再读入 `WorkOrderWire`。`Deserialize` 走同一函数。新增公开函数 `decode_work_order_value`，供引擎拿到结构化错误，不必把 `Value` 再编成字符串。
+
+测试数字（相对 W3D 的单测 48、集成 13）：单测 48 → 49，多出来的是 `order::tests::unknown_fields_are_rejected_and_every_name_is_listed`。集成测试仍是 calendar 3、identity 4、json 快照 3、lifecycle 3。已有测试没有改断言。
+
+## 证据
+
+红（`fa38d87`，修复前）：
+
+```text
+source /data/af-factory/env.sh
+cargo test -j 4 -p af-workorder --lib unknown_fields_are_rejected_and_every_name_is_listed
+# called `Result::unwrap_err()` on an `Ok` value: WorkOrder { id: "wo-inject", ... }
+# test result: FAILED. 0 passed; 1 failed; 48 filtered out
+```
+
+绿：
+
+```text
+source /data/af-factory/env.sh
+cargo check -j 4 -p af-workorder
+# Checking af-workorder v0.1.0
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.81s
+# exit 0
+
+cargo fmt -p af-workorder
+# 无输出，exit 0
+
+cargo clippy --all-targets -j 4 -p af-workorder -- -D warnings
+# Checking af-workorder v0.1.0
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.23s
+# exit 0，无警告
+
+cargo test -j 4 -p af-workorder
+# unittests src/lib.rs: ok. 49 passed; 0 failed
+# tests/calendar_sla.rs: ok. 3 passed; 0 failed
+# tests/identity.rs: ok. 4 passed; 0 failed
+# tests/json_snapshots.rs: ok. 3 passed; 0 failed
+# tests/lifecycle.rs: ok. 3 passed; 0 failed
+# Doc-tests af_workorder: ok. 0 passed; 0 failed
+```
+
+钉死的信封（测试内断言，运行通过）：
+
+- 两个未知字段：`field` = `injected_alpha, injected_beta`，`kind` = `unknown_field`，`detail` = `不认识的字段: injected_alpha, injected_beta,拒绝载入以免静默丢弃`
+- 只留 `injected_alpha`：`field` = `injected_alpha`
+- 同一份载荷再去掉 `stable_id`：仍先点名 `stable_id`
+- 序列化键与 `WORK_ORDER_WIRE_FIELDS` 一致（比较前排序，不依赖 `preserve_order`）
+
+`git diff --name-only aa4689b -- . ':!crates/af-workorder' ':!crates/af-engine'` 无输出。
+
+## 反馈
+
+1. 未知字段的权威拒绝在解码门禁，不在编排壳。壳若只用 `ok: true` 的 `order` 覆盖状态，这份拒绝不会再交回一张丢掉注入字段的快照。
+2. 名单按字典序，不按 JSON 键的出现顺序。工作区把 `serde_json` 的 `preserve_order` 打开或关掉，信封里的名字顺序不变。
+3. 身份门禁仍在未知字段之前。老载荷缺 `stable_id` 的已有测试不用改。带未知字段又缺 `stable_id` 时，先报缺身份，载荷同样不会被载入。
+4. `field` 仍是一个字符串。多个名字用 `, ` 连接，调用方不用改 `RejectionEnvelope` 的字段类型。
+5. 直接 `serde_json::from_str::<WorkOrder>` 的错误字符串仍以「拒绝式信封」开头，并带上字段名。
+
+## 遗留
+
+- `LineBinding`、`BudgetVoucher`、`WorkArtifact`、`Sla`、`HistoryRecord` 没有 `deny_unknown_fields`。嵌在这些对象里的未知字段仍会被 serde 丢掉。本次红队点名的是 `WorkOrderWire`。
+- `fuzz/fuzz_targets/af_workorder_order_parse.rs` 不在改动范围。解析失败本来就跳过。
+- 引擎如何把这只信封放到线上，见 `crates/af-engine` 的 F6 记录。库里的 `RejectionKind` 没有再包一层。
+
+---
+
 # RESULT-UPDATE — W3D · WorkOrder 稳定身份与分片映射
 
 日期：2026-10-19。分支 `task-W3D`。业务语义沿用已合流的 T4 / T56 / C5：门控两层、`graph_version` 无 setter、SLA 截止是 `DateTime<Utc>`、`payload_hash` 是 SHA-256 小写十六进制、变更单签名是注入种子的 ed25519。`CHANGE_ORDER_SIGNING_DOMAIN` 字节未改。
