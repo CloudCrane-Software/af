@@ -23,7 +23,11 @@
 //!
 //! 持久化账本在 [`ledger`]：一个计量一份 SQLite 文件。窗口起止按钟面日期解析，
 //! 扣减和 outbox 补偿写在同一个事务里。这里不改内存 [`Meter`] 的语义。
+//!
+//! Bifrost 接线在 [`bifrost`]。它只读 [`Meter::given`] 的可用量和
+//! [`BudgetLedger::remaining_cents`]，不改这两处已经验证的语义。
 
+pub mod bifrost;
 mod budget;
 pub mod demo;
 pub mod ledger;
