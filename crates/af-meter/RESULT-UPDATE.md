@@ -251,3 +251,98 @@ minimal failing input: case = WindowCase {
 - RESULT.md 里 Meter 的遗留仍在：单消费者、无持久化、固定窗口双倍突发、Max 的 `recovers_at` 是下界、`route` 不拆分任务。本任务不改这些。
 - `merge_consumers` 不是锁，也不是并发扣减。两个消费者要先各自 `try_spend`，再把账本交过来合并。
 - `proptest` 只写在 af-meter 的 dev-dependencies。根 `Cargo.toml` 不在本任务改动范围内，没有收进 `[workspace.dependencies]`。
+
+---
+
+# RESULT-UPDATE — W4D：af-meter 的 Bifrost 双层接线（weight + header）
+
+## ① 结论
+
+**通过**。`af-meter` 新增 `bifrost`：纯函数 `render(keys, now)` 把供给水位（`Meter::given(now).available`）或预算余额（`BudgetLedger::remaining_cents`）写成 Bifrost 配置片段。`keys[].weight` 是 0–100 的百分整；`governance.routing_rules` 用请求头 `x-af-pin-key` 钉住 key。主 key 量化后为 0 且没有正权重的备 key 时拒绝生成。负余额拒绝生成。调用方的计量树不被刷新。
+
+内存 `Meter`、`BudgetLedger`、SQLite 账本的已验证语义没有改。
+
+`cargo test -p af-meter` **60 全绿**（原 42：15 单元 + 17 账本 + 4 proptest + 5 路由 + 1 词表；新增 15 个 bifrost 单元测试和 3 个金标集成测试；文档测试仍是 0）。`cargo clippy --all-targets -p af-meter -- -D warnings` 无本 crate 警告。
+
+## ② 步骤
+
+1. 读完 `RESULT.md`、`RESULT-UPDATE.md`、`budget.rs`、`lib.rs`。计数仍是 `Count = u64`，金额仍是 `Cents = i64`。`remaining_cents` 是普通减法，只有 `i64` 下溢才停在 `i64::MIN`（`10 - 20 = -10`，不是 0）。`Meter::given` 仍会刷新调用方手里的树。这些结论没有改。Bifrost 研究原文不在本副本；权重公式对照的是 core `keyselectors/weightedrandom.go`（`totalWeight += int(key.Weight * 100)`，和为 0 时均匀随机，和为负时 `rand.Intn` panic），路由目标的 `weight` 对照的是 governance routing rule（一条规则内的命中概率，必须加总为 1）。
+2. `src/bifrost.rs`：一组 key 必须有唯一主 key、至少一把备 key、同一个 provider。余额按合计归一，`quantize_percent` 做一半向上的四舍五入，各自落在 0–100，不把和再摊回 100。保底校验发生在量化之后：主 key 为 0 且每把备 key 也是 0（含 201 份相等余额被舍成全 0）就返回 `ZeroWeights`，不产出 JSON。`targets[].weight` 恒为 `1.0`，不抄 key 的百分数。密钥只接受 `env.VAR`。`now` 只传给供给的克隆；账本不看时刻，但仍把 `now` 写入 `generated_at`。
+3. 金标三份，insta 1.49.0（锁里已有，只加到本 crate 的 dev-dependencies，`default-features = false`，feature `json`）。`Cargo.lock` 只在 af-meter 的依赖列表加了一行 `insta`，没有新包，没有改其他 crate 的源码。快照直接入库，不走 `cargo insta review`。
+4. 提交前跑过 `cargo fmt -p af-meter`、`cargo clippy --all-targets -p af-meter -j 4 -- -D warnings`、`cargo test -p af-meter -j 4`。cargo 命令前都 `source /data/af-factory/env.sh`。
+
+## ③ 证据
+
+命令均在 `source /data/af-factory/env.sh` 之后执行。
+
+`cargo check -p af-meter -j 4`（模块落地后）：`Finished dev profile ... in 0.51s`。
+
+`cargo clippy --all-targets -p af-meter -j 4 -- -D warnings`（快照入库后）：`Finished dev profile ... in 2.36s`，退出码 0。cargo 另打印既有的 future-incompat：`proc-macro-error2 v2.0.1`，不是本 crate 的警告。
+
+`cargo test -p af-meter -j 4`（未设 `INSTA_UPDATE`，快照只比对）：
+
+```
+running 30 tests
+test bifrost::tests::all_zero_weights_are_refused ... ok
+test bifrost::tests::budget_ratio_uses_remaining_cents ... ok
+test bifrost::tests::exact_exhaustion_is_zero_weight_not_a_negative ... ok
+test bifrost::tests::header_pin_weight_is_not_the_key_percent ... ok
+test bifrost::tests::injected_now_refreshes_a_clone_and_leaves_the_supply ... ok
+test bifrost::tests::rounding_collapse_to_all_zero_is_refused ... ok
+test result: ok. 30 passed; 0 failed
+
+running 3 tests
+test budget_balances_80_20 ... ok
+test supply_exhausted_primary_weight_zero ... ok
+test supply_recovers_on_injected_day_boundary ... ok
+test result: ok. 3 passed; 0 failed
+
+running 17 tests
+test result: ok. 17 passed; 0 failed
+
+running 4 tests
+test result: ok. 4 passed; 0 failed
+
+running 5 tests
+test result: ok. 5 passed; 0 failed
+
+running 1 test
+test result: ok. 1 passed; 0 failed
+
+Doc-tests af_meter
+test result: ok. 0 passed; 0 failed
+```
+
+60 = 原 42 + 15 个单元 + 3 个金标。单元里的 15 个旧测试（账本 4 + 计量树 11）数量没变。
+
+金标要点：预算剩余 800 与 200 → `keys[].weight` 80 和 20，`generated_at` 1700000000。日窗耗尽、`now = 86399` → 订阅权重 0、API 权重 100，钉住规则的 `targets[].weight` 仍是 `1.0`。`now = 86400` 日界重置后水位回到日窗容量 200（周窗剩余 800 不单独进权重）→ 2 和 98。
+
+`Cargo.lock` 的 diff 只有 af-meter 依赖列表中的 `+ "insta"`。
+
+提交：
+
+- `f8c8920` af-meter: 用余额比例生成 Bifrost 的 weight 与 header 钉住
+- `58c9852` af-meter: 补 Bifrost 配置金标快照
+
+## ④ 反馈
+
+1. `keys[].weight` 写成百分整，不是文档示例里的 0.7。V1.6 选择器还会再做 `int(w*100)`，每把 key 同乘 100，80:20 仍是 80:20。一半向上和 Go 的截断不一样：正好 0.5% 这里是 1，截断会收成 0，进而掉进全零均匀随机。
+2. `targets[].weight`、`keys[].weight`、虚拟 key 的 `provider_configs[].weight` 是三个字段。本片段只写前两个。钉住规则单目标恒为 1，表示这条规则的命中概率，不加总到 100，也不做 `int(w*100)`。
+3. 保底是拒绝，不是把备 key 抬到 1。主 key 为 0、备 key 有正的量化权重时允许下发（0 与 100），全零不下发。201 份相等的正余额会各自舍成 0，同样拒绝。
+4. 主 key 权重为 0 时，它的钉住规则还在，`targets[].weight` 仍是 1.0。请求带 `x-af-pin-key` 可以盖过 weight 层，选中这把耗尽的 key。
+5. 直接拼出来的账本如果已花大于总额，`remaining_cents` 是负数（`saturating_sub` 只防 `i64` 下溢）。这种余额会让 V1.6 panic，生成器拒绝。`try_spend` 本身仍然不会把账本记成这种状态。
+6. `generated_at` 不是 Bifrost 的字段。Go 的 `encoding/json` 默认丢掉未知字段，所以片段仍能喂进去；它用来钉住注入时刻。预算比例不随 `now` 变，供给水位会变。
+7. 权重在整组 key 上归一，并且要求同一个 provider。Bifrost 只在一个 provider 的 key 之间比较 `keys[].weight`。跨 provider 的比例是另一层 weight，这里直接拒绝，避免写出看起来按比例、实际各算各的配置。
+8. 独立四舍五入的和可以是 99 或 101（余额 1 与 199 → 权重 1 与 100）。选择器按相对权重抽，不要求和为 100。
+
+## ⑤ 遗留
+
+- `RESULT.md` 里 Meter 的遗留仍在：单消费者、内存树无持久化、固定窗口双倍突发、Max 的 `recovers_at` 是下界、`route` 不拆分任务。本任务不改这些。
+- SQLite 计数账本没有接进这个片段。生成器只读内存里的 `Meter` 和 `BudgetLedger`。
+- 没有对 Bifrost 的 Go 进程做加载测试。JSON 形状按 `providers` 与 `governance.routing_rules` 对齐；`generated_at` 依赖解码器忽略未知字段，没有拿发布的 JSON Schema 再验一次。
+- 钉住规则不改写 model。没写的 model 沿用请求里的模型。
+- 多 provider 的预算拆分不生成。虚拟 key 上的 `provider_configs[].weight` 也不生成。
+- 量化后和不为 100 时，没有用最大余数法把百分数摊平。
+- header 覆盖是声明式规则，本 crate 不跑 CEL。
+- 很多把极小余额被舍成全 0 时，整份配置拒绝，不会把最大的那把抬到 1。
+- `Meter::given` 跨过大量窗口仍是按窗循环。生成器继承这个开销，没有另写闭式。调用方不要对很细的窗口传入过大的 `now`。
