@@ -7,8 +7,8 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use af_workorder::{
-    BudgetVoucher, Decision, DecisionArtifact, DecisionError, GateError, GraphVersion, LineBinding,
-    OrderState, Role, WorkArtifact, WorkOrder,
+    decode_work_order_value, BudgetVoucher, Decision, DecisionArtifact, DecisionError, GateError,
+    GraphVersion, LineBinding, OrderDecodeError, OrderState, Role, WorkArtifact, WorkOrder,
 };
 use serde_json::{json, Value};
 
@@ -633,6 +633,48 @@ fn field_type_and_snapshot_errors_are_bad_request() {
 
     let got = invoke(r#"{"op":1}"#);
     assert_bad(&got, "字段 op 必须是字符串");
+}
+
+/// 拒绝式信封必须带着 field 与 detail 出去。压成 BadRequest.message 会丢掉结构。
+#[test]
+fn rejection_envelope_keeps_field_and_detail() {
+    let mut missing_id = serde_json::to_value(created()).unwrap();
+    missing_id.as_object_mut().unwrap().remove("stable_id");
+    assert_rejection_passthrough("release", &missing_id);
+
+    let mut blank_id = serde_json::to_value(created()).unwrap();
+    blank_id["stable_id"] = json!("");
+    assert_rejection_passthrough("release", &blank_id);
+
+    // 前置齐备的单加上两个未知字段。若被静默丢掉,release 会成功并把有损快照送回去。
+    let mut injected = serde_json::to_value(bound()).unwrap();
+    injected["injected_beta"] = json!("keep-me");
+    injected["injected_alpha"] = json!(1);
+    let got = assert_rejection_passthrough("release", &injected);
+    let field = got["error"]["field"].as_str().expect("field 是字符串");
+    assert!(field.contains("injected_alpha"), "{got}");
+    assert!(field.contains("injected_beta"), "{got}");
+    assert_eq!(field, "injected_alpha, injected_beta");
+}
+
+fn assert_rejection_passthrough(op: &str, order: &Value) -> Value {
+    let err = decode_work_order_value(order.clone()).expect_err("库应拒绝这份快照");
+    let OrderDecodeError::Rejected(envelope) = err else {
+        panic!("库应给出拒绝式信封,实际 {err:?}");
+    };
+    let got = invoke(
+        &serde_json::to_string(&json!({"op": op, "order": order})).expect("请求可序列化"),
+    );
+    assert_eq!(got["ok"], false, "{got}");
+    assert!(got.get("order").is_none(), "拒绝不能带回有损订单: {got}");
+    assert_eq!(got["error"]["kind"], "RejectionEnvelope", "{got}");
+    assert!(
+        got["error"].get("message").is_none(),
+        "拒绝式信封不能压成 message: {got}"
+    );
+    assert_eq!(got["error"]["field"], envelope.field, "{got}");
+    assert_eq!(got["error"]["detail"], envelope.detail, "{got}");
+    got
 }
 
 #[test]
