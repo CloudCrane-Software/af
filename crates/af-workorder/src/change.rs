@@ -285,6 +285,25 @@ mod tests {
     }
 
     #[test]
+    fn signing_domain_bytes_stay_on_v1() {
+        assert_eq!(
+            CHANGE_ORDER_SIGNING_DOMAIN,
+            b"af-workorder/change-order/v1\0"
+        );
+        let order = sample();
+        let message = order.signing_message().unwrap();
+        assert!(message.starts_with(CHANGE_ORDER_SIGNING_DOMAIN));
+        let body = &message[CHANGE_ORDER_SIGNING_DOMAIN.len()..];
+        let parsed: ChangeOrder = serde_json::from_slice(body).unwrap();
+        assert_eq!(parsed, order);
+        let text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(
+            !text.contains("stable_id"),
+            "签名域仍只覆盖变更单自身,不掺入工单身份:{text}"
+        );
+    }
+
+    #[test]
     fn signed_change_order_roundtrip_verifies() {
         let order = sample();
         let key = Ed25519Keypair::from_seed(&SEED);

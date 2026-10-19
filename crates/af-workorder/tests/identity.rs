@@ -3,8 +3,8 @@
 //! 时刻与熵都不读系统:身份由订单 id 或调用方带回的 stable_id 决定。
 
 use af_workorder::{
-    decode_work_order, GraphVersion, OrderDecodeError, Priority, RejectionKind, RunContext, Sla,
-    StableId, WorkOrder,
+    decode_work_order, sha256_hex, Decision, DecisionError, GraphVersion, OrderDecodeError,
+    Priority, RejectionKind, Role, RunContext, Sla, StableId, WorkOrder,
 };
 use chrono::{DateTime, Utc};
 
@@ -125,4 +125,72 @@ fn legacy_payload_without_stable_id_is_rejected() {
 
     let restored = decode_work_order(&serde_json::to_string(&fresh).unwrap()).unwrap();
     assert_eq!(restored, fresh);
+}
+
+#[test]
+fn decision_artifact_hash_includes_stable_id() {
+    let mut order = WorkOrder::with_stable_id(
+        "wo-1",
+        GraphVersion::new("g-3"),
+        sla(),
+        StableId::parse("sid-fixed").unwrap(),
+        RunContext::new("run-CAN-9f3e"),
+    );
+    let payload = order.decision_payload("release-request");
+    assert_eq!(
+        payload,
+        "af-workorder/decision-payload/v1|9|sid-fixed|15|release-request"
+    );
+    assert!(payload.contains("sid-fixed"));
+    assert!(!payload.contains("run-CAN-9f3e"));
+    let expected = "18d638628bd06103e7138ac40e673dee658d184f65965834b3a96c60e519754c";
+    assert_eq!(sha256_hex(payload.as_bytes()), expected);
+
+    let artifact = order.seal_decision(
+        "user-a",
+        Role::Approver,
+        Decision::Approve,
+        "release-request",
+        "k2",
+    );
+    assert_eq!(artifact.payload_hash, expected);
+    artifact.validate_against(&payload).unwrap();
+
+    let stripped = "af-workorder/decision-payload/v1|0||15|release-request";
+    assert!(matches!(
+        artifact.validate_against(stripped),
+        Err(DecisionError::PayloadHashMismatch { .. })
+    ));
+
+    order.continue_as_new(RunContext::new("run-other"));
+    let again = order.seal_decision(
+        "user-a",
+        Role::Approver,
+        Decision::Approve,
+        "release-request",
+        "k2",
+    );
+    assert_eq!(again.payload_hash, expected);
+    assert_eq!(order.decision_payload("release-request"), payload);
+
+    let other = WorkOrder::with_stable_id(
+        "wo-1",
+        GraphVersion::new("g-3"),
+        sla(),
+        StableId::parse("sid-other").unwrap(),
+        RunContext::new("run-CAN-9f3e"),
+    );
+    assert_ne!(other.decision_payload("release-request"), payload);
+    assert_ne!(
+        other
+            .seal_decision(
+                "user-a",
+                Role::Approver,
+                Decision::Approve,
+                "release-request",
+                "k2",
+            )
+            .payload_hash,
+        expected
+    );
 }

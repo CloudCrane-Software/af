@@ -10,8 +10,9 @@ use chrono::{DateTime, Utc};
 use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 
+use crate::decision::{Decision, DecisionArtifact, Role};
 use crate::error::{GateError, Missing, OrderDecodeError};
-use crate::identity::{inspect_identity_fields, RunContext, StableId};
+use crate::identity::{self, inspect_identity_fields, RunContext, StableId};
 use crate::sla::Sla;
 use crate::state::{OrderState, Transition};
 
@@ -235,6 +236,24 @@ impl WorkOrder {
     /// 身份是否连续:只比较 `stable_id`,不比较 run、业务 id 或状态。
     pub fn same_identity(&self, other: &Self) -> bool {
         self.stable_id == other.stable_id
+    }
+
+    /// 决策工件的被签 payload。`stable_id` 在里面,`run_id` 不在。
+    pub fn decision_payload(&self, subject: &str) -> String {
+        identity::decision_payload(&self.stable_id, subject)
+    }
+
+    /// 签发决策工件。哈希覆盖 [`Self::decision_payload`],因此换 run 不改变哈希,换身份会。
+    pub fn seal_decision(
+        &self,
+        actor_id: impl Into<String>,
+        role: Role,
+        decision: Decision,
+        subject: &str,
+        key_id: impl Into<String>,
+    ) -> DecisionArtifact {
+        let payload = self.decision_payload(subject);
+        DecisionArtifact::seal(actor_id, role, decision, &payload, key_id)
     }
 
     /// 分片键。`shard_count` 是配方层的分片数,不存在本单上。
