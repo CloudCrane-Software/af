@@ -222,15 +222,19 @@ impl FingerprintLedger {
         let any_table = has_decl || has_runtime || has_fingerprint;
 
         let status = match (version, tables, any_table) {
-            (0, false, false) => {
-                create(&mut conn, &decl)?;
-                OpenStatus::Created
-            }
-            (0, _, true) => {
-                return Err(Error::Corrupt(
-                    "user_version 为 0 但表已存在，拒绝当成首启".into(),
-                ));
-            }
+            (0, _, _) => match create(&mut conn, &decl)? {
+                // 事务外预检读到的"version=0 且表已在"可能是首开竞态的移动中快照；
+                // 一律进 create() 在 IMMEDIATE 事务内重读裁决：赢家已提交→AlreadyDeclared，
+                // 真撕裂（事务内仍 version=0 且 declaration 表在）→ Corrupt 不误伤。
+                CreateOutcome::Created => OpenStatus::Created,
+                CreateOutcome::AdoptedExisting => {
+                    let stored = read_declaration(&conn)?;
+                    if stored != decl {
+                        return Err(mismatch(&stored, &decl));
+                    }
+                    OpenStatus::AlreadyDeclared
+                }
+            },
             (SCHEMA_VERSION, true, _) => {
                 let stored = read_declaration(&conn)?;
                 if stored != decl {
@@ -393,8 +397,43 @@ fn table_exists(conn: &Connection, name: &str) -> Result<bool> {
     Ok(found.is_some())
 }
 
-fn create(conn: &mut Connection, decl: &LedgerDeclaration) -> Result<()> {
+/// create 的结果：真建了（Created）或事务内重读发现别人已建好（AdoptedExisting）。
+/// 后者是首开竞态的输家路径：IMMEDIATE 事务内重读 user_version，
+/// 赢家的提交对我可见，我不能把"表已存在"当损坏（复验 F4：曾 5% 首开误报 Corrupt）。
+enum CreateOutcome {
+    Created,
+    AdoptedExisting,
+}
+
+fn create(conn: &mut Connection, decl: &LedgerDeclaration) -> Result<CreateOutcome> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    // 事务内重读：只信这个快照，不信事务外的预检
+    let version: i64 = tx.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if version == SCHEMA_VERSION {
+        tx.rollback()?;
+        return Ok(CreateOutcome::AdoptedExisting);
+    }
+    if version != 0 {
+        tx.rollback()?;
+        return Err(Error::UnknownSchema {
+            found: version,
+            expected: SCHEMA_VERSION,
+        });
+    }
+    let has_decl: Option<i64> = tx
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'declaration'",
+            [],
+            |row| row.get(0),
+        )
+        .optional()?;
+    if has_decl.is_some() {
+        // version 为 0 但表已在：真撕裂，fail-closed
+        tx.rollback()?;
+        return Err(Error::Corrupt(
+            "user_version 为 0 但 declaration 表已存在，拒绝当成首启".into(),
+        ));
+    }
     tx.execute_batch(
         "CREATE TABLE declaration (
             id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -454,7 +493,7 @@ fn create(conn: &mut Connection, decl: &LedgerDeclaration) -> Result<()> {
     )?;
     tx.execute_batch("PRAGMA user_version = 1")?;
     tx.commit()?;
-    Ok(())
+    Ok(CreateOutcome::Created)
 }
 
 fn read_declaration(conn: &Connection) -> Result<LedgerDeclaration> {

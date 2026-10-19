@@ -65,16 +65,35 @@ pub(crate) fn prepare(conn: &mut Connection) -> Result<OpenStatus> {
     conn.pragma_update(None, "foreign_keys", "ON")?;
 
     if user_objects(conn)?.is_empty() {
-        create_schema(conn)?;
-        verify(conn)?;
-        return Ok(OpenStatus::Created);
+        // 首开竞态纪律（F4 同款）：事务外看到空库只是移动中快照，
+        // create_schema 用 IMMEDIATE 事务并在事务内重读裁决。
+        match create_schema(conn)? {
+            CreateSchema::Created => {
+                verify(conn)?;
+                return Ok(OpenStatus::Created);
+            }
+            CreateSchema::AdoptedExisting => {
+                verify(conn)?;
+                return Ok(OpenStatus::AlreadyDeclared);
+            }
+        }
     }
     verify(conn)?;
     Ok(OpenStatus::AlreadyDeclared)
 }
 
-fn create_schema(conn: &mut Connection) -> Result<()> {
-    let tx = conn.transaction()?;
+enum CreateSchema {
+    Created,
+    AdoptedExisting,
+}
+
+fn create_schema(conn: &mut Connection) -> Result<CreateSchema> {
+    let tx = conn.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
+    // 事务内重读：别人已建成则回滚按重入处理
+    if !user_objects(&tx)?.is_empty() {
+        tx.rollback()?;
+        return Ok(CreateSchema::AdoptedExisting);
+    }
     tx.execute(SQL_DECL, [])?;
     tx.execute(SQL_TASK, [])?;
     tx.execute(SQL_INDEX, [])?;
@@ -84,7 +103,7 @@ fn create_schema(conn: &mut Connection) -> Result<()> {
         params![SCHEMA_VERSION, SCHEMA_FINGERPRINT],
     )?;
     tx.commit()?;
-    Ok(())
+    Ok(CreateSchema::Created)
 }
 
 fn user_objects(conn: &Connection) -> Result<Vec<(String, String, Option<String>)>> {
