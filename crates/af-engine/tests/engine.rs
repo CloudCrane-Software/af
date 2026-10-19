@@ -999,3 +999,127 @@ fn contract_samples_match_engine() {
     .unwrap();
     assert_eq!(order, serde_json::to_value(created()).unwrap());
 }
+
+/// `VERSIONING.md`「操作步骤」代码块里的命令。干跑只校验它们存在。
+const CHANNEL_STEPS: &[&str] = &[
+    r#"cargo build -p af-engine --bin af-engine"#,
+    r#"mkdir -p -- "$ENGINE_CHANNEL_DIR/bins" "$ENGINE_CHANNEL_DIR/pins""#,
+    r#"cp -f -- "$ENGINE_BIN" "$ENGINE_CHANNEL_DIR/bins/$ENGINE_BUILD""#,
+    r#"ln -sfn -- "$ENGINE_CHANNEL_DIR/bins/$ENGINE_BUILD" "$ENGINE_CHANNEL_DIR/canary""#,
+    r#"readlink -f -- "$ENGINE_CHANNEL_DIR/canary""#,
+    r#"test -x "$ENGINE_CHANNEL_DIR/canary""#,
+    r#"rm -f -- "$ENGINE_CHANNEL_DIR/canary""#,
+    r#"test ! -e "$ENGINE_CHANNEL_DIR/canary""#,
+];
+
+fn operational_steps(doc: &str) -> Vec<String> {
+    let mut in_section = false;
+    let mut in_fence = false;
+    let mut steps = Vec::new();
+    for line in doc.lines() {
+        if !in_section {
+            if line == "## 操作步骤" {
+                in_section = true;
+            }
+            continue;
+        }
+        if !in_fence {
+            if line == "```sh" {
+                in_fence = true;
+            } else if line.starts_with("## ") {
+                break;
+            }
+            continue;
+        }
+        if line == "```" {
+            break;
+        }
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        steps.push(trimmed.to_string());
+    }
+    steps
+}
+
+fn assert_command_exists(cmd: &str) {
+    let output = Command::new("bash")
+        .args(["-c", r#"command -v "$1""#, "_", cmd])
+        .output()
+        .unwrap_or_else(|e| panic!("command -v {cmd}: {e}"));
+    let stdout = String::from_utf8(output.stdout).expect("command -v stdout utf-8");
+    let stderr = String::from_utf8(output.stderr).expect("command -v stderr utf-8");
+    assert!(
+        output.status.success(),
+        "命令 {cmd} 不存在，stderr={stderr}"
+    );
+    assert!(!stdout.trim().is_empty(), "command -v {cmd} 没有给出位置");
+}
+
+#[test]
+fn versioning_steps_dry_run_checks_commands_exist() {
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let doc = fs::read_to_string(manifest.join("VERSIONING.md")).expect("读取 VERSIONING.md");
+    for phrase in [
+        "EngineChannel",
+        "新规则先发 canary",
+        "该 run 全程用同版本",
+        "摘除 canary 指针",
+        "stable",
+        "canary",
+        "scripts/engine-channel-dry-run.sh",
+    ] {
+        assert!(doc.contains(phrase), "VERSIONING.md 应写明 {phrase}");
+    }
+
+    let steps = operational_steps(&doc);
+    assert_eq!(
+        steps,
+        CHANNEL_STEPS
+            .iter()
+            .map(|step| (*step).to_string())
+            .collect::<Vec<_>>()
+    );
+    for step in &steps {
+        let cmd = step.split_whitespace().next().expect("步骤有命令名");
+        assert!(
+            !cmd.contains('|') && !cmd.contains('&') && !cmd.contains(';'),
+            "操作步骤保持单命令，便于干跑: {step}"
+        );
+        assert_command_exists(cmd);
+    }
+
+    let scratch = std::env::temp_dir().join(format!("af-engine-w4f-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&scratch);
+    assert!(
+        !scratch.exists(),
+        "干跑开始前通道目录应不存在: {}",
+        scratch.display()
+    );
+
+    let script = manifest.join("scripts/engine-channel-dry-run.sh");
+    let output = Command::new("bash")
+        .arg(&script)
+        .env("ENGINE_CHANNEL_DIR", &scratch)
+        .output()
+        .expect("启动干跑脚本");
+    let stdout = String::from_utf8(output.stdout).expect("干跑 stdout utf-8");
+    let stderr = String::from_utf8(output.stderr).expect("干跑 stderr utf-8");
+    assert!(
+        output.status.success(),
+        "干跑应成功，stderr={stderr}\nstdout={stdout}"
+    );
+    assert!(stderr.is_empty(), "干跑 stderr 应为空: {stderr}");
+    for step in CHANNEL_STEPS {
+        assert!(stdout.contains(step), "干跑输出应列出步骤 {step}\n{stdout}");
+    }
+    assert!(stdout.contains("dry-run: not-executed"), "{stdout}");
+    assert!(stdout.contains("dry-run: ok"), "{stdout}");
+    assert!(!stdout.contains("MISSING"), "干跑发现缺失命令: {stdout}");
+    assert!(
+        !scratch.exists(),
+        "干跑不得创建通道目录 {}",
+        scratch.display()
+    );
+}

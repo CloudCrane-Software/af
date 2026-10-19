@@ -101,6 +101,7 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 - 不改 `graph_version`。换版走变更单，不在本 op 集里。
 - 不判定 SLA 逾期。`is_overdue` 要调用方注入时刻，本进程不提供对应 op。
 - 不把「已审批」写进 `release` 门控。审批校验是 `approve_decision`，放行生产是 `release`，两步都由编排层依次调用。
+- 不在进程内切换二进制。`EngineChannel` 的 stable / canary 选择规则见 `VERSIONING.md`。本进程只执行版本信封。
 
 ## 样例
 

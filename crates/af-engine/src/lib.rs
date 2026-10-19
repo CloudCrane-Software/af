@@ -16,6 +16,7 @@
 //!
 //! 请求可以带 `engine_version_min`（semver）。本二进制版本低于它时拒绝，并提示升级。
 //! 字段缺失表示不设下限。字段存在但无法解析时拒绝，不把看不懂的下限当成没有下限。
+//! stable / canary 两份二进制如何并存、如何回滚，见 crate 根目录的 `VERSIONING.md`。
 
 mod version;
 
