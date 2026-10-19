@@ -51,11 +51,7 @@ name = "af-meter"
 version = "0.1.0"
 dependencies = [
  "af-credential",
-<<<<<<< HEAD
- "criterion",
-=======
  "proptest",
->>>>>>> af-meter: 引入 proptest 1.12.0 作为 dev-dependency
  "serde",
  "serde_json",
  "thiserror 1.0.69",
@@ -75,7 +71,6 @@ dependencies = [
 name = "af-sampling"
 version = "0.1.0"
 dependencies = [
- "criterion",
  "proptest",
  "serde",
  "serde_json",
@@ -1288,17 +1283,10 @@ version = "1.49.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b67d3d2e287e4b86c10b3f3b641033d1f89b74bdb39d05f34952e2b9a6fe21cd"
 dependencies = [
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
  "console",
->>>>>>> af-credential: 加 insta 1.49.0 与 serde 测试依赖
- "once_cell",
-=======
  "once_cell",
  "pest",
  "pest_derive",
->>>>>>> af-workorder: 加 insta 1.49.0（dev，json+redactions）供 JSON 快照涂红签名与哈希
  "serde",
  "similar",
  "tempfile",
