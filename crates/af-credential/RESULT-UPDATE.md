@@ -1,93 +1,72 @@
-# RESULT-UPDATE.md — C1 insta 快照接入 af-credential
+# RESULT-UPDATE.md — W2F 根密钥持久形态 + bootstrap/replay
 
 ## ① 结论
 
-**通过**。`crates/af-credential` 接入 insta 1.49.0（`yaml`）做 `assert_yaml_snapshot!`。T3 词表语义没有改：`Cents` 仍是 `i64` 美分，`budget_cents` / `spend_cap_cents` / `spend_cents` 同词同型；衰减仍只加 check、不改事实；`authorize` 仍把 `FailedLogic` 折成 `Ok(false)`，限额超限等仍是真错误。
+**通过**。`af-credential` 的持久根不再每次 `KeyPair::new()`。`open(dir)` 首启（`Created`）生成 ed25519 根，写入 `<dir>/root.key`（权限恰好 `0600`），签发引导凭证并落库；重入（`AlreadyDeclared`）读回同一把公钥，引导凭证按落库字节重放，不重新签名。`root.key` 损坏、权限不是 `0600`、库只有一半、schema 版本或声明（namespace / tools 顺序 / budget_cents）对不上，都启动失败，不另生成密钥。
 
-本 crate 原先没有 `RESULT-UPDATE.md`。T3 对齐已经在源码和 `RESULT.md` 里（`pub type Cents = i64`，谓词常量，与 af-meter 同型）。这次只加快照，不改那些结论。
+`rotate(dir)` 显式换根并记下 `generation`。旧根签发的凭证（含衰减块）在 `GracePolicy.grace` 内可验；`now >= grace_until_ms` 拒绝。宽限按退役的那一代单独计，后一次轮换不改前一代的截止。零宽限在轮换的同一时刻拒绝旧凭证。
 
-测试从 8 个增到 11 个。多出来的 3 个都是新快照测试。`cargo test -p af-credential` 两轮全绿，第二轮不改 `.snap`。`cargo clippy --all-targets -p af-credential -- -D warnings` 无新增警告。
+`issue_root` 仍是一次性随机密钥，已有衰减 / 交集 / 快照测试语义没改。Datalog 执行限额仍是 `verify_limits()`（facts 1000 / iterations 100 / max_time 50ms），超限仍是真错误。验签路径不跑 authorizer。
+
+未新增第三方 crate，也没加新的加密库。签名继续用 biscuit-auth 自带的 ed25519。元数据用 workspace 已有的 rusqlite 0.32.1（bundled）。
+
+测试从 11 个增到 35 个。`cargo test -p af-credential` 全绿。`cargo clippy --all-targets -p af-credential -- -D warnings` 无新增警告。
 
 ## ② 步骤
 
-1. 读完 `crates/af-credential/RESULT.md` 与 `src/{credential,judge,policy}.rs`、`tests/{attenuation,intersection}.rs`。crate 目录下没有既有 `RESULT-UPDATE.md`。
-2. `[dev-dependencies]` 增加 `insta = { version = "1.49.0", features = ["yaml"] }` 与 `serde = { workspace = true }`（1.0.229，已带 `derive`）。insta 1.49 的 `yaml` 只打开 serde，序列化是 insta 自带的，不拉 `serde_yaml`。serde 只给测试里的快照视图做 `Serialize`。`cargo check` 更新了工作区 `Cargo.lock`：新增 insta 1.49.0、console 0.16.6、encode_unicode 1.0.0、similar 2.7.0。没有改其他 crate 的源码或版本。
-3. `authorize` 的判定抽到私有 `run_authorize`（仍用原来的 `verify_limits`：facts 1000 / iterations 100 / max_time 50ms）。新增 `denial()`：同一条路径，放行 `Ok(None)`，`FailedLogic` 展开成 `Denial`，不写 stderr。`authorize` 的 `Ok(false)` 与 stderr 文案不变。
-4. 新增 `tests/yaml_snapshots.rs` 三个 `assert_yaml_snapshot!`，`.snap` 在 `tests/snapshots/`：
-   - `two_policy_intersection_minimum`：Cedar 两条 permit ∩ 衰减后的 biscuit。工具交集是 `[test]`，花费上限取 `min(1000, 500) = 500`。最小授权只有 `reviewer + test`，观察到的最大放行花费是 500（501 在子凭证上被拒、在根上仍过）。`builder + git` 在根上放行，衰减后拒绝，但 `token_carries_capability` 仍为真（`git` 事实还在）。
-   - `cents_issuance_payload`：序列化往返后的载荷。`type_name::<Cents>() == "i64"`。authority 块含 `budget_cents(1000)` 与 `spend_cents <= budget_cents`。衰减块是 `request_tool ∈ ["test"]` 与 `spend_cents <= 500`。子凭证的 authority 块与根相同，事实里的 `budget_cents` 仍是 1000。签名字节不进快照；同一载荷换密钥，线上长度不变（根 303、衰减后 515），长度写入快照。
-   - `rejection_error_structure`：`denial()` 与 `authorize` 的布尔结果一致。覆盖衰减封死 git（block 1 check 0）、花费落在两档上限之间（block 1 check 1，`$s <= 500`）、同时超过两档上限（block 0 与 block 1 两条花费 check）、未知工具 `deploy`（`no_matching_policy` + 白名单 check）、错误命名空间（`no_matching_policy` 且 failed_checks 为空）、根凭证超预算、以及 cap 内放行（`denial: ~`）。
-5. 快照生成用 `INSTA_UPDATE=1`。之后不带该变量跑了两轮 `cargo test -p af-credential`，三份 `.snap` 都通过，工作区没有 `.snap.new`。
-6. 提交前跑过 `cargo fmt -p af-credential`、`cargo clippy --all-targets -p af-credential -- -D warnings`、`cargo test -p af-credential`。所有 cargo 命令前都 `source /data/af-factory/env.sh`。
+1. 读完 `RESULT.md` ④-6 与 `src/credential.rs` 的 `KeyPair::new()` 路径。限额修复保持：`authorize` / `inspect` 仍走显式 `verify_limits()`。
+2. `issue_root` 的组块抽到 `build_root_biscuit`。不带 `root_key_id` 时字节布局与原来一致。持久签发才写入代数。
+3. 新增可注入时钟（`SystemClock` / `ManualClock`）。宽限比较只用 `Clock::now_ms()`。
+4. `open` / `open_with_clock`：目录里没有 `root.key` 且没有 `credential.db` 时 `Created`；两份都在时 `AlreadyDeclared`；只在一份时 `Incomplete`。`credential.db` 用 WAL、`busy_timeout=5000ms`、`synchronous=NORMAL`、`foreign_keys=ON`。声明存在 `schema_meta`，代数公钥与宽限在 `root_generation`，引导凭证原文在 `bootstrap_credential`。
+5. `rotate` / `rotate_with_clock` 以及 `OpenedRoot::rotate`：先写 `root.key.pending`（同一把新种子），再在一个事务里退役旧代、插入新代，然后原子替换 `root.key`。库已提交但 `root.key` 还是旧的时，下次打开用 journal 里的种子补导出，不另生成。journal 没提交则删掉。journal 损坏或权限不对则失败，不动 `root.key`。
+6. 验签矩阵：轮换前、宽限内（含衰减凭证）、截止前 1ms、截止点、重启后、零宽限、连续两次轮换各自的宽限。另有损坏、`0644`/`0400`、声明不符、半份存储、符号链接、伪造但格式合法的 `root.key`、schema 不符、引导凭证被改、代数值不连续。
+7. 提交前跑了 `cargo fmt -p af-credential`、`cargo clippy --all-targets -p af-credential -- -D warnings`、`cargo test -p af-credential`。cargo 前都 `source /data/af-factory/env.sh`。
 
 ## ③ 证据
 
-```
-$ source /data/af-factory/env.sh && cargo check -p af-credential --all-targets
-     Locking 4 packages to highest compatible versions
-      Adding console v0.16.6
-      Adding encode_unicode v1.0.0
-      Adding insta v1.49.0
-      Adding similar v2.7.0
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 3.18s
-```
-
-新包许可证（crate 清单，对照 `deny.toml` 的 allow 列）：insta Apache-2.0，console MIT，encode_unicode Apache-2.0 OR MIT，similar Apache-2.0。本次没有跑 `cargo deny`。
+依赖没有新包。`Cargo.lock` 只在 `af-credential` 的依赖列表里加上已有的 `rusqlite`、`serde_json`、`thiserror 2.0.21`。
 
 ```
-$ cargo clippy --all-targets -p af-credential -- -D warnings
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.41s
+$ source /data/af-factory/env.sh && cargo clippy --all-targets -p af-credential --offline -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.26s
 ```
 
 退出码 0。仍有一条既有 note：`proc-macro-error2 v2.0.1` future-incompat（cedar 传递依赖，`RESULT.md` 已记录），不是本 crate 的 warning。
 
 ```
-$ cargo test -p af-credential
-running 0 tests
-test result: ok. 0 passed
+$ cargo test -p af-credential --offline -- --test-threads=8
+running 12 tests (unittests src/lib.rs)
+test result: ok. 12 passed; 0 failed
 running 4 tests (tests/attenuation.rs)
 test result: ok. 4 passed; 0 failed
 running 4 tests (tests/intersection.rs)
 test result: ok. 4 passed; 0 failed
+running 12 tests (tests/root_persist.rs)
+test result: ok. 12 passed; 0 failed
 running 3 tests (tests/yaml_snapshots.rs)
-test cents_issuance_payload ... ok
-test rejection_error_structure ... ok
-test two_policy_intersection_minimum ... ok
 test result: ok. 3 passed; 0 failed
 Doc-tests af_credential
 test result: ok. 0 passed
 ```
 
-紧接着再跑一轮同样的 `cargo test -p af-credential`，11 个测试仍全绿，`.snap` 无 diff，没有 `.snap.new`。
+35 个测试全绿。相对基线 11 个（衰减 4 + 交集 4 + 快照 3），多出的 24 个是：时钟 2、根存储单测 10、`tests/root_persist.rs` 12。原三组没有改断言。
 
-拒绝结构与 `RESULT.md` 记录的日志一致，例如衰减封死 git：
-
-```
-authorization failed: an allow policy matched (policy index: 0), and the following
-checks failed: Check n°0 in block n°1: check if request_tool($t), ["test"].contains($t)
-```
-
-花费 800（根 1000 过、子 500 拒）：
-
-```
-Check n°1 in block n°1: check if spend_cents($s), $s <= 500
-```
+单测里的库配方读数：`foreign_keys=1`，`journal_mode=wal`，`synchronous=1`（NORMAL），`busy_timeout=5000`。把 `bootstrap_credential.generation` 改成不存在的 99 被外键拒绝。
 
 ## ④ 反馈
 
-1. 快照应锁逻辑载荷，不锁签名字节。密钥每签一次都变；Datalog 源、`Cents` 整数和线上长度稳定。`wire_len` 能进快照，是因为换密钥后长度被断言相等。
-2. `denial()` 是加出来的读口，没有改 `authorize` 的折返。网关若要 block/check 序号，应调 `denial()`，不要解析 stderr 文案。
-3. `inspect` 的 `tools` 是 `HashSet`，顺序不稳定。快照前排了序。不要对 `HashSet` 的 Debug 做快照。
-4. 金额词表再次被快照钉住：衰减后事实仍是 `budget_cents(1000)`，更紧的 500 只出现在 check 字面量 `$s <= 500` 里，不是改写事实。这与「预算不能住在凭证里、累计账本在 af-meter」一致。
-5. 命名空间不匹配时 biscuit 报 `no_matching_policy`，`failed_checks` 为空，Display 仍以 `checks failed: ` 结尾（空列表）。调用方应按 `kind` 分支，不要靠这条后缀判断「有 check 失败」。
-6. insta 1.49 默认把多行字符串收成带 `\n` 的双引号。`INSTA_YAML_BLOCK_STYLE=1` 才会用字面量块。本次没设这个环境变量，避免快照依赖它。
-7. `denial` 与 `authorize` 共用 `verify_limits`。默认 1ms 墙钟限额仍然不能依赖，本次没有改限额。
+1. 私钥只放在 `root.key`（崩溃窗口里还有 `root.key.pending`）。库里是公钥、宽限截止和引导凭证字节。格式合法但公钥对不上的 `root.key` 不会被库里的记录覆盖，因为库里没有种子。
+2. 引导凭证的重放是字节相同，不是同一声明再签一次。biscuit 每次 `build` 都会抽下一跳密钥，重签会改掉线上字节。
+3. 宽限在 `verify` 读字节时执行。`now < grace_until_ms` 才接受退役代数；相等即拒绝。已经留在内存里的 `Biscuit` 不会被事后撤销，网关每次都应从字节验签。
+4. `open` 在引导凭证的签名仍能对上其代数公钥时成功，即使该代数已经过了宽限。过期后 `verify(bootstrap)` 返回 `GraceExpired`，但目录仍能打开，避免宽限一到进程就起不来。
+5. 声明按首启原文比对。`["git","test"]` 与 `["test","git"]` 是不符，直接失败。
+6. 权限必须恰好 `0600`。`0644` 和 `0400` 都拒绝，并且不把权限改回去。
+7. 每次 `open` / `verify` / `issue` / `rotate` 持有目录上的排他 flock，并重新读盘。另一个进程轮换之后，本进程下一次调用看得到新代数。句柄上的 `outcome` 和引导凭证字节是这次 `open` 的结果，不随别人的轮换改变。
+8. `credential.db`（以及 wal/shm）在打开连接时被收紧到 `0600`，避免引导凭证跟着 umask 变成组可读。这不改 `root.key`。
 
 ## ⑤ 遗留
 
-- 累计预算仍不在凭证里（af-meter 账本）。本次没有做预算主体绑定。
-- Cedar 仍是 schema-less。
-- `DenialBody::InvalidBlockRule` 与 `AuthorizerNotEmpty` 已映射（`authorize` 也把它们当拒绝），当前签发路径打不到，快照里这两种没有样例。`DenialView` 上对应字段在其余拒绝里是 `~`。
-- 根密钥轮换、third-party block 仍未做（见 `RESULT.md`）。
+- 累计预算仍不在凭证里（af-meter）。Cedar 仍是 schema-less。third-party block 仍未做。这些都是 `RESULT.md` 里的原遗留。
+- 当前私钥丢了且没有匹配的 journal 时，目录起不来。没有恢复口令，也没有把旧种子留在库里。
 - `proc-macro-error2` future-incompat 仍在，来自 cedar 传递依赖。
-- 本次没有跑 `cargo deny check`。新依赖许可证已按清单核对，在 `deny.toml` 的 allow 列里。
+- 本次没有跑 `cargo deny check`。没有新增包，许可证集合不变。
