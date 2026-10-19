@@ -13,12 +13,15 @@
 //!   最多放行 N 件探针;谓词通过 → 全量放行(CanaryPromoted)。
 //!
 //! 策略评估顺序(固定):canary → 夜间窗口 → WIP 上限。
+//! 工单入口 [`ReleaseGate::admit`] 在这三步之前先走工单自己的 release 门控，
+//! 三步本身的顺序不改。
 
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use af_workorder::{GateError as OrderGateError, WorkOrder};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -83,6 +86,51 @@ pub enum AdmitError {
     /// 仅由阻塞式 admit 产生:等待超时。
     #[error("blocking admit timed out")]
     TimedOut,
+}
+
+/// 渐放相位。挂在 [`Permit`] 上，供 trace 记下本单是探针、已全量，还是不在渐放里。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RampPhase {
+    /// 没有针对该图谱版本的渐放，按普通 CONWIP 放行。
+    Ungated,
+    /// 仍处于 gated。`index` 是本单探针序号（从 1 起），等于准入后的 released。
+    Probe { index: usize, max_probes: usize },
+    /// 谓词已通过，该版本全量放行。`probes_released` 停在晋升前的探针数。
+    Open { probes_released: usize },
+}
+
+/// 投放闸放行凭证。
+#[derive(Debug, Clone)]
+pub struct Permit {
+    pub order_id: String,
+    /// 在制票据。`ticket.config` 是工单 `graph_version`。
+    /// 释容用 `ticket.item_id` 调 [`ReleaseGate::complete`]，不要用工单自己的 `complete`。
+    pub ticket: Ticket,
+    pub ramp: RampPhase,
+}
+
+/// 订单 release 没能过闸。调用方工单保持进入 `admit` 之前的状态。
+#[derive(Debug, Error, Clone, PartialEq)]
+pub enum Reject {
+    /// 状态机边或 release 门控没过。此时投放闸的在制、信用、渐放游标都不变。
+    #[error("工单 release 被拒绝: {0}")]
+    Order(OrderGateError),
+    /// CONWIP：`wip + weight > upper`。精确等号不走这条。
+    #[error("CONWIP 容量已满: wip={wip:.1} + weight={weight:.1} > upper={cap:.1}")]
+    AtCapacity { wip: f64, weight: f64, cap: f64 },
+    /// 该图谱版本的渐放仍是 gated，探针名额已用完，还没晋升。
+    #[error("渐放相位未打开: config={config:?} released={released} cap={cap}")]
+    RampPhaseNotOpen {
+        config: String,
+        released: usize,
+        cap: usize,
+    },
+    /// 夜间窗口信用不足。规则与 [`AdmitError::NightThrottled`] 相同。
+    #[error("夜间窗口限流: ratio={ratio}")]
+    NightThrottled { ratio: f64 },
+    /// 权重不是有限正数，请求本身不成立，不进闸。
+    #[error("审阅分钟权重非法: {weight}")]
+    BadWeight { weight: f64 },
 }
 
 #[derive(Debug, Error, Clone, PartialEq)]
@@ -718,5 +766,122 @@ impl SharedGate {
         let (lock, _) = &*self.inner;
         let mut g = lock.lock().expect("gate mutex poisoned");
         f(&mut g)
+    }
+}
+
+impl ReleaseGate {
+    /// 把工单的 Created→Released 包进投放闸。
+    ///
+    /// 判定顺序：工单状态机与 release 门控（在副本上，不改调用方）→
+    /// 审阅分钟权重 → 渐放 → 夜间窗口 → CONWIP 上限。
+    /// 前两步失败时，在制、夜间信用、渐放游标都不变。
+    /// 后三步走 [`Self::try_admit`]，顺序与直接投件相同。
+    /// 全部通过后才把调用方工单迁到 Released，并返回带渐放相位的 [`Permit`]。
+    ///
+    /// `review_minutes` 与 [`Item::review_minutes`] 同一把尺子：
+    /// `wip + weight > upper` 才拒绝，精确等号可入。
+    /// `now` 由调用方注入，不读系统钟。
+    /// 渐放配置键是工单的 `graph_version`。
+    ///
+    /// 这是投放闸侧的 release 入口。直接调工单的 `release` 不会经过本闸。
+    pub fn admit(
+        &mut self,
+        order: &mut WorkOrder,
+        review_minutes: f64,
+        now: MinuteOfDay,
+    ) -> Result<Permit, Reject> {
+        let mut probe = order.clone();
+        if let Err(err) = probe.release() {
+            return Err(Reject::Order(err));
+        }
+        if !(review_minutes.is_finite() && review_minutes > 0.0) {
+            return Err(Reject::BadWeight {
+                weight: review_minutes,
+            });
+        }
+
+        let item = Item {
+            id: self.next_item_id(),
+            config: order.graph_version().as_str().to_string(),
+            review_minutes,
+        };
+        let ticket = match self.try_admit(&item, now) {
+            Ok(ticket) => ticket,
+            Err(AdmitError::WipCap { wip, weight, cap }) => {
+                return Err(Reject::AtCapacity { wip, weight, cap });
+            }
+            Err(AdmitError::CanaryProbeCap { config, cap }) => {
+                let released = self
+                    .canary
+                    .as_ref()
+                    .map(|canary| canary.released)
+                    .unwrap_or(0);
+                return Err(Reject::RampPhaseNotOpen {
+                    config,
+                    released,
+                    cap,
+                });
+            }
+            Err(AdmitError::NightThrottled { ratio }) => {
+                return Err(Reject::NightThrottled { ratio });
+            }
+            Err(AdmitError::TimedOut) => unreachable!("try_admit does not block"),
+        };
+        let ramp = self.ramp_phase(&ticket.config);
+
+        if let Err(err) = order.release() {
+            self.rollback_admit(ticket.item_id, now);
+            return Err(Reject::Order(err));
+        }
+
+        Ok(Permit {
+            order_id: order.id().to_string(),
+            ticket,
+            ramp,
+        })
+    }
+
+    fn next_item_id(&self) -> u64 {
+        self.queue
+            .iter()
+            .map(|queued| queued.ticket.item_id)
+            .max()
+            .unwrap_or(0)
+            .saturating_add(1)
+    }
+
+    fn ramp_phase(&self, config: &str) -> RampPhase {
+        match self.canary.as_ref() {
+            Some(canary) if canary.config == config && canary.open => RampPhase::Open {
+                probes_released: canary.released,
+            },
+            Some(canary) if canary.config == config => RampPhase::Probe {
+                index: canary.released,
+                max_probes: canary.max_probes,
+            },
+            _ => RampPhase::Ungated,
+        }
+    }
+
+    /// 副本门控已通过，正本 release 仍失败时收回刚刚入队的一件。
+    /// 不走 [`Self::complete`]，避免把这次回滚记成探针完成或触发晋升。
+    fn rollback_admit(&mut self, item_id: u64, now: MinuteOfDay) {
+        let Some(idx) = self
+            .queue
+            .iter()
+            .position(|queued| queued.ticket.item_id == item_id)
+        else {
+            return;
+        };
+        let Some(queued) = self.queue.remove(idx) else {
+            return;
+        };
+        self.wip -= queued.ticket.weight;
+        if let Some(canary) = &mut self.canary {
+            if !canary.open && canary.config == queued.ticket.config && canary.released > 0 {
+                canary.released -= 1;
+            }
+        }
+        self.check_refill_needed(now);
     }
 }
