@@ -11,6 +11,10 @@
 //! 2. **确定性节点首败**：check 型节点第一次失败 → `Stop(CheckFirstFail)`。
 //! 3. **普通错误阈值**：工具错误 + 普通错误累计达到 M → `Escalate`。
 //!
+//! 对外 JSON 带版本字段 `v`（当前为 1）。读到缺失或非 1 的版本会返回错误，不会静默降级。
+//! 指纹账本把「指纹 → 计数 / 处置 / 时间窗」落在 SQLite 里。三条规则的裁决仍只由本引擎决定：
+//! 时间窗到期不会把计数清掉，也不会改裁决。
+//!
 //! # 示例
 //! ```
 //! use af_stop::{Decision, Event, StopEngine, StopPolicy, StopReason};
@@ -22,10 +26,22 @@
 //! assert_eq!(eng.feed(err()), Decision::Stop { reason: StopReason::NoInfluence });
 //! ```
 
+mod clock;
+mod error;
+mod ledger;
+mod wire;
+
+pub use clock::{Clock, ManualClock, SystemClock};
+pub use error::{Error, Result};
+pub use ledger::{FingerprintLedger, FingerprintRecord, LedgerDeclaration, OpenStatus};
+pub use wire::{decode_doc, decode_wire, encode_doc, encode_wire, Versioned, WIRE_VERSION};
+
+use serde::de::Deserializer;
+use serde::{Deserialize, Serialize, Serializer};
 use std::collections::HashMap;
 
 /// 失败指纹：工具名 + 错误码。两者都相同才视为同一指纹。
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Fingerprint {
     pub tool: String,
     pub error_code: String,
@@ -41,7 +57,7 @@ impl Fingerprint {
 }
 
 /// 输入事件流。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Event {
     /// 工具调用失败，携带工具名与错误码（喂给规则①与规则③）。
     ToolError { tool: String, error_code: String },
@@ -54,7 +70,7 @@ pub enum Event {
 }
 
 /// Stop 的原因。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum StopReason {
     /// 规则①：同一指纹重复到无影响（重复失败已不产生新信息）。
     NoInfluence,
@@ -63,7 +79,7 @@ pub enum StopReason {
 }
 
 /// Escalate 的原因。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum EscalateReason {
     /// 规则③：普通错误累计达到阈值。
     NormalErrorThreshold,
@@ -72,7 +88,7 @@ pub enum EscalateReason {
 }
 
 /// 引擎裁决。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Decision {
     Continue,
     Stop { reason: StopReason },
@@ -87,7 +103,7 @@ impl Decision {
 
 /// 指纹库单条登记项：对该指纹覆盖连击阈值与触发动作。
 /// `streak_limit = Some(0)` 表示白名单——该指纹永不触发规则①。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FingerprintEntry {
     pub streak_limit: Option<usize>,
     pub action: FingerprintAction,
@@ -103,14 +119,17 @@ impl Default for FingerprintEntry {
 }
 
 /// 指纹命中后的动作（默认停机 NoInfluence；可登记为升级）。
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FingerprintAction {
     StopNoInfluence,
     Escalate,
 }
 
 /// 指纹库（结构预留）：`指纹 → 登记项`。默认为空库，行为与"无指纹库"完全一致。
-#[derive(Debug, Clone, Default)]
+///
+/// 序列化成按工具名、错误码排序的列表，避免 `HashMap` 的顺序进入对外文档。
+/// 重复指纹在反序列化时拒绝，不静默覆盖。
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FingerprintStore {
     entries: HashMap<Fingerprint, FingerprintEntry>,
 }
@@ -137,8 +156,48 @@ impl FingerprintStore {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StoreRow {
+    fingerprint: Fingerprint,
+    entry: FingerprintEntry,
+}
+
+impl Serialize for FingerprintStore {
+    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+        let mut rows: Vec<StoreRow> = self
+            .entries
+            .iter()
+            .map(|(fingerprint, entry)| StoreRow {
+                fingerprint: fingerprint.clone(),
+                entry: entry.clone(),
+            })
+            .collect();
+        rows.sort_by(|left, right| {
+            (&left.fingerprint.tool, &left.fingerprint.error_code)
+                .cmp(&(&right.fingerprint.tool, &right.fingerprint.error_code))
+        });
+        rows.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for FingerprintStore {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        let rows = Vec::<StoreRow>::deserialize(deserializer)?;
+        let mut entries = HashMap::with_capacity(rows.len());
+        for row in rows {
+            if entries.insert(row.fingerprint.clone(), row.entry).is_some() {
+                return Err(serde::de::Error::custom(format!(
+                    "duplicate fingerprint {}/{}",
+                    row.fingerprint.tool, row.fingerprint.error_code
+                )));
+            }
+        }
+        Ok(FingerprintStore { entries })
+    }
+}
+
 /// 注入的止损参数。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StopPolicy {
     /// 规则①全局默认：连续 N 次相同指纹 → Stop(NoInfluence)。
     pub fingerprint_streak_limit: usize,
@@ -263,6 +322,58 @@ impl StopEngine {
     pub fn normal_error_count(&self) -> usize {
         self.state.normal_errors
     }
+
+    /// 导出可落盘的引擎状态。连击长度与普通错误计数原样带出，不在这里清零。
+    pub fn snapshot(&self) -> EngineSnapshot {
+        EngineSnapshot {
+            v: WIRE_VERSION,
+            streak: self
+                .state
+                .streak
+                .as_ref()
+                .map(|(fp, len)| (fp.clone(), u64::try_from(*len).unwrap_or(u64::MAX))),
+            normal_errors: u64::try_from(self.state.normal_errors).unwrap_or(u64::MAX),
+        }
+    }
+
+    /// 用一份快照恢复引擎。`v` 不是 1，或连击长度为 0，都拒绝。
+    pub fn from_snapshot(policy: StopPolicy, snap: EngineSnapshot) -> Result<Self> {
+        if snap.v != WIRE_VERSION {
+            return Err(Error::UnknownVersion {
+                found: snap.v,
+                expected: WIRE_VERSION,
+            });
+        }
+        let streak = match snap.streak {
+            None => None,
+            Some((fingerprint, len)) => {
+                if len == 0 {
+                    return Err(Error::Corrupt("连击长度为 0".into()));
+                }
+                let len = usize::try_from(len)
+                    .map_err(|_| Error::Corrupt("连击长度超出 usize".into()))?;
+                Some((fingerprint, len))
+            }
+        };
+        let normal_errors = usize::try_from(snap.normal_errors)
+            .map_err(|_| Error::Corrupt("普通错误计数超出 usize".into()))?;
+        Ok(StopEngine {
+            policy,
+            state: EngineState {
+                streak,
+                normal_errors,
+            },
+        })
+    }
+}
+
+/// 引擎流式状态的对外快照。`v` 必须为 1。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EngineSnapshot {
+    #[serde(deserialize_with = "wire::require_v1")]
+    pub v: u32,
+    pub streak: Option<(Fingerprint, u64)>,
+    pub normal_errors: u64,
 }
 
 #[cfg(test)]
@@ -559,6 +670,92 @@ mod tests {
             Decision::Stop {
                 reason: StopReason::CheckFirstFail
             }
+        );
+    }
+
+    #[test]
+    fn fingerprint_store_wire_is_sorted_and_rejects_duplicates() {
+        let mut first = FingerprintStore::new();
+        first.register(
+            Fingerprint::new("b", "2"),
+            FingerprintEntry {
+                streak_limit: Some(1),
+                action: FingerprintAction::Escalate,
+            },
+        );
+        first.register(Fingerprint::new("a", "1"), FingerprintEntry::default());
+        let mut second = FingerprintStore::new();
+        second.register(Fingerprint::new("a", "1"), FingerprintEntry::default());
+        second.register(
+            Fingerprint::new("b", "2"),
+            FingerprintEntry {
+                streak_limit: Some(1),
+                action: FingerprintAction::Escalate,
+            },
+        );
+        let text_a = encode_wire(&first).unwrap();
+        let text_b = encode_wire(&second).unwrap();
+        assert_eq!(text_a, text_b);
+        let back: FingerprintStore = decode_wire(&text_a).unwrap();
+        assert_eq!(back, first);
+
+        let duplicated = r#"[
+            {"fingerprint":{"tool":"a","error_code":"1"},"entry":{"streak_limit":null,"action":"StopNoInfluence"}},
+            {"fingerprint":{"tool":"a","error_code":"1"},"entry":{"streak_limit":null,"action":"Escalate"}}
+        ]"#;
+        let err = serde_json::from_str::<FingerprintStore>(duplicated).unwrap_err();
+        assert!(err.to_string().contains("duplicate"), "{err}");
+    }
+
+    #[test]
+    fn snapshot_roundtrip_continues_decisions_and_rejects_unknown_version() {
+        let policy = StopPolicy {
+            normal_error_threshold: 100,
+            ..StopPolicy::default()
+        };
+        let mut live = StopEngine::new(policy.clone());
+        assert!(live.feed(tool_err("search", "E_TIMEOUT")).is_continue());
+        assert!(live.feed(tool_err("search", "E_TIMEOUT")).is_continue());
+        let snap = live.snapshot();
+        let text = encode_doc(&snap).unwrap();
+        let restored_snap: EngineSnapshot = decode_doc(&text).unwrap();
+        assert_eq!(restored_snap, snap);
+        let mut restored = StopEngine::from_snapshot(policy.clone(), restored_snap).unwrap();
+        let next = tool_err("search", "E_TIMEOUT");
+        assert_eq!(restored.feed(next.clone()), live.feed(next));
+        assert_eq!(restored.normal_error_count(), 3);
+        assert_eq!(restored.current_streak().map(|(_, len)| len), Some(3));
+
+        let err = StopEngine::from_snapshot(
+            policy,
+            EngineSnapshot {
+                v: 2,
+                streak: None,
+                normal_errors: 0,
+            },
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                Error::UnknownVersion {
+                    found: 2,
+                    expected: 1
+                }
+            ),
+            "{err}"
+        );
+        let bad_json =
+            decode_doc::<EngineSnapshot>(r#"{"v":2,"streak":null,"normal_errors":0}"#).unwrap_err();
+        assert!(
+            matches!(
+                bad_json,
+                Error::UnknownVersion {
+                    found: 2,
+                    expected: 1
+                }
+            ),
+            "{bad_json}"
         );
     }
 }
