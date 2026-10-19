@@ -1,0 +1,43 @@
+[package]
+name = "af-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+# cargo-fuzz 0.13.2 的 init 模板指定 libfuzzer-sys 0.4。本机 stable，跑的时候用 --sanitizer none。
+libfuzzer-sys = "0.4"
+# 构造订单 JSON / 载荷。版本与主工作区锁一致。
+serde_json = "1.0.154"
+# 注入 SLA 判定时刻。版本与主工作区锁一致。不读系统钟。
+chrono = "0.4.45"
+
+[dependencies.af-workorder]
+path = "../crates/af-workorder"
+
+[dependencies.af-effect-gateway]
+path = "../crates/af-effect-gateway"
+
+# 父目录是虚拟工作区。`cargo fuzz init` 默认不写这张表，
+# 子清单会被判定为“以为自己在工作区里却不是成员”。
+# cargo 给出的修法是补一张空 [workspace]，让 fuzz 自成工作区，
+# 并且不进根 members（`cargo test --workspace` 不会编这些 target）。
+# `--fuzzing-workspace=true` 会写成 `members = ["."]`，这里按接入清单留空表。
+[workspace]
+
+[[bin]]
+name = "af_workorder_order_parse"
+path = "fuzz_targets/af_workorder_order_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "af_effect_gateway_idempotency"
+path = "fuzz_targets/af_effect_gateway_idempotency.rs"
+test = false
+doc = false
+bench = false
