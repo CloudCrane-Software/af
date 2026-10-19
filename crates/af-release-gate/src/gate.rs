@@ -184,6 +184,70 @@ pub struct CanaryStatus {
     pub max_probes: usize,
 }
 
+/// 渐放游标。晋升与封顶依赖 `completed` / `defects`，重启时和 `released` 一起原样带回。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanaryCursor {
+    pub config: String,
+    pub open: bool,
+    pub released: usize,
+    pub max_probes: usize,
+    pub completed: usize,
+    pub defects: u64,
+}
+
+/// 一件已准入、未完成的在制。顺序与准入队列一致。
+#[derive(Debug, Clone, PartialEq)]
+pub struct InProcessItem {
+    pub id: u64,
+    pub config: String,
+    pub weight: f64,
+    pub admitted_at: MinuteOfDay,
+}
+
+/// 夜间信用与上一次窗口观察。`prev_in_window == None` 表示还没有调用过准入。
+#[derive(Debug, Clone, PartialEq)]
+pub struct NightView {
+    pub credit: f64,
+    pub requests: u64,
+    pub admitted: u64,
+    pub prev_in_window: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RuntimeSnapshot {
+    pub wip: f64,
+    pub items: Vec<SnapshotItem>,
+    pub night_credit: f64,
+    pub night_requests: u64,
+    pub night_admitted: u64,
+    pub prev_in_window: Option<bool>,
+    pub refill_active: bool,
+    pub canary: Option<CanarySnapshot>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SnapshotItem {
+    pub id: u64,
+    pub config: String,
+    pub weight: f64,
+    pub admitted_at: MinuteOfDay,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CanarySnapshot {
+    pub config: String,
+    pub max_probes: usize,
+    pub released: usize,
+    pub completed: usize,
+    pub defects: u64,
+    pub open: bool,
+}
+
+pub(crate) enum RestoreError {
+    PredicateMismatch,
+    InconsistentWip,
+}
+
 pub struct ReleaseGate {
     cfg: GateConfig,
     queue: VecDeque<QueuedItem>,
@@ -262,6 +326,41 @@ impl ReleaseGate {
             released: c.released,
             max_probes: c.max_probes,
         })
+    }
+
+    /// 渐放游标。没有开启过渐放时为 `None`。
+    pub fn canary_cursor(&self) -> Option<CanaryCursor> {
+        self.canary.as_ref().map(|c| CanaryCursor {
+            config: c.config.clone(),
+            open: c.open,
+            released: c.released,
+            max_probes: c.max_probes,
+            completed: c.completed,
+            defects: c.defects,
+        })
+    }
+
+    /// 当前在制队列，队首在前。
+    pub fn in_process(&self) -> Vec<InProcessItem> {
+        self.queue
+            .iter()
+            .map(|queued| InProcessItem {
+                id: queued.ticket.item_id,
+                config: queued.ticket.config.clone(),
+                weight: queued.ticket.weight,
+                admitted_at: queued.ticket.admitted_at,
+            })
+            .collect()
+    }
+
+    /// 夜间信用与窗口观察。判定仍走 [`Self::try_admit`] 里的既有顺序。
+    pub fn night_view(&self) -> NightView {
+        NightView {
+            credit: self.night.credit,
+            requests: self.night.requests,
+            admitted: self.night.admitted,
+            prev_in_window: self.prev_in_window,
+        }
     }
 
     pub fn drain_events(&mut self) -> Vec<GateEvent> {
@@ -464,6 +563,84 @@ impl ReleaseGate {
     /// 夜间窗口计数快照(当前窗口内的请求/放行数,用于占比验证)。
     pub fn night_stats(&self) -> (u64, u64) {
         (self.night.requests, self.night.admitted)
+    }
+
+    pub(crate) fn runtime_snapshot(&self) -> RuntimeSnapshot {
+        RuntimeSnapshot {
+            wip: self.wip,
+            items: self
+                .queue
+                .iter()
+                .map(|queued| SnapshotItem {
+                    id: queued.ticket.item_id,
+                    config: queued.ticket.config.clone(),
+                    weight: queued.ticket.weight,
+                    admitted_at: queued.ticket.admitted_at,
+                })
+                .collect(),
+            night_credit: self.night.credit,
+            night_requests: self.night.requests,
+            night_admitted: self.night.admitted,
+            prev_in_window: self.prev_in_window,
+            refill_active: self.refill_active,
+            canary: self.canary.as_ref().map(|canary| CanarySnapshot {
+                config: canary.config.clone(),
+                max_probes: canary.max_probes,
+                released: canary.released,
+                completed: canary.completed,
+                defects: canary.defects,
+                open: canary.open,
+            }),
+        }
+    }
+
+    /// 用账本里的运行态覆盖空闸。不走准入策略，事件缓冲清空。
+    pub(crate) fn restore_runtime(
+        &mut self,
+        snap: RuntimeSnapshot,
+        predicate: Option<CanaryPredicate>,
+    ) -> Result<(), RestoreError> {
+        if snap.canary.is_some() != predicate.is_some() {
+            return Err(RestoreError::PredicateMismatch);
+        }
+        let sum = snap.items.iter().fold(0.0, |acc, item| acc + item.weight);
+        if sum.to_bits() != snap.wip.to_bits() {
+            return Err(RestoreError::InconsistentWip);
+        }
+        self.queue.clear();
+        for item in snap.items {
+            self.queue.push_back(QueuedItem {
+                ticket: Ticket {
+                    item_id: item.id,
+                    config: item.config,
+                    weight: item.weight,
+                    admitted_at: item.admitted_at,
+                },
+            });
+        }
+        self.wip = snap.wip;
+        self.night = NightRuntime {
+            credit: snap.night_credit,
+            requests: snap.night_requests,
+            admitted: snap.night_admitted,
+        };
+        self.prev_in_window = snap.prev_in_window;
+        self.refill_active = snap.refill_active;
+        self.events.clear();
+        self.canary = match (snap.canary, predicate) {
+            (None, None) => None,
+            (Some(canary), Some(predicate)) => Some(CanaryState {
+                config: canary.config,
+                max_probes: canary.max_probes,
+                predicate,
+                released: canary.released,
+                completed: canary.completed,
+                defects: canary.defects,
+                open: canary.open,
+            }),
+            _ => return Err(RestoreError::PredicateMismatch),
+        };
+        Ok(())
     }
 }
 
