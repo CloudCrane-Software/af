@@ -5,7 +5,7 @@
 //! 后续 `write_normal` 走丢弃并记缺口的路径。
 //! 事件夹具的 `ts_ms` 是注入值；基准计时使用 `Instant`。
 
-use af_trace::{GapInfo, Level, Trace, TraceConfig, TraceEvent};
+use af_trace::{AnchorSettings, GapInfo, Level, Trace, TraceConfig, TraceEvent};
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use serde_json::{json, Value};
 use std::hint::black_box;
@@ -62,6 +62,7 @@ fn steady_cfg(dir: &Path) -> TraceConfig {
         dir: dir.to_path_buf(),
         otel_endpoint: None,
         otel_batch_size: 512,
+        anchor: AnchorSettings::default(),
     }
 }
 
@@ -74,6 +75,7 @@ fn flood_cfg(dir: &Path) -> TraceConfig {
         dir: dir.to_path_buf(),
         otel_endpoint: None,
         otel_batch_size: 512,
+        anchor: AnchorSettings::default(),
     }
 }
 

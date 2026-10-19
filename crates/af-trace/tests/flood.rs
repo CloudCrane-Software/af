@@ -6,8 +6,8 @@
 //! 3. Σ(gap span.count) == gap_counter，“缺了多少”成为落盘里的可验证事实。
 
 use af_trace::{
-    critical_log_path, normal_log_path, read_trace_log, sum_gap_counts, Level, OpenOutcome, Trace,
-    TraceConfig,
+    critical_log_path, normal_log_path, read_trace_log, sum_gap_counts, AnchorSettings, Level,
+    OpenOutcome, Trace, TraceConfig,
 };
 use serde_json::json;
 use std::collections::HashSet;
@@ -69,6 +69,7 @@ fn flood_100k_normal_events() {
         dir: dir.path().to_path_buf(),
         otel_endpoint: None,
         otel_batch_size: 512,
+        anchor: AnchorSettings::default(),
     };
     let (trace, outcome) = Trace::open(cfg.clone()).unwrap();
     assert_eq!(outcome, OpenOutcome::Created);

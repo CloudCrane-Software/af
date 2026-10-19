@@ -1,3 +1,4 @@
+use crate::anchor::{self, AnchorHandle, AnchorSettings};
 use crate::clock::{Clock, SystemClock};
 use crate::error::TraceError;
 use crate::event::{sum_gap_counts, GapInfo, Level, TraceEvent};
@@ -36,6 +37,8 @@ pub struct TraceConfig {
     pub otel_endpoint: Option<String>,
     /// OTLP 批大小，由配方层写入。`0` 按 512。在线时也是该 lane 的有界队列容量。
     pub otel_batch_size: usize,
+    /// critical 事件的 rekor 锚定。端点为空则关闭，不改变落盘语义。
+    pub anchor: AnchorSettings,
 }
 
 impl Default for TraceConfig {
@@ -48,6 +51,7 @@ impl Default for TraceConfig {
             dir: PathBuf::new(),
             otel_endpoint: None,
             otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
         }
     }
 }
@@ -86,6 +90,13 @@ pub struct ShutdownReport {
     pub otel_mode: OtelMode,
     /// 离线：只计数的 normal 条数。在线：导出成功的条数。失败进 `gap_counter`。
     pub otel_counted: u64,
+    /// 已落盘但还没有锚定成功的 critical 事件数。
+    /// 与 [`ShutdownReport::gap_counter`] 分开：后者只计丢弃，`Σ(gap.count) == gap_counter` 不变。
+    pub anchor_gap: u64,
+    /// rekor 不可达，或锚定队列里还有事件。
+    pub anchor_alert: bool,
+    /// 告警原因。没有告警时为 `None`。
+    pub anchor_alert_reason: Option<String>,
 }
 
 /// [`Trace::hold_consumers`] 的守卫。drop 之后落盘线程继续排空队列。
@@ -135,6 +146,7 @@ struct Inner {
     /// `try_send` 成功的次数。单测用来确认批次已经进队列，再放开被挡住的 exporter。
     #[cfg(all(test, feature = "otel"))]
     otel_queued: AtomicU64,
+    anchor: Option<AnchorHandle>,
 }
 
 pub struct Trace {
@@ -142,6 +154,7 @@ pub struct Trace {
     critical_handle: Mutex<Option<JoinHandle<()>>>,
     normal_handle: Mutex<Option<JoinHandle<()>>>,
     otel_handle: Mutex<Option<JoinHandle<()>>>,
+    anchor_join: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Trace {
@@ -207,6 +220,12 @@ impl Trace {
             )));
         }
         let seq_start = next_seq_start(&critical_history, &normal_history);
+        let anchor_parts =
+            anchor::spawn(&cfg.dir, &cfg.anchor, &critical_history, Arc::clone(&clock))?;
+        let (anchor, anchor_join) = match anchor_parts {
+            Some(parts) => (Some(parts.handle), Some(parts.join)),
+            None => (None, None),
+        };
         let critical_file = open_log(&critical_path)?;
         let normal_file = open_log(&normal_path)?;
 
@@ -237,6 +256,7 @@ impl Trace {
             otel_tx: Mutex::new(prepared.tx),
             #[cfg(all(test, feature = "otel"))]
             otel_queued: AtomicU64::new(0),
+            anchor,
         });
         let otel_handle = prepared.spawn.take().map(|spawn| {
             let counted = Arc::clone(&inner.otel_counted);
@@ -270,6 +290,7 @@ impl Trace {
                 critical_handle: Mutex::new(Some(critical_handle)),
                 normal_handle: Mutex::new(Some(normal_handle)),
                 otel_handle: Mutex::new(otel_handle),
+                anchor_join: Mutex::new(anchor_join),
             }),
             outcome,
         ))
@@ -311,6 +332,69 @@ impl Trace {
     /// 离线原因。在线时为 `None`。
     pub fn otel_offline_reason(&self) -> Option<String> {
         self.inner.otel_offline_reason.lock().unwrap().clone()
+    }
+
+    /// 已落盘但还没有锚定成功的 critical 事件数。锚定关闭时为 0。
+    /// 不含还在等 N 或 T 的开放批次。
+    pub fn anchor_gap(&self) -> u64 {
+        self.inner
+            .anchor
+            .as_ref()
+            .map(|anchor| anchor.gap())
+            .unwrap_or(0)
+    }
+
+    /// rekor 不可达或锚定队列非空。锚定关闭时为 false。
+    pub fn anchor_alert(&self) -> bool {
+        self.inner
+            .anchor
+            .as_ref()
+            .is_some_and(|anchor| anchor.alert())
+    }
+
+    /// 告警原因。没有告警时为 `None`。
+    pub fn anchor_alert_reason(&self) -> Option<String> {
+        self.inner
+            .anchor
+            .as_ref()
+            .and_then(|anchor| anchor.reason())
+    }
+
+    /// 锚线程已经处理完的 critical 条数（含提交失败后入队的）。
+    pub fn anchor_seen(&self) -> u64 {
+        self.inner
+            .anchor
+            .as_ref()
+            .map(|anchor| anchor.seen())
+            .unwrap_or(0)
+    }
+
+    /// 按注入的钟检查未封口批次，到龄则提交。
+    ///
+    /// 会等到这次检查做完（含一次 rekor 往返）。不要在 critical 写路径上调用。
+    /// 锚线程自身不睡眠；没有新事件时，时间窗要靠这次调用或 shutdown 才会被看见。
+    pub fn poll_anchor(&self) {
+        let Some(anchor) = &self.inner.anchor else {
+            return;
+        };
+        let Some(token) = anchor.poll() else {
+            return;
+        };
+        loop {
+            if anchor.poll_done() >= token {
+                return;
+            }
+            let finished = self
+                .anchor_join
+                .lock()
+                .unwrap()
+                .as_ref()
+                .is_none_or(|handle| handle.is_finished());
+            if finished {
+                return;
+            }
+            std::thread::yield_now();
+        }
     }
 
     /// **critical：移交同步，落盘线程同步写盘后再确认。fail-closed。**
@@ -361,7 +445,8 @@ impl Trace {
     /// 2) 关 OTel lane，等已接受的 span 导出完（失败只记缺口）；
     /// 3) 强制补发 pending 的合并 gap span；
     /// 4) 关 critical 通道，等 critical 落盘线程清空退出；
-    /// 5) 把缺口计数写成与 critical 文件一致的值。
+    /// 5) 停锚线程，未封口的批次提交一次；rekor 不可达则入队，不把本次关闭变成落盘失败；
+    /// 6) 把缺口计数写成与 critical 文件一致的值。
     ///
     /// 干净关闭时 `Ok` 的报告满足 `gap_counter == gap_reported == Σ(文件内 gap.count)`。
     /// critical 写盘失败时返回 [`TraceError::PersistFailed`]，事件在错误里。
@@ -379,10 +464,15 @@ impl Trace {
         if let Some(tx) = self.inner.critical_tx.lock().unwrap().take() {
             drop(tx);
         }
-        let critical_join = join_consumer(&self.critical_handle, "critical");
+        let critical_result = join_consumer(&self.critical_handle, "critical");
+        if let Some(anchor) = &self.inner.anchor {
+            anchor.disconnect();
+        }
+        let anchor_result = join_consumer(&self.anchor_join, "anchor");
         normal_join?;
         otel_join?;
-        critical_join?;
+        critical_result?;
+        anchor_result?;
 
         let critical_persisted = self.inner.sinks.critical.lock().unwrap().len();
         let normal_persisted = self.inner.sinks.normal.lock().unwrap().len();
@@ -394,6 +484,9 @@ impl Trace {
             sinks: self.inner.sinks.clone(),
             otel_mode: self.inner.otel_mode,
             otel_counted: self.inner.otel_counted.load(Ordering::Relaxed),
+            anchor_gap: self.anchor_gap(),
+            anchor_alert: self.anchor_alert(),
+            anchor_alert_reason: self.anchor_alert_reason(),
         };
         self.checkpoint(&report)
     }
@@ -501,6 +594,13 @@ impl Inner {
 
     fn take_unpersisted(&self) -> Vec<TraceEvent> {
         std::mem::take(&mut *self.unpersisted.lock().unwrap())
+    }
+
+    /// 已落盘的 critical 事件交给锚线程。通道是无界的，不在落盘线程里做 HTTP。
+    fn submit_critical_for_anchor(&self, event: TraceEvent) {
+        if let Some(anchor) = &self.anchor {
+            anchor.submit(event);
+        }
     }
 
     /// 落盘成功的 normal 事件交给非关键 lane。离线只计数；在线 `try_send`，满了记缺口。
@@ -734,12 +834,12 @@ fn spawn_consumer(
                         }
                         match append_line(&mut file, &line, matches!(lane, Lane::Critical)) {
                             Ok(()) => {
-                                guard.push(line);
                                 written = written.saturating_add(1);
-                                drop(guard);
-                                if matches!(lane, Lane::Normal) {
-                                    inner.submit_normal_persisted(event);
+                                match lane {
+                                    Lane::Critical => inner.submit_critical_for_anchor(event),
+                                    Lane::Normal => inner.submit_normal_persisted(event),
                                 }
+                                guard.push(line);
                             }
                             Err(detail) => {
                                 drop(guard);
@@ -809,6 +909,7 @@ mod tests {
             dir: dir.to_path_buf(),
             otel_endpoint: None,
             otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
         }
     }
 
@@ -848,6 +949,7 @@ mod tests {
             dir: dir.path().to_path_buf(),
             otel_endpoint: None,
             otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
         })
         .unwrap();
         let mut errs = Vec::new();
@@ -910,6 +1012,7 @@ mod tests {
             dir: dir.path().to_path_buf(),
             otel_endpoint: None,
             otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
         })
         .unwrap();
         for i in 0..20 {
@@ -950,6 +1053,7 @@ mod tests {
             dir: dir.path().to_path_buf(),
             otel_endpoint: None,
             otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
         })
         .unwrap();
         for i in 0..30 {
@@ -1027,6 +1131,7 @@ mod tests {
             dir: dir.path().to_path_buf(),
             otel_endpoint: None,
             otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
         };
         let clock = ManualClock::new(1_700_000_000_042);
         let (trace, outcome) = Trace::open_with_clock(cfg.clone(), clock.clone()).unwrap();
@@ -1132,6 +1237,7 @@ mod tests {
             dir: dir.path().to_path_buf(),
             otel_endpoint: None,
             otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
         })
         .unwrap();
         trace.inject_normal_fail_after(0);

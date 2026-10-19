@@ -1,7 +1,7 @@
 //! 可注入时刻。
 //!
-//! `ts_ms` 只作落盘审计，存的是墙钟毫秒。本 crate 没有间隔或过期判定。
-//! 生产用 [`SystemClock`]，测试用 [`ManualClock`] 固定时刻，不睡眠。
+//! `ts_ms` 是墙钟毫秒。锚定批次的时间窗也读这只钟：到龄与否由调用方推进的时刻决定，
+//! 锚线程不睡眠。生产用 [`SystemClock`]，测试用 [`ManualClock`]。
 
 use crate::event::now_ms;
 use std::sync::atomic::{AtomicU64, Ordering};

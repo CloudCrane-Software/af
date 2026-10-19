@@ -19,6 +19,14 @@
 //!   OTel lane 离线时（默认），`gap_counter` 仍等于磁盘丢弃数。
 //!   该计数写入 `trace.db`，与 critical 文件里的缺口合计一致；重开时对不上则启动失败。
 //!
+//! - **rekor 锚定（critical，不阻塞落盘）**：[`AnchorSettings::endpoint`] 非空时，已落盘的
+//!   critical 事件按 N 条或 T 毫秒（注入钟）封成批次，计算 RFC 6962 Merkle 根，
+//!   `POST {endpoint}/api/v2/log/entries`。回执（log index、检查点签名、纳入路径）
+//!   追加到 `critical.anchors.jsonl`。rekor 不可达时批次写入 `anchor-queue.jsonl` 待重试，
+//!   并记下 `anchor_gap` 与告警字段 `anchor_alert`。这不增加 `gap_counter`，
+//!   也不让 [`Trace::write_critical`] 等待网络。时间窗在落盘、[`Trace::poll_anchor`]
+//!   和 shutdown 时判定。[`verify_anchor`] 按回执复核 Merkle 路径。真实 rekor 不在 `cargo test` 里。
+//!
 //! [`Trace::open`] 首启只接受空库，返回 [`OpenOutcome::Created`]（建表并写入声明）。
 //! 重入返回 [`OpenOutcome::AlreadyDeclared`]，并核对 schema 版本、JSONL、critical 同步耐久性。
 //! 外来 SQLite 对象或声明缺行都拒绝，不建表、不补行。声明与已存状态不符则失败，不静默迁就。
@@ -27,6 +35,7 @@
 //!
 //! 契约：[`Trace::shutdown`] 必须在所有生产者线程结束之后调用。
 
+mod anchor;
 mod clock;
 mod error;
 mod event;
@@ -38,6 +47,10 @@ mod sha256;
 mod store;
 mod trace;
 
+pub use anchor::{
+    anchor_queue_path, anchor_sidecar_path, anchor_status_path, read_anchor_receipts,
+    AnchorSettings,
+};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::TraceError;
 pub use event::{sum_gap_counts, GapInfo, Level, TraceEvent};
