@@ -17,6 +17,9 @@ sha2 = "0.10"
 thiserror = { workspace = true }
 
 [dev-dependencies]
+# JSON 快照。crates.io 最新稳定 = 1.49.0。json 供 assert_json_snapshot!；
+# redactions 把签名字节与哈希涂成固定占位，避免密钥材料进快照、二次运行出 diff。
+insta = { version = "1.49.0", features = ["json"] }
 # 集成测试构造 Europe/Berlin 日历以覆盖 DST。版本与 af-calendar 的 chrono-tz 0.10 一致(锁定 0.10.4)。
 chrono-tz = "0.10"
 

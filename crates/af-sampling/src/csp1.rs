@@ -390,16 +390,9 @@ mod tests {
             s.to_sampling_switches
         );
         assert!(s.to_screening_switches >= 1);
-<<<<<<< HEAD
-        // f 不低于 f_min：名义不变式 + 经验抽检率也在 f_min 之上（F=0.2 对 0.05 余量极大）。
-        const {
-            assert!(F >= F_MIN);
-        }
-=======
         // f 不低于 f_min：有效抽检率（构造拒绝 + set_rate 钳制）以及经验抽检率。
         // 不用 `F >= F_MIN`：两个都是常量，clippy::assertions_on_constants 会拒绝。
         assert!(m.effective_rate() >= F_MIN);
->>>>>>> af-sampling: 加 criterion 0.8.2 基准（抽样判定、三谱系升迁）
         let emp = s.empirical_sampling_rate();
         assert!(emp >= F_MIN, "经验抽检率 {emp} 低于 f_min={F_MIN}");
         // “质量事故”段（500~529 连续缺陷）必须把机器打回全检：事故段内至少一次回切。
