@@ -32,6 +32,7 @@ dependencies = [
 name = "af-effect-gateway"
 version = "0.1.0"
 dependencies = [
+ "af-workorder",
  "rusqlite",
  "serde",
  "serde_json",

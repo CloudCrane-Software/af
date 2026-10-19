@@ -5,11 +5,12 @@
 //! 任意点崩溃；恢复后重放不能导致重复发送。
 //!
 //! 核心流程（四步，全部先过闸门）：
-//! 1. [`Gateway::declare_intent`] —— 用幂等键 (workorder_id, step_path, seq) 登记
-//!    意图，载荷指纹 sha256 一并入库；进入可撤回窗口。
+//! 1. [`Gateway::declare_intent`] —— 关联工单须为 Released 或 InProgress，
+//!    再用幂等键 (workorder_id, step_path, seq) 登记意图，载荷指纹 sha256
+//!    一并入库，并记下声明时刻的订单状态；进入可撤回窗口。
 //! 2. 窗口期内允许 [`Gateway::withdraw_intent`] 撤回（不发送）。
-//! 3. [`Gateway::execute`] —— 窗口关闭后真正执行外部调用；执行前若发现
-//!    回执已存在（崩溃前已执行过），直接返回已存结果，**不重发**。
+//! 3. [`Gateway::execute`] —— 工单当前为 InProgress 且窗口关闭后才真正执行；
+//!    执行前若发现回执已存在（崩溃前已执行过），直接返回已存结果，**不重发**。
 //! 4. [`Gateway::record_receipt`] —— 记录回执；`execute` 内部已自动记录，
 //!    外部调用在别处发生时也可显式调用。
 //!
@@ -22,6 +23,13 @@
 //! 同键不同载荷：指纹不一致 → [`GatewayError::PayloadConflict`]，要求人工
 //! 升级处理，网关绝不替调用方二选一。
 //!
+//! 订单态：[`Gateway::declare_intent`] 必须递交关联工单。幂等键里的
+//! `workorder_id` 要等于该工单 id，且声明当时的状态只能是 Released 或
+//! InProgress，否则 [`GatewayError::OrderStateRejected`]（带允许状态）或
+//! [`GatewayError::WorkOrderMismatch`]。[`Gateway::execute`] 只有工单当前
+//! 状态是 InProgress 才真正发送。意图行记下 `order_id` 与声明时刻的状态快照，
+//! 之后订单再迁移也不改写这份快照。
+//!
 //! 计时：撤回窗口的开关只看单调钟（[`Clock::monotonic_ms`] 折成库内只增不减的
 //! 逻辑毫秒）。墙钟（[`Clock::wall_ms`]）只写入 `declared_at_ms` /
 //! `executed_at_ms` 这类必须落库的绝对时刻，不参与执行或过期判定。
@@ -32,6 +40,7 @@ mod clock;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 
+use af_workorder::{OrderState, WorkOrder};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -88,6 +97,25 @@ pub enum GatewayError {
     /// 外部调用失败；意图保持 declared，窗口关闭后可重试。
     #[error("外部调用失败（意图保持 declared，可重试）: {0}")]
     ExternalCall(String),
+    /// 幂等键上的 workorder 与本次递交的订单不是同一张。
+    #[error(
+        "订单关联不一致：intent_workorder_id={intent_workorder_id} presented_order_id={presented_order_id}"
+    )]
+    WorkOrderMismatch {
+        intent_workorder_id: String,
+        presented_order_id: String,
+    },
+    /// 当前订单状态不允许这一步。`allowed` 是类型化允许集合。
+    #[error("订单态拒绝 {op}：order_id={order_id} state={state:?}，允许 {allowed:?}")]
+    OrderStateRejected {
+        op: IntentOrderOp,
+        order_id: String,
+        state: OrderState,
+        allowed: &'static [OrderState],
+    },
+    /// 库里的声明时状态快照不是已知订单状态。
+    #[error("intent {key} 的订单状态快照无法识别：{raw}")]
+    CorruptOrderSnapshot { key: String, raw: String },
     #[error("db error: {0}")]
     Db(#[from] rusqlite::Error),
     #[error("json error: {0}")]
@@ -98,6 +126,27 @@ pub enum GatewayError {
 pub fn external_err<T>(msg: impl Into<String>) -> Result<T> {
     Err(GatewayError::ExternalCall(msg.into()))
 }
+
+/// declare / execute 被订单态拒绝时，指出是哪一步。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IntentOrderOp {
+    Declare,
+    Execute,
+}
+
+impl fmt::Display for IntentOrderOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            IntentOrderOp::Declare => "declare",
+            IntentOrderOp::Execute => "execute",
+        })
+    }
+}
+
+/// declare 允许的订单状态。
+const DECLARE_OK: &[OrderState] = &[OrderState::Released, OrderState::InProgress];
+/// execute 真正发送时允许的订单状态。
+const EXECUTE_OK: &[OrderState] = &[OrderState::InProgress];
 
 // ---------------------------------------------------------------------------
 // 键 / 会话 / 状态
@@ -212,6 +261,10 @@ pub struct IntentSnapshot {
     pub declared_epoch: i64,
     pub receipt_json: Option<String>,
     pub executed_epoch: Option<i64>,
+    /// 声明时关联的订单 id，等于幂等键里的 workorder_id。
+    pub order_id: String,
+    /// 声明时刻的订单状态快照。之后订单再迁移也不改写。
+    pub declared_order_state: OrderState,
 }
 
 // ---------------------------------------------------------------------------
@@ -288,6 +341,9 @@ impl Gateway {
                  declared_at_ms       INTEGER NOT NULL,
                  -- withdraw_deadline_ms：单调逻辑毫秒截止点，只与逻辑 now 比较。
                  withdraw_deadline_ms INTEGER NOT NULL,
+                 -- order_id / declared_order_state：声明时刻的订单关联与状态快照，只审计。
+                 order_id             TEXT NOT NULL,
+                 declared_order_state TEXT NOT NULL,
                  receipt_json         TEXT,
                  executed_at_ms       INTEGER,
                  executed_epoch       INTEGER,
@@ -384,25 +440,34 @@ impl Gateway {
 
     /// 登记意图。幂等：同键同载荷重复声明返回 `AlreadyDeclared`；
     /// 同键不同载荷返回 `PayloadConflict`（要求人工升级）。
+    ///
+    /// `order` 是声明当时的工单。`key.workorder_id` 必须等于 `order.id()`，
+    /// 状态必须是 Released 或 InProgress。首次写入把订单 id 和这个状态记进意图，
+    /// 重复声明不改写快照。
     pub fn declare_intent(
         &self,
         session: &Session,
         key: &IntentKey,
         payload: &Value,
+        order: &WorkOrder,
     ) -> Result<DeclareOutcome> {
         self.fence(session)?;
+        ensure_same_order(&key.workorder_id, order)?;
+        ensure_order_state(order, IntentOrderOp::Declare, DECLARE_OK)?;
         let now = self.stamp_mono()?;
         let deadline = now.saturating_add(clock::duration_to_ms(self.withdraw_window));
         // 声明时刻的墙钟只审计。截止点是单调逻辑毫秒，不由墙钟相加得到。
         let declared_at_ms = self.clock.wall_ms();
         let fp = fingerprint(payload);
         let payload_json = serde_json::to_string(payload)?;
+        let declared_order_state = order_state_token(order.state());
 
         let inserted = self.conn.execute(
             "INSERT INTO effect_intent
                  (workorder_id, step_path, seq, payload_json, payload_sha256,
-                  state, declared_epoch, declared_at_ms, withdraw_deadline_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, 'declared', ?6, ?7, ?8)
+                  state, declared_epoch, declared_at_ms, withdraw_deadline_ms,
+                  order_id, declared_order_state)
+             VALUES (?1, ?2, ?3, ?4, ?5, 'declared', ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(workorder_id, step_path, seq) DO NOTHING",
             params![
                 key.workorder_id,
@@ -412,7 +477,9 @@ impl Gateway {
                 fp,
                 session.epoch,
                 declared_at_ms,
-                deadline
+                deadline,
+                order.id(),
+                declared_order_state
             ],
         )?;
         if inserted == 1 {
@@ -486,15 +553,23 @@ impl Gateway {
     // -- ③ execute -----------------------------------------------------------
 
     /// 执行外部操作。判定顺序：
-    /// withdrawn → 拒发；executed → 返回已存回执（**不调用** `effect`）；
-    /// declared 但窗口未关 → 拒发等窗口；否则调用 `effect` 并立刻落回执。
+    /// 订单 id 不一致 → 拒绝；withdrawn → 拒发；executed → 返回已存回执
+    /// （**不调用** `effect`，不再看当前订单态）；declared 但当前不是
+    /// InProgress → [`GatewayError::OrderStateRejected`]；declared 但窗口未关
+    /// → 拒发等窗口；否则调用 `effect` 并立刻落回执。
     ///
     /// `effect` 收到声明时的载荷（JSON）；返回 Err 时意图保持 declared，
     /// 窗口关闭后可重试。
+    ///
+    /// `order` 是执行当时的工单，不是声明时的快照。尚未发送的意图只有
+    /// 当前状态为 InProgress 才调用 `effect`；Released 可以声明但不能执行。
+    /// 已经执行过的意图仍重放已存回执：发送已经发生，订单之后离开
+    /// InProgress 也不再发一次。已经撤回的仍返回 [`GatewayError::Withdrawn`]。
     pub fn execute<T, F>(
         &self,
         session: &Session,
         key: &IntentKey,
+        order: &WorkOrder,
         effect: F,
     ) -> Result<ExecuteOutcome<T>>
     where
@@ -502,19 +577,22 @@ impl Gateway {
         T: Serialize + DeserializeOwned,
     {
         self.fence(session)?;
+        ensure_same_order(&key.workorder_id, order)?;
         let now = self.stamp_mono()?;
-        let (state, payload_json, deadline): (String, String, i64) = self
+        let (state, payload_json, deadline, stored_order_id): (String, String, i64, String) = self
             .conn
             .query_row(
-                "SELECT state, payload_json, withdraw_deadline_ms FROM effect_intent
+                "SELECT state, payload_json, withdraw_deadline_ms, order_id FROM effect_intent
                  WHERE workorder_id=?1 AND step_path=?2 AND seq=?3",
                 params![key.workorder_id, key.step_path, key.seq],
-                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
             )
             .optional()?
             .ok_or_else(|| GatewayError::NotDeclared {
                 key: key.to_string(),
             })?;
+        // 行上的 order_id 是声明时写入的。与本次递交的订单不一致就不发送、不重放。
+        ensure_same_order(&stored_order_id, order)?;
 
         match IntentState::from_db(&state) {
             IntentState::Withdrawn => Err(GatewayError::Withdrawn {
@@ -535,6 +613,8 @@ impl Gateway {
                 })
             }
             IntentState::Declared => {
+                // 订单态先于撤回窗口：Released 不能靠“等到窗口关闭”变成可发送。
+                ensure_order_state(order, IntentOrderOp::Execute, EXECUTE_OK)?;
                 if now < deadline {
                     return Err(GatewayError::WindowStillOpen {
                         deadline_ms: deadline,
@@ -554,7 +634,8 @@ impl Gateway {
 
     /// 显式记录回执（外部调用发生在闸门之外的分步流程用）。
     /// 只允许 declared → executed；已 executed 则幂等保留原回执。
-    /// 注意：回执记录不受撤回窗口约束——外呼已经发生，回执必须落库。
+    /// 注意：回执记录不受撤回窗口约束，也不看当前订单态——外呼已经发生，
+    /// 回执必须落库。订单态门控在 declare，以及尚未发送的 execute 上。
     pub fn record_receipt<T: Serialize>(
         &self,
         session: &Session,
@@ -616,33 +697,112 @@ impl Gateway {
     // -- 观测 ----------------------------------------------------------------
 
     pub fn snapshot_intent(&self, key: &IntentKey) -> Result<Option<IntentSnapshot>> {
-        let snap = self
+        let row = self
             .conn
             .query_row(
                 "SELECT state, payload_sha256, withdraw_deadline_ms, declared_epoch,
-                        receipt_json, executed_epoch
+                        receipt_json, executed_epoch, order_id, declared_order_state
                  FROM effect_intent
                  WHERE workorder_id=?1 AND step_path=?2 AND seq=?3",
                 params![key.workorder_id, key.step_path, key.seq],
                 |r| {
-                    Ok(IntentSnapshot {
-                        state: IntentState::from_db(&r.get::<_, String>(0)?),
-                        payload_sha256: r.get(1)?,
-                        withdraw_deadline_ms: r.get(2)?,
-                        declared_epoch: r.get(3)?,
-                        receipt_json: r.get(4)?,
-                        executed_epoch: r.get(5)?,
-                    })
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, String>(1)?,
+                        r.get::<_, i64>(2)?,
+                        r.get::<_, i64>(3)?,
+                        r.get::<_, Option<String>>(4)?,
+                        r.get::<_, Option<i64>>(5)?,
+                        r.get::<_, String>(6)?,
+                        r.get::<_, String>(7)?,
+                    ))
                 },
             )
             .optional()?;
-        Ok(snap)
+        let Some((
+            state,
+            payload_sha256,
+            withdraw_deadline_ms,
+            declared_epoch,
+            receipt_json,
+            executed_epoch,
+            order_id,
+            declared_raw,
+        )) = row
+        else {
+            return Ok(None);
+        };
+        let declared_order_state =
+            parse_order_state(&declared_raw).ok_or_else(|| GatewayError::CorruptOrderSnapshot {
+                key: key.to_string(),
+                raw: declared_raw,
+            })?;
+        Ok(Some(IntentSnapshot {
+            state: IntentState::from_db(&state),
+            payload_sha256,
+            withdraw_deadline_ms,
+            declared_epoch,
+            receipt_json,
+            executed_epoch,
+            order_id,
+            declared_order_state,
+        }))
     }
 }
 
 // ---------------------------------------------------------------------------
 // 工具
 // ---------------------------------------------------------------------------
+
+fn ensure_same_order(intent_workorder_id: &str, order: &WorkOrder) -> Result<()> {
+    if intent_workorder_id == order.id() {
+        return Ok(());
+    }
+    Err(GatewayError::WorkOrderMismatch {
+        intent_workorder_id: intent_workorder_id.to_string(),
+        presented_order_id: order.id().to_string(),
+    })
+}
+
+fn ensure_order_state(
+    order: &WorkOrder,
+    op: IntentOrderOp,
+    allowed: &'static [OrderState],
+) -> Result<()> {
+    let state = order.state();
+    if allowed.contains(&state) {
+        return Ok(());
+    }
+    Err(GatewayError::OrderStateRejected {
+        op,
+        order_id: order.id().to_string(),
+        state,
+        allowed,
+    })
+}
+
+fn order_state_token(state: OrderState) -> &'static str {
+    match state {
+        OrderState::Created => "Created",
+        OrderState::Released => "Released",
+        OrderState::InProgress => "InProgress",
+        OrderState::Completed => "Completed",
+        OrderState::Closed => "Closed",
+        OrderState::Cancelled => "Cancelled",
+    }
+}
+
+fn parse_order_state(raw: &str) -> Option<OrderState> {
+    Some(match raw {
+        "Created" => OrderState::Created,
+        "Released" => OrderState::Released,
+        "InProgress" => OrderState::InProgress,
+        "Completed" => OrderState::Completed,
+        "Closed" => OrderState::Closed,
+        "Cancelled" => OrderState::Cancelled,
+        _ => return None,
+    })
+}
 
 /// 载荷指纹：sha256(规范 JSON 字节)。serde_json 的 Map 默认按 key 排序
 /// （BTreeMap），序列化是确定性的，同载荷必同指纹。
