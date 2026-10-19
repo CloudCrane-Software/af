@@ -109,6 +109,7 @@ name = "af-trace"
 version = "0.1.0"
 dependencies = [
  "criterion",
+ "rusqlite",
  "serde",
  "serde_json",
  "thiserror 2.0.21",

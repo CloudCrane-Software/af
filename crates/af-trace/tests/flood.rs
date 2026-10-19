@@ -5,13 +5,46 @@
 //! 2. gap_counter == 实际丢弃数（发送数 - 落盘数）；
 //! 3. Σ(gap span.count) == gap_counter，“缺了多少”成为落盘里的可验证事实。
 
-use af_trace::{Level, Trace, TraceConfig};
+use af_trace::{
+    critical_log_path, normal_log_path, read_trace_log, sum_gap_counts, Level, OpenOutcome, Trace,
+    TraceConfig,
+};
 use serde_json::json;
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+
+struct TempDir(PathBuf);
+
+impl TempDir {
+    fn new() -> Self {
+        let path = std::env::temp_dir().join(format!("af-trace-flood-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&path);
+        std::fs::create_dir_all(&path).unwrap();
+        Self(path)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn nonempty_lines(path: &Path) -> usize {
+    std::fs::read_to_string(path)
+        .unwrap()
+        .lines()
+        .filter(|line| !line.is_empty())
+        .count()
+}
 
 const NORMAL_TOTAL: usize = 100_000;
 const PRODUCERS: usize = 4;
@@ -27,12 +60,16 @@ fn parse_sink(sink: &Mutex<Vec<String>>) -> Vec<af_trace::TraceEvent> {
 
 #[test]
 fn flood_100k_normal_events() {
-    let trace = Trace::spawn(TraceConfig {
+    let dir = TempDir::new();
+    let cfg = TraceConfig {
         critical_capacity: 8192,
         normal_capacity: 512,         // 小队列 → 洪峰必然溢出
         critical_consume_delay_us: 0, // critical 落盘不拖后腿
         normal_consume_delay_us: 200, // normal 慢消费者：200µs/条
-    });
+        dir: dir.path().to_path_buf(),
+    };
+    let (trace, outcome) = Trace::open(cfg.clone()).unwrap();
+    assert_eq!(outcome, OpenOutcome::Created);
 
     let ok_critical: Arc<Mutex<Vec<u64>>> = Arc::new(Mutex::new(Vec::new()));
     let rejected_critical: Arc<Mutex<Vec<u64>>> = Arc::new(Mutex::new(Vec::new()));
@@ -56,7 +93,10 @@ fn flood_100k_normal_events() {
                             }
                             Err(e) => {
                                 // fail-closed：调用方必须处理——这里选择记录并退避重试
-                                rejected_critical.lock().unwrap().push(e.event().seq);
+                                rejected_critical
+                                    .lock()
+                                    .unwrap()
+                                    .push(e.event().expect("fail-closed 退还事件").seq);
                                 retries.fetch_add(1, Ordering::Relaxed);
                                 thread::sleep(Duration::from_millis(1));
                             }
@@ -91,7 +131,7 @@ fn flood_100k_normal_events() {
     crit_writer.join().unwrap();
 
     let gap_at_quiesce = trace.gap_counter();
-    let report = trace.shutdown();
+    let report = trace.shutdown().unwrap();
 
     // ============ 验证 1：critical 全部落盘、零丢失 ============
     let crit = parse_sink(&report.sinks.critical);
@@ -155,6 +195,38 @@ fn flood_100k_normal_events() {
     assert_eq!(normal.len() as u64, delivered);
     assert!(normal.iter().all(|e| e.level == Level::Normal));
 
+    let crit_path = critical_log_path(dir.path());
+    let norm_path = normal_log_path(dir.path());
+    let crit_file = read_trace_log(&crit_path).unwrap();
+    let norm_file = read_trace_log(&norm_path).unwrap();
+    assert_eq!(crit_file.len(), crit.len(), "critical 文件与镜像一致");
+    assert_eq!(norm_file.len(), normal.len(), "normal 文件与镜像一致");
+    assert_eq!(sum_gap_counts(&crit_file), report.gap_counter);
+    let gap_lines = crit_file.iter().filter(|event| event.kind == "gap").count();
+    let non_gap_critical = crit_file.iter().filter(|event| event.kind != "gap").count();
+    assert_eq!(
+        non_gap_critical,
+        ok_seqs.len(),
+        "非缺口 critical 行 = 检查点"
+    );
+    // 事件数 = 成功落盘的非 gap 事件；缺口数 = gap span 行数（合并后一行可代表多次丢弃）。
+    let event_count = non_gap_critical + norm_file.len();
+    let file_lines = nonempty_lines(&crit_path) + nonempty_lines(&norm_path);
+    assert_eq!(
+        file_lines,
+        event_count + gap_lines,
+        "落盘文件行数 = 事件数 + 缺口数"
+    );
+
+    drop(trace);
+    let (again, outcome) = Trace::open(cfg).unwrap();
+    assert_eq!(outcome, OpenOutcome::AlreadyDeclared);
+    assert_eq!(again.gap_counter(), report.gap_counter);
+    assert_eq!(read_trace_log(&crit_path).unwrap(), crit_file);
+    let restored = again.shutdown().unwrap();
+    assert_eq!(restored.gap_counter, report.gap_counter);
+    assert_eq!(restored.gap_reported, report.gap_counter);
+
     let rejected = rejected_critical.lock().unwrap().clone();
     println!("==== 洪峰结果 ====");
     println!(
@@ -169,4 +241,5 @@ fn flood_100k_normal_events() {
         retries.load(Ordering::Relaxed),
         rejected.len()
     );
+    println!("落盘文件行数 {file_lines} = 事件数 {event_count} + 缺口数 {gap_lines}");
 }

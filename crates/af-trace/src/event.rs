@@ -39,6 +39,15 @@ pub struct TraceEvent {
     pub gap: Option<GapInfo>,
 }
 
+/// 把 gap span 的 `count` 加总。这是丢弃条数，不是 span 行数。
+pub fn sum_gap_counts(events: &[TraceEvent]) -> u64 {
+    events
+        .iter()
+        .filter_map(|event| event.gap.as_ref())
+        .map(|gap| gap.count)
+        .sum()
+}
+
 pub fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

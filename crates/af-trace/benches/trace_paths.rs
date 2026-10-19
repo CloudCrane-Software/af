@@ -9,7 +9,31 @@ use af_trace::{GapInfo, Level, Trace, TraceConfig, TraceEvent};
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use serde_json::{json, Value};
 use std::hint::black_box;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
+
+struct TempDir(PathBuf);
+
+impl TempDir {
+    fn new() -> Self {
+        static N: AtomicU64 = AtomicU64::new(0);
+        let n = N.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!("af-trace-bench-{}-{n}", std::process::id()));
+        std::fs::create_dir_all(&path).expect("bench temp dir");
+        Self(path)
+    }
+
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
 
 /// 小于 normal 容量，队列装得下整批，测的是 try_send 成功的入队路径。
 const ENQUEUE_BATCH: usize = 1024;
@@ -29,21 +53,23 @@ fn elements(n: usize) -> u64 {
     u64::try_from(n).expect("event count fits u64")
 }
 
-fn steady_cfg() -> TraceConfig {
+fn steady_cfg(dir: &Path) -> TraceConfig {
     TraceConfig {
         critical_capacity: 1024,
         normal_capacity: ENQUEUE_CAPACITY,
         critical_consume_delay_us: 0,
         normal_consume_delay_us: 0,
+        dir: dir.to_path_buf(),
     }
 }
 
-fn flood_cfg() -> TraceConfig {
+fn flood_cfg(dir: &Path) -> TraceConfig {
     TraceConfig {
         critical_capacity: FLOOD_CRITICAL_CAPACITY,
         normal_capacity: FLOOD_NORMAL_CAPACITY,
         critical_consume_delay_us: 0,
         normal_consume_delay_us: 0,
+        dir: dir.to_path_buf(),
     }
 }
 
@@ -63,7 +89,8 @@ fn steady_enqueue(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut total = Duration::ZERO;
             for _ in 0..iters {
-                let trace = Trace::spawn(steady_cfg());
+                let dir = TempDir::new();
+                let trace = Trace::spawn(steady_cfg(dir.path())).expect("spawn");
                 let payload = json!({ "i": 0 });
                 let start = Instant::now();
                 for _ in 0..ENQUEUE_BATCH {
@@ -72,8 +99,8 @@ fn steady_enqueue(c: &mut Criterion) {
                 let gap = trace.gap_counter();
                 black_box(gap);
                 total += start.elapsed();
+                trace.shutdown().expect("shutdown");
                 assert_eq!(gap, 0, "常载批次必须全部入队");
-                trace.shutdown();
             }
             total
         });
@@ -92,10 +119,11 @@ fn flood_backpressure(c: &mut Criterion) {
         b.iter_custom(|iters| {
             let mut total = Duration::ZERO;
             for _ in 0..iters {
-                let trace = Trace::spawn(flood_cfg());
+                let dir = TempDir::new();
+                let trace = Trace::spawn(flood_cfg(dir.path())).expect("spawn");
                 let (elapsed, dropped) = time_flood(&trace);
                 total += elapsed;
-                let report = trace.shutdown();
+                let report = trace.shutdown().expect("shutdown");
                 assert_eq!(
                     report.gap_reported, report.gap_counter,
                     "shutdown 补发后 reported 必须等于 counter"
