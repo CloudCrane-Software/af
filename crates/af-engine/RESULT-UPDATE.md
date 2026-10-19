@@ -1,3 +1,87 @@
+# RESULT-UPDATE — W4F · Worker Versioning v2 上线流程化
+
+日期：2026-10-19。分支 `task-W4F`。只改 `crates/af-engine/**`。没有新的第三方 crate，没有改其他 crate，`Cargo.lock` 无变化。
+
+提交：`158e88e`（版本信封与测试）、`a2de168`（`VERSIONING.md` 与干跑）。
+
+本 crate 没有单独的 `RESULT.md`。动手前读的是下面保留的 W3A 记录，其中的已验证语义没有推翻。
+
+## 结论
+
+通过。请求可以带 `engine_version_min`。本二进制的 `engine_version`（编译期 `CARGO_PKG_VERSION`，当前 `0.1.0`）低于它时拒绝，message 提示升级；响应仍然带 `engine_version`。字段不存在则不设下限，旧请求的行为与契约样例保持原样。字段存在但不是字符串，或不能按 semver 解析时拒绝，不把看不懂的下限当成没有下限。下限门在 `op` 和订单解析之前，版本不够时不返回领域错误。
+
+`VERSIONING.md` 写下 `EngineChannel { stable, canary }` 的编排选择规则：新规则先发 canary；旧 run 锁旧版，引擎无状态，所以锁的是「该 run 全程用同版本」这一条约定；回滚就是摘除 canary 指针。`scripts/engine-channel-dry-run.sh` 只对操作步骤做 `command -v`，不执行切换。
+
+## 步骤
+
+1. 在固定检查顺序里插入下限门：空行 → JSON → 对象 → `engine_version_min`（字段存在时）→ `op` → 订单 → 参数 → 领域判定。比较放在 `src/version.rs`，三段 semver，预发布按规范比较，build 元数据不参与比较。
+2. 集成测试覆盖下限正例（等于当前版本、`0.0.0`、`0.1.0-rc.1`、`0.1.0+build.7`）、负例（`0.1.1` / `0.2.0` / `1.0.0` / `99.0.0`、缺订单之前短路、无法解析、类型错误），以及放行、拒绝、版本门拒绝都带 `engine_version`。单测覆盖 semver 优先级链和解析失败原因。
+3. 写 `VERSIONING.md`。操作步骤是一组单命令。集成测试从文档抽出这组命令，逐条 `command -v`，再运行干跑脚本，并确认没有创建 `ENGINE_CHANNEL_DIR`。
+
+测试数字：单测 0 → 4，全部新增（`version::tests`）。集成测试 21 → 25，新增 4 个：`engine_version_min_accepts_current_lower_and_prerelease`、`engine_version_min_rejects_when_engine_is_older_or_min_is_unusable`、`engine_version_field_is_always_present`、`versioning_steps_dry_run_checks_commands_exist`。`src/main.rs` 单测仍是 0，文档测试仍是 0。没有改其他 crate 的测试。原有 21 个集成测试与 `tests/contract/` 样例仍通过。
+
+## 证据
+
+```text
+source /data/af-factory/env.sh
+cargo check -j 4 -p af-engine
+# Checking af-engine v0.1.0
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.19s
+# exit 0
+
+cargo fmt -p af-engine -- --check
+# 无输出，exit 0
+
+cargo clippy --all-targets -j 4 -p af-engine -- -D warnings
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+# exit 0，无警告
+
+cargo test -j 4 -p af-engine
+# unittests src/lib.rs: ok. 4 passed; 0 failed
+# unittests src/main.rs: ok. 0 passed; 0 failed
+# tests/engine.rs: ok. 25 passed; 0 failed; 0 ignored; 0 measured
+# Doc-tests af_engine: ok. 0 passed; 0 failed
+```
+
+`git diff --stat fd72185 -- . ':!crates/af-engine'` 无输出。
+
+干跑脚本当场输出（未创建通道目录）：
+
+```text
+dry-run: cargo: /data/af-factory/.cargo/bin/cargo :: cargo build -p af-engine --bin af-engine
+dry-run: mkdir: /usr/bin/mkdir :: mkdir -p -- "$ENGINE_CHANNEL_DIR/bins" "$ENGINE_CHANNEL_DIR/pins"
+dry-run: cp: /usr/bin/cp :: cp -f -- "$ENGINE_BIN" "$ENGINE_CHANNEL_DIR/bins/$ENGINE_BUILD"
+dry-run: ln: /usr/bin/ln :: ln -sfn -- "$ENGINE_CHANNEL_DIR/bins/$ENGINE_BUILD" "$ENGINE_CHANNEL_DIR/canary"
+dry-run: readlink: /usr/bin/readlink :: readlink -f -- "$ENGINE_CHANNEL_DIR/canary"
+dry-run: test: test :: test -x "$ENGINE_CHANNEL_DIR/canary"
+dry-run: rm: /usr/bin/rm :: rm -f -- "$ENGINE_CHANNEL_DIR/canary"
+dry-run: test: test :: test ! -e "$ENGINE_CHANNEL_DIR/canary"
+dry-run: not-executed
+dry-run: ok
+```
+
+版本不够时的响应形状（下限 `99.0.0`，本二进制 `0.1.0`）：
+
+```text
+{"ok":false,"error":{"kind":"BadRequest","message":"引擎版本 0.1.0 低于 engine_version_min 99.0.0，请升级引擎"},"engine_version":"0.1.0"}
+```
+
+## 反馈
+
+1. 下限比较是 crate 内的 semver 子集，没有引入 `semver` crate。接受 `MAJOR.MINOR.PATCH`、预发布标识和 build 元数据。不接受 `v` 前缀、缺段和前导零。正式版高于同号预发布版；数字标识按整数比（`beta.2` 低于 `beta.11`）。
+2. 版本不够和解析失败都是已有的 `BadRequest`，没有新的 `kind`。两边靠 message 区分：过低含「请升级引擎」，解析失败含「无法解析」。
+3. 通道目录、pin 和符号链接由编排按 `VERSIONING.md` 维护。引擎进程不读这些文件，也不在进程内切换二进制。
+4. 干跑退出 0 只说明操作步骤里的命令在 `PATH` 中。脚本不执行 `cargo build`、`cp`、`ln`、`rm`。
+5. `engine_version` 仍是编译期常量。两份二进制要各自编译；运行时设置 `CARGO_PKG_VERSION` 改不了响应，这一点与 W3A 相同。
+
+## 遗留
+
+- 编排层还没有按 `VERSIONING.md` 选择 stable / canary，也还没有在请求里填写 `engine_version_min`。那些文件不在本任务的改动范围里。
+- 没有任何 pin 再引用时才删除 `bins/` 里的本体。文档写了这条规则，没有自动清理。
+- W3A 留下的变更单、SLA 逾期 op、决策占位验签，本次没有改。
+
+## 附：W3A 记录（保留，未推翻）
+
 # RESULT-UPDATE — W3A · af-engine 薄壳引擎 bin
 
 日期：2026-10-19。分支 `task-W3A`。未改 `af-workorder` 的源码与语义。根 `Cargo.toml` 的 `members = ["crates/*"]` 已覆盖新目录，没有改根清单。`Cargo.lock` 只增加 `af-engine` 这一条 path 包，没有新的第三方 crate。
