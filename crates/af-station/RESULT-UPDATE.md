@@ -1,4 +1,80 @@
-# RESULT-UPDATE.md — B5 af-station 并发竞争补强
+# RESULT-UPDATE.md — W2G af-station 分派路由 + 班次日历
+
+## ① 结论
+
+**通过**。`cargo test -p af-station` **56 全绿、0 失败**。`cargo clippy --all-targets -p af-station -- -D warnings` 无警告。
+
+B5 的 22 个测试都还在。本波次多 34 个：开库声明 7、班次失败关闭 2、`tests/shift_window.rs` 25。认领 / 心跳 / 回收 / 完成的 SQL 守卫没有改。幂等键仍是 `ON CONFLICT(idempotency_key)`，主键冲突仍是裸 Sqlite 错误。
+
+分派在角色精确匹配之外加了班次门。角色或工位绑定 `af-calendar::Calendar` 后，只有 `is_working_instant(now)` 为真才 `claim`。没绑定不设门。非班次返回 `Ok(None)`，任务保持 queued。SLA 截止是 `DateTime<Utc>`，落盘为 unix 毫秒。
+
+## ② 步骤
+
+1. 读了 `crates/af-station/RESULT.md`、B5 的 `RESULT-UPDATE.md`（`Clock` / `ManualClock`、完成不看租约、`lease_until == now` 的边界），以及 `crates/af-calendar/RESULT.md`（29 个常规测试里 SLA 18 + DST/夜班 11，另有 1 个 ignored 密扫）。没有改 `af-calendar`。
+2. `b5e3dc0`：开库改为声明。空库建表并写入 `schema_version=1` 与指纹，返回 `OpenStatus::Created`。重入对照 `sqlite_master` 的建表 SQL 和声明行，一致才返回 `AlreadyDeclared`。版本、指纹、缺表、多列、预先存在的 `task` 表都 `DeclarationMismatch`，不补表、不收养。每次连接重设 WAL、`busy_timeout=5000`、`synchronous=NORMAL`、`foreign_keys=ON`。`Opened` 对 `Station` 做 `Deref`，原调用点不用改签名。
+3. `40ef916`：`claim` 仍先用同一次 `now_ms` 回收过期租约，再问班次。角色日历与工位日历都要在班次内；只绑一边就只查那一边。心跳和完成不看班次。`enqueue` 接受 `Option<DateTime<Utc>>`，亚毫秒拒绝落盘。`sla_deadline_utc` 把日历解析结果折成 UTC。`Cargo.lock` 只给 `af-station` 加上已有包的依赖边：`af-calendar`（路径）、`chrono 0.4.45`、`serde_json`、dev 的 `chrono-tz 0.10.4`。没有新包，没有改版本。
+4. 班次测试用 `ManualClock` 设绝对时刻。夜班沿用日历的两窗口（`[22:00, 24:00)` 用 `23:59:59.999999999` 逼近，加次日 `[00:00, 06:00)`）。DST 用 Europe/Berlin 2026-03-29 春跳和 2026-10-25 秋拨。每条持久化写入都有「写完 → drop → 重开 → 原样可读」，重开断言 `AlreadyDeclared`。
+
+## ③ 证据
+
+工具链：`source /data/af-factory/env.sh` 之后，`rustc 1.99.1`。命令都在仓库根。
+
+```
+$ cargo check -p af-station -j 4
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.32s
+CHECK:0
+
+$ cargo fmt -p af-station -- --check
+FMT:0
+
+$ cargo clippy --all-targets -p af-station -j 4 -- -D warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+CLIPPY:0
+
+$ cargo test -p af-station -j 4
+running 20 tests
+test result: ok. 20 passed; 0 failed; finished in 0.04s
+
+running 8 tests
+test result: ok. 8 passed; 0 failed; finished in 0.06s
+
+running 3 tests
+test result: ok. 3 passed; 0 failed; finished in 0.63s
+
+running 25 tests
+test result: ok. 25 passed; 0 failed; finished in 0.03s
+
+Doc-tests af_station
+test result: ok. 0 passed; 0 failed
+```
+
+20 = 原 11 个单测 + 开库声明 7 + 坏日历 2。8 与 3 是 B5 的并发集成和 proptest，断言没改，只把 `open_with_clock` 的返回值 `into_station()`。25 全在 `tests/shift_window.rs`。合计 56。
+
+`Cargo.lock` 的 diff 只有 `af-station` 的依赖列表多了四行，没有新的 `[[package]]`。
+
+## ④ 反馈
+
+1. **没绑定日历和绑定一张空日历不是一回事。** 前者保持 B5 的「只按 `required_role` 精确匹配」，现有并发和属性测试才不用改影子模型。后者 `is_working_instant` 恒为 false，永不派单。
+2. **非班次的 `claim` 仍会回收过期租约，然后返回 None。** 任务回到 queued，但这次调用不把它派出去。已认领且租约未过期的行，下班后保持 claimed；心跳和完成都不看班次。完成仍不看租约：回收发生前，过期原主还能 `complete`。这是 RESULT.md / B5 的 SQL，这次没有改 WHERE。
+3. **夜班继续拆成两个窗口。** `Shift` 在构造期拒绝 `start >= end`，本任务不能改 `af-calendar`。午夜接缝的 1ns 低于账本的毫秒钟，`23:59:59` 和次日 `00:00:00` 都会派单，测试里没有观察到空档。
+4. **DST 沿用日历已验证的裁决，没有在账本里重写工时算术。** 窗口看本地钟面。春跳当天 `[02:00, 03:00)` 没有可注入的时刻，间隙两侧都不派；前一天 02:30 会派，用来证明窗口本身是开的。秋拨的两个 02:30（`earliest` / `latest`）钟面相同，两次都派。`is_working_instant` 不消歧，和日历 RESULT ⑥ 的坑 3 一致。
+5. **deadline 不参与派单。** 逾期任务在班次内仍可认领，班次外仍保持 queued。判定式与 af-workorder `Sla::is_overdue` 相同：`deadline < now` 才算逾期，恰在截止不算。周五 16:00+08、承诺 4 工时，得到 `2026-10-26T03:00:00Z`。同一幂等键再入账不改已有 deadline。带亚毫秒的时刻直接拒绝，避免截断后读回变成另一个时刻。
+6. **旧库不会被静默升级。** B5 之前只有 `task` 表、没有 `station_decl` 的文件，open 失败。声明行被改、或 `ALTER TABLE` 增删列，也失败。外键开关是连接态，每次 open 都打开；用临时父子表确认悬空引用会被拒绝，探针表在关闭前删掉，重开仍是 `AlreadyDeclared`。
+
+## ⑤ 遗留
+
+- `README.md` 仍写「8 测试」。改 README 不在本任务范围。
+- `RESULT.md` 的行号和「8/8」计数已过时。四条 SQL 结论没有推翻，所以没有改那份账本。
+- `claim` 的 `LIMIT 64`、done 之后的审计查询、优先级、取消/作废，仍是原遗留。
+- 完成是否应在租约过期后失败，仍未改行为。见上一节第 2 条。
+- 夜班的单窗口跨午夜、以及 `is_working_instant` 对歧义钟面不消歧，都在 `af-calendar`。本 crate 只消费它。
+- 属性测试不绑定班次，影子模型因此没有班次状态。班次门由 `tests/shift_window.rs` 的定点用例覆盖，不是 proptest。
+- 派单不按 deadline 排序。截止时刻只用于逾期判定。
+- `task` 与 `shift_binding` 之间没有外键。`foreign_keys=ON` 已打开，但这两张表谁也不引用谁。
+
+---
+
+# 历史 · B5 af-station 并发竞争补强
 
 ## ① 结论
 
