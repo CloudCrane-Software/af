@@ -1,14 +1,1 @@
-{
-  "id": "wo-1",
-  "state": "Created",
-  "graph_version": "g-3",
-  "line": null,
-  "budget_voucher": null,
-  "artifacts": [],
-  "sla": {
-    "deadline": "2026-11-01T00:00:00Z",
-    "priority": "High"
-  },
-  "supersedes": null,
-  "history": []
-}
+{"id":"wo-1","stable_id":"sid-f905c3b464315a0a05fe2682f64a93aa2194016459b62a5b554f8d60692f451f","run_id":"run-eng-1","state":"Created","graph_version":"g-3","line":null,"budget_voucher":null,"artifacts":[],"sla":{"deadline":"2026-11-01T00:00:00Z","priority":"High"},"supersedes":null,"history":[]}

@@ -17,6 +17,8 @@ const PAYLOAD: &str = "wo-1:release-request:g-3";
 fn created() -> WorkOrder {
     serde_json::from_value(json!({
         "id": "wo-1",
+        "stable_id": "sid-f905c3b464315a0a05fe2682f64a93aa2194016459b62a5b554f8d60692f451f",
+        "run_id": "run-eng-1",
         "state": "Created",
         "graph_version": "g-3",
         "line": null,
@@ -794,7 +796,13 @@ fn contract_samples_match_engine() {
             !on_disk.trim().contains('\n'),
             "{name}.request.json 必须是单行 JSON"
         );
-        assert_eq!(on_disk.trim(), request, "{name} 请求样例与构造不一致");
+        // 语义比较（不逐字节）：serde_json 的 preserve_order 由 cedar-policy-core 经 feature
+        // 统一开关，工作区/单 crate 构建键序不同——契约等价性按 Value 判定，键序不作契约。
+        let disk_req: serde_json::Value = serde_json::from_str(on_disk.trim())
+            .unwrap_or_else(|e| panic!("{name}.request.json 不是合法 JSON: {e}"));
+        let built_req: serde_json::Value = serde_json::from_str(request)
+            .unwrap_or_else(|e| panic!("{name} 构造串不是合法 JSON: {e}"));
+        assert_eq!(disk_req, built_req, "{name} 请求样例与构造不一致");
         let expected = fs::read_to_string(&resp_path)
             .unwrap_or_else(|e| panic!("读取 {}：{e}", resp_path.display()));
         assert!(
@@ -802,11 +810,11 @@ fn contract_samples_match_engine() {
             "{name}.response.json 必须是单行，与 stdout 一致"
         );
         let actual = invoke_line(request);
-        assert_eq!(
-            actual.trim_end(),
-            expected.trim(),
-            "{name} stdout 与样例不一致"
-        );
+        let actual_v: serde_json::Value = serde_json::from_str(actual.trim())
+            .unwrap_or_else(|e| panic!("{name} stdout 不是合法 JSON: {e}"));
+        let expected_v: serde_json::Value = serde_json::from_str(expected.trim())
+            .unwrap_or_else(|e| panic!("{name}.response.json 不是合法 JSON: {e}"));
+        assert_eq!(actual_v, expected_v, "{name} stdout 与样例不一致");
         parse_stdout(&actual);
         if let Some(op) = serde_json::from_str::<Value>(request)
             .ok()

@@ -1,1 +1,1 @@
-{"ok":false,"error":{"kind":"BadRequest","message":"订单快照无法反序列化: unknown variant `Flying`, expected one of `Created`, `Released`, `InProgress`, `Completed`, `Closed`, `Cancelled`"},"engine_version":"0.1.0"}
+{"ok":false,"error":{"kind":"BadRequest","message":"订单快照无法反序列化: 工单载荷字段无法读入:unknown variant `Flying`, expected one of `Created`, `Released`, `InProgress`, `Completed`, `Closed`, `Cancelled`"},"engine_version":"0.1.0"}
