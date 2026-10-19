@@ -1,26 +1,25 @@
 //! af-effect-gateway PoC 验收测试。
 //!
-//! 对应任务四条验收用例，另加两条补充（窗口门控、外部失败可重试）。
+//! 对应任务四条验收用例，另加窗口门控、外部失败可重试，
+//! 以及墙钟回拨不影响幂等窗口。时序全部由 [`ManualClock`] 注入。
 
 use af_effect_gateway::*;
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::thread::sleep;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
+
+const WALL0: i64 = 1_700_000_000_000;
+
+fn manual_clock() -> ManualClock {
+    ManualClock::new(0, WALL0)
+}
 
 fn temp_db(tag: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_nanos();
-    let p = std::env::temp_dir().join(format!(
-        "af_eg_poc_{}_{}_{}.db",
-        tag,
-        std::process::id(),
-        nanos
-    ));
+    static SEQ: AtomicU64 = AtomicU64::new(0);
+    let n = SEQ.fetch_add(1, Ordering::SeqCst);
+    let p = std::env::temp_dir().join(format!("af_eg_poc_{}_{}_{}.db", tag, std::process::id(), n));
     let _ = std::fs::remove_file(&p);
     p
 }
@@ -54,16 +53,17 @@ fn t1_crash_recovery_same_key_same_payload_replays_stored_result() {
     let counter = Arc::new(AtomicUsize::new(0));
     let k = key("WO-1001", "pay_vendor", 1);
     let payload = json!({ "amount": 12800, "to_account": "ACCT-A" });
+    let clock = manual_clock();
 
-    // —— 第一次生命周期：declare → 窗口 → execute（真实外呼一次）→ “崩溃” ——
+    // —— 第一次生命周期：declare → 窗口走到截止点 → execute（真实外呼一次）→ “崩溃” ——
     {
-        let gw = Gateway::open(&db, Duration::from_millis(50)).unwrap();
+        let gw = Gateway::open_with_clock(&db, Duration::from_millis(50), clock.clone()).unwrap();
         assert_eq!(gw.current_epoch().unwrap(), 0, "新库纪元从 0 开始");
         let s = gw.attach().unwrap();
         let out = gw.declare_intent(&s, &k, &payload).unwrap();
         assert!(matches!(out, DeclareOutcome::Created { .. }));
 
-        sleep(Duration::from_millis(80)); // 等窗口关闭
+        clock.advance(Duration::from_millis(50)); // 单调钟到达截止点，窗口关闭
         let exec = gw
             .execute(&s, &k, counting_effect(counter.clone()))
             .unwrap();
@@ -79,7 +79,7 @@ fn t1_crash_recovery_same_key_same_payload_replays_stored_result() {
 
     // —— 恢复：重新 open，resume 使纪元 +1，同键同载荷重放 ——
     {
-        let gw = Gateway::open(&db, Duration::from_millis(50)).unwrap();
+        let gw = Gateway::open_with_clock(&db, Duration::from_millis(50), manual_clock()).unwrap();
         assert_eq!(gw.current_epoch().unwrap(), 0, "恢复后先看到崩溃前纪元");
         let s2 = gw.resume().unwrap();
         assert_eq!(s2.epoch, 1, "resume 必须使纪元 +1");
@@ -164,7 +164,8 @@ fn t2_same_key_different_payload_rejected_requires_escalation() {
 #[test]
 fn t3_withdraw_within_window_means_never_sent() {
     let counter = Arc::new(AtomicUsize::new(0));
-    let gw = Gateway::open_in_memory(Duration::from_millis(300)).unwrap(); // 长窗口
+    let clock = manual_clock();
+    let gw = Gateway::open_in_memory_with_clock(Duration::from_millis(300), clock.clone()).unwrap();
     let s = gw.attach().unwrap();
     let k = key("WO-3003", "send_sms", 1);
     let payload = json!({ "phone": "138xxxx", "text": "验证码" });
@@ -199,7 +200,7 @@ fn t3_withdraw_within_window_means_never_sent() {
     // 对照组：另一个意图窗口已关才去撤回 → 撤回失败（窗口保护有效）
     let k2 = key("WO-3003", "send_sms", 2);
     gw.declare_intent(&s, &k2, &payload).unwrap();
-    sleep(Duration::from_millis(330)); // 越过 300ms 窗口
+    clock.advance(Duration::from_millis(300)); // 单调钟越过 300ms 窗口
     let err = gw.withdraw_intent(&s, &k2).unwrap_err();
     assert!(
         matches!(err, GatewayError::WithdrawWindowClosed { .. }),
@@ -215,7 +216,8 @@ fn t3_withdraw_within_window_means_never_sent() {
 fn t4_stale_epoch_requests_rejected() {
     let counter = Arc::new(AtomicUsize::new(0));
     let db = temp_db("t4");
-    let gw = Gateway::open(&db, Duration::from_millis(30)).unwrap();
+    let clock = manual_clock();
+    let gw = Gateway::open_with_clock(&db, Duration::from_millis(30), clock.clone()).unwrap();
     let s_old = gw.attach().unwrap(); // epoch 0
     assert_eq!(s_old.epoch, 0);
     let k = key("WO-4004", "dispatch_truck", 1);
@@ -272,7 +274,7 @@ fn t4_stale_epoch_requests_rejected() {
     ));
 
     // 新纪元 session 可继续操作旧纪元声明的意图（崩溃恢复重放的路必须通）
-    sleep(Duration::from_millis(50)); // 越过 30ms 窗口
+    clock.advance(Duration::from_millis(30)); // 单调钟越过 30ms 窗口
     let exec = gw
         .execute(&s_newer, &k, counting_effect(counter.clone()))
         .unwrap();
@@ -288,7 +290,8 @@ fn t4_stale_epoch_requests_rejected() {
 #[test]
 fn t5_execute_before_window_close_is_refused_then_allowed() {
     let counter = Arc::new(AtomicUsize::new(0));
-    let gw = Gateway::open_in_memory(Duration::from_millis(120)).unwrap();
+    let clock = manual_clock();
+    let gw = Gateway::open_in_memory_with_clock(Duration::from_millis(120), clock.clone()).unwrap();
     let s = gw.attach().unwrap();
     let k = key("WO-5005", "charge_fee", 1);
     gw.declare_intent(&s, &k, &json!({"fee": 99})).unwrap();
@@ -299,13 +302,16 @@ fn t5_execute_before_window_close_is_refused_then_allowed() {
     match &err {
         GatewayError::WindowStillOpen {
             deadline_ms,
-            now_ms: _,
-        } => assert!(*deadline_ms > 0, "deadline 必须是未来时刻"),
+            now_ms,
+        } => {
+            assert!(now_ms < deadline_ms, "窗口未关时单调 now 必须早于 deadline");
+            assert!(*deadline_ms > 0);
+        }
         other => panic!("期望 WindowStillOpen，实际 {:?}", other),
     }
     assert_eq!(call_count(&counter), 0, "窗口未关不发送");
 
-    sleep(Duration::from_millis(150)); // 越过窗口
+    clock.advance(Duration::from_millis(120)); // 单调钟到达截止点
     let exec = gw
         .execute(&s, &k, counting_effect(counter.clone()))
         .unwrap();
@@ -319,11 +325,12 @@ fn t5_execute_before_window_close_is_refused_then_allowed() {
 #[test]
 fn t6_external_failure_keeps_declared_and_retry_succeeds() {
     let counter = Arc::new(AtomicUsize::new(0));
-    let gw = Gateway::open_in_memory(Duration::from_millis(20)).unwrap();
+    let clock = manual_clock();
+    let gw = Gateway::open_in_memory_with_clock(Duration::from_millis(20), clock.clone()).unwrap();
     let s = gw.attach().unwrap();
     let k = key("WO-6006", "refund", 1);
     gw.declare_intent(&s, &k, &json!({"order": "D-9"})).unwrap();
-    sleep(Duration::from_millis(40));
+    clock.advance(Duration::from_millis(20));
 
     let c1 = counter.clone();
     let fail = move |_p: &Value| -> Result<Value> {
@@ -358,6 +365,107 @@ fn t6_external_failure_keeps_declared_and_retry_succeeds() {
         .unwrap();
     assert!(again.is_replay());
     assert_eq!(counter.load(Ordering::SeqCst), 2);
+}
+
+// ===========================================================================
+// 补充⑦：系统时钟回拨不影响幂等窗口判定
+// ===========================================================================
+#[test]
+fn t7_wall_clock_rollback_does_not_affect_idempotency_window() {
+    // 幂等窗口（撤回窗口）只由单调钟判定。
+    // 墙钟前跳不得提前关窗；墙钟回拨不得延长窗口，也不得在重启后把窗口重新打开。
+    let db = temp_db("t7");
+    let clock = manual_clock();
+    let window = Duration::from_millis(100);
+    let gw = Gateway::open_with_clock(&db, window, clock.clone()).unwrap();
+    let s = gw.attach().unwrap();
+    let counter = Arc::new(AtomicUsize::new(0));
+
+    // A. 墙钟前跳 1 小时，单调钟不动：窗口仍开。
+    let k_open = key("WO-7007", "hold", 1);
+    gw.declare_intent(&s, &k_open, &json!({"n": 1})).unwrap();
+    clock.shift_wall_ms(3_600_000);
+    let err = gw
+        .execute(&s, &k_open, counting_effect(counter.clone()))
+        .unwrap_err();
+    match err {
+        GatewayError::WindowStillOpen {
+            deadline_ms,
+            now_ms,
+        } => {
+            assert_eq!(now_ms, 0, "判定读数必须是单调逻辑毫秒，不是前跳后的墙钟");
+            assert_eq!(deadline_ms, 100);
+        }
+        other => panic!("期望 WindowStillOpen，实际 {:?}", other),
+    }
+    assert_eq!(call_count(&counter), 0, "墙钟前跳不得提前发送");
+    assert_eq!(
+        gw.withdraw_intent(&s, &k_open).unwrap(),
+        WithdrawOutcome::Withdrawn,
+        "单调窗口未到点时仍可撤回"
+    );
+
+    // B. 单调钟走到截止点，同时墙钟回拨到声明之前：窗口必须已关。
+    let k = key("WO-7007", "pay", 1);
+    let declared = gw.declare_intent(&s, &k, &json!({"n": 2})).unwrap();
+    assert!(matches!(
+        declared,
+        DeclareOutcome::Created {
+            withdraw_deadline_ms: 100
+        }
+    ));
+    clock.advance(Duration::from_millis(60));
+    clock.shift_wall_ms(-7_200_000);
+    let err = gw
+        .execute(&s, &k, counting_effect(counter.clone()))
+        .unwrap_err();
+    match err {
+        GatewayError::WindowStillOpen {
+            deadline_ms,
+            now_ms,
+        } => {
+            assert_eq!(now_ms, 60, "回拨后的墙钟不得把 now 拉回窗口起点");
+            assert_eq!(deadline_ms, 100);
+        }
+        other => panic!("单调未到点不得放行 {:?}", other),
+    }
+    assert_eq!(call_count(&counter), 0);
+
+    clock.advance(Duration::from_millis(40)); // 逻辑毫秒 100，窗口关闭
+    let err = gw.withdraw_intent(&s, &k).unwrap_err();
+    match err {
+        GatewayError::WithdrawWindowClosed {
+            deadline_ms, state, ..
+        } => {
+            assert_eq!(state, "declared");
+            assert_eq!(deadline_ms, 100, "截止点是单调毫秒，不是 Unix 墙钟");
+        }
+        other => panic!("窗口关闭后撤回必须失败: {:?}", other),
+    }
+
+    // C. 进程重启。新单调钟从 0 起，墙钟停在 Unix 纪元（相对声明时的墙钟是回拨）。
+    //    已提交的单调高水位已到 deadline，不得借墙钟把窗口重新打开。
+    drop(gw);
+    let restarted = ManualClock::new(0, 0);
+    let gw = Gateway::open_with_clock(&db, window, restarted.clone()).unwrap();
+    let s2 = gw.attach().unwrap();
+    let exec = gw
+        .execute(&s2, &k, counting_effect(counter.clone()))
+        .unwrap();
+    assert!(
+        !exec.is_replay(),
+        "窗口已按单调钟关闭，重启后应真实执行一次"
+    );
+    assert_eq!(call_count(&counter), 1);
+
+    restarted.shift_wall_ms(-1_000_000);
+    let again = gw
+        .execute(&s2, &k, counting_effect(counter.clone()))
+        .unwrap();
+    assert!(again.is_replay(), "回执已在，墙钟再回拨也不得重发");
+    assert_eq!(call_count(&counter), 1, "外部调用恰好一次");
+
+    let _ = std::fs::remove_file(&db);
 }
 
 // —— 测试辅助：直接用库里同样的指纹算法 ——
