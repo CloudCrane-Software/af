@@ -1,8 +1,26 @@
-//! 读包装器与（随后的）写入器共用的类型化错误。
+//! 写入、outbox 与读包装器的类型化错误。
+//!
+//! [`MesError::Backpressure`]：这一行没有被接收，调用方保留它。
+//! [`MesError::OutboxPersist`]：这一行已经在内存批里。调用方不得把同一行再 `push`；
+//! 修掉 outbox 目录后调用 [`crate::MesWriter::flush`]。
 
 use std::path::PathBuf;
 
-/// MES 读路径与写入器的错误。写入侧变体在批写入落地时使用。
+/// `push` / `flush` / `poll` 在数据没有丢时的结果。
+///
+/// `Err` 才表示这一行仍归调用方（背压），或批留在内存里出不去（outbox 落盘失败）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Accept {
+    /// 还在内存批里。行数和延迟都没到。
+    Buffered { pending: usize },
+    /// ClickHouse 已接受这批。`rows == 0` 表示没有待发的批。
+    Sent { rows: usize },
+    /// ClickHouse 没接住。整批已写入 outbox，之后由 retry 重放。
+    /// 调用方不得把同一行再 `push` 一次。
+    Parked { rows: usize },
+}
+
+/// MES 写入器与读路径的错误。
 #[derive(Debug, thiserror::Error)]
 pub enum MesError {
     #[error("配置无效: {0}")]
