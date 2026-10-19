@@ -59,6 +59,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "af-eval"
+version = "0.1.0"
+dependencies = [
+ "rusqlite",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "af-graph"
 version = "0.1.0"
 dependencies = [
