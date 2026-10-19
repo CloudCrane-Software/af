@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{GateError, Missing};
+use crate::identity::{RunContext, StableId};
 use crate::sla::Sla;
 use crate::state::{OrderState, Transition};
 
@@ -60,9 +61,15 @@ pub struct HistoryRecord {
 }
 
 /// 工单。字段全部私有,只能经方法操作,保证所有变更都过门控。
+///
+/// `stable_id` 在创建时写入,没有 setter。`run_id` 只由 [`WorkOrder::continue_as_new`] 更换。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WorkOrder {
     id: String,
+    /// 跨引擎 run 的稳定身份。创建时生成,continue-as-new 不改。
+    stable_id: StableId,
+    /// 当前引擎 run。continue-as-new 会换成新值;空串表示尚未绑定。
+    run_id: String,
     state: OrderState,
     graph_version: GraphVersion,
     line: Option<LineBinding>,
@@ -76,21 +83,38 @@ pub struct WorkOrder {
 
 impl WorkOrder {
     /// 新建工单:初始状态 Created,graph_version 在此一次性绑定。
+    ///
+    /// `stable_id` 由订单 id 在 [`crate::identity::STABLE_ID_DOMAIN`] 下生成。
+    /// 不读系统熵,也不读引擎 run。初始 `run_id` 为空(尚未绑定)。
     pub fn new(id: impl Into<String>, graph_version: GraphVersion, sla: Sla) -> Self {
-        Self {
-            id: id.into(),
-            state: OrderState::Created,
+        let id = id.into();
+        let stable_id = StableId::generate(&id);
+        Self::assemble(
+            id,
+            stable_id,
+            RunContext::detached(),
             graph_version,
-            line: None,
-            budget_voucher: None,
-            artifacts: Vec::new(),
             sla,
-            supersedes: None,
-            history: Vec::new(),
-        }
+            None,
+        )
+    }
+
+    /// 以已经存在的稳定身份建单,并绑到这次的引擎 run。
+    ///
+    /// 不重新生成 `stable_id`。continue-as-new 续接时,把上一轮载荷里的身份原样带进来。
+    pub fn with_stable_id(
+        id: impl Into<String>,
+        graph_version: GraphVersion,
+        sla: Sla,
+        stable_id: StableId,
+        run: RunContext,
+    ) -> Self {
+        Self::assemble(id.into(), stable_id, run, graph_version, sla, None)
     }
 
     /// 后继工单构造:由变更单生成,graph_version 直接绑新版本,并记录 supersede 关系。
+    ///
+    /// 后继单是一张新工单,`stable_id` 按新 id 重新生成,不继承原单身份。
     pub fn successor(
         id: impl Into<String>,
         graph_version: GraphVersion,
@@ -103,10 +127,67 @@ impl WorkOrder {
         }
     }
 
+    fn assemble(
+        id: String,
+        stable_id: StableId,
+        run: RunContext,
+        graph_version: GraphVersion,
+        sla: Sla,
+        supersedes: Option<String>,
+    ) -> Self {
+        Self {
+            id,
+            stable_id,
+            run_id: run.into_run_id(),
+            state: OrderState::Created,
+            graph_version,
+            line: None,
+            budget_voucher: None,
+            artifacts: Vec::new(),
+            sla,
+            supersedes,
+            history: Vec::new(),
+        }
+    }
+
     // ---------- 只读访问 ----------
 
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    /// 稳定身份。没有对应的 setter。
+    pub fn stable_id(&self) -> &StableId {
+        &self.stable_id
+    }
+
+    /// 当前引擎 run。空串表示尚未绑定。
+    pub fn run_id(&self) -> &str {
+        &self.run_id
+    }
+
+    pub fn run_context(&self) -> RunContext {
+        RunContext::new(self.run_id.clone())
+    }
+
+    /// 身份是否连续:只比较 `stable_id`,不比较 run、业务 id 或状态。
+    pub fn same_identity(&self, other: &Self) -> bool {
+        self.stable_id == other.stable_id
+    }
+
+    /// 分片键。`shard_count` 是配方层的分片数,不存在本单上。
+    /// 只由 `stable_id` 决定,换 run 不改变结果。
+    pub fn shard_key(&self, shard_count: u32) -> Result<u32, crate::error::ShardError> {
+        self.stable_id.shard_key(shard_count)
+    }
+
+    /// 引擎 continue-as-new:换成新的 run。
+    ///
+    /// `stable_id`、`id`、`graph_version`、状态与履历都保持原值。
+    /// 这不是状态机边,不记入 [`HistoryRecord`]。
+    pub fn continue_as_new(&mut self, run: RunContext) -> &StableId {
+        self.run_id = run.into_run_id();
+        &self.stable_id
     }
 
     pub fn state(&self) -> OrderState {
@@ -513,5 +594,52 @@ mod tests {
         assert!(!wo.is_overdue(deadline), "恰在时限不算逾期");
         assert!(wo.is_overdue(deadline + chrono::Duration::seconds(1)));
         assert!(!wo.is_overdue(deadline - chrono::Duration::seconds(1)));
+    }
+
+    #[test]
+    fn stable_id_survives_run_change_and_the_lifecycle() {
+        let mut wo = WorkOrder::new("wo-1", GraphVersion::new("g-3"), sla());
+        let sid = wo.stable_id().clone();
+        assert_eq!(sid, StableId::generate("wo-1"));
+        assert!(wo.run_context().is_detached());
+        assert_eq!(wo.graph_version().as_str(), "g-3");
+
+        let carried = wo.continue_as_new(RunContext::new("run-a")).clone();
+        assert_eq!(carried, sid);
+        assert_eq!(wo.run_id(), "run-a");
+        assert_eq!(wo.stable_id(), &sid);
+        assert!(wo.history().is_empty(), "换 run 不是状态机边");
+
+        wo.bind_line(line()).unwrap();
+        wo.attach_budget_voucher(voucher(true)).unwrap();
+        wo.release().unwrap();
+        wo.start().unwrap();
+        wo.attach_artifact(artifact("fa-1", true, true)).unwrap();
+        wo.complete().unwrap();
+        wo.close().unwrap();
+        assert_eq!(wo.continue_as_new(RunContext::new("run-b")), &sid);
+        assert_eq!(wo.run_id(), "run-b");
+        assert_eq!(wo.stable_id(), &sid);
+        assert_eq!(wo.graph_version().as_str(), "g-3");
+        assert_eq!(wo.state(), OrderState::Closed);
+        assert_eq!(wo.history().len(), 4);
+
+        let other = WorkOrder::with_stable_id(
+            "wo-other-label",
+            GraphVersion::new("g-9"),
+            sla(),
+            sid.clone(),
+            RunContext::new("run-c"),
+        );
+        assert!(wo.same_identity(&other));
+        assert_ne!(wo.run_id(), other.run_id());
+        assert_ne!(wo.id(), other.id());
+        assert_eq!(wo.shard_key(64).unwrap(), other.shard_key(64).unwrap());
+        assert_eq!(wo.shard_key(64).unwrap(), sid.shard_key(64).unwrap());
+
+        let successor = WorkOrder::successor("wo-1b", GraphVersion::new("g-4"), sla(), "wo-1");
+        assert_ne!(successor.stable_id(), &sid);
+        assert_eq!(successor.stable_id(), &StableId::generate("wo-1b"));
+        assert_eq!(successor.supersedes(), Some("wo-1"));
     }
 }

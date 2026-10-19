@@ -113,3 +113,17 @@ pub enum ChangeError {
     #[error("变更单签名无效:{0}")]
     SignatureInvalid(SignError),
 }
+
+/// 稳定身份解析错误。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error, Serialize, Deserialize)]
+pub enum IdentityError {
+    #[error("stable_id 为空或含空白,不能作为订单身份")]
+    EmptyStableId,
+}
+
+/// 分片映射错误。分片数来自配方层,0 不是合法配方值。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error, Serialize, Deserialize)]
+pub enum ShardError {
+    #[error("分片数为 0:配方层必须给出正整数")]
+    ZeroShardCount,
+}
