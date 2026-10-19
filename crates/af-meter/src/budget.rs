@@ -8,6 +8,9 @@
 //! 凭证上的 check 是 per-call 的：`spend_cents <= spend_cap_cents`，根块还有
 //! `spend_cents <= budget_cents`。累计是否超出账本由 [`BudgetLedger::try_spend`] 拒绝。
 //! 比较用的是同一个美分整数，调用方不做单位换算。
+//!
+//! 多个消费者各自记自己的账，事后用 [`BudgetLedger::merge_consumers`] 把已花相加。
+//! 这不是 [`crate::Meter`] 的并发访问：计量树仍是单消费者状态机。
 
 use serde::{Deserialize, Serialize};
 
@@ -31,6 +34,9 @@ pub enum BudgetError {
     /// 消耗必须是非负美分。退款不是一次 spend。
     #[error("spend_cents {spend_cents} is negative")]
     NegativeSpend { spend_cents: Cents },
+    /// 合并的账本总额不一致。`low` / `high` 是其中最小与最大的总额，与切片顺序无关。
+    #[error("budget_cents mismatch: low {low} vs high {high}")]
+    BudgetMismatch { low: Cents, high: Cents },
 }
 
 /// 累计预算真相源。凭证只携带 per-call 上限，不管累计消耗。
@@ -92,6 +98,65 @@ impl BudgetLedger {
         }
         self.spent_cents = next;
         Ok(())
+    }
+
+    /// 合并多个消费者各自累计的账本。
+    ///
+    /// 每个消费者在自己的账本上调用 [`Self::try_spend`]。合并只把 `spent_cents` 相加，
+    /// 不重放消耗顺序，因此结果与切片顺序无关：
+    /// - 空切片 → `budget_cents = 0`、`spent_cents = 0`；
+    /// - 总额不一致 → [`BudgetError::BudgetMismatch`]（`low` / `high` 取最小与最大）；
+    /// - 总额一致但有负数 `spent_cents` → [`BudgetError::NegativeSpend`]（取最小的负数）；
+    /// - 已花之和超过 `i64`，或和大于总额且和不为 0 → [`BudgetError::OverBudget`]。
+    ///   `spend_cents` 是这个和（超出 `i64` 时钳在 `i64::MAX`），`remaining_cents` 是共同总额；
+    /// - 否则得到同一总额，`spent_cents` 为和。
+    ///
+    /// 和为 0 时允许总额为负：没有任何已花可合并，负数余额来自总额本身
+    /// （[`Self::remaining_cents`] 的 `saturating_sub`），不是扣出来的透支。
+    /// 入参不修改。
+    pub fn merge_consumers(ledgers: &[Self]) -> Result<Self, BudgetError> {
+        let Some(first) = ledgers.first() else {
+            return Ok(Self::new(0));
+        };
+
+        let mut low = first.budget_cents;
+        let mut high = first.budget_cents;
+        let mut min_spent = first.spent_cents;
+        let mut sum: i128 = 0;
+        for ledger in ledgers {
+            low = low.min(ledger.budget_cents);
+            high = high.max(ledger.budget_cents);
+            min_spent = min_spent.min(ledger.spent_cents);
+            sum += i128::from(ledger.spent_cents);
+        }
+        if low != high {
+            return Err(BudgetError::BudgetMismatch { low, high });
+        }
+        if min_spent < 0 {
+            return Err(BudgetError::NegativeSpend {
+                spend_cents: min_spent,
+            });
+        }
+
+        let budget = low;
+        // 已花都非负，和也非负。和为 0 时没有新的消耗，负总额保持原样。
+        // 和超出 i64 时一定大于任何总额，同一条 OverBudget 就能接住。
+        if sum != 0 && sum > i128::from(budget) {
+            return Err(BudgetError::OverBudget {
+                spend_cents: i64::try_from(sum).unwrap_or(i64::MAX),
+                remaining_cents: budget,
+            });
+        }
+        let Ok(spent_cents) = i64::try_from(sum) else {
+            return Err(BudgetError::OverBudget {
+                spend_cents: i64::MAX,
+                remaining_cents: budget,
+            });
+        };
+        Ok(Self {
+            budget_cents: budget,
+            spent_cents,
+        })
     }
 }
 
