@@ -75,7 +75,11 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 |---|---|---|---|
 | `release` | `WorkOrder::release` | 无 | 已绑定产线版本，且预算凭证存在并 `signed` |
 | `close` | `WorkOrder::close` | 无 | 存在 `is_final && qualified` 的工件 |
-| `approve_decision` | `DecisionArtifact::validate_against` | `artifact`（`DecisionArtifact`）、`payload`（字符串） | 四层校验：payload 哈希、角色权限上限、决策所需权限、占位签名 |
+| `approve_decision` | `DecisionArtifact::validate_against` | `artifact`（`DecisionArtifact`）、`payload`（字符串） | 先核对 payload 等于订单现算值，再做四层校验 |
+
+`approve_decision` 的 payload 由本进程从订单现算，不采用调用方另指的字符串。算法是 `WorkOrder::decision_payload`，subject 为这张订单的 `graph_version`。域分离格式因此同时绑住 `stable_id` 与 `graph_version`。`run_id` 不进入被签字符串，换 run 不改变哈希。
+
+请求里的 `payload` 仍然必填。它必须与现算结果逐字相同。不一致是 `BadRequest`（message 含「payload 与订单现算的 decision_payload 不一致」），不会拿调用方的字符串去做哈希。一致之后才对这份现算 payload 做四层校验：payload 哈希、角色权限上限、决策所需权限、占位签名。因此一份对订单 A 成立的工件，配上订单 B（另一个 `stable_id` 或另一个 `graph_version`）会被拒绝，哪怕工件和自带 payload 彼此哈希一致。
 
 `approve_decision` 不修改订单。工单类型上没有决策字段，`release` 的门控也不读决策。校验通过时，响应里的 `order` 与请求快照相同。校验接受库所接受的任何 `Decision`（包括 `Reject` / `Revise` / `Arbitrate`），本进程不另加「必须是 Approve」的规则。
 

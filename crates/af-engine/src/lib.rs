@@ -192,6 +192,12 @@ fn decision(err: DecisionError) -> WireError {
     WireError::Decision { decision: err }
 }
 
+/// 审批绑定的 payload。`WorkOrder::decision_payload` 写入 `stable_id`；
+/// 这里把 `graph_version` 当作 subject，使同一身份的另一张图版本不能复用工件。
+fn order_decision_payload(order: &WorkOrder) -> String {
+    order.decision_payload(order.graph_version().as_str())
+}
+
 fn dispatch(op: Op, order: &mut WorkOrder, obj: &Map<String, Value>) -> Result<(), WireError> {
     match op {
         Op::BindLine => {
@@ -215,9 +221,19 @@ fn dispatch(op: Op, order: &mut WorkOrder, obj: &Map<String, Value>) -> Result<(
         Op::Cancel => order.cancel().map(|_| ()).map_err(gate),
         Op::ApproveDecision => {
             let artifact: DecisionArtifact = parse_field(obj, "artifact")?;
-            let payload: String = parse_field(obj, "payload")?;
+            let supplied: String = parse_field(obj, "payload")?;
+            // 被签字符串只由这张订单现算。调用方自带的 payload 必须逐字相同，
+            // 不能拿另一张订单的工件配上一份自洽的 payload 混过来。
+            // `decision_payload` 把 stable_id 放进域分离格式；subject 用 graph_version，
+            // 所以换图版本也会换哈希。run_id 不在这段字节里。
             // 工单上没有决策字段，release 门控也不读决策。校验通过后原样送回快照。
-            artifact.validate_against(&payload).map_err(decision)?;
+            let bound = order_decision_payload(order);
+            if supplied != bound {
+                return Err(bad(
+                    "payload 与订单现算的 decision_payload 不一致（须绑定 stable_id 与 graph_version）",
+                ));
+            }
+            artifact.validate_against(&bound).map_err(decision)?;
             Ok(())
         }
     }

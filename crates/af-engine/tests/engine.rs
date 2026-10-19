@@ -12,7 +12,10 @@ use af_workorder::{
 };
 use serde_json::{json, Value};
 
-const PAYLOAD: &str = "wo-1:release-request:g-3";
+/// 与引擎 `approve_decision` 使用同一条绑定：`decision_payload(graph_version)`。
+fn bound_payload(order: &WorkOrder) -> String {
+    order.decision_payload(order.graph_version().as_str())
+}
 
 fn created() -> WorkOrder {
     serde_json::from_value(json!({
@@ -94,21 +97,23 @@ fn ready_to_close() -> WorkOrder {
 }
 
 fn approver() -> DecisionArtifact {
+    let order = created();
     DecisionArtifact::seal(
         "user-approver",
         Role::Approver,
         Decision::Approve,
-        PAYLOAD,
+        &bound_payload(&order),
         "k-approver",
     )
 }
 
 fn reader() -> DecisionArtifact {
+    let order = created();
     DecisionArtifact::seal(
         "user-reader",
         Role::Reader,
         Decision::Approve,
-        PAYLOAD,
+        &bound_payload(&order),
         "k-reader",
     )
 }
@@ -471,11 +476,12 @@ fn cancel_accepts_created_and_rejects_completed() {
 #[test]
 fn approve_decision_accepts_approver_and_returns_same_order() {
     let wo = released();
-    approver().validate_against(PAYLOAD).unwrap();
+    let payload = bound_payload(&wo);
+    approver().validate_against(&payload).unwrap();
     let got = call(
         "approve_decision",
         &wo,
-        json!({"artifact": approver(), "payload": PAYLOAD}),
+        json!({"artifact": approver(), "payload": payload}),
     );
     assert_same_order(&got, &wo);
     assert_eq!(got["order"]["state"], "Released");
@@ -483,28 +489,108 @@ fn approve_decision_accepts_approver_and_returns_same_order() {
 
 #[test]
 fn approve_decision_rejects_reader() {
+    let wo = created();
+    let payload = bound_payload(&wo);
     let art = reader();
-    let err = art.validate_against(PAYLOAD).unwrap_err();
+    let err = art.validate_against(&payload).unwrap_err();
     assert!(matches!(err, DecisionError::PermissionDenied { .. }));
     let got = call(
         "approve_decision",
-        &created(),
-        json!({"artifact": art, "payload": PAYLOAD}),
+        &wo,
+        json!({"artifact": art, "payload": payload}),
     );
     assert_decision(&got, &err);
 }
 
 #[test]
 fn approve_decision_rejects_hash_mismatch() {
-    let art = approver();
-    let err = art.validate_against("被掉包的 payload").unwrap_err();
+    let wo = created();
+    let payload = bound_payload(&wo);
+    // 请求 payload 已是这张订单的现算值，工件却签在另一段字符串上。
+    let art = DecisionArtifact::seal(
+        "user-approver",
+        Role::Approver,
+        Decision::Approve,
+        "不是这张订单的 payload",
+        "k-approver",
+    );
+    let err = art.validate_against(&payload).unwrap_err();
     assert!(matches!(err, DecisionError::PayloadHashMismatch { .. }));
     let got = call(
         "approve_decision",
-        &created(),
-        json!({"artifact": art, "payload": "被掉包的 payload"}),
+        &wo,
+        json!({"artifact": art, "payload": payload}),
     );
     assert_decision(&got, &err);
+}
+
+/// 发现 F5：工件与自带 payload 互相一致时，换一张订单仍然被接受。
+/// 引擎必须按订单现算 `decision_payload`（stable_id + graph_version），拒绝这种请求。
+/// 换 `run_id` 不改变绑定，同一工件仍然通过。
+#[test]
+fn approve_decision_rejects_matching_artifact_on_the_wrong_order() {
+    let victim = created();
+    let payload = bound_payload(&victim);
+    let artifact = DecisionArtifact::seal(
+        "user-approver",
+        Role::Approver,
+        Decision::Approve,
+        &payload,
+        "k-approver",
+    );
+    artifact
+        .validate_against(&payload)
+        .expect("工件对这份 payload 成立");
+
+    let mut other_id = serde_json::to_value(&victim).unwrap();
+    other_id["stable_id"] = json!("sid-other");
+    let other_id: WorkOrder = serde_json::from_value(other_id).unwrap();
+    assert_ne!(bound_payload(&other_id), payload);
+    let got = call(
+        "approve_decision",
+        &other_id,
+        json!({"artifact": artifact, "payload": payload}),
+    );
+    assert_bad(&got, "payload 与订单现算的 decision_payload 不一致");
+
+    let mut other_graph = serde_json::to_value(&victim).unwrap();
+    other_graph["graph_version"] = json!("g-9");
+    let other_graph: WorkOrder = serde_json::from_value(other_graph).unwrap();
+    assert_ne!(bound_payload(&other_graph), payload);
+    let got = call(
+        "approve_decision",
+        &other_graph,
+        json!({"artifact": artifact, "payload": payload}),
+    );
+    assert_bad(&got, "payload 与订单现算的 decision_payload 不一致");
+
+    // 同一张订单上，调用方改口一段自洽但不属于本单的 payload，同样拒绝。
+    let foreign = "wo-1:release-request:g-3";
+    let foreign_art = DecisionArtifact::seal(
+        "user-approver",
+        Role::Approver,
+        Decision::Approve,
+        foreign,
+        "k-approver",
+    );
+    foreign_art.validate_against(foreign).unwrap();
+    let got = call(
+        "approve_decision",
+        &victim,
+        json!({"artifact": foreign_art, "payload": foreign}),
+    );
+    assert_bad(&got, "payload 与订单现算的 decision_payload 不一致");
+
+    let mut other_run = serde_json::to_value(&victim).unwrap();
+    other_run["run_id"] = json!("run-CAN-other");
+    let other_run: WorkOrder = serde_json::from_value(other_run).unwrap();
+    assert_eq!(bound_payload(&other_run), payload);
+    let got = call(
+        "approve_decision",
+        &other_run,
+        json!({"artifact": artifact, "payload": payload}),
+    );
+    assert_same_order(&got, &other_run);
 }
 
 #[test]
@@ -571,7 +657,11 @@ fn missing_op_order_and_params_are_bad_request() {
         "缺少字段 payload",
     );
     assert_bad(
-        &call("approve_decision", &created(), json!({"payload": PAYLOAD})),
+        &call(
+            "approve_decision",
+            &created(),
+            json!({"payload": bound_payload(&created())}),
+        ),
         "缺少字段 artifact",
     );
 }
@@ -907,7 +997,7 @@ fn samples() -> Vec<(&'static str, String)> {
             request_line(
                 "approve_decision",
                 &released(),
-                json!({"artifact": approver(), "payload": PAYLOAD}),
+                json!({"artifact": approver(), "payload": bound_payload(&released())}),
             ),
         ),
         (
@@ -915,7 +1005,7 @@ fn samples() -> Vec<(&'static str, String)> {
             request_line(
                 "approve_decision",
                 &created(),
-                json!({"artifact": reader(), "payload": PAYLOAD}),
+                json!({"artifact": reader(), "payload": bound_payload(&created())}),
             ),
         ),
         ("unknown_op", r#"{"op":"frob"}"#.to_string()),
