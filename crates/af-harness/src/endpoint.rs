@@ -48,6 +48,16 @@ impl fmt::Display for EndpointKey {
     }
 }
 
+/// 一次模型调用的供给侧计量。网关侧独立口径，不吃 agent 自报。
+/// 流式拿不到完整 usage 时字段为 None。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModelUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    pub cache_read_tokens: u64,
+}
+
 /// 模型一轮的归一化结果。两种协议都落到这里。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -55,6 +65,8 @@ pub struct ModelMessage {
     pub text: String,
     pub tool_calls: Vec<ParsedToolCall>,
     pub finish: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub usage: Option<ModelUsage>,
 }
 
 /// 一次工具调用。`arguments` 已解析成 JSON。
@@ -79,6 +91,8 @@ pub enum TranscriptItem {
     Assistant {
         text: String,
         tool_calls: Vec<ParsedToolCall>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        usage: Option<ModelUsage>,
     },
     Tool {
         call_id: String,
@@ -174,6 +188,9 @@ fn openai_body(
         "messages": messages,
         "stream": endpoint.stream,
     });
+    if endpoint.stream {
+        body["stream_options"] = json!({"include_usage": true});
+    }
     if !tools.is_empty() {
         body["tools"] = json!(tools.iter().map(openai_tool).collect::<Vec<_>>());
     }
@@ -187,7 +204,9 @@ fn openai_message(item: &TranscriptItem) -> Value {
     match item {
         TranscriptItem::System { text } => json!({"role": "system", "content": text}),
         TranscriptItem::User { text } => json!({"role": "user", "content": text}),
-        TranscriptItem::Assistant { text, tool_calls } => {
+        TranscriptItem::Assistant {
+            text, tool_calls, ..
+        } => {
             let mut message = json!({"role": "assistant"});
             if text.is_empty() && !tool_calls.is_empty() {
                 message["content"] = Value::Null;
@@ -271,7 +290,9 @@ fn anthropic_messages(transcript: &[TranscriptItem]) -> Vec<Value> {
                 messages.push(json!({"role": "user", "content": text}));
                 index += 1;
             }
-            TranscriptItem::Assistant { text, tool_calls } => {
+            TranscriptItem::Assistant {
+                text, tool_calls, ..
+            } => {
                 let mut blocks = Vec::new();
                 if !text.is_empty() {
                     blocks.push(json!({"type": "text", "text": text}));
@@ -387,10 +408,22 @@ fn parse_openai_json(value: &Value) -> Result<ModelMessage> {
         .and_then(Value::as_str)
         .unwrap_or("stop")
         .to_string();
+    let usage = value.get("usage").map(|u| ModelUsage {
+        input_tokens: u.get("prompt_tokens").and_then(Value::as_u64).unwrap_or(0),
+        output_tokens: u
+            .get("completion_tokens")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+        cache_read_tokens: u
+            .pointer("/prompt_tokens_details/cached_tokens")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+    });
     Ok(ModelMessage {
         text,
         tool_calls,
         finish,
+        usage,
     })
 }
 
@@ -420,12 +453,26 @@ fn parse_openai_sse(body: &str) -> Result<ModelMessage> {
     let mut text = String::new();
     let mut calls: Vec<CallAcc> = Vec::new();
     let mut finish = String::from("stop");
+    let mut usage = None;
     for data in sse_data(body) {
         if data == "[DONE]" {
             continue;
         }
         let value: Value = serde_json::from_str(data)
             .map_err(|err| Error::Protocol(format!("openai SSE 不是 JSON: {err}")))?;
+        if let Some(u) = value.get("usage") {
+            usage = Some(ModelUsage {
+                input_tokens: u.get("prompt_tokens").and_then(Value::as_u64).unwrap_or(0),
+                output_tokens: u
+                    .get("completion_tokens")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0),
+                cache_read_tokens: u
+                    .pointer("/prompt_tokens_details/cached_tokens")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(0),
+            });
+        }
         if let Some(reason) = value
             .pointer("/choices/0/finish_reason")
             .and_then(Value::as_str)
@@ -465,6 +512,7 @@ fn parse_openai_sse(body: &str) -> Result<ModelMessage> {
         text,
         tool_calls,
         finish,
+        usage,
     })
 }
 
@@ -508,10 +556,19 @@ fn parse_anthropic_json(value: &Value) -> Result<ModelMessage> {
         .and_then(Value::as_str)
         .unwrap_or("end_turn")
         .to_string();
+    let usage = value.get("usage").map(|u| ModelUsage {
+        input_tokens: u.get("input_tokens").and_then(Value::as_u64).unwrap_or(0),
+        output_tokens: u.get("output_tokens").and_then(Value::as_u64).unwrap_or(0),
+        cache_read_tokens: u
+            .get("cache_read_input_tokens")
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
+    });
     Ok(ModelMessage {
         text,
         tool_calls,
         finish,
+        usage,
     })
 }
 
@@ -520,6 +577,7 @@ fn parse_anthropic_sse(body: &str) -> Result<ModelMessage> {
     let mut calls: Vec<CallAcc> = Vec::new();
     let mut finish = String::from("end_turn");
     let mut event_name = String::new();
+    let mut usage: Option<ModelUsage> = None;
     for line in body.split('\n') {
         let line = line.trim_end_matches('\r');
         if let Some(rest) = line.strip_prefix("event:") {
@@ -535,9 +593,29 @@ fn parse_anthropic_sse(body: &str) -> Result<ModelMessage> {
         }
         let value: Value = serde_json::from_str(data)
             .map_err(|err| Error::Protocol(format!("anthropic SSE 不是 JSON: {err}")))?;
+        if event_name == "message_start" {
+            if let Some(u) = value.pointer("/message/usage") {
+                usage = Some(ModelUsage {
+                    input_tokens: u.get("input_tokens").and_then(Value::as_u64).unwrap_or(0),
+                    output_tokens: 0,
+                    cache_read_tokens: u
+                        .get("cache_read_input_tokens")
+                        .and_then(Value::as_u64)
+                        .unwrap_or(0),
+                });
+            }
+        }
         if event_name == "message_delta" {
             if let Some(reason) = value.pointer("/delta/stop_reason").and_then(Value::as_str) {
                 finish = reason.to_string();
+            }
+            if let Some(out) = value.pointer("/usage/output_tokens").and_then(Value::as_u64) {
+                let entry = usage.get_or_insert(ModelUsage {
+                    input_tokens: 0,
+                    output_tokens: 0,
+                    cache_read_tokens: 0,
+                });
+                entry.output_tokens = out;
             }
         }
         if event_name == "content_block_start" {
@@ -589,6 +667,7 @@ fn parse_anthropic_sse(body: &str) -> Result<ModelMessage> {
         text,
         tool_calls,
         finish,
+        usage,
     })
 }
 
@@ -814,6 +893,46 @@ mod tests {
         );
         assert!(body.get("tools").is_none());
         assert_eq!(effect_label(EffectClass::Persist), "persist");
+    }
+
+    #[test]
+    fn openai_json_captures_usage() {
+        let stub = StubServer::spawn().unwrap();
+        let client = UreqClient::new();
+        let mut spec = decode_spec(crate::EXAMPLE_SPEC_JSON).unwrap();
+        spec.endpoint.base_url = stub.url();
+        stub.push(StubResponse::json(
+            200,
+            r#"{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":120,"completion_tokens":34,"prompt_tokens_details":{"cached_tokens":96}}}"#,
+        ));
+        let transcript = vec![TranscriptItem::User { text: "go".into() }];
+        let message =
+            complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap();
+        let usage = message.usage.expect("openai usage 应被捕获");
+        assert_eq!(usage.input_tokens, 120);
+        assert_eq!(usage.output_tokens, 34);
+        assert_eq!(usage.cache_read_tokens, 96);
+    }
+
+    #[test]
+    fn anthropic_json_captures_usage() {
+        let stub = StubServer::spawn().unwrap();
+        let client = UreqClient::new();
+        let mut spec = decode_spec(crate::EXAMPLE_SPEC_JSON).unwrap();
+        spec.endpoint.protocol = Protocol::AnthropicMessages;
+        spec.endpoint.base_url = stub.url();
+        stub.push(StubResponse::json(
+            200,
+            r#"{"stop_reason":"end_turn","content":[{"type":"thinking","thinking":"..."},{"type":"text","text":"好"}],"usage":{"input_tokens":51,"output_tokens":300,"cache_read_input_tokens":40}}"#,
+        ));
+        let transcript = vec![TranscriptItem::User { text: "go".into() }];
+        let message =
+            complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap();
+        assert_eq!(message.text, "好");
+        let usage = message.usage.expect("anthropic usage 应被捕获");
+        assert_eq!(usage.input_tokens, 51);
+        assert_eq!(usage.output_tokens, 300);
+        assert_eq!(usage.cache_read_tokens, 40);
     }
 
     #[test]

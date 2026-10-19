@@ -134,6 +134,16 @@ pub struct RunReport {
     pub effect_fresh: u64,
     pub transcript: Vec<TranscriptItem>,
     pub whitelist: Vec<String>,
+    /// 供给侧 token 三本账（输入/输出/缓存读），跨轮累计。
+    pub tokens: TokenTotals,
+}
+
+/// 一次 Run 的 token 总量。网关侧独立计量，误差与供应商账单对账。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct TokenTotals {
+    pub input: u64,
+    pub output: u64,
+    pub cache_read: u64,
 }
 
 /// 打开后的执行器。一个目录一把库、一个网关、一份 trace。
@@ -414,12 +424,18 @@ impl Opened {
                 "turn": live.row.turn_index,
                 "model": launch.spec.endpoint.model,
                 "finish": message.finish,
+                "usage": message.usage.map(|u| json!({
+                    "input_tokens": u.input_tokens,
+                    "output_tokens": u.output_tokens,
+                    "cache_read_tokens": u.cache_read_tokens,
+                })),
             }),
         );
         let assistant_text = message.text.clone();
         live.transcript.push(TranscriptItem::Assistant {
             text: message.text,
             tool_calls: message.tool_calls.clone(),
+            usage: message.usage,
         });
         let any_tool = !message.tool_calls.is_empty();
         let pass = self.run_tools(launch, live, &message.tool_calls)?;
@@ -798,6 +814,18 @@ fn terminal_status(row: &RunRecord) -> Result<Option<RunStatus>> {
 }
 
 fn report_of(row: &RunRecord, status: RunStatus) -> Result<RunReport> {
+    let transcript: Vec<TranscriptItem> = parse_stored(&row.transcript_json, "对话快照")?;
+    let mut tokens = TokenTotals::default();
+    for item in &transcript {
+        if let TranscriptItem::Assistant {
+            usage: Some(u), ..
+        } = item
+        {
+            tokens.input = tokens.input.saturating_add(u.input_tokens);
+            tokens.output = tokens.output.saturating_add(u.output_tokens);
+            tokens.cache_read = tokens.cache_read.saturating_add(u.cache_read_tokens);
+        }
+    }
     Ok(RunReport {
         run_id: row.run_id.clone(),
         status,
@@ -805,8 +833,9 @@ fn report_of(row: &RunRecord, status: RunStatus) -> Result<RunReport> {
         model_calls: row.model_calls,
         effect_replays: row.effect_replays,
         effect_fresh: row.effect_fresh,
-        transcript: parse_stored(&row.transcript_json, "对话快照")?,
+        transcript,
         whitelist: parse_stored(&row.whitelist_json, "白名单")?,
+        tokens,
     })
 }
 

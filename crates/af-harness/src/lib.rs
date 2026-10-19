@@ -37,12 +37,15 @@ pub use authz::{issue_run_credential, AuthzCode, RunCredential};
 pub use budget::{BudgetBinding, BudgetFault, BudgetRecord};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use endpoint::{
-    complete_once, EndpointKey, ModelMessage, ParsedToolCall, TranscriptItem, ANTHROPIC_VERSION,
+    complete_once, EndpointKey, ModelMessage, ModelUsage, ParsedToolCall, TranscriptItem,
+    ANTHROPIC_VERSION,
 };
 pub use error::Error;
 pub use http::{HttpClient, HttpResponse, UreqClient};
 pub use render::render;
-pub use run::{Breakpoint, Launch, Opened, RunReport, RunStatus, ToolFailure, ToolRegistry};
+pub use run::{
+    Breakpoint, Launch, Opened, RunReport, RunStatus, TokenTotals, ToolFailure, ToolRegistry,
+};
 pub use spec::{
     decode_spec, encode_spec, AgentSpec, AuthStyle, BudgetRef, BudgetUnit, ContextTemplate,
     EffectClass, EndpointSpec, Policy, Protocol, ReasoningTier, StopCondition, ToolDecl,
