@@ -30,7 +30,11 @@
 mod clock;
 mod error;
 mod event;
+mod http_util;
+mod merkle;
 mod otel;
+mod rekor;
+mod sha256;
 mod store;
 mod trace;
 
@@ -38,6 +42,7 @@ pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::TraceError;
 pub use event::{sum_gap_counts, GapInfo, Level, TraceEvent};
 pub use otel::OtelMode;
+pub use rekor::{verify_anchor, AnchorError, AnchorReceipt, RekorClient};
 pub use store::{store_path, OpenOutcome};
 pub use trace::{
     critical_log_path, normal_log_path, read_trace_log, ConsumerHold, ShutdownReport, Trace,
