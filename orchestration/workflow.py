@@ -22,7 +22,7 @@ import ledger
 TASK_QUEUE = "bridge-queue-a"
 ACT_TIMEOUT = datetime.timedelta(seconds=60)
 ENGINE_BIN = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "engine", "target", "debug", "wo-engine"
+    os.path.dirname(os.path.abspath(__file__)), "..", "target", "debug", "af-engine"
 )
 ENGINE_TRACE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "data", "engine_calls.log"
@@ -104,7 +104,7 @@ class BridgeOrderA:
         self._s = StateA()
 
     async def _engine(self, op: str, **kw: Any) -> Dict[str, Any]:
-        req = {"op": op, "order": self._s.order, "tag": self._s.order_id, **kw}
+        req = {"op": op, "order": self._s.order, **kw}
         resp = await temporalio.workflow.execute_activity(engine_call, args=[req], **_engine_options())
         if not resp.get("ok"):
             err = resp.get("error", {})
@@ -116,14 +116,16 @@ class BridgeOrderA:
         return resp
 
     async def _engine_transition(self, t: str) -> None:
-        await self._engine("transition", transition=t)
+        await self._engine(t)
 
     @temporalio.workflow.run
     async def run(self, s: StateA) -> Dict[str, Any]:
         self._s = s
         if not s.order:  # 首个 run：拼初始快照（字段集合 = af-workorder::WorkOrder 的 serde 形态）
+            from identity import stable_id_for  # stable_id 确定性派生（与 Rust 侧同规则）
             s.order = {
-                "id": s.order_id, "state": "Created", "graph_version": "g-bridge",
+                "id": s.order_id, "stable_id": stable_id_for(s.order_id), "run_id": "",
+                "state": "Created", "graph_version": "g-bridge",
                 "line": None, "budget_voucher": None, "artifacts": [],
                 "sla": {"deadline": ("2026-12-31T00:00:00Z" if s.with_deadline else None),
                         "priority": "High"},
