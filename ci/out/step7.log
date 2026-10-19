@@ -1,16 +1,39 @@
-warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:43:1
+warning[duplicate]: found 2 duplicate entries for crate 'base64'
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:33:1
    │  
-43 │ ╭ block-buffer 0.9.0 registry+https://github.com/rust-lang/crates.io-index
-44 │ │ block-buffer 0.10.4 registry+https://github.com/rust-lang/crates.io-index
+33 │ ╭ base64 0.13.1 registry+https://github.com/rust-lang/crates.io-index
+34 │ │ base64 0.22.1 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰───────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ base64 v0.13.1
+     └── biscuit-auth v6.0.0
+         ├── af-credential v0.1.0
+         │   ├── af-harness v0.1.0
+         │   ├── (dev) af-meter v0.1.0
+         │   │   └── af-harness v0.1.0 (*)
+         │   └── af-sandbox v0.1.0
+         ├── af-harness v0.1.0 (*)
+         └── af-sandbox v0.1.0 (*)
+   ├ base64 v0.22.1
+     └── ureq v2.12.1
+         └── af-harness v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:45:1
+   │  
+45 │ ╭ block-buffer 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+46 │ │ block-buffer 0.10.4 registry+https://github.com/rust-lang/crates.io-index
    │ ╰─────────────────────────────────────────────────────────────────────────┘ lock entries
    │  
    ├ block-buffer v0.9.0
      └── sha2 v0.9.9
          └── biscuit-auth v6.0.0
              ├── af-credential v0.1.0
+             │   ├── af-harness v0.1.0
              │   ├── (dev) af-meter v0.1.0
+             │   │   └── af-harness v0.1.0 (*)
              │   └── af-sandbox v0.1.0
+             ├── af-harness v0.1.0 (*)
              └── af-sandbox v0.1.0 (*)
    ├ block-buffer v0.10.4
      └── digest v0.10.7
@@ -18,12 +41,17 @@ warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
          │   └── ed25519-dalek v2.2.0
          │       ├── af-workorder v0.1.0
          │       │   ├── af-effect-gateway v0.1.0
+         │       │   │   └── af-harness v0.1.0
          │       │   ├── (dev) af-engine v0.1.0
+         │       │   ├── af-harness v0.1.0 (*)
          │       │   └── (dev) af-release-gate v0.1.0
          │       └── biscuit-auth v6.0.0
          │           ├── af-credential v0.1.0
+         │           │   ├── af-harness v0.1.0 (*)
          │           │   ├── (dev) af-meter v0.1.0
+         │           │   │   └── af-harness v0.1.0 (*)
          │           │   └── af-sandbox v0.1.0
+         │           ├── af-harness v0.1.0 (*)
          │           └── af-sandbox v0.1.0 (*)
          ├── ecdsa v0.16.9
          │   ├── biscuit-auth v6.0.0 (*)
@@ -56,10 +84,10 @@ warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
                  └── ed25519-dalek v2.2.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:75:1
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:77:1
    │  
-75 │ ╭ cpufeatures 0.2.17 registry+https://github.com/rust-lang/crates.io-index
-76 │ │ cpufeatures 0.3.1 registry+https://github.com/rust-lang/crates.io-index
+77 │ ╭ cpufeatures 0.2.17 registry+https://github.com/rust-lang/crates.io-index
+78 │ │ cpufeatures 0.3.1 registry+https://github.com/rust-lang/crates.io-index
    │ ╰───────────────────────────────────────────────────────────────────────┘ lock entries
    │  
    ├ cpufeatures v0.2.17
@@ -67,12 +95,17 @@ warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
      │   └── ed25519-dalek v2.2.0
      │       ├── af-workorder v0.1.0
      │       │   ├── af-effect-gateway v0.1.0
+     │       │   │   └── af-harness v0.1.0
      │       │   ├── (dev) af-engine v0.1.0
+     │       │   ├── af-harness v0.1.0 (*)
      │       │   └── (dev) af-release-gate v0.1.0
      │       └── biscuit-auth v6.0.0
      │           ├── af-credential v0.1.0
+     │           │   ├── af-harness v0.1.0 (*)
      │           │   ├── (dev) af-meter v0.1.0
+     │           │   │   └── af-harness v0.1.0 (*)
      │           │   └── af-sandbox v0.1.0
+     │           ├── af-harness v0.1.0 (*)
      │           └── af-sandbox v0.1.0 (*)
      ├── keccak v0.1.6
      │   └── sha3 v0.10.9
@@ -97,13 +130,17 @@ warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
          │   │   ├── af-station v0.1.0
          │   │   └── af-workorder v0.1.0
          │   │       ├── af-effect-gateway v0.1.0
+         │   │       │   └── af-harness v0.1.0
          │   │       ├── (dev) af-engine v0.1.0
+         │   │       ├── af-harness v0.1.0 (*)
          │   │       └── (dev) af-release-gate v0.1.0
          │   ├── (dev) af-meter v0.1.0
+         │   │   └── af-harness v0.1.0 (*)
          │   ├── (dev) af-release-gate v0.1.0 (*)
          │   ├── (dev) af-sampling v0.1.0
          │   ├── (dev) af-station v0.1.0 (*)
          │   └── (dev) af-stop v0.1.0
+         │       └── af-harness v0.1.0 (*)
          └── rand v0.10.3
              ├── proptest v1.12.0 (*)
              └── twox-hash v2.1.5
@@ -111,18 +148,21 @@ warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
                      └── af-mes v0.1.0
 
 warning[duplicate]: found 2 duplicate entries for crate 'der'
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:90:1
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:92:1
    │  
-90 │ ╭ der 0.6.1 registry+https://github.com/rust-lang/crates.io-index
-91 │ │ der 0.7.10 registry+https://github.com/rust-lang/crates.io-index
+92 │ ╭ der 0.6.1 registry+https://github.com/rust-lang/crates.io-index
+93 │ │ der 0.7.10 registry+https://github.com/rust-lang/crates.io-index
    │ ╰────────────────────────────────────────────────────────────────┘ lock entries
    │  
    ├ der v0.6.1
      ├── pkcs8 v0.9.0
      │   └── biscuit-auth v6.0.0
      │       ├── af-credential v0.1.0
+     │       │   ├── af-harness v0.1.0
      │       │   ├── (dev) af-meter v0.1.0
+     │       │   │   └── af-harness v0.1.0 (*)
      │       │   └── af-sandbox v0.1.0
+     │       ├── af-harness v0.1.0 (*)
      │       └── af-sandbox v0.1.0 (*)
      └── spki v0.6.0
          └── pkcs8 v0.9.0 (*)
@@ -130,8 +170,11 @@ warning[duplicate]: found 2 duplicate entries for crate 'der'
      ├── ecdsa v0.16.9
      │   ├── biscuit-auth v6.0.0
      │   │   ├── af-credential v0.1.0
+     │   │   │   ├── af-harness v0.1.0
      │   │   │   ├── (dev) af-meter v0.1.0
+     │   │   │   │   └── af-harness v0.1.0 (*)
      │   │   │   └── af-sandbox v0.1.0
+     │   │   ├── af-harness v0.1.0 (*)
      │   │   └── af-sandbox v0.1.0 (*)
      │   └── p256 v0.13.2
      │       └── biscuit-auth v6.0.0 (*)
@@ -140,7 +183,9 @@ warning[duplicate]: found 2 duplicate entries for crate 'der'
      │   │   └── ed25519-dalek v2.2.0
      │   │       ├── af-workorder v0.1.0
      │   │       │   ├── af-effect-gateway v0.1.0
+     │   │       │   │   └── af-harness v0.1.0 (*)
      │   │       │   ├── (dev) af-engine v0.1.0
+     │   │       │   ├── af-harness v0.1.0 (*)
      │   │       │   └── (dev) af-release-gate v0.1.0
      │   │       └── biscuit-auth v6.0.0 (*)
      │   ├── elliptic-curve v0.13.8
@@ -157,30 +202,38 @@ warning[duplicate]: found 2 duplicate entries for crate 'der'
          └── pkcs8 v0.10.2 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'digest'
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:93:1
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:95:1
    │  
-93 │ ╭ digest 0.9.0 registry+https://github.com/rust-lang/crates.io-index
-94 │ │ digest 0.10.7 registry+https://github.com/rust-lang/crates.io-index
+95 │ ╭ digest 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+96 │ │ digest 0.10.7 registry+https://github.com/rust-lang/crates.io-index
    │ ╰───────────────────────────────────────────────────────────────────┘ lock entries
    │  
    ├ digest v0.9.0
      └── sha2 v0.9.9
          └── biscuit-auth v6.0.0
              ├── af-credential v0.1.0
+             │   ├── af-harness v0.1.0
              │   ├── (dev) af-meter v0.1.0
+             │   │   └── af-harness v0.1.0 (*)
              │   └── af-sandbox v0.1.0
+             ├── af-harness v0.1.0 (*)
              └── af-sandbox v0.1.0 (*)
    ├ digest v0.10.7
      ├── curve25519-dalek v4.1.3
      │   └── ed25519-dalek v2.2.0
      │       ├── af-workorder v0.1.0
      │       │   ├── af-effect-gateway v0.1.0
+     │       │   │   └── af-harness v0.1.0
      │       │   ├── (dev) af-engine v0.1.0
+     │       │   ├── af-harness v0.1.0 (*)
      │       │   └── (dev) af-release-gate v0.1.0
      │       └── biscuit-auth v6.0.0
      │           ├── af-credential v0.1.0
+     │           │   ├── af-harness v0.1.0 (*)
      │           │   ├── (dev) af-meter v0.1.0
+     │           │   │   └── af-harness v0.1.0 (*)
      │           │   └── af-sandbox v0.1.0
+     │           ├── af-harness v0.1.0 (*)
      │           └── af-sandbox v0.1.0 (*)
      ├── ecdsa v0.16.9
      │   ├── biscuit-auth v6.0.0 (*)
@@ -213,51 +266,62 @@ warning[duplicate]: found 2 duplicate entries for crate 'digest'
              └── ed25519-dalek v2.2.0 (*)
 
 warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:125:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:127:1
     │  
-125 │ ╭ getrandom 0.2.17 registry+https://github.com/rust-lang/crates.io-index
-126 │ │ getrandom 0.3.4 registry+https://github.com/rust-lang/crates.io-index
-127 │ │ getrandom 0.4.3 registry+https://github.com/rust-lang/crates.io-index
+127 │ ╭ getrandom 0.2.17 registry+https://github.com/rust-lang/crates.io-index
+128 │ │ getrandom 0.3.4 registry+https://github.com/rust-lang/crates.io-index
+129 │ │ getrandom 0.4.3 registry+https://github.com/rust-lang/crates.io-index
     │ ╰─────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ getrandom v0.2.17
       ├── biscuit-auth v6.0.0
       │   ├── af-credential v0.1.0
+      │   │   ├── af-harness v0.1.0
       │   │   ├── (dev) af-meter v0.1.0
+      │   │   │   └── af-harness v0.1.0 (*)
       │   │   └── af-sandbox v0.1.0
+      │   ├── af-harness v0.1.0 (*)
       │   └── af-sandbox v0.1.0 (*)
-      └── rand_core v0.6.4
-          ├── biscuit-auth v6.0.0 (*)
-          ├── crypto-bigint v0.5.5
-          │   └── elliptic-curve v0.13.8
-          │       ├── biscuit-auth v6.0.0 (*)
-          │       ├── ecdsa v0.16.9
-          │       │   ├── biscuit-auth v6.0.0 (*)
-          │       │   └── p256 v0.13.2
-          │       │       └── biscuit-auth v6.0.0 (*)
-          │       ├── p256 v0.13.2 (*)
-          │       └── primeorder v0.13.6
-          │           └── p256 v0.13.2 (*)
-          ├── ed25519-dalek v2.2.0
-          │   ├── af-workorder v0.1.0
-          │   │   ├── af-effect-gateway v0.1.0
-          │   │   ├── (dev) af-engine v0.1.0
-          │   │   └── (dev) af-release-gate v0.1.0
-          │   └── biscuit-auth v6.0.0 (*)
-          ├── elliptic-curve v0.13.8 (*)
-          ├── ff v0.13.1
-          │   ├── elliptic-curve v0.13.8 (*)
-          │   └── group v0.13.0
-          │       └── elliptic-curve v0.13.8 (*)
-          ├── group v0.13.0 (*)
-          ├── rand v0.8.8
-          │   └── biscuit-auth v6.0.0 (*)
-          ├── rand_chacha v0.3.1
-          │   └── rand v0.8.8 (*)
-          └── signature v2.2.0
-              ├── ecdsa v0.16.9 (*)
-              └── ed25519 v2.2.3
-                  └── ed25519-dalek v2.2.0 (*)
+      ├── rand_core v0.6.4
+      │   ├── biscuit-auth v6.0.0 (*)
+      │   ├── crypto-bigint v0.5.5
+      │   │   └── elliptic-curve v0.13.8
+      │   │       ├── biscuit-auth v6.0.0 (*)
+      │   │       ├── ecdsa v0.16.9
+      │   │       │   ├── biscuit-auth v6.0.0 (*)
+      │   │       │   └── p256 v0.13.2
+      │   │       │       └── biscuit-auth v6.0.0 (*)
+      │   │       ├── p256 v0.13.2 (*)
+      │   │       └── primeorder v0.13.6
+      │   │           └── p256 v0.13.2 (*)
+      │   ├── ed25519-dalek v2.2.0
+      │   │   ├── af-workorder v0.1.0
+      │   │   │   ├── af-effect-gateway v0.1.0
+      │   │   │   │   └── af-harness v0.1.0 (*)
+      │   │   │   ├── (dev) af-engine v0.1.0
+      │   │   │   ├── af-harness v0.1.0 (*)
+      │   │   │   └── (dev) af-release-gate v0.1.0
+      │   │   └── biscuit-auth v6.0.0 (*)
+      │   ├── elliptic-curve v0.13.8 (*)
+      │   ├── ff v0.13.1
+      │   │   ├── elliptic-curve v0.13.8 (*)
+      │   │   └── group v0.13.0
+      │   │       └── elliptic-curve v0.13.8 (*)
+      │   ├── group v0.13.0 (*)
+      │   ├── rand v0.8.8
+      │   │   └── biscuit-auth v6.0.0 (*)
+      │   ├── rand_chacha v0.3.1
+      │   │   └── rand v0.8.8 (*)
+      │   └── signature v2.2.0
+      │       ├── ecdsa v0.16.9 (*)
+      │       └── ed25519 v2.2.3
+      │           └── ed25519-dalek v2.2.0 (*)
+      └── ring v0.17.14
+          ├── rustls v0.23.46
+          │   └── ureq v2.12.1
+          │       └── af-harness v0.1.0 (*)
+          └── rustls-webpki v0.103.15
+              └── rustls v0.23.46 (*)
     ├ getrandom v0.3.4
       └── rand_core v0.9.5
           ├── rand v0.9.5
@@ -272,19 +336,24 @@ warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
       │   │   │   ├── af-station v0.1.0
       │   │   │   └── af-workorder v0.1.0
       │   │   │       ├── af-effect-gateway v0.1.0
+      │   │   │       │   └── af-harness v0.1.0
       │   │   │       ├── (dev) af-engine v0.1.0
+      │   │   │       ├── af-harness v0.1.0 (*)
       │   │   │       └── (dev) af-release-gate v0.1.0
       │   │   ├── (dev) af-meter v0.1.0
+      │   │   │   └── af-harness v0.1.0 (*)
       │   │   ├── (dev) af-release-gate v0.1.0 (*)
       │   │   ├── (dev) af-sampling v0.1.0
       │   │   ├── (dev) af-station v0.1.0 (*)
       │   │   └── (dev) af-stop v0.1.0
+      │   │       └── af-harness v0.1.0 (*)
       │   └── twox-hash v2.1.5
       │       └── clickhouse v0.15.3
       │           └── af-mes v0.1.0
       └── tempfile v3.27.0
           ├── insta v1.49.0
           │   ├── (dev) af-credential v0.1.0
+          │   │   ├── af-harness v0.1.0 (*)
           │   │   ├── (dev) af-meter v0.1.0 (*)
           │   │   └── af-sandbox v0.1.0
           │   ├── (dev) af-graph v0.1.0
@@ -295,26 +364,32 @@ warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
               └── proptest v1.12.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:130:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:132:1
     │  
-130 │ ╭ hashbrown 0.14.5 registry+https://github.com/rust-lang/crates.io-index
-131 │ │ hashbrown 0.17.1 registry+https://github.com/rust-lang/crates.io-index
+132 │ ╭ hashbrown 0.14.5 registry+https://github.com/rust-lang/crates.io-index
+133 │ │ hashbrown 0.17.1 registry+https://github.com/rust-lang/crates.io-index
     │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ hashbrown v0.14.5
       └── hashlink v0.9.1
           └── rusqlite v0.32.1
               ├── af-credential v0.1.0
+              │   ├── af-harness v0.1.0
               │   ├── (dev) af-meter v0.1.0
+              │   │   └── af-harness v0.1.0 (*)
               │   └── af-sandbox v0.1.0
               ├── af-effect-gateway v0.1.0
+              │   └── af-harness v0.1.0 (*)
               ├── af-eval v0.1.0
+              ├── af-harness v0.1.0 (*)
               ├── af-meter v0.1.0 (*)
               ├── af-release-gate v0.1.0
               ├── af-sampling v0.1.0
               ├── af-station v0.1.0
               ├── af-stop v0.1.0
+              │   └── af-harness v0.1.0 (*)
               └── af-trace v0.1.0
+                  └── af-harness v0.1.0 (*)
     ├ hashbrown v0.17.1
       ├── clickhouse v0.15.3
       │   └── af-mes v0.1.0
@@ -324,7 +399,9 @@ warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
           │       └── (build) cedar-policy-core v4.14.0
           │           ├── cedar-policy v4.14.0
           │           │   └── af-credential v0.1.0
+          │           │       ├── af-harness v0.1.0
           │           │       ├── (dev) af-meter v0.1.0
+          │           │       │   └── af-harness v0.1.0 (*)
           │           │       └── af-sandbox v0.1.0
           │           └── cedar-policy-formatter v4.14.0
           │               └── cedar-policy v4.14.0 (*)
@@ -333,23 +410,29 @@ warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
               │   ├── af-station v0.1.0
               │   └── af-workorder v0.1.0
               │       ├── af-effect-gateway v0.1.0
+              │       │   └── af-harness v0.1.0 (*)
               │       ├── (dev) af-engine v0.1.0
+              │       ├── af-harness v0.1.0 (*)
               │       └── (dev) af-release-gate v0.1.0
               ├── af-credential v0.1.0 (*)
               ├── af-dspy-ir v0.1.0
               ├── af-effect-gateway v0.1.0 (*)
               ├── (dev) af-engine v0.1.0 (*)
               ├── af-graph v0.1.0
+              ├── af-harness v0.1.0 (*)
               ├── af-mes v0.1.0 (*)
               ├── af-meter v0.1.0 (*)
               ├── af-release-gate v0.1.0 (*)
               ├── af-sampling v0.1.0
               ├── af-station v0.1.0 (*)
               ├── af-stop v0.1.0
+              │   └── af-harness v0.1.0 (*)
               ├── af-trace v0.1.0
+              │   └── af-harness v0.1.0 (*)
               ├── af-workorder v0.1.0 (*)
               ├── biscuit-auth v6.0.0
               │   ├── af-credential v0.1.0 (*)
+              │   ├── af-harness v0.1.0 (*)
               │   └── af-sandbox v0.1.0 (*)
               ├── cedar-policy v4.14.0 (*)
               ├── cedar-policy-core v4.14.0 (*)
@@ -365,12 +448,12 @@ warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
                   └── criterion v0.8.2 (*)
 
 warning[duplicate]: found 3 duplicate entries for crate 'itertools'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:155:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:157:1
     │  
-155 │ ╭ itertools 0.10.5 registry+https://github.com/rust-lang/crates.io-index
-156 │ │ itertools 0.13.0 registry+https://github.com/rust-lang/crates.io-index
-157 │ │ itertools 0.14.0 registry+https://github.com/rust-lang/crates.io-index
-158 │ │ itertools 0.15.0 registry+https://github.com/rust-lang/crates.io-index
+157 │ ╭ itertools 0.10.5 registry+https://github.com/rust-lang/crates.io-index
+158 │ │ itertools 0.13.0 registry+https://github.com/rust-lang/crates.io-index
+159 │ │ itertools 0.14.0 registry+https://github.com/rust-lang/crates.io-index
+160 │ │ itertools 0.15.0 registry+https://github.com/rust-lang/crates.io-index
     │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ itertools v0.10.5
@@ -378,8 +461,11 @@ warning[duplicate]: found 3 duplicate entries for crate 'itertools'
           └── prost v0.10.4
               ├── biscuit-auth v6.0.0
               │   ├── af-credential v0.1.0
+              │   │   ├── af-harness v0.1.0
               │   │   ├── (dev) af-meter v0.1.0
+              │   │   │   └── af-harness v0.1.0 (*)
               │   │   └── af-sandbox v0.1.0
+              │   ├── af-harness v0.1.0 (*)
               │   └── af-sandbox v0.1.0 (*)
               └── prost-types v0.10.1
                   └── biscuit-auth v6.0.0 (*)
@@ -388,14 +474,18 @@ warning[duplicate]: found 3 duplicate entries for crate 'itertools'
           └── (build) cedar-policy-core v4.14.0
               ├── cedar-policy v4.14.0
               │   └── af-credential v0.1.0
+              │       ├── af-harness v0.1.0
               │       ├── (dev) af-meter v0.1.0
+              │       │   └── af-harness v0.1.0 (*)
               │       └── af-sandbox v0.1.0
               └── cedar-policy-formatter v4.14.0
                   └── cedar-policy v4.14.0 (*)
     ├ itertools v0.15.0
       ├── cedar-policy v4.14.0
       │   └── af-credential v0.1.0
+      │       ├── af-harness v0.1.0
       │       ├── (dev) af-meter v0.1.0
+      │       │   └── af-harness v0.1.0 (*)
       │       └── af-sandbox v0.1.0
       ├── cedar-policy-core v4.14.0
       │   ├── cedar-policy v4.14.0 (*)
@@ -404,10 +494,10 @@ warning[duplicate]: found 3 duplicate entries for crate 'itertools'
       └── cedar-policy-formatter v4.14.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:205:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:207:1
     │  
-205 │ ╭ phf_shared 0.11.3 registry+https://github.com/rust-lang/crates.io-index
-206 │ │ phf_shared 0.12.1 registry+https://github.com/rust-lang/crates.io-index
+207 │ ╭ phf_shared 0.11.3 registry+https://github.com/rust-lang/crates.io-index
+208 │ │ phf_shared 0.12.1 registry+https://github.com/rust-lang/crates.io-index
     │ ╰───────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ phf_shared v0.11.3
@@ -416,7 +506,9 @@ warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
               └── (build) cedar-policy-core v4.14.0
                   ├── cedar-policy v4.14.0
                   │   └── af-credential v0.1.0
+                  │       ├── af-harness v0.1.0
                   │       ├── (dev) af-meter v0.1.0
+                  │       │   └── af-harness v0.1.0 (*)
                   │       └── af-sandbox v0.1.0
                   └── cedar-policy-formatter v4.14.0
                       └── cedar-policy v4.14.0 (*)
@@ -427,36 +519,47 @@ warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
               │   ├── af-station v0.1.0
               │   └── af-workorder v0.1.0
               │       ├── af-effect-gateway v0.1.0
+              │       │   └── af-harness v0.1.0
               │       ├── (dev) af-engine v0.1.0
+              │       ├── af-harness v0.1.0 (*)
               │       └── (dev) af-release-gate v0.1.0
               ├── af-meter v0.1.0
+              │   └── af-harness v0.1.0 (*)
               ├── (dev) af-station v0.1.0 (*)
               └── (dev) af-workorder v0.1.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'pkcs8'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:209:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:211:1
     │  
-209 │ ╭ pkcs8 0.9.0 registry+https://github.com/rust-lang/crates.io-index
-210 │ │ pkcs8 0.10.2 registry+https://github.com/rust-lang/crates.io-index
+211 │ ╭ pkcs8 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+212 │ │ pkcs8 0.10.2 registry+https://github.com/rust-lang/crates.io-index
     │ ╰──────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ pkcs8 v0.9.0
       └── biscuit-auth v6.0.0
           ├── af-credential v0.1.0
+          │   ├── af-harness v0.1.0
           │   ├── (dev) af-meter v0.1.0
+          │   │   └── af-harness v0.1.0 (*)
           │   └── af-sandbox v0.1.0
+          ├── af-harness v0.1.0 (*)
           └── af-sandbox v0.1.0 (*)
     ├ pkcs8 v0.10.2
       ├── ed25519 v2.2.3
       │   └── ed25519-dalek v2.2.0
       │       ├── af-workorder v0.1.0
       │       │   ├── af-effect-gateway v0.1.0
+      │       │   │   └── af-harness v0.1.0
       │       │   ├── (dev) af-engine v0.1.0
+      │       │   ├── af-harness v0.1.0 (*)
       │       │   └── (dev) af-release-gate v0.1.0
       │       └── biscuit-auth v6.0.0
       │           ├── af-credential v0.1.0
+      │           │   ├── af-harness v0.1.0 (*)
       │           │   ├── (dev) af-meter v0.1.0
+      │           │   │   └── af-harness v0.1.0 (*)
       │           │   └── af-sandbox v0.1.0
+      │           ├── af-harness v0.1.0 (*)
       │           └── af-sandbox v0.1.0 (*)
       ├── elliptic-curve v0.13.8
       │   ├── biscuit-auth v6.0.0 (*)
@@ -470,23 +573,11 @@ warning[duplicate]: found 2 duplicate entries for crate 'pkcs8'
       └── sec1 v0.7.3
           └── elliptic-curve v0.13.8 (*)
 
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
-   │
-25 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:22:4
-   │
-22 │   "ISC",
-   │    ━━━ unmatched license allowance
-
 warning[duplicate]: found 2 duplicate entries for crate 'r-efi'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:231:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:233:1
     │  
-231 │ ╭ r-efi 5.3.0 registry+https://github.com/rust-lang/crates.io-index
-232 │ │ r-efi 6.0.0 registry+https://github.com/rust-lang/crates.io-index
+233 │ ╭ r-efi 5.3.0 registry+https://github.com/rust-lang/crates.io-index
+234 │ │ r-efi 6.0.0 registry+https://github.com/rust-lang/crates.io-index
     │ ╰─────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ r-efi v5.3.0
@@ -505,19 +596,24 @@ warning[duplicate]: found 2 duplicate entries for crate 'r-efi'
           │   │   │   ├── af-station v0.1.0
           │   │   │   └── af-workorder v0.1.0
           │   │   │       ├── af-effect-gateway v0.1.0
+          │   │   │       │   └── af-harness v0.1.0
           │   │   │       ├── (dev) af-engine v0.1.0
+          │   │   │       ├── af-harness v0.1.0 (*)
           │   │   │       └── (dev) af-release-gate v0.1.0
           │   │   ├── (dev) af-meter v0.1.0
+          │   │   │   └── af-harness v0.1.0 (*)
           │   │   ├── (dev) af-release-gate v0.1.0 (*)
           │   │   ├── (dev) af-sampling v0.1.0
           │   │   ├── (dev) af-station v0.1.0 (*)
           │   │   └── (dev) af-stop v0.1.0
+          │   │       └── af-harness v0.1.0 (*)
           │   └── twox-hash v2.1.5
           │       └── clickhouse v0.15.3
           │           └── af-mes v0.1.0
           └── tempfile v3.27.0
               ├── insta v1.49.0
               │   ├── (dev) af-credential v0.1.0
+              │   │   ├── af-harness v0.1.0 (*)
               │   │   ├── (dev) af-meter v0.1.0 (*)
               │   │   └── af-sandbox v0.1.0
               │   ├── (dev) af-graph v0.1.0
@@ -528,18 +624,21 @@ warning[duplicate]: found 2 duplicate entries for crate 'r-efi'
                   └── proptest v1.12.0 (*)
 
 warning[duplicate]: found 3 duplicate entries for crate 'rand'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:233:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:235:1
     │  
-233 │ ╭ rand 0.8.8 registry+https://github.com/rust-lang/crates.io-index
-234 │ │ rand 0.9.5 registry+https://github.com/rust-lang/crates.io-index
-235 │ │ rand 0.10.3 registry+https://github.com/rust-lang/crates.io-index
+235 │ ╭ rand 0.8.8 registry+https://github.com/rust-lang/crates.io-index
+236 │ │ rand 0.9.5 registry+https://github.com/rust-lang/crates.io-index
+237 │ │ rand 0.10.3 registry+https://github.com/rust-lang/crates.io-index
     │ ╰─────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ rand v0.8.8
       └── biscuit-auth v6.0.0
           ├── af-credential v0.1.0
+          │   ├── af-harness v0.1.0
           │   ├── (dev) af-meter v0.1.0
+          │   │   └── af-harness v0.1.0 (*)
           │   └── af-sandbox v0.1.0
+          ├── af-harness v0.1.0 (*)
           └── af-sandbox v0.1.0 (*)
     ├ rand v0.9.5
       └── clickhouse v0.15.3
@@ -550,30 +649,37 @@ warning[duplicate]: found 3 duplicate entries for crate 'rand'
       │   │   ├── af-station v0.1.0
       │   │   └── af-workorder v0.1.0
       │   │       ├── af-effect-gateway v0.1.0
+      │   │       │   └── af-harness v0.1.0
       │   │       ├── (dev) af-engine v0.1.0
+      │   │       ├── af-harness v0.1.0 (*)
       │   │       └── (dev) af-release-gate v0.1.0
       │   ├── (dev) af-meter v0.1.0
+      │   │   └── af-harness v0.1.0 (*)
       │   ├── (dev) af-release-gate v0.1.0 (*)
       │   ├── (dev) af-sampling v0.1.0
       │   ├── (dev) af-station v0.1.0 (*)
       │   └── (dev) af-stop v0.1.0
+      │       └── af-harness v0.1.0 (*)
       └── twox-hash v2.1.5
           └── clickhouse v0.15.3
               └── af-mes v0.1.0
 
 warning[duplicate]: found 2 duplicate entries for crate 'rand_chacha'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:236:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:238:1
     │  
-236 │ ╭ rand_chacha 0.3.1 registry+https://github.com/rust-lang/crates.io-index
-237 │ │ rand_chacha 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+238 │ ╭ rand_chacha 0.3.1 registry+https://github.com/rust-lang/crates.io-index
+239 │ │ rand_chacha 0.9.0 registry+https://github.com/rust-lang/crates.io-index
     │ ╰───────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ rand_chacha v0.3.1
       └── rand v0.8.8
           └── biscuit-auth v6.0.0
               ├── af-credential v0.1.0
+              │   ├── af-harness v0.1.0
               │   ├── (dev) af-meter v0.1.0
+              │   │   └── af-harness v0.1.0 (*)
               │   └── af-sandbox v0.1.0
+              ├── af-harness v0.1.0 (*)
               └── af-sandbox v0.1.0 (*)
     ├ rand_chacha v0.9.0
       └── rand v0.9.5
@@ -581,18 +687,21 @@ warning[duplicate]: found 2 duplicate entries for crate 'rand_chacha'
               └── af-mes v0.1.0
 
 warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:238:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:240:1
     │  
-238 │ ╭ rand_core 0.6.4 registry+https://github.com/rust-lang/crates.io-index
-239 │ │ rand_core 0.9.5 registry+https://github.com/rust-lang/crates.io-index
-240 │ │ rand_core 0.10.1 registry+https://github.com/rust-lang/crates.io-index
+240 │ ╭ rand_core 0.6.4 registry+https://github.com/rust-lang/crates.io-index
+241 │ │ rand_core 0.9.5 registry+https://github.com/rust-lang/crates.io-index
+242 │ │ rand_core 0.10.1 registry+https://github.com/rust-lang/crates.io-index
     │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ rand_core v0.6.4
       ├── biscuit-auth v6.0.0
       │   ├── af-credential v0.1.0
+      │   │   ├── af-harness v0.1.0
       │   │   ├── (dev) af-meter v0.1.0
+      │   │   │   └── af-harness v0.1.0 (*)
       │   │   └── af-sandbox v0.1.0
+      │   ├── af-harness v0.1.0 (*)
       │   └── af-sandbox v0.1.0 (*)
       ├── crypto-bigint v0.5.5
       │   └── elliptic-curve v0.13.8
@@ -607,7 +716,9 @@ warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
       ├── ed25519-dalek v2.2.0
       │   ├── af-workorder v0.1.0
       │   │   ├── af-effect-gateway v0.1.0
+      │   │   │   └── af-harness v0.1.0 (*)
       │   │   ├── (dev) af-engine v0.1.0
+      │   │   ├── af-harness v0.1.0 (*)
       │   │   └── (dev) af-release-gate v0.1.0
       │   └── biscuit-auth v6.0.0 (*)
       ├── elliptic-curve v0.13.8 (*)
@@ -637,13 +748,17 @@ warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
       │   │   │   ├── af-station v0.1.0
       │   │   │   └── af-workorder v0.1.0
       │   │   │       ├── af-effect-gateway v0.1.0
+      │   │   │       │   └── af-harness v0.1.0
       │   │   │       ├── (dev) af-engine v0.1.0
+      │   │   │       ├── af-harness v0.1.0 (*)
       │   │   │       └── (dev) af-release-gate v0.1.0
       │   │   ├── (dev) af-meter v0.1.0
+      │   │   │   └── af-harness v0.1.0 (*)
       │   │   ├── (dev) af-release-gate v0.1.0 (*)
       │   │   ├── (dev) af-sampling v0.1.0
       │   │   ├── (dev) af-station v0.1.0 (*)
       │   │   └── (dev) af-stop v0.1.0
+      │   │       └── af-harness v0.1.0 (*)
       │   └── rand v0.10.3
       │       ├── proptest v1.12.0 (*)
       │       └── twox-hash v2.1.5
@@ -654,6 +769,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
       │   └── tempfile v3.27.0
       │       ├── insta v1.49.0
       │       │   ├── (dev) af-credential v0.1.0
+      │       │   │   ├── af-harness v0.1.0 (*)
       │       │   │   ├── (dev) af-meter v0.1.0 (*)
       │       │   │   └── af-sandbox v0.1.0
       │       │   ├── (dev) af-graph v0.1.0
@@ -667,54 +783,68 @@ warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
           └── proptest v1.12.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'sha2'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:269:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:275:1
     │  
-269 │ ╭ sha2 0.9.9 registry+https://github.com/rust-lang/crates.io-index
-270 │ │ sha2 0.10.9 registry+https://github.com/rust-lang/crates.io-index
+275 │ ╭ sha2 0.9.9 registry+https://github.com/rust-lang/crates.io-index
+276 │ │ sha2 0.10.9 registry+https://github.com/rust-lang/crates.io-index
     │ ╰─────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ sha2 v0.9.9
       └── biscuit-auth v6.0.0
           ├── af-credential v0.1.0
+          │   ├── af-harness v0.1.0
           │   ├── (dev) af-meter v0.1.0
+          │   │   └── af-harness v0.1.0 (*)
           │   └── af-sandbox v0.1.0
+          ├── af-harness v0.1.0 (*)
           └── af-sandbox v0.1.0 (*)
     ├ sha2 v0.10.9
       ├── af-effect-gateway v0.1.0
+      │   └── af-harness v0.1.0
       ├── af-workorder v0.1.0
       │   ├── af-effect-gateway v0.1.0 (*)
       │   ├── (dev) af-engine v0.1.0
+      │   ├── af-harness v0.1.0 (*)
       │   └── (dev) af-release-gate v0.1.0
       ├── ed25519-dalek v2.2.0
       │   ├── af-workorder v0.1.0 (*)
       │   └── biscuit-auth v6.0.0
       │       ├── af-credential v0.1.0
+      │       │   ├── af-harness v0.1.0 (*)
       │       │   ├── (dev) af-meter v0.1.0
+      │       │   │   └── af-harness v0.1.0 (*)
       │       │   └── af-sandbox v0.1.0
+      │       ├── af-harness v0.1.0 (*)
       │       └── af-sandbox v0.1.0 (*)
       └── p256 v0.13.2
           └── biscuit-auth v6.0.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'spki'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:280:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:286:1
     │  
-280 │ ╭ spki 0.6.0 registry+https://github.com/rust-lang/crates.io-index
-281 │ │ spki 0.7.3 registry+https://github.com/rust-lang/crates.io-index
+286 │ ╭ spki 0.6.0 registry+https://github.com/rust-lang/crates.io-index
+287 │ │ spki 0.7.3 registry+https://github.com/rust-lang/crates.io-index
     │ ╰────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ spki v0.6.0
       └── pkcs8 v0.9.0
           └── biscuit-auth v6.0.0
               ├── af-credential v0.1.0
+              │   ├── af-harness v0.1.0
               │   ├── (dev) af-meter v0.1.0
+              │   │   └── af-harness v0.1.0 (*)
               │   └── af-sandbox v0.1.0
+              ├── af-harness v0.1.0 (*)
               └── af-sandbox v0.1.0 (*)
     ├ spki v0.7.3
       ├── ecdsa v0.16.9
       │   ├── biscuit-auth v6.0.0
       │   │   ├── af-credential v0.1.0
+      │   │   │   ├── af-harness v0.1.0
       │   │   │   ├── (dev) af-meter v0.1.0
+      │   │   │   │   └── af-harness v0.1.0 (*)
       │   │   │   └── af-sandbox v0.1.0
+      │   │   ├── af-harness v0.1.0 (*)
       │   │   └── af-sandbox v0.1.0 (*)
       │   └── p256 v0.13.2
       │       └── biscuit-auth v6.0.0 (*)
@@ -723,7 +853,9 @@ warning[duplicate]: found 2 duplicate entries for crate 'spki'
           │   └── ed25519-dalek v2.2.0
           │       ├── af-workorder v0.1.0
           │       │   ├── af-effect-gateway v0.1.0
+          │       │   │   └── af-harness v0.1.0 (*)
           │       │   ├── (dev) af-engine v0.1.0
+          │       │   ├── af-harness v0.1.0 (*)
           │       │   └── (dev) af-release-gate v0.1.0
           │       └── biscuit-auth v6.0.0 (*)
           ├── elliptic-curve v0.13.8
@@ -736,19 +868,22 @@ warning[duplicate]: found 2 duplicate entries for crate 'spki'
               └── elliptic-curve v0.13.8 (*)
 
 warning[duplicate]: found 3 duplicate entries for crate 'syn'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:287:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:293:1
     │  
-287 │ ╭ syn 1.0.109 registry+https://github.com/rust-lang/crates.io-index
-288 │ │ syn 2.0.119 registry+https://github.com/rust-lang/crates.io-index
-289 │ │ syn 3.0.9 registry+https://github.com/rust-lang/crates.io-index
+293 │ ╭ syn 1.0.109 registry+https://github.com/rust-lang/crates.io-index
+294 │ │ syn 2.0.119 registry+https://github.com/rust-lang/crates.io-index
+295 │ │ syn 3.0.9 registry+https://github.com/rust-lang/crates.io-index
     │ ╰───────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ syn v1.0.109
       ├── biscuit-quote v0.3.0
       │   └── biscuit-auth v6.0.0
       │       ├── af-credential v0.1.0
+      │       │   ├── af-harness v0.1.0
       │       │   ├── (dev) af-meter v0.1.0
+      │       │   │   └── af-harness v0.1.0 (*)
       │       │   └── af-sandbox v0.1.0
+      │       ├── af-harness v0.1.0 (*)
       │       └── af-sandbox v0.1.0 (*)
       └── prost-derive v0.10.1
           └── prost v0.10.4
@@ -764,12 +899,17 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       └── ed25519-dalek v2.2.0
       │           ├── af-workorder v0.1.0
       │           │   ├── af-effect-gateway v0.1.0
+      │           │   │   └── af-harness v0.1.0
       │           │   ├── (dev) af-engine v0.1.0
+      │           │   ├── af-harness v0.1.0 (*)
       │           │   └── (dev) af-release-gate v0.1.0
       │           └── biscuit-auth v6.0.0
       │               ├── af-credential v0.1.0
+      │               │   ├── af-harness v0.1.0 (*)
       │               │   ├── (dev) af-meter v0.1.0
+      │               │   │   └── af-harness v0.1.0 (*)
       │               │   └── af-sandbox v0.1.0
+      │               ├── af-harness v0.1.0 (*)
       │               └── af-sandbox v0.1.0 (*)
       ├── logos-codegen v0.16.1
       │   └── logos-derive v0.16.1
@@ -835,12 +975,15 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
               │               ├── af-credential v0.1.0 (*)
               │               ├── af-effect-gateway v0.1.0 (*)
               │               ├── af-eval v0.1.0
+              │               ├── af-harness v0.1.0 (*)
               │               ├── af-meter v0.1.0 (*)
               │               ├── af-release-gate v0.1.0 (*)
               │               ├── af-sampling v0.1.0
               │               ├── af-station v0.1.0 (*)
               │               ├── af-stop v0.1.0
+              │               │   └── af-harness v0.1.0 (*)
               │               └── af-trace v0.1.0
+              │                   └── af-harness v0.1.0 (*)
               ├── half v2.7.1
               │   ├── ciborium-ll v0.2.2
               │   │   └── ciborium v0.2.2
@@ -863,7 +1006,9 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │   │       └── serde_with v3.24.0
       │   │           ├── cedar-policy v4.14.0
       │   │           │   └── af-credential v0.1.0
+      │   │           │       ├── af-harness v0.1.0
       │   │           │       ├── (dev) af-meter v0.1.0
+      │   │           │       │   └── af-harness v0.1.0 (*)
       │   │           │       └── af-sandbox v0.1.0
       │   │           └── cedar-policy-core v4.14.0
       │   │               ├── cedar-policy v4.14.0 (*)
@@ -878,8 +1023,10 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │   │   │   └── idna_adapter v1.2.2
       │   │   │       └── idna v1.1.0
       │   │   │           └── url v2.5.8
-      │   │   │               └── clickhouse v0.15.3
-      │   │   │                   └── af-mes v0.1.0
+      │   │   │               ├── clickhouse v0.15.3
+      │   │   │               │   └── af-mes v0.1.0
+      │   │   │               └── ureq v2.12.1
+      │   │   │                   └── af-harness v0.1.0 (*)
       │   │   └── icu_properties v2.3.0
       │   │       └── idna_adapter v1.2.2 (*)
       │   ├── icu_locale_core v2.3.0
@@ -909,19 +1056,24 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       │   ├── af-station v0.1.0
       │       │   └── af-workorder v0.1.0
       │       │       ├── af-effect-gateway v0.1.0
+      │       │       │   └── af-harness v0.1.0 (*)
       │       │       ├── (dev) af-engine v0.1.0
+      │       │       ├── af-harness v0.1.0 (*)
       │       │       └── (dev) af-release-gate v0.1.0
       │       ├── (dev) af-credential v0.1.0 (*)
       │       ├── af-dspy-ir v0.1.0
       │       ├── af-effect-gateway v0.1.0 (*)
       │       ├── af-engine v0.1.0 (*)
       │       ├── af-graph v0.1.0
+      │       ├── af-harness v0.1.0 (*)
       │       ├── af-mes v0.1.0 (*)
       │       ├── af-meter v0.1.0 (*)
       │       ├── af-release-gate v0.1.0 (*)
       │       ├── af-sampling v0.1.0
       │       ├── af-stop v0.1.0
+      │       │   └── af-harness v0.1.0 (*)
       │       ├── af-trace v0.1.0
+      │       │   └── af-harness v0.1.0 (*)
       │       ├── af-workorder v0.1.0 (*)
       │       ├── bytes v1.12.1
       │       │   ├── clickhouse v0.15.3 (*)
@@ -946,6 +1098,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       │   ├── prost v0.10.4
       │       │   │   ├── biscuit-auth v6.0.0
       │       │   │   │   ├── af-credential v0.1.0 (*)
+      │       │   │   │   ├── af-harness v0.1.0 (*)
       │       │   │   │   └── af-sandbox v0.1.0 (*)
       │       │   │   └── prost-types v0.10.1
       │       │   │       └── biscuit-auth v6.0.0 (*)
@@ -1035,6 +1188,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       ├── af-credential v0.1.0 (*)
       │       ├── af-dspy-ir v0.1.0 (*)
       │       ├── af-eval v0.1.0
+      │       ├── af-harness v0.1.0 (*)
       │       ├── af-mes v0.1.0 (*)
       │       ├── af-release-gate v0.1.0 (*)
       │       ├── af-sampling v0.1.0 (*)
@@ -1071,21 +1225,31 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       └── zerovec-derive v0.11.6
           └── zerovec v0.11.8 (*)
 
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
+   │
+25 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
 warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:293:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:299:1
     │  
-293 │ ╭ thiserror 1.0.69 registry+https://github.com/rust-lang/crates.io-index
-294 │ │ thiserror 2.0.21 registry+https://github.com/rust-lang/crates.io-index
+299 │ ╭ thiserror 1.0.69 registry+https://github.com/rust-lang/crates.io-index
+300 │ │ thiserror 2.0.21 registry+https://github.com/rust-lang/crates.io-index
     │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ thiserror v1.0.69
       ├── af-effect-gateway v0.1.0
+      │   └── af-harness v0.1.0
       ├── af-meter v0.1.0
+      │   └── af-harness v0.1.0 (*)
       ├── af-station v0.1.0
       ├── biscuit-auth v6.0.0
       │   ├── af-credential v0.1.0
+      │   │   ├── af-harness v0.1.0 (*)
       │   │   ├── (dev) af-meter v0.1.0 (*)
       │   │   └── af-sandbox v0.1.0
+      │   ├── af-harness v0.1.0 (*)
       │   └── af-sandbox v0.1.0 (*)
       ├── biscuit-parser v0.2.0
       │   ├── biscuit-auth v6.0.0 (*)
@@ -1098,19 +1262,26 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
       │   ├── af-station v0.1.0
       │   └── af-workorder v0.1.0
       │       ├── af-effect-gateway v0.1.0
+      │       │   └── af-harness v0.1.0
       │       ├── (dev) af-engine v0.1.0
+      │       ├── af-harness v0.1.0 (*)
       │       └── (dev) af-release-gate v0.1.0
       ├── af-credential v0.1.0
+      │   ├── af-harness v0.1.0 (*)
       │   ├── (dev) af-meter v0.1.0
+      │   │   └── af-harness v0.1.0 (*)
       │   └── af-sandbox v0.1.0
       ├── af-dspy-ir v0.1.0
       ├── af-eval v0.1.0
+      ├── af-harness v0.1.0 (*)
       ├── af-mes v0.1.0
       ├── af-release-gate v0.1.0 (*)
       ├── af-sampling v0.1.0
       ├── af-sandbox v0.1.0 (*)
       ├── af-stop v0.1.0
+      │   └── af-harness v0.1.0 (*)
       ├── af-trace v0.1.0
+      │   └── af-harness v0.1.0 (*)
       ├── af-workorder v0.1.0 (*)
       ├── cedar-policy v4.14.0
       │   └── af-credential v0.1.0 (*)
@@ -1124,21 +1295,25 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
           └── clickhouse v0.15.3 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:295:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:301:1
     │  
-295 │ ╭ thiserror-impl 1.0.69 registry+https://github.com/rust-lang/crates.io-index
-296 │ │ thiserror-impl 2.0.21 registry+https://github.com/rust-lang/crates.io-index
+301 │ ╭ thiserror-impl 1.0.69 registry+https://github.com/rust-lang/crates.io-index
+302 │ │ thiserror-impl 2.0.21 registry+https://github.com/rust-lang/crates.io-index
     │ ╰───────────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ thiserror-impl v1.0.69
       └── thiserror v1.0.69
           ├── af-effect-gateway v0.1.0
+          │   └── af-harness v0.1.0
           ├── af-meter v0.1.0
+          │   └── af-harness v0.1.0 (*)
           ├── af-station v0.1.0
           ├── biscuit-auth v6.0.0
           │   ├── af-credential v0.1.0
+          │   │   ├── af-harness v0.1.0 (*)
           │   │   ├── (dev) af-meter v0.1.0 (*)
           │   │   └── af-sandbox v0.1.0
+          │   ├── af-harness v0.1.0 (*)
           │   └── af-sandbox v0.1.0 (*)
           ├── biscuit-parser v0.2.0
           │   ├── biscuit-auth v6.0.0 (*)
@@ -1152,19 +1327,26 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
           │   ├── af-station v0.1.0
           │   └── af-workorder v0.1.0
           │       ├── af-effect-gateway v0.1.0
+          │       │   └── af-harness v0.1.0
           │       ├── (dev) af-engine v0.1.0
+          │       ├── af-harness v0.1.0 (*)
           │       └── (dev) af-release-gate v0.1.0
           ├── af-credential v0.1.0
+          │   ├── af-harness v0.1.0 (*)
           │   ├── (dev) af-meter v0.1.0
+          │   │   └── af-harness v0.1.0 (*)
           │   └── af-sandbox v0.1.0
           ├── af-dspy-ir v0.1.0
           ├── af-eval v0.1.0
+          ├── af-harness v0.1.0 (*)
           ├── af-mes v0.1.0
           ├── af-release-gate v0.1.0 (*)
           ├── af-sampling v0.1.0
           ├── af-sandbox v0.1.0 (*)
           ├── af-stop v0.1.0
+          │   └── af-harness v0.1.0 (*)
           ├── af-trace v0.1.0
+          │   └── af-harness v0.1.0 (*)
           ├── af-workorder v0.1.0 (*)
           ├── cedar-policy v4.14.0
           │   └── af-credential v0.1.0 (*)
@@ -1178,17 +1360,19 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
               └── clickhouse v0.15.3 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'unicode-width'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:317:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:323:1
     │  
-317 │ ╭ unicode-width 0.1.14 registry+https://github.com/rust-lang/crates.io-index
-318 │ │ unicode-width 0.2.2 registry+https://github.com/rust-lang/crates.io-index
+323 │ ╭ unicode-width 0.1.14 registry+https://github.com/rust-lang/crates.io-index
+324 │ │ unicode-width 0.2.2 registry+https://github.com/rust-lang/crates.io-index
     │ ╰─────────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ unicode-width v0.1.14
       └── miette v7.6.0
           ├── cedar-policy v4.14.0
           │   └── af-credential v0.1.0
+          │       ├── af-harness v0.1.0
           │       ├── (dev) af-meter v0.1.0
+          │       │   └── af-harness v0.1.0 (*)
           │       └── af-sandbox v0.1.0
           ├── cedar-policy-core v4.14.0
           │   ├── cedar-policy v4.14.0 (*)
@@ -1200,7 +1384,93 @@ warning[duplicate]: found 2 duplicate entries for crate 'unicode-width'
           └── cedar-policy-formatter v4.14.0
               └── cedar-policy v4.14.0
                   └── af-credential v0.1.0
+                      ├── af-harness v0.1.0
                       ├── (dev) af-meter v0.1.0
+                      │   └── af-harness v0.1.0 (*)
                       └── af-sandbox v0.1.0
+
+warning[duplicate]: found 2 duplicate entries for crate 'windows-sys'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:355:1
+    │  
+355 │ ╭ windows-sys 0.52.0 registry+https://github.com/rust-lang/crates.io-index
+356 │ │ windows-sys 0.61.2 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ windows-sys v0.52.0
+      └── ring v0.17.14
+          ├── rustls v0.23.46
+          │   └── ureq v2.12.1
+          │       └── af-harness v0.1.0
+          └── rustls-webpki v0.103.15
+              └── rustls v0.23.46 (*)
+    ├ windows-sys v0.61.2
+      ├── console v0.16.6
+      │   └── insta v1.49.0
+      │       ├── (dev) af-credential v0.1.0
+      │       │   ├── af-harness v0.1.0
+      │       │   ├── (dev) af-meter v0.1.0
+      │       │   │   └── af-harness v0.1.0 (*)
+      │       │   └── af-sandbox v0.1.0
+      │       ├── (dev) af-graph v0.1.0
+      │       ├── (dev) af-meter v0.1.0 (*)
+      │       └── (dev) af-workorder v0.1.0
+      │           ├── af-effect-gateway v0.1.0
+      │           │   └── af-harness v0.1.0 (*)
+      │           ├── (dev) af-engine v0.1.0
+      │           ├── af-harness v0.1.0 (*)
+      │           └── (dev) af-release-gate v0.1.0
+      ├── errno v0.3.14
+      │   └── rustix v1.1.5
+      │       └── tempfile v3.27.0
+      │           ├── insta v1.49.0 (*)
+      │           ├── proptest v1.12.0
+      │           │   ├── (dev) af-calendar v0.1.0
+      │           │   │   ├── af-station v0.1.0
+      │           │   │   └── af-workorder v0.1.0 (*)
+      │           │   ├── (dev) af-meter v0.1.0 (*)
+      │           │   ├── (dev) af-release-gate v0.1.0 (*)
+      │           │   ├── (dev) af-sampling v0.1.0
+      │           │   ├── (dev) af-station v0.1.0 (*)
+      │           │   └── (dev) af-stop v0.1.0
+      │           │       └── af-harness v0.1.0 (*)
+      │           └── rusty-fork v0.3.1
+      │               └── proptest v1.12.0 (*)
+      ├── mio v1.2.4
+      │   └── tokio v1.53.3
+      │       ├── af-mes v0.1.0
+      │       ├── clickhouse v0.15.3
+      │       │   └── af-mes v0.1.0 (*)
+      │       ├── hyper v1.12.0
+      │       │   ├── clickhouse v0.15.3 (*)
+      │       │   └── hyper-util v0.1.21
+      │       │       └── clickhouse v0.15.3 (*)
+      │       └── hyper-util v0.1.21 (*)
+      ├── rustix v1.1.5 (*)
+      ├── socket2 v0.6.5
+      │   ├── hyper-util v0.1.21 (*)
+      │   └── tokio v1.53.3 (*)
+      ├── stacker v0.1.25
+      │   └── cedar-policy-core v4.14.0
+      │       ├── cedar-policy v4.14.0
+      │       │   └── af-credential v0.1.0 (*)
+      │       └── cedar-policy-formatter v4.14.0
+      │           └── cedar-policy v4.14.0 (*)
+      ├── tempfile v3.27.0 (*)
+      ├── term v1.2.1
+      │   ├── ascii-canvas v4.0.0
+      │   │   └── lalrpop v0.22.2
+      │   │       └── (build) cedar-policy-core v4.14.0 (*)
+      │   └── lalrpop v0.22.2 (*)
+      ├── tokio v1.53.3 (*)
+      └── winapi-util v0.1.11
+          ├── same-file v1.0.6
+          │   └── walkdir v2.5.0
+          │       ├── criterion v0.8.2
+          │       │   ├── (dev) af-meter v0.1.0 (*)
+          │       │   ├── (dev) af-sampling v0.1.0 (*)
+          │       │   └── (dev) af-trace v0.1.0
+          │       │       └── af-harness v0.1.0 (*)
+          │       └── lalrpop v0.22.2 (*)
+          └── walkdir v2.5.0 (*)
 
 advisories ok, bans ok, licenses ok, sources ok
