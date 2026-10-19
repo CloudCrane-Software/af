@@ -1,8 +1,8 @@
 warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:37:1
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:38:1
    │  
-37 │ ╭ block-buffer 0.9.0 registry+https://github.com/rust-lang/crates.io-index
-38 │ │ block-buffer 0.10.4 registry+https://github.com/rust-lang/crates.io-index
+38 │ ╭ block-buffer 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+39 │ │ block-buffer 0.10.4 registry+https://github.com/rust-lang/crates.io-index
    │ ╰─────────────────────────────────────────────────────────────────────────┘ lock entries
    │  
    ├ block-buffer v0.9.0
@@ -51,11 +51,23 @@ warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
              └── ed25519 v2.2.3
                  └── ed25519-dalek v2.2.0 (*)
 
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
+   │
+25 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:22:4
+   │
+22 │   "ISC",
+   │    ━━━ unmatched license allowance
+
 warning[duplicate]: found 2 duplicate entries for crate 'der'
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:78:1
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:79:1
    │  
-78 │ ╭ der 0.6.1 registry+https://github.com/rust-lang/crates.io-index
-79 │ │ der 0.7.10 registry+https://github.com/rust-lang/crates.io-index
+79 │ ╭ der 0.6.1 registry+https://github.com/rust-lang/crates.io-index
+80 │ │ der 0.7.10 registry+https://github.com/rust-lang/crates.io-index
    │ ╰────────────────────────────────────────────────────────────────┘ lock entries
    │  
    ├ der v0.6.1
@@ -94,10 +106,10 @@ warning[duplicate]: found 2 duplicate entries for crate 'der'
          └── pkcs8 v0.10.2 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'digest'
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:81:1
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:82:1
    │  
-81 │ ╭ digest 0.9.0 registry+https://github.com/rust-lang/crates.io-index
-82 │ │ digest 0.10.7 registry+https://github.com/rust-lang/crates.io-index
+82 │ ╭ digest 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+83 │ │ digest 0.10.7 registry+https://github.com/rust-lang/crates.io-index
    │ ╰───────────────────────────────────────────────────────────────────┘ lock entries
    │  
    ├ digest v0.9.0
@@ -146,10 +158,10 @@ warning[duplicate]: found 2 duplicate entries for crate 'digest'
              └── ed25519-dalek v2.2.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:112:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:113:1
     │  
-112 │ ╭ hashbrown 0.14.5 registry+https://github.com/rust-lang/crates.io-index
-113 │ │ hashbrown 0.17.1 registry+https://github.com/rust-lang/crates.io-index
+113 │ ╭ hashbrown 0.14.5 registry+https://github.com/rust-lang/crates.io-index
+114 │ │ hashbrown 0.17.1 registry+https://github.com/rust-lang/crates.io-index
     │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ hashbrown v0.14.5
@@ -182,6 +194,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
               │       ├── (dev) af-engine v0.1.0
               │       └── (dev) af-release-gate v0.1.0
               ├── af-credential v0.1.0 (*)
+              ├── af-dspy-ir v0.1.0
               ├── af-effect-gateway v0.1.0 (*)
               ├── (dev) af-engine v0.1.0 (*)
               ├── af-graph v0.1.0
@@ -207,12 +220,12 @@ warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
                   └── criterion v0.8.2 (*)
 
 warning[duplicate]: found 3 duplicate entries for crate 'itertools'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:122:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:123:1
     │  
-122 │ ╭ itertools 0.10.5 registry+https://github.com/rust-lang/crates.io-index
-123 │ │ itertools 0.13.0 registry+https://github.com/rust-lang/crates.io-index
-124 │ │ itertools 0.14.0 registry+https://github.com/rust-lang/crates.io-index
-125 │ │ itertools 0.15.0 registry+https://github.com/rust-lang/crates.io-index
+123 │ ╭ itertools 0.10.5 registry+https://github.com/rust-lang/crates.io-index
+124 │ │ itertools 0.13.0 registry+https://github.com/rust-lang/crates.io-index
+125 │ │ itertools 0.14.0 registry+https://github.com/rust-lang/crates.io-index
+126 │ │ itertools 0.15.0 registry+https://github.com/rust-lang/crates.io-index
     │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ itertools v0.10.5
@@ -242,10 +255,10 @@ warning[duplicate]: found 3 duplicate entries for crate 'itertools'
       └── cedar-policy-formatter v4.14.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:168:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:169:1
     │  
-168 │ ╭ phf_shared 0.11.3 registry+https://github.com/rust-lang/crates.io-index
-169 │ │ phf_shared 0.12.1 registry+https://github.com/rust-lang/crates.io-index
+169 │ ╭ phf_shared 0.11.3 registry+https://github.com/rust-lang/crates.io-index
+170 │ │ phf_shared 0.12.1 registry+https://github.com/rust-lang/crates.io-index
     │ ╰───────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ phf_shared v0.11.3
@@ -271,10 +284,10 @@ warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
               └── (dev) af-workorder v0.1.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'pkcs8'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:172:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:173:1
     │  
-172 │ ╭ pkcs8 0.9.0 registry+https://github.com/rust-lang/crates.io-index
-173 │ │ pkcs8 0.10.2 registry+https://github.com/rust-lang/crates.io-index
+173 │ ╭ pkcs8 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+174 │ │ pkcs8 0.10.2 registry+https://github.com/rust-lang/crates.io-index
     │ ╰──────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ pkcs8 v0.9.0
@@ -304,10 +317,10 @@ warning[duplicate]: found 2 duplicate entries for crate 'pkcs8'
           └── elliptic-curve v0.13.8 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'sha2'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:226:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:227:1
     │  
-226 │ ╭ sha2 0.9.9 registry+https://github.com/rust-lang/crates.io-index
-227 │ │ sha2 0.10.9 registry+https://github.com/rust-lang/crates.io-index
+227 │ ╭ sha2 0.9.9 registry+https://github.com/rust-lang/crates.io-index
+228 │ │ sha2 0.10.9 registry+https://github.com/rust-lang/crates.io-index
     │ ╰─────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ sha2 v0.9.9
@@ -329,10 +342,10 @@ warning[duplicate]: found 2 duplicate entries for crate 'sha2'
           └── biscuit-auth v6.0.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'spki'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:236:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:237:1
     │  
-236 │ ╭ spki 0.6.0 registry+https://github.com/rust-lang/crates.io-index
-237 │ │ spki 0.7.3 registry+https://github.com/rust-lang/crates.io-index
+237 │ ╭ spki 0.6.0 registry+https://github.com/rust-lang/crates.io-index
+238 │ │ spki 0.7.3 registry+https://github.com/rust-lang/crates.io-index
     │ ╰────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ spki v0.6.0
@@ -365,11 +378,11 @@ warning[duplicate]: found 2 duplicate entries for crate 'spki'
               └── elliptic-curve v0.13.8 (*)
 
 warning[duplicate]: found 3 duplicate entries for crate 'syn'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:242:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:243:1
     │  
-242 │ ╭ syn 1.0.109 registry+https://github.com/rust-lang/crates.io-index
-243 │ │ syn 2.0.119 registry+https://github.com/rust-lang/crates.io-index
-244 │ │ syn 3.0.9 registry+https://github.com/rust-lang/crates.io-index
+243 │ ╭ syn 1.0.109 registry+https://github.com/rust-lang/crates.io-index
+244 │ │ syn 2.0.119 registry+https://github.com/rust-lang/crates.io-index
+245 │ │ syn 3.0.9 registry+https://github.com/rust-lang/crates.io-index
     │ ╰───────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ syn v1.0.109
@@ -411,6 +424,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       └── insta v1.49.0
       │           ├── (dev) af-credential v0.1.0 (*)
       │           ├── (dev) af-graph v0.1.0
+      │           ├── (dev) af-meter v0.1.0 (*)
       │           └── (dev) af-workorder v0.1.0 (*)
       ├── proc-macro-error2 v2.0.1
       │   └── biscuit-quote v0.3.0
@@ -503,6 +517,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       │       ├── (dev) af-engine v0.1.0
       │       │       └── (dev) af-release-gate v0.1.0
       │       ├── (dev) af-credential v0.1.0 (*)
+      │       ├── af-dspy-ir v0.1.0
       │       ├── af-effect-gateway v0.1.0 (*)
       │       ├── af-engine v0.1.0 (*)
       │       ├── af-graph v0.1.0
@@ -538,6 +553,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       ├── insta v1.49.0
       │       │   ├── (dev) af-credential v0.1.0 (*)
       │       │   ├── (dev) af-graph v0.1.0 (*)
+      │       │   ├── (dev) af-meter v0.1.0 (*)
       │       │   └── (dev) af-workorder v0.1.0 (*)
       │       ├── linked-hash-map v0.5.6
       │       │   ├── cedar-policy v4.14.0 (*)
@@ -572,6 +588,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │   └── thiserror v2.0.21
       │       ├── af-calendar v0.1.0 (*)
       │       ├── af-credential v0.1.0 (*)
+      │       ├── af-dspy-ir v0.1.0 (*)
       │       ├── af-release-gate v0.1.0 (*)
       │       ├── af-sampling v0.1.0 (*)
       │       ├── af-stop v0.1.0 (*)
@@ -595,10 +612,10 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
                   └── web-sys v0.3.106 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:247:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:248:1
     │  
-247 │ ╭ thiserror 1.0.69 registry+https://github.com/rust-lang/crates.io-index
-248 │ │ thiserror 2.0.21 registry+https://github.com/rust-lang/crates.io-index
+248 │ ╭ thiserror 1.0.69 registry+https://github.com/rust-lang/crates.io-index
+249 │ │ thiserror 2.0.21 registry+https://github.com/rust-lang/crates.io-index
     │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ thiserror v1.0.69
@@ -623,6 +640,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
       │       └── (dev) af-release-gate v0.1.0
       ├── af-credential v0.1.0
       │   └── (dev) af-meter v0.1.0
+      ├── af-dspy-ir v0.1.0
       ├── af-release-gate v0.1.0 (*)
       ├── af-sampling v0.1.0
       ├── af-stop v0.1.0
@@ -635,23 +653,11 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
           └── cedar-policy-formatter v4.14.0
               └── cedar-policy v4.14.0 (*)
 
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
-   │
-25 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:22:4
-   │
-22 │   "ISC",
-   │    ━━━ unmatched license allowance
-
 warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:249:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:250:1
     │  
-249 │ ╭ thiserror-impl 1.0.69 registry+https://github.com/rust-lang/crates.io-index
-250 │ │ thiserror-impl 2.0.21 registry+https://github.com/rust-lang/crates.io-index
+250 │ ╭ thiserror-impl 1.0.69 registry+https://github.com/rust-lang/crates.io-index
+251 │ │ thiserror-impl 2.0.21 registry+https://github.com/rust-lang/crates.io-index
     │ ╰───────────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ thiserror-impl v1.0.69
@@ -678,6 +684,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
           │       └── (dev) af-release-gate v0.1.0
           ├── af-credential v0.1.0
           │   └── (dev) af-meter v0.1.0
+          ├── af-dspy-ir v0.1.0
           ├── af-release-gate v0.1.0 (*)
           ├── af-sampling v0.1.0
           ├── af-stop v0.1.0
@@ -691,10 +698,10 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
                   └── cedar-policy v4.14.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'unicode-width'
-    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:263:1
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:264:1
     │  
-263 │ ╭ unicode-width 0.1.14 registry+https://github.com/rust-lang/crates.io-index
-264 │ │ unicode-width 0.2.2 registry+https://github.com/rust-lang/crates.io-index
+264 │ ╭ unicode-width 0.1.14 registry+https://github.com/rust-lang/crates.io-index
+265 │ │ unicode-width 0.2.2 registry+https://github.com/rust-lang/crates.io-index
     │ ╰─────────────────────────────────────────────────────────────────────────┘ lock entries
     │  
     ├ unicode-width v0.1.14

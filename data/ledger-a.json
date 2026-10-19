@@ -1,0 +1,36 @@
+{
+ "vouchers": {
+  "wo-live-2": {
+   "voucher_id": "bv-wo-live-2",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "wo-live-3": {
+   "voucher_id": "bv-wo-live-3",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  }
+ },
+ "artifacts": {
+  "wo-live-2": {
+   "artifact_id": "fa-wo-live-2",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "wo-live-3": {
+   "artifact_id": "fa-wo-live-3",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  }
+ },
+ "ops_log": [
+  "sign_voucher order=wo-live-2 attempt=1",
+  "forge_artifact order=wo-live-2 attempt=1 t=19:08:32",
+  "sign_voucher order=wo-live-3 attempt=1",
+  "forge_artifact order=wo-live-3 attempt=1 t=19:09:20"
+ ]
+}
