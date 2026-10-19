@@ -769,4 +769,66 @@ mod tests {
             other => panic!("去掉 stable_id 后应拒绝,实际 {other:?}"),
         }
     }
+
+    /// 多字段载荷必须整单拒绝,并把每一个不认识的字段名写进拒绝式信封。
+    ///
+    /// 修复前 `WorkOrderWire` 没有 `deny_unknown_fields`,这两个字段会被静默丢掉,
+    /// 解码仍然成功。编排壳若用这份有损响应覆盖状态,注入字段就永久消失。
+    #[test]
+    fn unknown_fields_are_rejected_and_every_name_is_listed() {
+        let mut current =
+            serde_json::to_value(WorkOrder::new("wo-inject", GraphVersion::new("g-3"), sla()))
+                .unwrap();
+        {
+            let obj = current.as_object_mut().unwrap();
+            // 插入顺序与字典序相反,信封里的名单必须按字典序,不能跟着键序走。
+            obj.insert("injected_beta".into(), serde_json::json!("keep-me"));
+            obj.insert("injected_alpha".into(), serde_json::json!(1));
+        }
+        let text = current.to_string();
+        let err = decode_work_order(&text).unwrap_err();
+        let crate::error::OrderDecodeError::Rejected(envelope) = err else {
+            panic!("多字段载荷必须走拒绝式信封,不能静默丢弃,实际 {err:?}");
+        };
+        assert_eq!(envelope.field, "injected_alpha, injected_beta");
+        assert_eq!(
+            envelope.detail,
+            "不认识的字段: injected_alpha, injected_beta,拒绝载入以免静默丢弃"
+        );
+        assert!(
+            envelope.to_string().contains("injected_alpha")
+                && envelope.to_string().contains("injected_beta"),
+            "{envelope}"
+        );
+
+        let direct = serde_json::from_str::<WorkOrder>(&text)
+            .unwrap_err()
+            .to_string();
+        assert!(direct.contains("拒绝式信封"), "{direct}");
+        assert!(direct.contains("injected_alpha"), "{direct}");
+        assert!(direct.contains("injected_beta"), "{direct}");
+
+        // 只多一个字段时,field 就是这一个名字,不另加分隔符。
+        current
+            .as_object_mut()
+            .unwrap()
+            .remove("injected_beta")
+            .unwrap();
+        let err = decode_work_order(&current.to_string()).unwrap_err();
+        let crate::error::OrderDecodeError::Rejected(envelope) = err else {
+            panic!("单个未知字段也必须走拒绝式信封,实际 {err:?}");
+        };
+        assert_eq!(envelope.field, "injected_alpha");
+        assert!(envelope.detail.contains("injected_alpha"), "{envelope:?}");
+
+        // 缺身份仍先点名 stable_id,不把未知字段抢到前面。
+        current.as_object_mut().unwrap().remove("stable_id");
+        let err = decode_work_order(&current.to_string()).unwrap_err();
+        match err {
+            crate::error::OrderDecodeError::Rejected(envelope) => {
+                assert_eq!(envelope.field, "stable_id");
+            }
+            other => panic!("缺 stable_id 时仍应先点名该字段,实际 {other:?}"),
+        }
+    }
 }
