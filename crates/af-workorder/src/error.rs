@@ -129,6 +129,7 @@ pub enum ShardError {
 }
 
 /// 拒绝式信封的种类。老载荷缺身份字段时用 [`RejectionKind::MissingField`],不补默认值。
+/// 线格式以外的字段用 [`RejectionKind::UnknownField`],不静默丢弃。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RejectionKind {
@@ -138,6 +139,8 @@ pub enum RejectionKind {
     BlankField,
     /// 字段在,但不是字符串。
     InvalidField,
+    /// 载荷含 [`crate::order::WorkOrder`] 线格式不认识的字段。
+    UnknownField,
 }
 
 /// 拒绝载入工单时返回的信封。`field` 点名缺的是哪一个字段。
@@ -173,6 +176,19 @@ impl RejectionEnvelope {
             kind: RejectionKind::InvalidField,
             field: field.to_string(),
             detail: format!("字段 {field} 类型不对,拒绝载入"),
+        }
+    }
+
+    /// 不认识的字段名清单。`names` 由调用方按字典序排好,这里不再重排。
+    ///
+    /// `field` 用逗号加空格把名字连起来。只有一个名字时不加分隔符。
+    /// `detail` 重复这份清单,读信封的人不必再拆 `field`。
+    pub fn unknown_fields(names: &[String]) -> Self {
+        let listed = names.join(", ");
+        Self {
+            kind: RejectionKind::UnknownField,
+            field: listed.clone(),
+            detail: format!("不认识的字段: {listed},拒绝载入以免静默丢弃"),
         }
     }
 }

@@ -11,6 +11,7 @@
 //! 6. **稳定身份**:[`identity::StableId`] 在创建时生成。引擎 continue-as-new 只换
 //!    `run_id`,不换 `stable_id`。分片键是 `sha256(stable_id)` 对配方层分片数取模。
 //!    老载荷缺 `stable_id` 时走拒绝式信封([`error::RejectionEnvelope`]),不补默认身份。
+//!    线格式不认识的字段也走拒绝式信封,并列出每一个字段名,不静默丢弃。
 //!
 //! payload_hash 为 SHA-256 小写十六进制([`hash`]),跨进程确定。
 //! 变更单签名是真 ed25519([`sign`]):在本 crate 内签发与验签,不经过 af-credential。
@@ -38,8 +39,8 @@ pub use identity::{
     decision_payload, RunContext, StableId, DECISION_PAYLOAD_DOMAIN, STABLE_ID_DOMAIN,
 };
 pub use order::{
-    decode_work_order, BudgetVoucher, GraphVersion, HistoryRecord, LineBinding, WorkArtifact,
-    WorkOrder,
+    decode_work_order, decode_work_order_value, BudgetVoucher, GraphVersion, HistoryRecord,
+    LineBinding, WorkArtifact, WorkOrder,
 };
 pub use sign::{
     Ed25519Keypair, Ed25519PublicKey, ED25519_PUBLIC_KEY_LEN, ED25519_SEED_LEN,

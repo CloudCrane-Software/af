@@ -11,7 +11,7 @@ use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 
 use crate::decision::{Decision, DecisionArtifact, Role};
-use crate::error::{GateError, Missing, OrderDecodeError};
+use crate::error::{GateError, Missing, OrderDecodeError, RejectionEnvelope};
 use crate::identity::{self, inspect_identity_fields, RunContext, StableId};
 use crate::sla::Sla;
 use crate::state::{OrderState, Transition};
@@ -68,6 +68,7 @@ pub struct HistoryRecord {
 ///
 /// serde 不给这两个字段填默认值。老载荷缺字段时,[`decode_work_order`] 与
 /// `Deserialize` 都返回拒绝式信封,并点名缺的字段。
+/// 线格式以外的字段同样拒绝,信封列出全部不认识的字段名,不静默丢弃。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WorkOrder {
     id: String,
@@ -88,7 +89,11 @@ pub struct WorkOrder {
 
 /// 与 [`WorkOrder`] 同形的读入结构。身份字段在进入这里之前已经由拒绝式信封查过,
 /// 这里不再给 `stable_id` 或 `run_id` 加默认值。
+///
+/// `deny_unknown_fields` 挡住线格式以外的键。serde 只点名它遇到的第一个未知字段,
+/// 完整名单由 [`reject_unknown_fields`] 先收齐,再放进拒绝式信封。
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct WorkOrderWire {
     id: String,
     stable_id: StableId,
@@ -121,15 +126,35 @@ impl WorkOrderWire {
     }
 }
 
+/// `WorkOrder` 线格式认识的字段,与 [`WorkOrderWire`] 一一对应。字典序,便于查找。
+const WORK_ORDER_WIRE_FIELDS: &[&str] = &[
+    "artifacts",
+    "budget_voucher",
+    "graph_version",
+    "history",
+    "id",
+    "line",
+    "run_id",
+    "sla",
+    "stable_id",
+    "state",
+    "supersedes",
+];
+
 /// 读工单 JSON。缺 `stable_id` 或 `run_id` 时返回拒绝式信封,不生成替补身份。
+/// 含不认识的字段时同样返回拒绝式信封,并列出这些字段名。
 pub fn decode_work_order(text: &str) -> Result<WorkOrder, OrderDecodeError> {
     let value =
         serde_json::from_str(text).map_err(|err| OrderDecodeError::Malformed(err.to_string()))?;
-    decode_value(value)
+    decode_work_order_value(value)
 }
 
-fn decode_value(value: serde_json::Value) -> Result<WorkOrder, OrderDecodeError> {
+/// 读已经解析成 [`serde_json::Value`] 的工单。门禁与 [`decode_work_order`] 相同。
+pub fn decode_work_order_value(value: serde_json::Value) -> Result<WorkOrder, OrderDecodeError> {
     if let Err(envelope) = inspect_identity_fields(&value) {
+        return Err(OrderDecodeError::Rejected(envelope));
+    }
+    if let Err(envelope) = reject_unknown_fields(&value) {
         return Err(OrderDecodeError::Rejected(envelope));
     }
     let wire: WorkOrderWire =
@@ -137,10 +162,29 @@ fn decode_value(value: serde_json::Value) -> Result<WorkOrder, OrderDecodeError>
     Ok(wire.into_order())
 }
 
+/// 非对象留给 serde 报类型错误,不伪装成未知字段。
+///
+/// 先于 [`WorkOrderWire`] 扫描,是因为 `deny_unknown_fields` 的报错只含第一个字段名。
+fn reject_unknown_fields(value: &serde_json::Value) -> Result<(), RejectionEnvelope> {
+    let Some(obj) = value.as_object() else {
+        return Ok(());
+    };
+    let mut unknown: Vec<String> = obj
+        .keys()
+        .filter(|key| !WORK_ORDER_WIRE_FIELDS.contains(&key.as_str()))
+        .cloned()
+        .collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    unknown.sort();
+    Err(RejectionEnvelope::unknown_fields(&unknown))
+}
+
 impl<'de> Deserialize<'de> for WorkOrder {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let value = serde_json::Value::deserialize(deserializer)?;
-        decode_value(value).map_err(serde::de::Error::custom)
+        decode_work_order_value(value).map_err(serde::de::Error::custom)
     }
 }
 
@@ -776,9 +820,22 @@ mod tests {
     /// 解码仍然成功。编排壳若用这份有损响应覆盖状态,注入字段就永久消失。
     #[test]
     fn unknown_fields_are_rejected_and_every_name_is_listed() {
-        let mut current =
+        let clean =
             serde_json::to_value(WorkOrder::new("wo-inject", GraphVersion::new("g-3"), sla()))
                 .unwrap();
+        let mut keys: Vec<&str> = clean
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys, WORK_ORDER_WIRE_FIELDS,
+            "线格式字段名单必须与序列化键一致"
+        );
+
+        let mut current = clean;
         {
             let obj = current.as_object_mut().unwrap();
             // 插入顺序与字典序相反,信封里的名单必须按字典序,不能跟着键序走。
@@ -790,11 +847,15 @@ mod tests {
         let crate::error::OrderDecodeError::Rejected(envelope) = err else {
             panic!("多字段载荷必须走拒绝式信封,不能静默丢弃,实际 {err:?}");
         };
+        assert_eq!(envelope.kind, crate::error::RejectionKind::UnknownField);
         assert_eq!(envelope.field, "injected_alpha, injected_beta");
         assert_eq!(
             envelope.detail,
             "不认识的字段: injected_alpha, injected_beta,拒绝载入以免静默丢弃"
         );
+        let body = serde_json::to_value(&envelope).unwrap();
+        assert_eq!(body["kind"], "unknown_field");
+        assert_eq!(body["field"], "injected_alpha, injected_beta");
         assert!(
             envelope.to_string().contains("injected_alpha")
                 && envelope.to_string().contains("injected_beta"),
@@ -818,8 +879,10 @@ mod tests {
         let crate::error::OrderDecodeError::Rejected(envelope) = err else {
             panic!("单个未知字段也必须走拒绝式信封,实际 {err:?}");
         };
+        assert_eq!(envelope.kind, crate::error::RejectionKind::UnknownField);
         assert_eq!(envelope.field, "injected_alpha");
         assert!(envelope.detail.contains("injected_alpha"), "{envelope:?}");
+        assert!(!envelope.detail.contains("injected_beta"), "{envelope:?}");
 
         // 缺身份仍先点名 stable_id,不把未知字段抢到前面。
         current.as_object_mut().unwrap().remove("stable_id");
