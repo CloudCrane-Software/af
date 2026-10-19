@@ -7,8 +7,9 @@
 
 use af_credential::{issue_root, RootSpec};
 use af_harness::{
-    AgentSpec, BudgetBinding, BudgetRef, BudgetUnit, ContextTemplate, EndpointKey, EndpointSpec,
-    Launch, Opened, Policy, Protocol, ReasoningTier, RunStatus, StopCondition, ToolRegistry,
+    AgentSpec, AuthStyle, BudgetBinding, BudgetRef, BudgetUnit, ContextTemplate, EndpointKey,
+    EndpointSpec, Launch, Opened, Policy, Protocol, ReasoningTier, RunStatus, StopCondition,
+    ToolRegistry,
 };
 use af_meter::BudgetLedger;
 use af_stop::StopPolicy;
@@ -52,6 +53,14 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
             .into());
         }
     };
+    let auth = match std::env::var("AF_HARNESS_AUTH").ok().as_deref() {
+        None => None,
+        Some("bearer") => Some(AuthStyle::Bearer),
+        Some("x-api-key") => Some(AuthStyle::XApiKey),
+        Some(other) => {
+            return Err(format!("AF_HARNESS_AUTH 只能是 bearer 或 x-api-key，收到 {other}").into());
+        }
+    };
     let spec = AgentSpec {
         endpoint: EndpointSpec {
             protocol,
@@ -60,6 +69,7 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
             key_ref: "env".into(),
             reasoning_tier: ReasoningTier::Off,
             stream: false,
+            auth,
         },
         context_template: ContextTemplate {
             system: "你是冒烟探针。只回答一个词。".into(),

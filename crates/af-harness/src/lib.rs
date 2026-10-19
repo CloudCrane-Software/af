@@ -44,8 +44,9 @@ pub use http::{HttpClient, HttpResponse, UreqClient};
 pub use render::render;
 pub use run::{Breakpoint, Launch, Opened, RunReport, RunStatus, ToolFailure, ToolRegistry};
 pub use spec::{
-    decode_spec, encode_spec, AgentSpec, BudgetRef, BudgetUnit, ContextTemplate, EffectClass,
-    EndpointSpec, Policy, Protocol, ReasoningTier, StopCondition, ToolDecl, SPEC_VERSION,
+    decode_spec, encode_spec, AgentSpec, AuthStyle, BudgetRef, BudgetUnit, ContextTemplate,
+    EffectClass, EndpointSpec, Policy, Protocol, ReasoningTier, StopCondition, ToolDecl,
+    SPEC_VERSION,
 };
 pub use store::OpenStatus;
 

@@ -58,6 +58,15 @@ pub enum BudgetUnit {
     Count,
 }
 
+/// 认证形态。缺省按协议推导：openai → bearer，anthropic → x_api_key。
+/// mavis 网关与 bigmodel coding plan 的 anthropic 端点都要求 bearer，需显式覆盖。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthStyle {
+    Bearer,
+    XApiKey,
+}
+
 /// 端点。`key_ref` 只存引用名，不存明文。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -70,6 +79,9 @@ pub struct EndpointSpec {
     /// 为真时走 SSE 组装。默认非流式。
     #[serde(default)]
     pub stream: bool,
+    /// 认证形态覆盖。缺省按协议推导。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth: Option<AuthStyle>,
 }
 
 /// 系统提示模板。`slots` 是允许出现的变量名。

@@ -493,6 +493,12 @@ warning[duplicate]: found 3 duplicate entries for crate 'itertools'
       │       └── cedar-policy v4.14.0 (*)
       └── cedar-policy-formatter v4.14.0 (*)
 
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
+   │
+25 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
 warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
     ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:207:1
     │  
@@ -1224,12 +1230,6 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       ├── zerofrom-derive v0.1.8 (*)
       └── zerovec-derive v0.11.6
           └── zerovec v0.11.8 (*)
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
-   │
-25 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
     ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:299:1

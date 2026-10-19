@@ -5,7 +5,7 @@
 
 use crate::error::{redact, Error, Result};
 use crate::http::HttpClient;
-use crate::spec::{EffectClass, EndpointSpec, Protocol, ReasoningTier, ToolDecl};
+use crate::spec::{AuthStyle, EffectClass, EndpointSpec, Protocol, ReasoningTier, ToolDecl};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fmt;
@@ -129,16 +129,25 @@ pub(crate) fn endpoint_url(endpoint: &EndpointSpec) -> Result<String> {
     Ok(format!("{base}/{path}"))
 }
 
+fn resolved_auth(endpoint: &EndpointSpec) -> AuthStyle {
+    endpoint.auth.unwrap_or(match endpoint.protocol {
+        Protocol::OpenaiChatCompletions => AuthStyle::Bearer,
+        Protocol::AnthropicMessages => AuthStyle::XApiKey,
+    })
+}
+
 fn request_headers(endpoint: &EndpointSpec, secret: &str) -> Vec<(String, String)> {
     let mut headers = vec![("content-type".into(), "application/json".into())];
-    match endpoint.protocol {
-        Protocol::OpenaiChatCompletions => {
+    match resolved_auth(endpoint) {
+        AuthStyle::Bearer => {
             headers.push(("authorization".into(), format!("Bearer {secret}")));
         }
-        Protocol::AnthropicMessages => {
+        AuthStyle::XApiKey => {
             headers.push(("x-api-key".into(), secret.to_string()));
-            headers.push(("anthropic-version".into(), ANTHROPIC_VERSION.into()));
         }
+    }
+    if endpoint.protocol == Protocol::AnthropicMessages {
+        headers.push(("anthropic-version".into(), ANTHROPIC_VERSION.into()));
     }
     headers
 }
@@ -805,6 +814,33 @@ mod tests {
         );
         assert!(body.get("tools").is_none());
         assert_eq!(effect_label(EffectClass::Persist), "persist");
+    }
+
+    #[test]
+    fn stub_anthropic_bearer_override_skips_x_api_key() {
+        let stub = StubServer::spawn().unwrap();
+        let client = UreqClient::new();
+        let mut spec = decode_spec(crate::EXAMPLE_SPEC_JSON).unwrap();
+        spec.endpoint.protocol = Protocol::AnthropicMessages;
+        spec.endpoint.base_url = stub.url();
+        spec.endpoint.auth = Some(crate::AuthStyle::Bearer);
+        stub.push(StubResponse::json(
+            200,
+            r#"{"stop_reason":"end_turn","content":[{"type":"text","text":"好"}]}"#,
+        ));
+        let transcript = vec![TranscriptItem::User { text: "go".into() }];
+        let message = complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap();
+        assert_eq!(message.text, "好");
+        let recorded = &stub.requests()[0];
+        assert!(recorded
+            .headers
+            .iter()
+            .any(|(name, value)| name == "authorization" && value == "Bearer sk-test-secret"));
+        assert!(!recorded.headers.iter().any(|(name, _)| name == "x-api-key"));
+        assert!(recorded
+            .headers
+            .iter()
+            .any(|(name, value)| name == "anthropic-version" && value == ANTHROPIC_VERSION));
     }
 
     #[test]
