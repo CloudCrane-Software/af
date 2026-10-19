@@ -3,6 +3,9 @@
 
 订单模型的唯一权威在 Rust（af-workorder）：workflow 里的 `order` 字段是引擎回传的
 JSON 快照，Python 只透传、只读 `state` 字段决定"下一步做什么"；"能不能做"全部问引擎。
+
+审批 signal 只登记审批人、角色和决策工件。release 之前必须调用引擎
+`approve_decision`；引擎拒绝时以 error.kind 作为类型化错误失败，不放行。
 """
 import asyncio
 import datetime
@@ -21,12 +24,63 @@ import ledger
 
 TASK_QUEUE = "bridge-queue-a"
 ACT_TIMEOUT = datetime.timedelta(seconds=60)
-ENGINE_BIN = os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), "..", "target", "debug", "af-engine"
-)
+def _resolve_engine_bin() -> str:
+    """优先用 env.sh 的 CARGO_TARGET_DIR。仓库内 target/ 仍是默认位置。"""
+    relative = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "..", "target", "debug", "af-engine"
+    )
+    target_dir = os.environ.get("CARGO_TARGET_DIR")
+    if target_dir:
+        from_env = os.path.join(target_dir, "debug", "af-engine")
+        if os.path.isfile(from_env):
+            return from_env
+    return relative
+
+
+ENGINE_BIN = _resolve_engine_bin()
 ENGINE_TRACE = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "data", "engine_calls.log"
 )
+# 与 af-workorder::decision_payload 同形。subject 是 graph_version，从而绑住图版本。
+DECISION_PAYLOAD_DOMAIN = "af-workorder/decision-payload/v1"
+
+
+def bound_decision_payload(stable_id: str, graph_version: str) -> str:
+    """引擎 approve_decision 会按订单重算这段字符串。长度按 UTF-8 字节。"""
+    sid = stable_id.encode("utf-8")
+    subject = graph_version.encode("utf-8")
+    return f"{DECISION_PAYLOAD_DOMAIN}|{len(sid)}|{stable_id}|{len(subject)}|{graph_version}"
+
+
+def engine_trace_record(req: Dict[str, Any], resp: Dict[str, Any]) -> Dict[str, Any]:
+    """轨迹字段从引擎响应的真实键读取。
+
+    放行后的状态在 resp["order"]["state"]。门控缺失清单在
+    error.gate.PreconditionsNotMet.missing。响应没有顶层 state，错误也没有 detail。
+    """
+    order = resp.get("order")
+    state_after = order.get("state") if isinstance(order, dict) else None
+    err = resp.get("error")
+    gate = err.get("gate") if isinstance(err, dict) else None
+    pre = gate.get("PreconditionsNotMet") if isinstance(gate, dict) else None
+    missing = pre.get("missing") if isinstance(pre, dict) else None
+    return {
+        "t": datetime.datetime.now().isoformat(timespec="milliseconds"),
+        "tag": req.get("tag"),
+        "op": req.get("op"),
+        "transition": req.get("transition"),
+        "ok": resp.get("ok"),
+        "engine_version": resp.get("engine_version"),
+        "state_after": state_after,
+        "missing": missing,
+    }
+
+
+def _approval_ready(approval: Dict[str, Any]) -> bool:
+    artifact = approval.get("artifact") if isinstance(approval, dict) else None
+    if not isinstance(artifact, dict) or not artifact:
+        return False
+    return bool(approval.get("approver")) and bool(approval.get("role"))
 
 
 # ---------- activities：外部调用端 ----------
@@ -53,14 +107,9 @@ async def engine_call(req: Dict[str, Any]) -> Dict[str, Any]:
     if proc.returncode != 0:
         raise ApplicationError(f"engine crashed rc={proc.returncode}: {proc.stderr[:300]}")
     resp = json.loads(proc.stdout)
+    os.makedirs(os.path.dirname(ENGINE_TRACE), exist_ok=True)
     with open(ENGINE_TRACE, "a", encoding="utf-8") as f:  # 观测轨迹：哪个版本引擎判了什么
-        f.write(json.dumps({
-            "t": datetime.datetime.now().isoformat(timespec="milliseconds"),
-            "tag": req.get("tag"), "op": req.get("op"), "transition": req.get("transition"),
-            "ok": resp.get("ok"), "engine_version": resp.get("engine_version"),
-            "state_after": resp.get("state"),
-            "missing": (resp.get("error") or {}).get("detail", {}).get("PreconditionsNotMet", {}).get("missing"),
-        }, ensure_ascii=False) + "\n")
+        f.write(json.dumps(engine_trace_record(req, resp), ensure_ascii=False) + "\n")
     return resp
 
 
@@ -74,7 +123,10 @@ class StateA:
     phase: int = 1                # CAN 后置 2
     runs_done: int = 0
     order: Dict[str, Any] = field(default_factory=dict)  # Rust 拥有的订单 JSON 快照（透传）
+    pending_approval: Dict[str, Any] = field(default_factory=dict)  # signal 载荷，引擎接受前不算已审批
     approved_by: str = ""
+    approver_role: str = ""
+    decision_artifact: Dict[str, Any] = field(default_factory=dict)  # 引擎接受的决策工件（含角色）
     voucher_signed: bool = False
     artifact_forged: bool = False
     trace: List[str] = field(default_factory=list)
@@ -104,16 +156,49 @@ class BridgeOrderA:
         self._s = StateA()
 
     async def _engine(self, op: str, **kw: Any) -> Dict[str, Any]:
-        req = {"op": op, "order": self._s.order, **kw}
+        req = {"op": op, "order": self._s.order, "tag": op, **kw}
         resp = await temporalio.workflow.execute_activity(engine_call, args=[req], **_engine_options())
         if not resp.get("ok"):
-            err = resp.get("error", {})
+            err = resp.get("error") or {}
+            kind = err.get("kind") or "EngineRejected"
             raise ApplicationError(
-                f"engine rejected {op}: {err.get('message')}", resp,
-                non_retryable=True, type=err.get("kind") or "EngineRejected",
+                f"engine rejected {op}: {kind}", resp,
+                non_retryable=True, type=kind,
             )
         self._s.order = resp["order"]
         return resp
+
+    async def _accept_approval(self) -> None:
+        """release 前的审批。引擎不过就抛类型化错误，不写 approved_by，也不 release。"""
+        approval = self._s.pending_approval
+        artifact = approval.get("artifact")
+        approver = str(approval.get("approver") or "")
+        role = str(approval.get("role") or "")
+        if not _approval_ready(approval):
+            raise ApplicationError(
+                "release rejected: approval missing approver, role, or decision artifact",
+                {"kind": "Decision"},
+                non_retryable=True,
+                type="Decision",
+            )
+        if not isinstance(artifact, dict) or artifact.get("role") != role:
+            raise ApplicationError(
+                "release rejected: signal role does not match decision artifact",
+                {"kind": "Decision"},
+                non_retryable=True,
+                type="Decision",
+            )
+        order = self._s.order
+        payload = bound_decision_payload(
+            str(order.get("stable_id") or ""),
+            str(order.get("graph_version") or ""),
+        )
+        await self._engine("approve_decision", artifact=artifact, payload=payload)
+        # 引擎接受之后才记录。角色留在工件的 role 字段上。
+        self._s.approved_by = approver
+        self._s.approver_role = str(artifact.get("role") or "")
+        self._s.decision_artifact = artifact
+        self._s.trace.append(f"approved_by={approver} role={self._s.approver_role}")
 
     async def _engine_transition(self, t: str) -> None:
         await self._engine(t)
@@ -145,12 +230,13 @@ class BridgeOrderA:
             s.voucher_signed = True
             s.trace.append("voucher_signed")
 
-        # 审批门（signal 放行）
+        # 审批门。signal 只登记载荷；没到齐就等。到齐后必须引擎 approve_decision。
         if not s.approved_by:
-            await temporalio.workflow.wait_condition(lambda: bool(s.approved_by))
-            s.trace.append(f"approved_by={s.approved_by}")
+            if not s.pending_approval:
+                await temporalio.workflow.wait_condition(lambda: bool(s.pending_approval))
+            await self._accept_approval()
 
-        # 门控跃迁：release —— 本流程唯一的门控前置条件点，判定在 Rust 引擎
+        # 门控跃迁：release。上面的审批没通过时不会执行到这里。
         if s.order.get("state") == "Created":
             await self._engine_transition("release")
             s.trace.append("released")
@@ -182,18 +268,29 @@ class BridgeOrderA:
         return {
             "order_id": s.order_id, "final_state": s.order.get("state"),
             "history": s.order.get("history"), "trace": s.trace, "runs_done": s.runs_done,
+            "approved_by": s.approved_by, "approver_role": s.approver_role,
+            "decision_artifact": s.decision_artifact,
         }
 
     @temporalio.workflow.signal
-    def approve(self, approver: str) -> None:
-        if not self._s.approved_by:
-            self._s.approved_by = f"signal:{approver}"
+    def approve(self, approval: Dict[str, Any]) -> None:
+        """载荷带 approver、role 和决策工件。裸字符串或未接受的工件不算放行。"""
+        if self._s.approved_by or not isinstance(approval, dict):
+            return
+        artifact = approval.get("artifact")
+        self._s.pending_approval = {
+            "approver": str(approval.get("approver") or ""),
+            "role": str(approval.get("role") or ""),
+            "artifact": artifact if isinstance(artifact, dict) else {},
+        }
 
     @temporalio.workflow.query
     def status(self) -> Dict[str, Any]:
         return {
             "order_id": self._s.order_id, "order_state": self._s.order.get("state"),
             "phase": self._s.phase, "approved_by": self._s.approved_by,
+            "approver_role": self._s.approver_role,
+            "decision_artifact": self._s.decision_artifact,
             "voucher_signed": self._s.voucher_signed, "artifact_forged": self._s.artifact_forged,
             "trace": list(self._s.trace), "run_id": temporalio.workflow.info().run_id,
             "replaying": temporalio.workflow.unsafe.is_replaying(),
