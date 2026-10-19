@@ -7,10 +7,13 @@ use af_workorder::{
 };
 
 fn main() {
+    let deadline = chrono::DateTime::parse_from_rfc3339("2026-11-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
     let mut wo = WorkOrder::new(
         "wo-demo",
         GraphVersion::new("g-3"),
-        Sla::new(Some("2026-11-01T00:00:00Z".into()), Priority::High),
+        Sla::new(Some(deadline), Priority::High),
     );
     println!(
         "状态:{:?}(graph_version={})",

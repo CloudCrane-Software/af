@@ -6,6 +6,7 @@
 //! [`crate::change::ChangeOrder`] 生成"后继工单"(`supersedes`),原工单保持封存。
 //! 因此"不可变"是 API 层面的编译期保证,不是运行期约定。
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{GateError, Missing};
@@ -119,6 +120,15 @@ impl WorkOrder {
 
     pub fn sla(&self) -> &Sla {
         &self.sla
+    }
+
+    /// 本单 SLA 是否已逾期。
+    ///
+    /// 比较的是建单时写入的绝对时刻 [`Sla::deadline`] 与调用方注入的 `now`。
+    /// 不读系统钟,也不再问日历:班次规则只在解析 deadline 时生效。
+    /// 恰在 deadline 不算逾期;未设 deadline 恒为 false。状态迁移不改变 deadline。
+    pub fn is_overdue(&self, now: DateTime<Utc>) -> bool {
+        self.sla.is_overdue(now)
     }
 
     pub fn line(&self) -> Option<&LineBinding> {
@@ -268,7 +278,10 @@ mod tests {
     use crate::sla::Priority;
 
     fn sla() -> Sla {
-        Sla::new(Some("2026-10-30T00:00:00Z".into()), Priority::Normal)
+        let deadline = chrono::DateTime::parse_from_rfc3339("2026-10-30T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        Sla::new(Some(deadline), Priority::Normal)
     }
 
     fn line() -> LineBinding {
@@ -484,5 +497,21 @@ mod tests {
         // API 只有读取器;全流程后版本仍等于创建时绑定的版本
         assert_eq!(*wo.graph_version(), before);
         assert_eq!(wo.graph_version().as_str(), "g-3");
+    }
+
+    #[test]
+    fn order_overdue_uses_stored_absolute_deadline() {
+        let deadline = chrono::DateTime::parse_from_rfc3339("2026-10-30T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let wo = WorkOrder::new(
+            "wo-sla",
+            GraphVersion::new("g-3"),
+            Sla::new(Some(deadline), Priority::Normal),
+        );
+        assert_eq!(wo.sla().deadline, Some(deadline));
+        assert!(!wo.is_overdue(deadline), "恰在时限不算逾期");
+        assert!(wo.is_overdue(deadline + chrono::Duration::seconds(1)));
+        assert!(!wo.is_overdue(deadline - chrono::Duration::seconds(1)));
     }
 }

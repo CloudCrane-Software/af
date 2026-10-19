@@ -3,9 +3,13 @@ name = "af-workorder"
 version = "0.1.0"
 edition.workspace = true
 
-# PoC 依赖从简:serde/serde_json(序列化与 payload 规范化)、thiserror(类型化门控错误)。
-# 不引入 tokio/chrono/sha2:时钟与真哈希在最终方案再接,接口已按占位预留。
+# 依赖:serde/serde_json(序列化)、thiserror(类型化门控错误)、af-calendar(班次日历解析 SLA 截止)。
+# chrono 0.4 + feature serde:Sla.deadline 的类型是 DateTime<Utc>(与 af-calendar 同一主版本,解析为 0.4.45)。
+# serde 特性使 DateTime 的线格式保持 RFC3339,旧字符串载荷可直接读入。
+# 不引入 tokio/sha2:时刻由调用方注入,哈希仍是 FNV 占位。
 [dependencies]
+af-calendar = { path = "../af-calendar" }
+chrono = { version = "0.4", features = ["serde"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

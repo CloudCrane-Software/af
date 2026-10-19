@@ -8,7 +8,10 @@ use af_workorder::{
 };
 
 fn sla(priority: Priority) -> Sla {
-    Sla::new(Some("2026-11-01T00:00:00Z".into()), priority)
+    let deadline = chrono::DateTime::parse_from_rfc3339("2026-11-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    Sla::new(Some(deadline), priority)
 }
 
 fn prepared_order(id: &str, graph: &str) -> WorkOrder {
