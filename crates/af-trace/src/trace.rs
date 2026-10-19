@@ -249,16 +249,18 @@ impl Trace {
         if let Some(detail) = self.inner.persist_detail() {
             return Err(TraceError::PersistFailed {
                 detail,
-                events: vec![ev],
+                events: Box::new(vec![ev]),
             });
         }
         let guard = self.inner.critical_tx.lock().unwrap();
         match guard.as_ref() {
-            None => Err(TraceError::Shutdown(ev)),
+            None => Err(TraceError::Shutdown(Box::new(ev))),
             Some(tx) => match tx.try_send(ev) {
                 Ok(()) => Ok(seq),
-                Err(TrySendError::Full(event)) => Err(TraceError::CriticalFull(event)),
-                Err(TrySendError::Disconnected(event)) => Err(TraceError::Shutdown(event)),
+                Err(TrySendError::Full(event)) => Err(TraceError::CriticalFull(Box::new(event))),
+                Err(TrySendError::Disconnected(event)) => {
+                    Err(TraceError::Shutdown(Box::new(event)))
+                }
             },
         }
     }
@@ -331,7 +333,7 @@ impl Trace {
             .set_gap_state(durable, durable)?;
         Err(TraceError::PersistFailed {
             detail: failed.unwrap_or_else(|| "critical 落盘失败".into()),
-            events: unpersisted,
+            events: Box::new(unpersisted),
         })
     }
 

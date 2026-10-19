@@ -146,8 +146,15 @@ warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
     ├ hashbrown v0.14.5
       └── hashlink v0.9.1
           └── rusqlite v0.32.1
+              ├── af-credential v0.1.0
+              │   └── (dev) af-meter v0.1.0
               ├── af-effect-gateway v0.1.0
-              └── af-station v0.1.0
+              ├── af-meter v0.1.0 (*)
+              ├── af-release-gate v0.1.0
+              ├── af-sampling v0.1.0
+              ├── af-station v0.1.0
+              ├── af-stop v0.1.0
+              └── af-trace v0.1.0
     ├ hashbrown v0.17.1
       └── indexmap v2.14.2
           ├── petgraph v0.7.1
@@ -160,12 +167,16 @@ warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
           │               └── cedar-policy v4.14.0 (*)
           └── serde_json v1.0.154
               ├── af-calendar v0.1.0
+              │   ├── af-station v0.1.0
               │   └── af-workorder v0.1.0
+              ├── af-credential v0.1.0 (*)
               ├── af-effect-gateway v0.1.0
               ├── af-graph v0.1.0
               ├── af-meter v0.1.0 (*)
               ├── af-release-gate v0.1.0
               ├── af-sampling v0.1.0
+              ├── af-station v0.1.0 (*)
+              ├── af-stop v0.1.0
               ├── af-trace v0.1.0
               ├── af-workorder v0.1.0 (*)
               ├── biscuit-auth v6.0.0
@@ -237,7 +248,10 @@ warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
       └── phf v0.12.1
           └── chrono-tz v0.10.4
               ├── af-calendar v0.1.0
+              │   ├── af-station v0.1.0
               │   └── af-workorder v0.1.0
+              ├── af-meter v0.1.0
+              ├── (dev) af-station v0.1.0 (*)
               └── (dev) af-workorder v0.1.0 (*)
 
 warning[duplicate]: found 2 duplicate entries for crate 'pkcs8'
@@ -269,18 +283,6 @@ warning[duplicate]: found 2 duplicate entries for crate 'pkcs8'
       │       └── p256 v0.13.2 (*)
       └── sec1 v0.7.3
           └── elliptic-curve v0.13.8 (*)
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
-   │
-25 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:22:4
-   │
-22 │   "ISC",
-   │    ━━━ unmatched license allowance
 
 warning[duplicate]: found 2 duplicate entries for crate 'sha2'
     ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:225:1
@@ -401,12 +403,17 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       └── iana-time-zone v0.1.65
       │           └── chrono v0.4.45
       │               ├── af-calendar v0.1.0
+      │               │   ├── af-station v0.1.0 (*)
       │               │   └── af-workorder v0.1.0 (*)
+      │               ├── af-meter v0.1.0 (*)
+      │               ├── af-station v0.1.0 (*)
       │               ├── af-workorder v0.1.0 (*)
       │               ├── cedar-policy-core v4.14.0 (*)
       │               ├── cel-interpreter v0.10.0 (*)
       │               └── chrono-tz v0.10.4
       │                   ├── af-calendar v0.1.0 (*)
+      │                   ├── af-meter v0.1.0 (*)
+      │                   ├── (dev) af-station v0.1.0 (*)
       │                   └── (dev) af-workorder v0.1.0 (*)
       ├── windows-interface v0.59.3
       │   └── windows-core v0.62.2 (*)
@@ -416,15 +423,21 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
               │   └── hashbrown v0.14.5
               │       └── hashlink v0.9.1
               │           └── rusqlite v0.32.1
+              │               ├── af-credential v0.1.0 (*)
               │               ├── af-effect-gateway v0.1.0 (*)
-              │               └── af-station v0.1.0 (*)
+              │               ├── af-meter v0.1.0 (*)
+              │               ├── af-release-gate v0.1.0
+              │               ├── af-sampling v0.1.0
+              │               ├── af-station v0.1.0 (*)
+              │               ├── af-stop v0.1.0
+              │               └── af-trace v0.1.0
               ├── half v2.7.1
               │   └── ciborium-ll v0.2.2
               │       └── ciborium v0.2.2
               │           └── criterion v0.8.2
               │               ├── (dev) af-meter v0.1.0 (*)
-              │               ├── (dev) af-sampling v0.1.0
-              │               └── (dev) af-trace v0.1.0
+              │               ├── (dev) af-sampling v0.1.0 (*)
+              │               └── (dev) af-trace v0.1.0 (*)
               └── ppv-lite86 v0.2.21
                   └── rand_chacha v0.3.1
                       └── rand v0.8.8
@@ -456,6 +469,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       ├── serde_derive v1.0.229
       │   └── serde v1.0.229
       │       ├── af-calendar v0.1.0
+      │       │   ├── af-station v0.1.0
       │       │   └── af-workorder v0.1.0
       │       ├── (dev) af-credential v0.1.0 (*)
       │       ├── af-effect-gateway v0.1.0
@@ -463,6 +477,7 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       ├── af-meter v0.1.0 (*)
       │       ├── af-release-gate v0.1.0
       │       ├── af-sampling v0.1.0
+      │       ├── af-stop v0.1.0
       │       ├── af-trace v0.1.0
       │       ├── af-workorder v0.1.0 (*)
       │       ├── cedar-policy v4.14.0 (*)
@@ -471,11 +486,15 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       │       │   └── af-graph v0.1.0 (*)
       │       ├── chrono v0.4.45
       │       │   ├── af-calendar v0.1.0 (*)
+      │       │   ├── af-meter v0.1.0 (*)
+      │       │   ├── af-station v0.1.0 (*)
       │       │   ├── af-workorder v0.1.0 (*)
       │       │   ├── cedar-policy-core v4.14.0 (*)
       │       │   ├── cel-interpreter v0.10.0 (*)
       │       │   └── chrono-tz v0.10.4
       │       │       ├── af-calendar v0.1.0 (*)
+      │       │       ├── af-meter v0.1.0 (*)
+      │       │       ├── (dev) af-station v0.1.0 (*)
       │       │       └── (dev) af-workorder v0.1.0 (*)
       │       ├── chrono-tz v0.10.4 (*)
       │       ├── ciborium v0.2.2
@@ -520,8 +539,10 @@ warning[duplicate]: found 3 duplicate entries for crate 'syn'
       ├── thiserror-impl v2.0.21
       │   └── thiserror v2.0.21
       │       ├── af-calendar v0.1.0 (*)
+      │       ├── af-credential v0.1.0 (*)
       │       ├── af-release-gate v0.1.0 (*)
       │       ├── af-sampling v0.1.0 (*)
+      │       ├── af-stop v0.1.0 (*)
       │       ├── af-trace v0.1.0 (*)
       │       ├── af-workorder v0.1.0 (*)
       │       ├── cedar-policy v4.14.0 (*)
@@ -563,14 +584,17 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
           └── af-graph v0.1.0
     ├ thiserror v2.0.21
       ├── af-calendar v0.1.0
+      │   ├── af-station v0.1.0
       │   └── af-workorder v0.1.0
+      ├── af-credential v0.1.0
+      │   └── (dev) af-meter v0.1.0
       ├── af-release-gate v0.1.0
       ├── af-sampling v0.1.0
+      ├── af-stop v0.1.0
       ├── af-trace v0.1.0
       ├── af-workorder v0.1.0 (*)
       ├── cedar-policy v4.14.0
-      │   └── af-credential v0.1.0
-      │       └── (dev) af-meter v0.1.0
+      │   └── af-credential v0.1.0 (*)
       └── cedar-policy-core v4.14.0
           ├── cedar-policy v4.14.0 (*)
           └── cedar-policy-formatter v4.14.0
@@ -600,14 +624,17 @@ warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
     ├ thiserror-impl v2.0.21
       └── thiserror v2.0.21
           ├── af-calendar v0.1.0
+          │   ├── af-station v0.1.0
           │   └── af-workorder v0.1.0
+          ├── af-credential v0.1.0
+          │   └── (dev) af-meter v0.1.0
           ├── af-release-gate v0.1.0
           ├── af-sampling v0.1.0
+          ├── af-stop v0.1.0
           ├── af-trace v0.1.0
           ├── af-workorder v0.1.0 (*)
           ├── cedar-policy v4.14.0
-          │   └── af-credential v0.1.0
-          │       └── (dev) af-meter v0.1.0
+          │   └── af-credential v0.1.0 (*)
           └── cedar-policy-core v4.14.0
               ├── cedar-policy v4.14.0 (*)
               └── cedar-policy-formatter v4.14.0
@@ -636,5 +663,17 @@ warning[duplicate]: found 2 duplicate entries for crate 'unicode-width'
               └── cedar-policy v4.14.0
                   └── af-credential v0.1.0
                       └── (dev) af-meter v0.1.0
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
+   │
+25 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:22:4
+   │
+22 │   "ISC",
+   │    ━━━ unmatched license allowance
 
 advisories ok, bans ok, licenses ok, sources ok
