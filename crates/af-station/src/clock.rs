@@ -2,7 +2,7 @@
 //!
 //! 租约比较用的是 Unix 毫秒。[`SystemClock`] 读本机墙钟，`Station::open` 与
 //! `Station::open_in_memory` 默认用它。[`ManualClock`] 把时刻交给调用方，
-//! 测试推进时间时不睡眠。
+//! 测试推进时间时不睡眠。班次窗口判定把同一次读数换成 `DateTime<Utc>`，不再读墙钟。
 
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::sync::Arc;

@@ -315,7 +315,9 @@ fn apply(station: &Station, clock: &ManualClock, model: &mut Model, op: &Op) {
 }
 
 fn reopen(path: &PathBuf, clock: &ManualClock) -> Station {
-    Station::open_with_clock(path, clock.clone()).unwrap()
+    Station::open_with_clock(path, clock.clone())
+        .unwrap()
+        .into_station()
 }
 
 /// 时刻跳过全部租约，丢掉连接再打开。未完成的行回到 queued，同一批 id 可再认领。

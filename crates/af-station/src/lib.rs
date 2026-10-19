@@ -12,17 +12,22 @@
 //! 3. 幂等键：`idempotency_key` 列 UNIQUE，重复入账返回 `Enqueued::Duplicate`，不产生第二行。
 //! 4. 角色路由：`required_role` 与 worker 角色精确匹配才可被认领。
 //!
+//! 开库是声明，不是「有表就迁就」：[`OpenStatus::Created`] 为首启（建表并写入
+//! schema 版本与指纹），[`OpenStatus::AlreadyDeclared`] 为重入且库内声明与代码一致。
+//! 版本、指纹或活表结构对不上则失败，不补表、不改已有行。
+//!
 //! 时刻经 [`Clock`] 注入。[`Station::open`] 与 [`Station::open_in_memory`]
 //! 仍读本机墙钟；测试用 [`ManualClock`] 推进租约，不睡眠。
 
 mod clock;
+mod schema;
 
 pub use clock::{Clock, ManualClock, SystemClock};
+pub use schema::OpenStatus;
 
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 use std::sync::Arc;
-use std::time::Duration;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -30,6 +35,47 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     #[error("sqlite: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    /// 库内声明与代码不一致，或库里已有对不上的对象。调用方应停机，而不是接着派单。
+    #[error("声明与库内状态不符: {0}")]
+    DeclarationMismatch(String),
+}
+
+/// [`Station::open`] 的结果：账本，以及这次是首启还是重入。
+///
+/// 方法调用经 [`Deref`](std::ops::Deref) 落到 [`Station`]。要区分首启与重入，看 [`Opened::status`]。
+pub struct Opened {
+    status: OpenStatus,
+    station: Station,
+}
+
+impl std::fmt::Debug for Opened {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Opened")
+            .field("status", &self.status)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Opened {
+    pub fn status(&self) -> OpenStatus {
+        self.status
+    }
+
+    pub fn station(&self) -> &Station {
+        &self.station
+    }
+
+    pub fn into_station(self) -> Station {
+        self.station
+    }
+}
+
+impl std::ops::Deref for Opened {
+    type Target = Station;
+
+    fn deref(&self) -> &Station {
+        &self.station
+    }
 }
 
 /// 任务状态机：queued -> claimed -> done。
@@ -85,49 +131,39 @@ pub struct Station {
 }
 
 impl Station {
-    /// 打开（必要时创建）账本。WAL + busy_timeout，供多进程/多线程并发。
+    /// 打开（必要时创建）账本。WAL + busy_timeout + foreign_keys，供多进程/多线程并发。
     /// 时刻用 [`SystemClock`]。
-    pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+    ///
+    /// 空库返回 [`OpenStatus::Created`]。已声明且一致返回 [`OpenStatus::AlreadyDeclared`]。
+    /// 声明对不上返回 [`Error::DeclarationMismatch`]，不改库里的表。
+    pub fn open(path: impl AsRef<Path>) -> Result<Opened> {
         Self::open_with_clock(path, SystemClock::new())
     }
 
     /// 与 [`Station::open`] 相同，但租约读写使用 `clock`。
-    pub fn open_with_clock(path: impl AsRef<Path>, clock: impl Clock + 'static) -> Result<Self> {
+    pub fn open_with_clock(path: impl AsRef<Path>, clock: impl Clock + 'static) -> Result<Opened> {
         let conn = Connection::open(path)?;
         Self::init(conn, Arc::new(clock))
     }
 
     /// 内存账本（单连接独享，适合单 worker 测试）。时刻用 [`SystemClock`]。
-    pub fn open_in_memory() -> Result<Self> {
+    /// 每次调用都是一张新库，因此状态恒为 [`OpenStatus::Created`]。
+    pub fn open_in_memory() -> Result<Opened> {
         Self::open_in_memory_with_clock(SystemClock::new())
     }
 
     /// 与 [`Station::open_in_memory`] 相同，但租约读写使用 `clock`。
-    pub fn open_in_memory_with_clock(clock: impl Clock + 'static) -> Result<Self> {
+    pub fn open_in_memory_with_clock(clock: impl Clock + 'static) -> Result<Opened> {
         let conn = Connection::open_in_memory()?;
         Self::init(conn, Arc::new(clock))
     }
 
-    fn init(conn: Connection, clock: Arc<dyn Clock>) -> Result<Self> {
-        conn.busy_timeout(Duration::from_secs(5))?;
-        // WAL 提高并发读写；内存库该语句无效果（返回 memory），无害。
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS task (
-                id              TEXT PRIMARY KEY,
-                payload_ref     TEXT NOT NULL,
-                required_role   TEXT NOT NULL,
-                state           TEXT NOT NULL
-                    CHECK (state IN ('queued','claimed','done')),
-                claimant        TEXT,
-                lease_until     INTEGER,
-                idempotency_key TEXT UNIQUE
-            );
-            CREATE INDEX IF NOT EXISTS idx_task_role_state
-                ON task (required_role, state);",
-        )?;
-        Ok(Station { conn, clock })
+    fn init(mut conn: Connection, clock: Arc<dyn Clock>) -> Result<Opened> {
+        let status = schema::prepare(&mut conn)?;
+        Ok(Opened {
+            status,
+            station: Station { conn, clock },
+        })
     }
 
     fn now_ms(&self) -> i64 {
@@ -547,5 +583,153 @@ mod tests {
         assert!(s.complete("w-1", "human-alice").unwrap());
         assert_eq!(s.get("w-1").unwrap().unwrap().state, State::Done);
         assert_eq!(s.count_by_state(State::Done).unwrap(), 1);
+    }
+
+    #[test]
+    fn open_in_memory_is_created() {
+        let opened = Station::open_in_memory().unwrap();
+        assert_eq!(opened.status(), OpenStatus::Created);
+    }
+
+    #[test]
+    fn open_file_is_created_then_already_declared() {
+        let db = tmpdb("decl");
+        let first = Station::open(&db).unwrap();
+        assert_eq!(first.status(), OpenStatus::Created);
+        drop(first);
+        let second = Station::open(&db).unwrap();
+        assert_eq!(second.status(), OpenStatus::AlreadyDeclared);
+        let _ = std::fs::remove_dir_all(db.parent().unwrap());
+    }
+
+    #[test]
+    fn pragmas_follow_the_ledger_recipe_and_foreign_keys_reject() {
+        let db = tmpdb("pragma");
+        let opened = Station::open(&db).unwrap();
+        let fk: i64 = opened
+            .conn
+            .pragma_query_value(None, "foreign_keys", |r| r.get(0))
+            .unwrap();
+        let busy: i64 = opened
+            .conn
+            .pragma_query_value(None, "busy_timeout", |r| r.get(0))
+            .unwrap();
+        let sync: i64 = opened
+            .conn
+            .pragma_query_value(None, "synchronous", |r| r.get(0))
+            .unwrap();
+        let journal: String = opened
+            .conn
+            .pragma_query_value(None, "journal_mode", |r| r.get(0))
+            .unwrap();
+        assert_eq!(fk, 1);
+        assert_eq!(busy, 5_000);
+        assert_eq!(sync, 1, "synchronous=NORMAL");
+        assert_eq!(journal.to_lowercase(), "wal");
+
+        opened
+            .conn
+            .execute_batch(
+                "CREATE TABLE parent_probe (id INTEGER PRIMARY KEY);
+                 CREATE TABLE child_probe (
+                     id INTEGER PRIMARY KEY,
+                     pid INTEGER REFERENCES parent_probe(id)
+                 );",
+            )
+            .unwrap();
+        let rejected = opened
+            .conn
+            .execute("INSERT INTO child_probe (id, pid) VALUES (1, 99)", []);
+        assert!(rejected.is_err(), "foreign_keys=ON 必须拒绝悬空引用");
+        opened
+            .conn
+            .execute_batch("DROP TABLE child_probe; DROP TABLE parent_probe;")
+            .unwrap();
+        drop(opened);
+        assert_eq!(
+            Station::open(&db).unwrap().status(),
+            OpenStatus::AlreadyDeclared
+        );
+        let _ = std::fs::remove_dir_all(db.parent().unwrap());
+    }
+
+    #[test]
+    fn schema_version_mismatch_fails_closed() {
+        let db = tmpdb("ver");
+        drop(Station::open(&db).unwrap());
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute(
+            "UPDATE station_decl SET schema_version = schema_version + 1",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        let err = Station::open(&db).unwrap_err();
+        assert!(
+            matches!(err, Error::DeclarationMismatch(_)),
+            "version drift must fail closed, got {err}"
+        );
+        let _ = std::fs::remove_dir_all(db.parent().unwrap());
+    }
+
+    #[test]
+    fn fingerprint_mismatch_fails_closed() {
+        let db = tmpdb("fp");
+        drop(Station::open(&db).unwrap());
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute("UPDATE station_decl SET schema_fingerprint = 'other'", [])
+            .unwrap();
+        drop(conn);
+        let err = Station::open(&db).unwrap_err();
+        assert!(matches!(err, Error::DeclarationMismatch(_)), "{err}");
+        let _ = std::fs::remove_dir_all(db.parent().unwrap());
+    }
+
+    #[test]
+    fn preexisting_task_table_is_not_adopted() {
+        let db = tmpdb("adopt");
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute_batch("CREATE TABLE task (id TEXT PRIMARY KEY);")
+            .unwrap();
+        drop(conn);
+        let err = Station::open(&db).unwrap_err();
+        assert!(
+            matches!(err, Error::DeclarationMismatch(_)),
+            "unmanaged task table must not be silently adopted, got {err}"
+        );
+        let _ = std::fs::remove_dir_all(db.parent().unwrap());
+    }
+
+    #[test]
+    fn live_schema_drift_fails_closed() {
+        let db = tmpdb("drift");
+        drop(Station::open(&db).unwrap());
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute_batch("ALTER TABLE task ADD COLUMN rogue TEXT;")
+            .unwrap();
+        drop(conn);
+        let err = Station::open(&db).unwrap_err();
+        assert!(matches!(err, Error::DeclarationMismatch(_)), "{err}");
+
+        let db_drop = tmpdb("dropcol");
+        drop(Station::open(&db_drop).unwrap());
+        let conn = rusqlite::Connection::open(&db_drop).unwrap();
+        conn.execute_batch("ALTER TABLE task DROP COLUMN deadline_ms;")
+            .unwrap();
+        drop(conn);
+        let err = Station::open(&db_drop).unwrap_err();
+        assert!(matches!(err, Error::DeclarationMismatch(_)), "{err}");
+
+        let db_missing = tmpdb("notable");
+        drop(Station::open(&db_missing).unwrap());
+        let conn = rusqlite::Connection::open(&db_missing).unwrap();
+        conn.execute_batch("DROP TABLE shift_binding;").unwrap();
+        drop(conn);
+        let err = Station::open(&db_missing).unwrap_err();
+        assert!(matches!(err, Error::DeclarationMismatch(_)), "{err}");
+
+        let _ = std::fs::remove_dir_all(db.parent().unwrap());
+        let _ = std::fs::remove_dir_all(db_drop.parent().unwrap());
+        let _ = std::fs::remove_dir_all(db_missing.parent().unwrap());
     }
 }
