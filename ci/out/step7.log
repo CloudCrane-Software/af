@@ -1,0 +1,640 @@
+warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:36:1
+   │  
+36 │ ╭ block-buffer 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+37 │ │ block-buffer 0.10.4 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰─────────────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ block-buffer v0.9.0
+     └── sha2 v0.9.9
+         └── biscuit-auth v6.0.0
+             └── af-credential v0.1.0
+                 └── (dev) af-meter v0.1.0
+   ├ block-buffer v0.10.4
+     └── digest v0.10.7
+         ├── curve25519-dalek v4.1.3
+         │   └── ed25519-dalek v2.2.0
+         │       ├── af-workorder v0.1.0
+         │       └── biscuit-auth v6.0.0
+         │           └── af-credential v0.1.0
+         │               └── (dev) af-meter v0.1.0
+         ├── ecdsa v0.16.9
+         │   ├── biscuit-auth v6.0.0 (*)
+         │   └── p256 v0.13.2
+         │       └── biscuit-auth v6.0.0 (*)
+         ├── elliptic-curve v0.13.8
+         │   ├── biscuit-auth v6.0.0 (*)
+         │   ├── ecdsa v0.16.9 (*)
+         │   ├── p256 v0.13.2 (*)
+         │   └── primeorder v0.13.6
+         │       └── p256 v0.13.2 (*)
+         ├── hmac v0.12.1
+         │   └── rfc6979 v0.4.0
+         │       └── ecdsa v0.16.9 (*)
+         ├── sha2 v0.10.9
+         │   ├── af-effect-gateway v0.1.0
+         │   ├── af-workorder v0.1.0 (*)
+         │   ├── ed25519-dalek v2.2.0 (*)
+         │   └── p256 v0.13.2 (*)
+         ├── sha3 v0.10.9
+         │   └── lalrpop v0.22.2
+         │       └── (build) cedar-policy-core v4.14.0
+         │           ├── cedar-policy v4.14.0
+         │           │   └── af-credential v0.1.0 (*)
+         │           └── cedar-policy-formatter v4.14.0
+         │               └── cedar-policy v4.14.0 (*)
+         └── signature v2.2.0
+             ├── ecdsa v0.16.9 (*)
+             └── ed25519 v2.2.3
+                 └── ed25519-dalek v2.2.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'der'
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:77:1
+   │  
+77 │ ╭ der 0.6.1 registry+https://github.com/rust-lang/crates.io-index
+78 │ │ der 0.7.10 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ der v0.6.1
+     ├── pkcs8 v0.9.0
+     │   └── biscuit-auth v6.0.0
+     │       └── af-credential v0.1.0
+     │           └── (dev) af-meter v0.1.0
+     └── spki v0.6.0
+         └── pkcs8 v0.9.0 (*)
+   ├ der v0.7.10
+     ├── ecdsa v0.16.9
+     │   ├── biscuit-auth v6.0.0
+     │   │   └── af-credential v0.1.0
+     │   │       └── (dev) af-meter v0.1.0
+     │   └── p256 v0.13.2
+     │       └── biscuit-auth v6.0.0 (*)
+     ├── pkcs8 v0.10.2
+     │   ├── ed25519 v2.2.3
+     │   │   └── ed25519-dalek v2.2.0
+     │   │       ├── af-workorder v0.1.0
+     │   │       └── biscuit-auth v6.0.0 (*)
+     │   ├── elliptic-curve v0.13.8
+     │   │   ├── biscuit-auth v6.0.0 (*)
+     │   │   ├── ecdsa v0.16.9 (*)
+     │   │   ├── p256 v0.13.2 (*)
+     │   │   └── primeorder v0.13.6
+     │   │       └── p256 v0.13.2 (*)
+     │   └── sec1 v0.7.3
+     │       └── elliptic-curve v0.13.8 (*)
+     ├── sec1 v0.7.3 (*)
+     └── spki v0.7.3
+         ├── ecdsa v0.16.9 (*)
+         └── pkcs8 v0.10.2 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'digest'
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:80:1
+   │  
+80 │ ╭ digest 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+81 │ │ digest 0.10.7 registry+https://github.com/rust-lang/crates.io-index
+   │ ╰───────────────────────────────────────────────────────────────────┘ lock entries
+   │  
+   ├ digest v0.9.0
+     └── sha2 v0.9.9
+         └── biscuit-auth v6.0.0
+             └── af-credential v0.1.0
+                 └── (dev) af-meter v0.1.0
+   ├ digest v0.10.7
+     ├── curve25519-dalek v4.1.3
+     │   └── ed25519-dalek v2.2.0
+     │       ├── af-workorder v0.1.0
+     │       └── biscuit-auth v6.0.0
+     │           └── af-credential v0.1.0
+     │               └── (dev) af-meter v0.1.0
+     ├── ecdsa v0.16.9
+     │   ├── biscuit-auth v6.0.0 (*)
+     │   └── p256 v0.13.2
+     │       └── biscuit-auth v6.0.0 (*)
+     ├── elliptic-curve v0.13.8
+     │   ├── biscuit-auth v6.0.0 (*)
+     │   ├── ecdsa v0.16.9 (*)
+     │   ├── p256 v0.13.2 (*)
+     │   └── primeorder v0.13.6
+     │       └── p256 v0.13.2 (*)
+     ├── hmac v0.12.1
+     │   └── rfc6979 v0.4.0
+     │       └── ecdsa v0.16.9 (*)
+     ├── sha2 v0.10.9
+     │   ├── af-effect-gateway v0.1.0
+     │   ├── af-workorder v0.1.0 (*)
+     │   ├── ed25519-dalek v2.2.0 (*)
+     │   └── p256 v0.13.2 (*)
+     ├── sha3 v0.10.9
+     │   └── lalrpop v0.22.2
+     │       └── (build) cedar-policy-core v4.14.0
+     │           ├── cedar-policy v4.14.0
+     │           │   └── af-credential v0.1.0 (*)
+     │           └── cedar-policy-formatter v4.14.0
+     │               └── cedar-policy v4.14.0 (*)
+     └── signature v2.2.0
+         ├── ecdsa v0.16.9 (*)
+         └── ed25519 v2.2.3
+             └── ed25519-dalek v2.2.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:111:1
+    │  
+111 │ ╭ hashbrown 0.14.5 registry+https://github.com/rust-lang/crates.io-index
+112 │ │ hashbrown 0.17.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ hashbrown v0.14.5
+      └── hashlink v0.9.1
+          └── rusqlite v0.32.1
+              ├── af-effect-gateway v0.1.0
+              └── af-station v0.1.0
+    ├ hashbrown v0.17.1
+      └── indexmap v2.14.2
+          ├── petgraph v0.7.1
+          │   └── lalrpop v0.22.2
+          │       └── (build) cedar-policy-core v4.14.0
+          │           ├── cedar-policy v4.14.0
+          │           │   └── af-credential v0.1.0
+          │           │       └── (dev) af-meter v0.1.0
+          │           └── cedar-policy-formatter v4.14.0
+          │               └── cedar-policy v4.14.0 (*)
+          └── serde_json v1.0.154
+              ├── af-calendar v0.1.0
+              │   └── af-workorder v0.1.0
+              ├── af-effect-gateway v0.1.0
+              ├── af-graph v0.1.0
+              ├── af-meter v0.1.0 (*)
+              ├── af-release-gate v0.1.0
+              ├── af-sampling v0.1.0
+              ├── af-trace v0.1.0
+              ├── af-workorder v0.1.0 (*)
+              ├── biscuit-auth v6.0.0
+              │   └── af-credential v0.1.0 (*)
+              ├── cedar-policy v4.14.0 (*)
+              ├── cedar-policy-core v4.14.0 (*)
+              ├── criterion v0.8.2
+              │   ├── (dev) af-meter v0.1.0 (*)
+              │   ├── (dev) af-sampling v0.1.0 (*)
+              │   └── (dev) af-trace v0.1.0 (*)
+              ├── serde_with v3.24.0
+              │   ├── cedar-policy v4.14.0 (*)
+              │   └── cedar-policy-core v4.14.0 (*)
+              └── tinytemplate v1.2.1
+                  └── criterion v0.8.2 (*)
+
+warning[duplicate]: found 3 duplicate entries for crate 'itertools'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:121:1
+    │  
+121 │ ╭ itertools 0.10.5 registry+https://github.com/rust-lang/crates.io-index
+122 │ │ itertools 0.13.0 registry+https://github.com/rust-lang/crates.io-index
+123 │ │ itertools 0.14.0 registry+https://github.com/rust-lang/crates.io-index
+124 │ │ itertools 0.15.0 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ itertools v0.10.5
+      └── prost-derive v0.10.1
+          └── prost v0.10.4
+              ├── biscuit-auth v6.0.0
+              │   └── af-credential v0.1.0
+              │       └── (dev) af-meter v0.1.0
+              └── prost-types v0.10.1
+                  └── biscuit-auth v6.0.0 (*)
+    ├ itertools v0.14.0
+      └── lalrpop v0.22.2
+          └── (build) cedar-policy-core v4.14.0
+              ├── cedar-policy v4.14.0
+              │   └── af-credential v0.1.0
+              │       └── (dev) af-meter v0.1.0
+              └── cedar-policy-formatter v4.14.0
+                  └── cedar-policy v4.14.0 (*)
+    ├ itertools v0.15.0
+      ├── cedar-policy v4.14.0
+      │   └── af-credential v0.1.0
+      │       └── (dev) af-meter v0.1.0
+      ├── cedar-policy-core v4.14.0
+      │   ├── cedar-policy v4.14.0 (*)
+      │   └── cedar-policy-formatter v4.14.0
+      │       └── cedar-policy v4.14.0 (*)
+      └── cedar-policy-formatter v4.14.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:167:1
+    │  
+167 │ ╭ phf_shared 0.11.3 registry+https://github.com/rust-lang/crates.io-index
+168 │ │ phf_shared 0.12.1 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ phf_shared v0.11.3
+      └── string_cache v0.8.9
+          └── lalrpop v0.22.2
+              └── (build) cedar-policy-core v4.14.0
+                  ├── cedar-policy v4.14.0
+                  │   └── af-credential v0.1.0
+                  │       └── (dev) af-meter v0.1.0
+                  └── cedar-policy-formatter v4.14.0
+                      └── cedar-policy v4.14.0 (*)
+    ├ phf_shared v0.12.1
+      └── phf v0.12.1
+          └── chrono-tz v0.10.4
+              ├── af-calendar v0.1.0
+              │   └── af-workorder v0.1.0
+              └── (dev) af-workorder v0.1.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'pkcs8'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:171:1
+    │  
+171 │ ╭ pkcs8 0.9.0 registry+https://github.com/rust-lang/crates.io-index
+172 │ │ pkcs8 0.10.2 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ pkcs8 v0.9.0
+      └── biscuit-auth v6.0.0
+          └── af-credential v0.1.0
+              └── (dev) af-meter v0.1.0
+    ├ pkcs8 v0.10.2
+      ├── ed25519 v2.2.3
+      │   └── ed25519-dalek v2.2.0
+      │       ├── af-workorder v0.1.0
+      │       └── biscuit-auth v6.0.0
+      │           └── af-credential v0.1.0
+      │               └── (dev) af-meter v0.1.0
+      ├── elliptic-curve v0.13.8
+      │   ├── biscuit-auth v6.0.0 (*)
+      │   ├── ecdsa v0.16.9
+      │   │   ├── biscuit-auth v6.0.0 (*)
+      │   │   └── p256 v0.13.2
+      │   │       └── biscuit-auth v6.0.0 (*)
+      │   ├── p256 v0.13.2 (*)
+      │   └── primeorder v0.13.6
+      │       └── p256 v0.13.2 (*)
+      └── sec1 v0.7.3
+          └── elliptic-curve v0.13.8 (*)
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
+   │
+25 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:22:4
+   │
+22 │   "ISC",
+   │    ━━━ unmatched license allowance
+
+warning[duplicate]: found 2 duplicate entries for crate 'sha2'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:225:1
+    │  
+225 │ ╭ sha2 0.9.9 registry+https://github.com/rust-lang/crates.io-index
+226 │ │ sha2 0.10.9 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ sha2 v0.9.9
+      └── biscuit-auth v6.0.0
+          └── af-credential v0.1.0
+              └── (dev) af-meter v0.1.0
+    ├ sha2 v0.10.9
+      ├── af-effect-gateway v0.1.0
+      ├── af-workorder v0.1.0
+      ├── ed25519-dalek v2.2.0
+      │   ├── af-workorder v0.1.0 (*)
+      │   └── biscuit-auth v6.0.0
+      │       └── af-credential v0.1.0
+      │           └── (dev) af-meter v0.1.0
+      └── p256 v0.13.2
+          └── biscuit-auth v6.0.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'spki'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:235:1
+    │  
+235 │ ╭ spki 0.6.0 registry+https://github.com/rust-lang/crates.io-index
+236 │ │ spki 0.7.3 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ spki v0.6.0
+      └── pkcs8 v0.9.0
+          └── biscuit-auth v6.0.0
+              └── af-credential v0.1.0
+                  └── (dev) af-meter v0.1.0
+    ├ spki v0.7.3
+      ├── ecdsa v0.16.9
+      │   ├── biscuit-auth v6.0.0
+      │   │   └── af-credential v0.1.0
+      │   │       └── (dev) af-meter v0.1.0
+      │   └── p256 v0.13.2
+      │       └── biscuit-auth v6.0.0 (*)
+      └── pkcs8 v0.10.2
+          ├── ed25519 v2.2.3
+          │   └── ed25519-dalek v2.2.0
+          │       ├── af-workorder v0.1.0
+          │       └── biscuit-auth v6.0.0 (*)
+          ├── elliptic-curve v0.13.8
+          │   ├── biscuit-auth v6.0.0 (*)
+          │   ├── ecdsa v0.16.9 (*)
+          │   ├── p256 v0.13.2 (*)
+          │   └── primeorder v0.13.6
+          │       └── p256 v0.13.2 (*)
+          └── sec1 v0.7.3
+              └── elliptic-curve v0.13.8 (*)
+
+warning[duplicate]: found 3 duplicate entries for crate 'syn'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:241:1
+    │  
+241 │ ╭ syn 1.0.109 registry+https://github.com/rust-lang/crates.io-index
+242 │ │ syn 2.0.119 registry+https://github.com/rust-lang/crates.io-index
+243 │ │ syn 3.0.9 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ syn v1.0.109
+      ├── biscuit-quote v0.3.0
+      │   └── biscuit-auth v6.0.0
+      │       └── af-credential v0.1.0
+      │           └── (dev) af-meter v0.1.0
+      └── prost-derive v0.10.1
+          └── prost v0.10.4
+              ├── biscuit-auth v6.0.0 (*)
+              └── prost-types v0.10.1
+                  └── biscuit-auth v6.0.0 (*)
+    ├ syn v2.0.119
+      ├── curve25519-dalek-derive v0.1.1
+      │   └── curve25519-dalek v4.1.3
+      │       └── ed25519-dalek v2.2.0
+      │           ├── af-workorder v0.1.0
+      │           └── biscuit-auth v6.0.0
+      │               └── af-credential v0.1.0
+      │                   └── (dev) af-meter v0.1.0
+      ├── logos-codegen v0.16.1
+      │   └── logos-derive v0.16.1
+      │       └── logos v0.16.1
+      │           └── cedar-policy-formatter v4.14.0
+      │               └── cedar-policy v4.14.0
+      │                   └── af-credential v0.1.0 (*)
+      ├── miette-derive v7.6.0
+      │   └── miette v7.6.0
+      │       ├── cedar-policy v4.14.0 (*)
+      │       ├── cedar-policy-core v4.14.0
+      │       │   ├── cedar-policy v4.14.0 (*)
+      │       │   └── cedar-policy-formatter v4.14.0 (*)
+      │       └── cedar-policy-formatter v4.14.0 (*)
+      ├── pest_generator v2.9.2
+      │   └── pest_derive v2.9.2
+      │       └── insta v1.49.0
+      │           ├── (dev) af-credential v0.1.0 (*)
+      │           ├── (dev) af-graph v0.1.0
+      │           └── (dev) af-workorder v0.1.0 (*)
+      ├── proc-macro-error2 v2.0.1
+      │   └── biscuit-quote v0.3.0
+      │       └── biscuit-auth v6.0.0 (*)
+      ├── thiserror-impl v1.0.69
+      │   └── thiserror v1.0.69
+      │       ├── af-effect-gateway v0.1.0
+      │       ├── af-meter v0.1.0 (*)
+      │       ├── af-station v0.1.0
+      │       ├── biscuit-auth v6.0.0 (*)
+      │       ├── biscuit-parser v0.2.0
+      │       │   ├── biscuit-auth v6.0.0 (*)
+      │       │   └── biscuit-quote v0.3.0 (*)
+      │       └── cel-interpreter v0.10.0
+      │           └── af-graph v0.1.0 (*)
+      ├── windows-implement v0.60.2
+      │   └── windows-core v0.62.2
+      │       └── iana-time-zone v0.1.65
+      │           └── chrono v0.4.45
+      │               ├── af-calendar v0.1.0
+      │               │   └── af-workorder v0.1.0 (*)
+      │               ├── af-workorder v0.1.0 (*)
+      │               ├── cedar-policy-core v4.14.0 (*)
+      │               ├── cel-interpreter v0.10.0 (*)
+      │               └── chrono-tz v0.10.4
+      │                   ├── af-calendar v0.1.0 (*)
+      │                   └── (dev) af-workorder v0.1.0 (*)
+      ├── windows-interface v0.59.3
+      │   └── windows-core v0.62.2 (*)
+      └── zerocopy-derive v0.8.63
+          └── zerocopy v0.8.63
+              ├── ahash v0.8.12
+              │   └── hashbrown v0.14.5
+              │       └── hashlink v0.9.1
+              │           └── rusqlite v0.32.1
+              │               ├── af-effect-gateway v0.1.0 (*)
+              │               └── af-station v0.1.0 (*)
+              ├── half v2.7.1
+              │   └── ciborium-ll v0.2.2
+              │       └── ciborium v0.2.2
+              │           └── criterion v0.8.2
+              │               ├── (dev) af-meter v0.1.0 (*)
+              │               ├── (dev) af-sampling v0.1.0
+              │               └── (dev) af-trace v0.1.0
+              └── ppv-lite86 v0.2.21
+                  └── rand_chacha v0.3.1
+                      └── rand v0.8.8
+                          └── biscuit-auth v6.0.0 (*)
+    ├ syn v3.0.9
+      ├── darling_core v0.24.1
+      │   ├── darling v0.24.1
+      │   │   └── serde_with_macros v3.24.0
+      │   │       └── serde_with v3.24.0
+      │   │           ├── cedar-policy v4.14.0
+      │   │           │   └── af-credential v0.1.0
+      │   │           │       └── (dev) af-meter v0.1.0
+      │   │           └── cedar-policy-core v4.14.0
+      │   │               ├── cedar-policy v4.14.0 (*)
+      │   │               └── cedar-policy-formatter v4.14.0
+      │   │                   └── cedar-policy v4.14.0 (*)
+      │   └── darling_macro v0.24.1
+      │       └── darling v0.24.1 (*)
+      ├── darling_macro v0.24.1 (*)
+      ├── educe v0.8.1
+      │   └── cedar-policy-core v4.14.0 (*)
+      ├── enum-ordinalize-derive v4.4.2
+      │   └── enum-ordinalize v4.4.2
+      │       └── educe v0.8.1 (*)
+      ├── ref-cast-impl v1.0.27
+      │   └── ref-cast v1.0.27
+      │       ├── cedar-policy v4.14.0 (*)
+      │       └── cedar-policy-core v4.14.0 (*)
+      ├── serde_derive v1.0.229
+      │   └── serde v1.0.229
+      │       ├── af-calendar v0.1.0
+      │       │   └── af-workorder v0.1.0
+      │       ├── (dev) af-credential v0.1.0 (*)
+      │       ├── af-effect-gateway v0.1.0
+      │       ├── af-graph v0.1.0
+      │       ├── af-meter v0.1.0 (*)
+      │       ├── af-release-gate v0.1.0
+      │       ├── af-sampling v0.1.0
+      │       ├── af-trace v0.1.0
+      │       ├── af-workorder v0.1.0 (*)
+      │       ├── cedar-policy v4.14.0 (*)
+      │       ├── cedar-policy-core v4.14.0 (*)
+      │       ├── cel-interpreter v0.10.0
+      │       │   └── af-graph v0.1.0 (*)
+      │       ├── chrono v0.4.45
+      │       │   ├── af-calendar v0.1.0 (*)
+      │       │   ├── af-workorder v0.1.0 (*)
+      │       │   ├── cedar-policy-core v4.14.0 (*)
+      │       │   ├── cel-interpreter v0.10.0 (*)
+      │       │   └── chrono-tz v0.10.4
+      │       │       ├── af-calendar v0.1.0 (*)
+      │       │       └── (dev) af-workorder v0.1.0 (*)
+      │       ├── chrono-tz v0.10.4 (*)
+      │       ├── ciborium v0.2.2
+      │       │   └── criterion v0.8.2
+      │       │       ├── (dev) af-meter v0.1.0 (*)
+      │       │       ├── (dev) af-sampling v0.1.0 (*)
+      │       │       └── (dev) af-trace v0.1.0 (*)
+      │       ├── criterion v0.8.2 (*)
+      │       ├── insta v1.49.0
+      │       │   ├── (dev) af-credential v0.1.0 (*)
+      │       │   ├── (dev) af-graph v0.1.0 (*)
+      │       │   └── (dev) af-workorder v0.1.0 (*)
+      │       ├── linked-hash-map v0.5.6
+      │       │   ├── cedar-policy v4.14.0 (*)
+      │       │   ├── cedar-policy-core v4.14.0 (*)
+      │       │   └── linked_hash_set v0.1.6
+      │       │       ├── cedar-policy v4.14.0 (*)
+      │       │       └── cedar-policy-core v4.14.0 (*)
+      │       ├── miette v7.6.0
+      │       │   ├── cedar-policy v4.14.0 (*)
+      │       │   ├── cedar-policy-core v4.14.0 (*)
+      │       │   └── cedar-policy-formatter v4.14.0 (*)
+      │       ├── nonempty v0.12.0
+      │       │   └── cedar-policy-core v4.14.0 (*)
+      │       ├── serdect v0.2.0
+      │       │   ├── ecdsa v0.16.9
+      │       │   │   ├── biscuit-auth v6.0.0
+      │       │   │   │   └── af-credential v0.1.0 (*)
+      │       │   │   └── p256 v0.13.2
+      │       │   │       └── biscuit-auth v6.0.0 (*)
+      │       │   ├── elliptic-curve v0.13.8
+      │       │   │   ├── biscuit-auth v6.0.0 (*)
+      │       │   │   ├── ecdsa v0.16.9 (*)
+      │       │   │   ├── p256 v0.13.2 (*)
+      │       │   │   └── primeorder v0.13.6
+      │       │   │       └── p256 v0.13.2 (*)
+      │       │   └── sec1 v0.7.3
+      │       │       └── elliptic-curve v0.13.8 (*)
+      │       └── tinytemplate v1.2.1
+      │           └── criterion v0.8.2 (*)
+      ├── serde_with_macros v3.24.0 (*)
+      ├── thiserror-impl v2.0.21
+      │   └── thiserror v2.0.21
+      │       ├── af-calendar v0.1.0 (*)
+      │       ├── af-release-gate v0.1.0 (*)
+      │       ├── af-sampling v0.1.0 (*)
+      │       ├── af-trace v0.1.0 (*)
+      │       ├── af-workorder v0.1.0 (*)
+      │       ├── cedar-policy v4.14.0 (*)
+      │       └── cedar-policy-core v4.14.0 (*)
+      └── wasm-bindgen-macro-support v0.2.129
+          └── wasm-bindgen-macro v0.2.129
+              └── wasm-bindgen v0.2.129
+                  ├── chrono v0.4.45 (*)
+                  ├── iana-time-zone v0.1.65
+                  │   └── chrono v0.4.45 (*)
+                  ├── js-sys v0.3.106
+                  │   ├── chrono v0.4.45 (*)
+                  │   ├── iana-time-zone v0.1.65 (*)
+                  │   └── web-sys v0.3.106
+                  │       └── plotters v0.3.7
+                  │           └── criterion v0.8.2 (*)
+                  ├── plotters v0.3.7 (*)
+                  └── web-sys v0.3.106 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'thiserror'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:246:1
+    │  
+246 │ ╭ thiserror 1.0.69 registry+https://github.com/rust-lang/crates.io-index
+247 │ │ thiserror 2.0.21 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰──────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ thiserror v1.0.69
+      ├── af-effect-gateway v0.1.0
+      ├── af-meter v0.1.0
+      ├── af-station v0.1.0
+      ├── biscuit-auth v6.0.0
+      │   └── af-credential v0.1.0
+      │       └── (dev) af-meter v0.1.0 (*)
+      ├── biscuit-parser v0.2.0
+      │   ├── biscuit-auth v6.0.0 (*)
+      │   └── biscuit-quote v0.3.0
+      │       └── biscuit-auth v6.0.0 (*)
+      └── cel-interpreter v0.10.0
+          └── af-graph v0.1.0
+    ├ thiserror v2.0.21
+      ├── af-calendar v0.1.0
+      │   └── af-workorder v0.1.0
+      ├── af-release-gate v0.1.0
+      ├── af-sampling v0.1.0
+      ├── af-trace v0.1.0
+      ├── af-workorder v0.1.0 (*)
+      ├── cedar-policy v4.14.0
+      │   └── af-credential v0.1.0
+      │       └── (dev) af-meter v0.1.0
+      └── cedar-policy-core v4.14.0
+          ├── cedar-policy v4.14.0 (*)
+          └── cedar-policy-formatter v4.14.0
+              └── cedar-policy v4.14.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'thiserror-impl'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:248:1
+    │  
+248 │ ╭ thiserror-impl 1.0.69 registry+https://github.com/rust-lang/crates.io-index
+249 │ │ thiserror-impl 2.0.21 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰───────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ thiserror-impl v1.0.69
+      └── thiserror v1.0.69
+          ├── af-effect-gateway v0.1.0
+          ├── af-meter v0.1.0
+          ├── af-station v0.1.0
+          ├── biscuit-auth v6.0.0
+          │   └── af-credential v0.1.0
+          │       └── (dev) af-meter v0.1.0 (*)
+          ├── biscuit-parser v0.2.0
+          │   ├── biscuit-auth v6.0.0 (*)
+          │   └── biscuit-quote v0.3.0
+          │       └── biscuit-auth v6.0.0 (*)
+          └── cel-interpreter v0.10.0
+              └── af-graph v0.1.0
+    ├ thiserror-impl v2.0.21
+      └── thiserror v2.0.21
+          ├── af-calendar v0.1.0
+          │   └── af-workorder v0.1.0
+          ├── af-release-gate v0.1.0
+          ├── af-sampling v0.1.0
+          ├── af-trace v0.1.0
+          ├── af-workorder v0.1.0 (*)
+          ├── cedar-policy v4.14.0
+          │   └── af-credential v0.1.0
+          │       └── (dev) af-meter v0.1.0
+          └── cedar-policy-core v4.14.0
+              ├── cedar-policy v4.14.0 (*)
+              └── cedar-policy-formatter v4.14.0
+                  └── cedar-policy v4.14.0 (*)
+
+warning[duplicate]: found 2 duplicate entries for crate 'unicode-width'
+    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:262:1
+    │  
+262 │ ╭ unicode-width 0.1.14 registry+https://github.com/rust-lang/crates.io-index
+263 │ │ unicode-width 0.2.2 registry+https://github.com/rust-lang/crates.io-index
+    │ ╰─────────────────────────────────────────────────────────────────────────┘ lock entries
+    │  
+    ├ unicode-width v0.1.14
+      └── miette v7.6.0
+          ├── cedar-policy v4.14.0
+          │   └── af-credential v0.1.0
+          │       └── (dev) af-meter v0.1.0
+          ├── cedar-policy-core v4.14.0
+          │   ├── cedar-policy v4.14.0 (*)
+          │   └── cedar-policy-formatter v4.14.0
+          │       └── cedar-policy v4.14.0 (*)
+          └── cedar-policy-formatter v4.14.0 (*)
+    ├ unicode-width v0.2.2
+      └── pretty v0.12.5
+          └── cedar-policy-formatter v4.14.0
+              └── cedar-policy v4.14.0
+                  └── af-credential v0.1.0
+                      └── (dev) af-meter v0.1.0
+
+advisories ok, bans ok, licenses ok, sources ok

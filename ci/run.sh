@@ -163,6 +163,10 @@ cosign_step() {
 }
 step 6 "cosign 断网 verify-blob" -- bash -c "$(declare -f cosign_step); cosign_step"
 
+# ---- 7. cargo deny 供应链门（licenses/bans/sources/advisories，离线本地 db） ----
+echo "== step7 cargo deny（四类检查，advisory-db 本地化离线）"
+step 7 "cargo deny --offline check" -- bash -c "cd '$AF_ROOT' && cargo deny --offline check"
+
 # ---- 汇总 -------------------------------------------------------------------
 echo "== 汇总"
 printf '%s\n' "${SUMMARY[@]}" | tee "$OUT/SUMMARY.txt"

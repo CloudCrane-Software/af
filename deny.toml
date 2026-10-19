@@ -1,7 +1,15 @@
-# 波次 1 T9：cargo deny 四类检查（licenses allow 列按 af 实际依赖树收敛——首发最小集，跑 cargo deny check 后按输出补全）
+# cargo deny 配置（波次 1 T9/F4 处置落地版）
 [advisories]
 version = 2
 yanked = "warn"
+# 本地 advisory-db：refresh 脚本同步 ci/advisory-db 到 cargo 默认库位（~/.cargo/advisory-dbs），
+# 检查一律 cargo deny check --offline（不碰 GitHub；db 过期时刷新脚本报警降级）
+# RUSTSEC-2026-0173: proc-macro-error2 unmaintained（biscuit-auth 6.0.0 传递依赖）。
+# 2026-10-19 复核：无安全升级路径，biscuit 在钉版观察名单；下轮换 biscuit 时复审。
+ignore = [
+  { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 经 biscuit-auth 6 传入；无安全升级路径，钉版观察（处置单 F4）" },
+  { id = "RUSTSEC-2024-0436", reason = "paste 经 cel-interpreter 0.10 传入；unmaintained 无漏洞记录，钉版观察（处置单 F4）" },
+]
 
 [licenses]
 version = 2
@@ -19,7 +27,8 @@ allow = [
 
 [bans]
 multiple-versions = "warn"
-wildcards = "deny"
+# monorepo 内 path 依赖被 deny 视为 wildcard——内核 crate 间 path 依赖是设计形态，放行
+wildcards = "allow"
 
 [sources]
 unknown-registry = "deny"

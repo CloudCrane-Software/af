@@ -2,6 +2,7 @@
 name = "af-workorder"
 version = "0.1.0"
 edition.workspace = true
+license = "Apache-2.0"
 
 # serde/serde_json:序列化与 payload 规范化。thiserror:类型化门控错误。
 # sha2 0.10:payload_hash(锁文件已有 0.10.9,af-credential 经 biscuit-auth 带入),不另选 blake3。
