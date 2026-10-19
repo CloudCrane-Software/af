@@ -14,6 +14,7 @@
 //! best-of-N 之前走 [`Guardrails::screen_before_best_of_n`]。
 //! 修复之前走 [`Guardrails::judge_repair`]：只修崩溃，不修低分。
 //! 时刻用 [`Clock`] 注入，只抄进 [`Ledger`]，不参与放行。
+//! 规格在 crate 根目录的 `JIT-GUARDRAILS.md`。
 
 mod archive;
 mod clock;
