@@ -29,6 +29,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "af-dspy-ir"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "af-effect-gateway"
 version = "0.1.0"
 dependencies = [
