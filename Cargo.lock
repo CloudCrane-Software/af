@@ -71,6 +71,7 @@ dependencies = [
 name = "af-sampling"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "serde",
  "serde_json",
