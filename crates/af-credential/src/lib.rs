@@ -15,11 +15,18 @@
 //! 累计消耗不在凭证里，账本在 af-meter。
 //!
 //! 注意：衰减（append 新块）只能**加** check，不能删事实——这是 biscuit 的单调性设计。
+//!
+//! 持久根：[`open`] 把根私钥写在 `<dir>/root.key`（权限 0600），元数据在同目录的
+//! `credential.db`。首启签发引导凭证并落库；重入原样重放，不重新签名。
+//! [`rotate`] 换新根并记下代数。旧根签发的凭证只在调用方给出的宽限内可验。
 
+mod clock;
 mod credential;
 mod judge;
 mod policy;
+mod root;
 
+pub use clock::{Clock, ManualClock, SystemClock};
 pub use credential::{
     attenuate, authorize, denial, deserialize_verify, inspect, issue_root, serialize, Cents,
     ChildSpec, Denial, DenialBody, DenialCheck, DenialEffect, DenialPolicy, RootSpec, TokenCaps,
@@ -27,3 +34,7 @@ pub use credential::{
 };
 pub use judge::{evaluate, AccessQuery, Verdict};
 pub use policy::{cedar_allows, CEDAR_POLICIES};
+pub use root::{
+    open, open_with_clock, rotate, rotate_with_clock, GracePolicy, OpenOutcome, OpenedRoot,
+    RootError, Rotation, SCHEMA_VERSION,
+};

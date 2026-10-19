@@ -22,7 +22,10 @@ dependencies = [
  "biscuit-auth",
  "cedar-policy",
  "insta",
+ "rusqlite",
  "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

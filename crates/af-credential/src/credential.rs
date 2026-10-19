@@ -62,8 +62,23 @@ pub struct RootCredential {
 ///
 /// 根块 check：`spend_cents <= budget_cents`——把验证方声明的开销跟凭证预算挂钩。
 /// （预算本身不能放在衰减块里“改小”，见 attenuate 的注释。）
+///
+/// 这里的密钥每次都是 [`KeyPair::new`]，进程重启即换根公钥。要跨重启保住同一把根，
+/// 走 [`crate::open`] / [`crate::rotate`]，不要重复调用本函数。
 pub fn issue_root(spec: &RootSpec) -> Result<RootCredential> {
     let keypair = KeyPair::new();
+    let token = build_root_biscuit(spec, &keypair, None)?;
+    Ok(RootCredential { keypair, token })
+}
+
+/// 用调用方给出的根密钥签发。`root_key_id` 写入 token，供验签时选择代数。
+///
+/// `None` 与 [`issue_root`] 的历史行为一致：token 不带 root key id。
+pub(crate) fn build_root_biscuit(
+    spec: &RootSpec,
+    keypair: &KeyPair,
+    root_key_id: Option<u32>,
+) -> std::result::Result<Biscuit, biscuit_auth::error::Token> {
     let mut b = Biscuit::builder();
     for t in &spec.tools {
         b = b.fact(dlog::fact(F_TOOL, &[dlog::string(t)]))?;
@@ -73,8 +88,10 @@ pub fn issue_root(spec: &RootSpec) -> Result<RootCredential> {
     // builder 只收 &str（TryFrom<&str>），不收 String
     let guard = format!("check if {F_SPEND_CENTS}($s), {F_BUDGET_CENTS}($v), $s <= $v");
     b = b.check(guard.as_str())?;
-    let token = b.build(&keypair)?;
-    Ok(RootCredential { keypair, token })
+    if let Some(id) = root_key_id {
+        b = b.root_key_id(id);
+    }
+    b.build(keypair)
 }
 
 /// 序列化（线上传输格式）。
