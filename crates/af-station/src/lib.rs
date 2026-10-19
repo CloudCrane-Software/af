@@ -11,10 +11,18 @@
 //!    `claim` 入口先惰性回收过期租约（state 置回 queued、清 claimant），他人即可接管。
 //! 3. 幂等键：`idempotency_key` 列 UNIQUE，重复入账返回 `Enqueued::Duplicate`，不产生第二行。
 //! 4. 角色路由：`required_role` 与 worker 角色精确匹配才可被认领。
+//!
+//! 时刻经 [`Clock`] 注入。[`Station::open`] 与 [`Station::open_in_memory`]
+//! 仍读本机墙钟；测试用 [`ManualClock`] 推进租约，不睡眠。
+
+mod clock;
+
+pub use clock::{Clock, ManualClock, SystemClock};
 
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::Arc;
+use std::time::Duration;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -73,29 +81,34 @@ pub enum Enqueued {
 /// 多 worker = 各自 open 同一个 db 文件，正确性不依赖进程内锁。
 pub struct Station {
     conn: Connection,
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    clock: Arc<dyn Clock>,
 }
 
 impl Station {
     /// 打开（必要时创建）账本。WAL + busy_timeout，供多进程/多线程并发。
+    /// 时刻用 [`SystemClock`]。
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
+        Self::open_with_clock(path, SystemClock::new())
+    }
+
+    /// 与 [`Station::open`] 相同，但租约读写使用 `clock`。
+    pub fn open_with_clock(path: impl AsRef<Path>, clock: impl Clock + 'static) -> Result<Self> {
         let conn = Connection::open(path)?;
-        Self::init(conn)
+        Self::init(conn, Arc::new(clock))
     }
 
-    /// 内存账本（单连接独享，适合单 worker 测试）。
+    /// 内存账本（单连接独享，适合单 worker 测试）。时刻用 [`SystemClock`]。
     pub fn open_in_memory() -> Result<Self> {
-        let conn = Connection::open_in_memory()?;
-        Self::init(conn)
+        Self::open_in_memory_with_clock(SystemClock::new())
     }
 
-    fn init(conn: Connection) -> Result<Self> {
+    /// 与 [`Station::open_in_memory`] 相同，但租约读写使用 `clock`。
+    pub fn open_in_memory_with_clock(clock: impl Clock + 'static) -> Result<Self> {
+        let conn = Connection::open_in_memory()?;
+        Self::init(conn, Arc::new(clock))
+    }
+
+    fn init(conn: Connection, clock: Arc<dyn Clock>) -> Result<Self> {
         conn.busy_timeout(Duration::from_secs(5))?;
         // WAL 提高并发读写；内存库该语句无效果（返回 memory），无害。
         conn.pragma_update(None, "journal_mode", "WAL")?;
@@ -114,14 +127,18 @@ impl Station {
             CREATE INDEX IF NOT EXISTS idx_task_role_state
                 ON task (required_role, state);",
         )?;
-        Ok(Station { conn })
+        Ok(Station { conn, clock })
+    }
+
+    fn now_ms(&self) -> i64 {
+        self.clock.now_ms()
     }
 
     /// 入账一条新任务（初始 queued）。
     ///
-    /// 幂等键语义：`idempotency_key` 上有 UNIQUE 约束，`ON CONFLICT DO NOTHING`
-    /// 加上受影响行数判定 —— 撞键时不产生第二行，返回已存在任务的 id。
-    /// `idempotency_key=None` 不参与去重（SQLite UNIQUE 允许多个 NULL）。
+    /// 幂等键语义：`idempotency_key` 上有 UNIQUE 约束。
+    /// `ON CONFLICT DO NOTHING` 配合受影响行数判定：撞键时不产生第二行，返回已存在任务的 id。
+    /// `idempotency_key = None` 不参与去重（SQLite UNIQUE 允许多个 NULL）。
     pub fn new_task(
         &self,
         id: &str,
@@ -154,11 +171,15 @@ impl Station {
     /// 惰性回收：把租约已过期的 claimed 任务打回 queued。
     /// 在每次 `claim` 开头调用 —— 过期任务无需后台线程，被下一次查询顺手回炉。
     pub fn reclaim_expired(&self) -> Result<usize> {
+        self.reclaim_before(self.now_ms())
+    }
+
+    fn reclaim_before(&self, now: i64) -> Result<usize> {
         let n = self.conn.execute(
             "UPDATE task
              SET state = 'queued', claimant = NULL, lease_until = NULL
              WHERE state = 'claimed' AND lease_until IS NOT NULL AND lease_until < ?1",
-            params![now_ms()],
+            params![now],
         )?;
         Ok(n)
     }
@@ -169,7 +190,9 @@ impl Station {
     /// `WHERE ... AND claimant IS NULL` 保证并发下只有一个 worker 能置上 claimant。
     /// 行数为 0（被别人抢先）就换下一个候选重试，全部落空返回 None。
     pub fn claim(&self, worker_id: &str, role: &str, lease_ms: u64) -> Result<Option<Task>> {
-        self.reclaim_expired()?; // 过期租约先回炉，他人即可接管
+        // 回收与租约截止共用同一次读数，注入的时刻在这一次认领里不会中途漂移。
+        let now = self.now_ms();
+        self.reclaim_before(now)?; // 过期租约先回炉，他人即可接管
         let mut stmt = self.conn.prepare(
             "SELECT id FROM task
              WHERE state = 'queued' AND required_role = ?1
@@ -180,7 +203,7 @@ impl Station {
             rows.collect::<std::result::Result<Vec<_>, _>>()?
         };
         drop(stmt);
-        let lease_until = now_ms() + lease_ms as i64;
+        let lease_until = now + lease_ms as i64;
         for tid in candidates {
             // 与任务书一致的原子认领模式：受影响行数判定成败。
             let n = self.conn.execute(
@@ -200,10 +223,12 @@ impl Station {
     /// 只有"现任 claimant 且租约尚未过期"才续得上 —— 过期后原主人心跳失败，
     /// 防止僵尸 worker 复活已被接管的任务。
     pub fn heartbeat(&self, task_id: &str, worker_id: &str, extend_ms: u64) -> Result<bool> {
+        // 截止点与守卫用同一个 now：心跳以该时刻为基准重置，而不是在旧值上累加。
+        let now = self.now_ms();
         let n = self.conn.execute(
             "UPDATE task SET lease_until = ?1
              WHERE id = ?2 AND claimant = ?3 AND state = 'claimed' AND lease_until > ?4",
-            params![now_ms() + extend_ms as i64, task_id, worker_id, now_ms()],
+            params![now + extend_ms as i64, task_id, worker_id, now],
         )?;
         Ok(n == 1)
     }
@@ -260,6 +285,7 @@ mod tests {
     use super::*;
     use std::sync::{Arc, Barrier};
     use std::thread;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     /// 唯一的临时目录，多连接并发用例共享同一个磁盘库。
     fn tmpdb(tag: &str) -> std::path::PathBuf {
@@ -314,6 +340,41 @@ mod tests {
         assert_eq!(s.count_by_state(State::Queued).unwrap(), 3);
     }
 
+    /// RESULT.md ④.3：`ON CONFLICT(idempotency_key)` 只吞幂等键冲突。
+    /// 同一 id、不同 key（或 key 为 NULL）是主键冲突，表现为 Sqlite 错误，不是 Duplicate。
+    /// 同一 id 且同一 key 仍走幂等键，返回 Duplicate，不产生第二行。
+    #[test]
+    fn primary_key_conflict_is_not_reported_as_duplicate() {
+        let s = Station::open_in_memory().unwrap();
+        assert_eq!(
+            s.new_task("t1", "p", "r0", Some("k1")).unwrap(),
+            Enqueued::Inserted { id: "t1".into() }
+        );
+        assert_eq!(
+            s.new_task("t2", "p", "r1", Some("k1")).unwrap(),
+            Enqueued::Duplicate {
+                existing_id: "t1".into()
+            }
+        );
+        let diff_key = s.new_task("t1", "p", "r0", Some("k2")).unwrap_err();
+        assert!(
+            matches!(diff_key, Error::Sqlite(_)),
+            "same id, different key must be a sqlite error, got {diff_key}"
+        );
+        let null_key = s.new_task("t1", "p", "r0", None).unwrap_err();
+        assert!(
+            matches!(null_key, Error::Sqlite(_)),
+            "same id, null key must be a sqlite error, got {null_key}"
+        );
+        assert_eq!(
+            s.new_task("t1", "p", "r0", Some("k1")).unwrap(),
+            Enqueued::Duplicate {
+                existing_id: "t1".into()
+            }
+        );
+        assert_eq!(s.count_by_state(State::Queued).unwrap(), 1);
+    }
+
     #[test]
     fn role_routes_claim_to_matching_worker_only() {
         let s = Station::open_in_memory().unwrap();
@@ -333,20 +394,24 @@ mod tests {
 
     #[test]
     fn heartbeat_renews_lease_and_only_claimant_can_use_it() {
-        let s = Station::open_in_memory().unwrap();
+        let clock = ManualClock::new(1_700_000_000_000);
+        let s = Station::open_in_memory_with_clock(clock.clone()).unwrap();
         s.new_task("t1", "p", "reviewer", None).unwrap();
         let t = s.claim("wA", "reviewer", 1_000).unwrap().unwrap();
         let before = t.lease_until.unwrap();
-        // 他人心跳：无效
+        assert_eq!(before, 1_700_000_000_000 + 1_000);
+        // 他人心跳：无效，租约不动
         assert!(!s.heartbeat("t1", "wB", 1_000).unwrap());
-        thread::sleep(Duration::from_millis(60));
-        // 现任心跳：续期到 now+1000，明显晚于原租约
+        assert_eq!(s.get("t1").unwrap().unwrap().lease_until, Some(before));
+        clock.advance(60);
+        // 现任心跳：以注入的 now 为基准重置到 now+1000，而不是在旧截止点上累加
         assert!(s.heartbeat("t1", "wA", 1_000).unwrap());
         let after = s.get("t1").unwrap().unwrap().lease_until.unwrap();
         assert!(
             after > before,
             "heartbeat must push lease forward: {before} -> {after}"
         );
+        assert_eq!(after, before + 60);
         assert!(s.complete("t1", "wA").unwrap());
         assert_eq!(s.get("t1").unwrap().unwrap().state, State::Done);
         // 非 claimant 不能完成别人的任务
@@ -358,11 +423,13 @@ mod tests {
 
     #[test]
     fn expired_lease_is_reclaimed_and_takeover_works() {
-        let s = Station::open_in_memory().unwrap();
+        let clock = ManualClock::new(5_000_000);
+        let s = Station::open_in_memory_with_clock(clock.clone()).unwrap();
         s.new_task("t1", "p", "reviewer", None).unwrap();
-        s.claim("wA", "reviewer", 150).unwrap().unwrap();
-        thread::sleep(Duration::from_millis(350)); // 租约过期
-                                                   // 过期后原主人心跳失败（防僵尸复活）
+        let claimed = s.claim("wA", "reviewer", 150).unwrap().unwrap();
+        assert_eq!(claimed.lease_until, Some(5_000_150));
+        clock.advance(350); // 注入时刻越过租约，不睡眠
+                            // 过期后原主人心跳失败（防僵尸复活）
         assert!(!s.heartbeat("t1", "wA", 60_000).unwrap());
         // 他人认领：惰性回收先回炉，wB 接管成功
         let t = s.claim("wB", "reviewer", 60_000).unwrap().unwrap();
