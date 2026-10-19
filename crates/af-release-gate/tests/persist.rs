@@ -662,6 +662,44 @@ fn predicate_presence_must_match_persisted_canary() {
     assert_eq!(cursor.released, 0);
 }
 
+/// F1：admit 0.1 与 0.2，再 complete 掉 0.1。增量累加的 wip 与在制重求和差 1 ULP，重开被判损坏。
+#[test]
+fn fractional_wip_survives_reopen_after_partial_complete() {
+    let tmp = TmpDb::new("frac-wip");
+    let declaration = cfg(10.0, 0.0, None);
+    let clock = ManualClock::new(50);
+    let (mut gate, outcome) =
+        DurableGate::open_with_clock(tmp.path(), &declaration, None, clock.clone()).unwrap();
+    assert_eq!(outcome, OpenOutcome::Created);
+    gate.try_admit(&item(1, "v1", 0.1), 1).unwrap();
+    gate.try_admit(&item(2, "v1", 0.2), 2).unwrap();
+    gate.complete(1, 3, 0).unwrap();
+    let before_bits = gate.wip_minutes().to_bits();
+    let remaining = gate.in_process();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].id, 2);
+    let stored_weight_bits = remaining[0].weight.to_bits();
+    assert_eq!(stored_weight_bits, 0.2f64.to_bits());
+    drop(gate);
+
+    let (gate, outcome) =
+        DurableGate::open_with_clock(tmp.path(), &declaration, None, clock).unwrap();
+    assert_eq!(outcome, OpenOutcome::AlreadyDeclared);
+    assert_eq!(
+        gate.wip_minutes().to_bits(),
+        before_bits,
+        "reopen changed wip"
+    );
+    assert_eq!(
+        gate.wip_minutes().to_bits(),
+        stored_weight_bits,
+        "wip is not the remaining item"
+    );
+    assert_books(&gate, 0.2, 1);
+    assert_eq!(gate.in_process()[0].id, 2);
+    assert_eq!(gate.in_process()[0].admitted_at, 2);
+}
+
 #[test]
 fn corrupt_rows_fail_closed() {
     let declaration = cfg(20.0, 0.0, None);
