@@ -631,3 +631,44 @@ fn concurrent_same_key_is_charged_once() {
     assert_eq!(totals.outbox_count, 1);
     assert_eq!(ledger.event("same-key").unwrap().unwrap().amount, 1);
 }
+
+/// F4：八个线程同时第一次打开同一个空文件。只允许一个 `Created`，
+/// 其余必须是 `AlreadyDeclared`。锁冲突不能把首开打成失败。
+#[test]
+fn concurrent_first_open_one_creator() {
+    let scratch = Scratch::new("cold-open");
+    let decl = sample(10);
+    let threads = 8;
+    let barrier = Arc::new(Barrier::new(threads));
+    let results = std::thread::scope(|scope| {
+        let mut guards = Vec::new();
+        for _ in 0..threads {
+            let path = scratch.path.clone();
+            let decl = decl.clone();
+            let barrier = Arc::clone(&barrier);
+            guards.push(scope.spawn(move || {
+                barrier.wait();
+                Ledger::open(&path, &decl).map(|opened| opened.is_created())
+            }));
+        }
+        guards
+            .into_iter()
+            .map(|guard| guard.join().expect("open thread"))
+            .collect::<Vec<_>>()
+    });
+    let mut created = 0usize;
+    let mut declared = 0usize;
+    for result in &results {
+        match result {
+            Ok(true) => created += 1,
+            Ok(false) => declared += 1,
+            Err(err) => panic!("cold start failed: {err}"),
+        }
+    }
+    assert_eq!(created, 1, "{results:?}");
+    assert_eq!(declared, threads - 1, "{results:?}");
+    let ledger = open_again(&scratch.path, &decl);
+    let recipe = ledger.recipe().unwrap();
+    assert_eq!(recipe.journal_mode, "wal");
+    assert_eq!(recipe.user_version, SCHEMA_VERSION);
+}

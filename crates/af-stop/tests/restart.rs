@@ -8,6 +8,7 @@ use af_stop::{
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 static SEQ: AtomicU64 = AtomicU64::new(0);
@@ -576,6 +577,51 @@ fn ledger_feed_matches_the_pure_engine_across_restart() {
             .count
             >= mid_search
     );
+}
+
+/// F4：八个线程同时第一次打开同一个空库。只允许一个 `Created`。
+#[test]
+fn concurrent_first_open_one_creator() {
+    let db = TempDb::new();
+    let sample = LedgerDeclaration::new(3, 5, 1_000, FingerprintStore::new());
+    let threads = 8;
+    let barrier = Arc::new(Barrier::new(threads));
+    let results = std::thread::scope(|scope| {
+        let mut guards = Vec::new();
+        for _ in 0..threads {
+            let path = db.path().to_path_buf();
+            let sample = sample.clone();
+            let barrier = Arc::clone(&barrier);
+            guards.push(scope.spawn(move || {
+                barrier.wait();
+                FingerprintLedger::open_with_clock(path, sample, ManualClock::new(0, 10))
+                    .map(|(_, status)| status)
+            }));
+        }
+        guards
+            .into_iter()
+            .map(|guard| guard.join().expect("open thread"))
+            .collect::<Vec<_>>()
+    });
+    let mut created = 0usize;
+    let mut declared = 0usize;
+    for result in &results {
+        match result {
+            Ok(OpenStatus::Created) => created += 1,
+            Ok(OpenStatus::AlreadyDeclared) => declared += 1,
+            Err(err) => panic!("cold start failed: {err}"),
+        }
+    }
+    assert_eq!(created, 1, "{results:?}");
+    assert_eq!(declared, threads - 1, "{results:?}");
+    let (_ledger, status) =
+        FingerprintLedger::open_with_clock(db.path(), sample, ManualClock::new(0, 10)).unwrap();
+    assert_eq!(status, OpenStatus::AlreadyDeclared);
+    let conn = rusqlite::Connection::open(db.path()).unwrap();
+    let journal: String = conn
+        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(journal.to_ascii_lowercase(), "wal");
 }
 
 #[test]

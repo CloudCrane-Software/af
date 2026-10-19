@@ -14,10 +14,11 @@
 //! 准入用的分钟仍由调用方每次传入。[`crate::Clock::wall_ms`] 只写 `updated_wall_ms`。
 
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use thiserror::Error;
 
 use crate::clock::{Clock, SystemClock};
@@ -31,6 +32,9 @@ use crate::gate::{
 pub const SCHEMA_VERSION: i64 = 1;
 
 const BUSY_TIMEOUT_MS: u64 = 5_000;
+
+/// 首开窗口里对 `database is locked` / `already exists` 的重试次数。
+const COLD_START_ATTEMPTS: u32 = 16;
 
 const SCHEMA_SQL: &str = "
 CREATE TABLE gate_meta (
@@ -160,20 +164,42 @@ impl DurableGate {
     }
 
     /// 同 [`Self::open`]，绝对时刻戳走 `clock`。
+    ///
+    /// 先读 `user_version`。已经是 [`SCHEMA_VERSION`] 就不再做 delete→WAL。
+    /// 空库在一个 `BEGIN IMMEDIATE` 里建表、写入声明并打下版本。
+    /// `database is locked` 或 `already exists` 在首开窗口内按注入的退避重试，
+    /// 用尽仍失败则原样返回，不改已有行。非法声明在创建文件之前失败。
     pub fn open_with_clock(
         path: impl AsRef<Path>,
         declaration: &GateConfig,
         resume_predicate: Option<CanaryPredicate>,
         clock: impl Clock + 'static,
     ) -> Result<(Self, OpenOutcome), PersistError> {
-        // 非法声明在创建文件之前失败。
-        let gate = ReleaseGate::new(declaration.clone())?;
-        let conn = Connection::open(path)?;
-        configure(&conn)?;
-        if !table_exists(&conn, "gate_meta")? {
-            return open_created(conn, declaration, gate, resume_predicate, clock);
+        let clock: Arc<dyn Clock> = Arc::new(clock);
+        let mut resume_predicate = resume_predicate;
+        let mut attempt = 0u32;
+        loop {
+            // 非法声明在创建文件之前失败。每次重试重新构造闸门，谓词只在装回成功时取走。
+            let gate = ReleaseGate::new(declaration.clone())?;
+            let opened = match Connection::open(path.as_ref()) {
+                Ok(conn) => open_prepared(
+                    conn,
+                    declaration,
+                    gate,
+                    &mut resume_predicate,
+                    Arc::clone(&clock),
+                ),
+                Err(err) => Err(err.into()),
+            };
+            match opened {
+                Ok(pair) => return Ok(pair),
+                Err(err) if cold_start_conflict(&err) && attempt + 1 < COLD_START_ATTEMPTS => {
+                    cold_start_pause(attempt);
+                    attempt += 1;
+                }
+                Err(err) => return Err(err),
+            }
         }
-        open_existing(conn, declaration, gate, resume_predicate, Arc::new(clock))
     }
 
     pub fn config(&self) -> &GateConfig {
@@ -360,14 +386,47 @@ impl DurableGate {
     }
 }
 
-fn open_created(
+fn open_prepared(
     mut conn: Connection,
     declaration: &GateConfig,
     gate: ReleaseGate,
-    resume_predicate: Option<CanaryPredicate>,
-    clock: impl Clock + 'static,
+    resume_predicate: &mut Option<CanaryPredicate>,
+    clock: Arc<dyn Clock>,
 ) -> Result<(DurableGate, OpenOutcome), PersistError> {
-    if any_user_table(&conn)? {
+    connection_pragmas(&conn)?;
+    // ① 先读版本。已声明的库不再碰 delete→WAL 转换。
+    let version = read_user_version(&conn)?;
+    if version == SCHEMA_VERSION {
+        ensure_journal_mode(&conn)?;
+        return open_existing(conn, declaration, gate, resume_predicate, clock);
+    }
+    if version != 0 {
+        return Err(PersistError::SchemaMismatch {
+            stored: version,
+            expected: SCHEMA_VERSION,
+        });
+    }
+    // delete→WAL 要排他锁。SQLite 禁止在事务里改 WAL，所以这一步紧挨在 BEGIN 之前。
+    ensure_journal_mode(&conn)?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.pragma_update(None, "foreign_keys", "ON")?;
+    tx.pragma_update(None, "synchronous", "NORMAL")?;
+    let version = read_user_version(&tx)?;
+    if version == SCHEMA_VERSION {
+        tx.rollback()?;
+        return open_existing(conn, declaration, gate, resume_predicate, clock);
+    }
+    if version != 0 {
+        return Err(PersistError::SchemaMismatch {
+            stored: version,
+            expected: SCHEMA_VERSION,
+        });
+    }
+    if table_exists(&tx, "gate_meta")? {
+        tx.rollback()?;
+        return open_existing(conn, declaration, gate, resume_predicate, clock);
+    }
+    if any_user_table(&tx)? {
         return Err(PersistError::Corrupt {
             detail: "database has tables but no gate_meta".to_string(),
         });
@@ -375,10 +434,12 @@ fn open_created(
     if resume_predicate.is_some() {
         return Err(PersistError::CanaryPredicateUnexpected);
     }
-    let clock: Arc<dyn Clock> = Arc::new(clock);
     let wall_ms = clock.wall_ms();
     let snap = gate.runtime_snapshot();
-    create_schema(&mut conn, declaration, &snap, wall_ms)?;
+    tx.execute_batch(SCHEMA_SQL)?;
+    insert_initial(&tx, declaration, &snap, wall_ms)?;
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    tx.commit()?;
     Ok((
         DurableGate {
             conn,
@@ -395,7 +456,7 @@ fn open_existing(
     conn: Connection,
     declaration: &GateConfig,
     mut gate: ReleaseGate,
-    resume_predicate: Option<CanaryPredicate>,
+    resume_predicate: &mut Option<CanaryPredicate>,
     clock: Arc<dyn Clock>,
 ) -> Result<(DurableGate, OpenOutcome), PersistError> {
     if !table_exists(&conn, "wip_item")? || !table_exists(&conn, "canary")? {
@@ -424,7 +485,8 @@ fn open_existing(
         (false, true) => return Err(PersistError::CanaryPredicateUnexpected),
         _ => {}
     }
-    gate.restore_runtime(loaded.clone(), resume_predicate)
+    let predicate = resume_predicate.take();
+    gate.restore_runtime(loaded.clone(), predicate)
         .map_err(map_restore)?;
     if gate.runtime_snapshot() != loaded {
         return Err(PersistError::Corrupt {
@@ -454,30 +516,52 @@ fn map_restore(err: RestoreError) -> PersistError {
     }
 }
 
-fn configure(conn: &Connection) -> Result<(), PersistError> {
+fn connection_pragmas(conn: &Connection) -> Result<(), PersistError> {
     conn.busy_timeout(Duration::from_millis(BUSY_TIMEOUT_MS))?;
-    conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     Ok(())
 }
 
-fn create_schema(
-    conn: &mut Connection,
-    declaration: &GateConfig,
-    snap: &RuntimeSnapshot,
-    wall_ms: i64,
-) -> Result<(), PersistError> {
-    let tx = conn.transaction()?;
-    tx.execute_batch(SCHEMA_SQL)?;
-    insert_initial(&tx, declaration, snap, wall_ms)?;
-    tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-    tx.commit()?;
-    Ok(())
+/// 注入的首开退避。车道号让同时失败的线程错开醒来，不读业务时钟。
+fn cold_start_pause(attempt: u32) {
+    static LANES: AtomicU64 = AtomicU64::new(0);
+    let lane = LANES.fetch_add(1, Ordering::Relaxed) % 8;
+    let millis = u64::from(attempt.saturating_add(1)).saturating_add(lane);
+    std::thread::sleep(Duration::from_millis(millis));
+}
+
+fn cold_start_conflict(err: &PersistError) -> bool {
+    let text = err.to_string().to_ascii_lowercase();
+    text.contains("database is locked")
+        || text.contains("database is busy")
+        || text.contains("database table is locked")
+        || text.contains("already exists")
+}
+
+fn ensure_journal_mode(conn: &Connection) -> Result<(), PersistError> {
+    let mode: String = conn.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
+    if mode.eq_ignore_ascii_case("wal") {
+        return Ok(());
+    }
+    let mode: String =
+        conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
+    if mode.eq_ignore_ascii_case("wal") {
+        Ok(())
+    } else {
+        Err(busy_locked().into())
+    }
+}
+
+fn busy_locked() -> rusqlite::Error {
+    rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+        Some("database is locked".to_string()),
+    )
 }
 
 fn insert_initial(
-    tx: &rusqlite::Transaction<'_>,
+    tx: &Connection,
     declaration: &GateConfig,
     snap: &RuntimeSnapshot,
     wall_ms: i64,

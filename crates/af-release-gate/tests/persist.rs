@@ -4,6 +4,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Barrier};
 
 use af_release_gate::{
     AdmitError, CanaryCursor, CanaryPredicate, DurableGate, EvalReport, GateConfig, GateError,
@@ -758,4 +759,49 @@ fn wall_stamp_follows_injected_clock_and_reopen_does_not_rewrite() {
     assert_eq!(gate.updated_wall_ms(), 8_000);
     assert_eq!(gate.in_process()[0].admitted_at, 4);
     assert_books(&gate, 1.0, 1);
+}
+
+/// F4：八个线程同时第一次打开同一个空库。只允许一个 `Created`。
+/// 表存在检查和建表必须原子，delete→WAL 的锁冲突要在首开窗口内消化。
+#[test]
+fn concurrent_first_open_one_creator() {
+    let tmp = TmpDb::new("cold-open");
+    let declaration = cfg(30.0, 5.0, None);
+    let threads = 8;
+    let barrier = Arc::new(Barrier::new(threads));
+    let results = std::thread::scope(|scope| {
+        let mut guards = Vec::new();
+        for _ in 0..threads {
+            let path = tmp.path().to_path_buf();
+            let declaration = declaration.clone();
+            let barrier = Arc::clone(&barrier);
+            guards.push(scope.spawn(move || {
+                barrier.wait();
+                DurableGate::open_with_clock(&path, &declaration, None, ManualClock::new(100))
+                    .map(|(_, outcome)| outcome)
+            }));
+        }
+        guards
+            .into_iter()
+            .map(|guard| guard.join().expect("open thread"))
+            .collect::<Vec<_>>()
+    });
+    let mut created = 0usize;
+    let mut declared = 0usize;
+    for result in &results {
+        match result {
+            Ok(OpenOutcome::Created) => created += 1,
+            Ok(OpenOutcome::AlreadyDeclared) => declared += 1,
+            Err(err) => panic!("cold start failed: {err}"),
+        }
+    }
+    assert_eq!(created, 1, "{results:?}");
+    assert_eq!(declared, threads - 1, "{results:?}");
+    let (gate, outcome) =
+        DurableGate::open_with_clock(tmp.path(), &declaration, None, ManualClock::new(100))
+            .unwrap();
+    assert_eq!(outcome, OpenOutcome::AlreadyDeclared);
+    assert_eq!(gate.updated_wall_ms(), 100);
+    let profile = gate.storage_profile().unwrap();
+    assert_eq!(profile.journal_mode, "wal");
 }

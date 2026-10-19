@@ -6,6 +6,7 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Barrier};
 use std::time::Duration;
 
 use af_credential::{
@@ -439,4 +440,55 @@ fn token_without_root_key_id_is_rejected() {
     let bytes = serialize(&ephemeral.token).unwrap();
     let err = opened.verify(&bytes).unwrap_err();
     assert!(matches!(err, RootError::MissingRootKeyId), "{err}");
+}
+
+/// F4：八个线程同时第一次打开同一个空目录。只生成一把根，引导凭证字节相同。
+#[test]
+fn concurrent_first_open_one_root() {
+    let dir = Temp::new();
+    let threads = 8;
+    let barrier = Arc::new(Barrier::new(threads));
+    let clock = ManualClock::new(42);
+    let results = std::thread::scope(|scope| {
+        let mut guards = Vec::new();
+        for _ in 0..threads {
+            let path = dir.path().to_path_buf();
+            let barrier = Arc::clone(&barrier);
+            let clock = clock.clone();
+            guards.push(scope.spawn(move || {
+                barrier.wait();
+                let opened = open_with_clock(&path, &spec(), clock)?;
+                Ok::<_, RootError>((
+                    opened.outcome(),
+                    opened.bootstrap_bytes().to_vec(),
+                    opened.bootstrap_issued_at_ms(),
+                ))
+            }));
+        }
+        guards
+            .into_iter()
+            .map(|guard| guard.join().expect("open thread"))
+            .collect::<Vec<_>>()
+    });
+    let mut created = 0usize;
+    let mut declared = 0usize;
+    let mut bytes: Option<Vec<u8>> = None;
+    for result in &results {
+        let (outcome, token, issued_at) = match result {
+            Ok(row) => row,
+            Err(err) => panic!("cold start failed: {err}"),
+        };
+        assert_eq!(*issued_at, 42);
+        match outcome {
+            OpenOutcome::Created => created += 1,
+            OpenOutcome::AlreadyDeclared => declared += 1,
+        }
+        match &bytes {
+            None => bytes = Some(token.clone()),
+            Some(expected) => assert_eq!(token, expected),
+        }
+    }
+    assert_eq!(created, 1, "{results:?}");
+    assert_eq!(declared, threads - 1, "{results:?}");
+    assert_eq!(mode(&dir.path().join("root.key")), 0o600);
 }

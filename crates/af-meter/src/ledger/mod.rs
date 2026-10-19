@@ -19,6 +19,7 @@ pub use recover::OutboxRecord;
 
 use std::fmt;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use chrono_tz::Tz;
@@ -30,6 +31,9 @@ use crate::Count;
 pub const SCHEMA_VERSION: i64 = 1;
 
 const BUSY_TIMEOUT_MS: i64 = 5_000;
+
+/// 首开窗口里对 `database is locked` / `already exists` 的重试次数。
+const COLD_START_ATTEMPTS: u32 = 16;
 
 const EXPECTED_TABLES: &[&str] = &["declaration", "events", "outbox", "windows"];
 
@@ -262,64 +266,26 @@ impl Ledger {
     /// 打开或创建账本文件。
     ///
     /// 每条连接都设置 WAL、`busy_timeout` 5000 ms、`synchronous=NORMAL`、`foreign_keys=ON`。
+    /// 先读 `user_version`：已经是 [`SCHEMA_VERSION`] 就走 [`Opened::AlreadyDeclared`]，
+    /// 不再做 delete→WAL 的排他转换。空库在一个 `BEGIN IMMEDIATE` 里建表并写下版本。
+    /// `database is locked` 或 `already exists` 在首开窗口内按注入的退避重试，
+    /// 用尽仍失败则原样返回，不改已有行。
     /// `user_version == 0` 且没有任何用户表 → [`Opened::Created`]。
-    /// `user_version == SCHEMA_VERSION` 且声明一致 → [`Opened::AlreadyDeclared`]。
     /// 其余情况返回错误，不改库里的行。
     pub fn open(path: impl AsRef<Path>, decl: &Declaration) -> Result<Opened> {
         let (tz, capacity_i64) = validate(decl)?;
-        let mut conn = Connection::open(path)?;
-        apply_recipe(&conn)?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let version = user_version(&tx)?;
-        if version == 0 {
-            let names = table_names(&tx)?;
-            if !names.is_empty() {
-                return Err(LedgerError::TornInitialization);
+        let path = path.as_ref();
+        let mut attempt = 0u32;
+        loop {
+            match open_once(path, decl, tz, capacity_i64) {
+                Ok(opened) => return Ok(opened),
+                Err(err) if cold_start_conflict(&err) && attempt + 1 < COLD_START_ATTEMPTS => {
+                    cold_start_pause(attempt);
+                    attempt += 1;
+                }
+                Err(err) => return Err(err),
             }
-            tx.execute_batch(DDL)?;
-            tx.execute(
-                "INSERT INTO declaration (id, meter_id, capacity, timezone, window_kind)
-                 VALUES (1, ?1, ?2, ?3, ?4)",
-                params![
-                    decl.meter_id,
-                    capacity_i64,
-                    decl.timezone,
-                    decl.kind.as_str()
-                ],
-            )?;
-            tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
-            tx.commit()?;
-            let stored_version = user_version(&conn)?;
-            if stored_version != SCHEMA_VERSION {
-                return Err(LedgerError::SchemaMismatch {
-                    found: stored_version,
-                    expected: SCHEMA_VERSION,
-                });
-            }
-            return Ok(Opened::Created(Ledger {
-                conn,
-                decl: decl.clone(),
-                tz,
-                capacity_i64,
-            }));
         }
-        if version != SCHEMA_VERSION {
-            return Err(LedgerError::SchemaMismatch {
-                found: version,
-                expected: SCHEMA_VERSION,
-            });
-        }
-        let names = table_names(&tx)?;
-        exact_tables(&names)?;
-        let stored = load_declaration(&tx)?;
-        ensure_same(decl, &stored)?;
-        tx.rollback()?;
-        Ok(Opened::AlreadyDeclared(Ledger {
-            conn,
-            decl: decl.clone(),
-            tz,
-            capacity_i64,
-        }))
     }
 
     pub fn declaration(&self) -> &Declaration {
@@ -362,11 +328,103 @@ fn validate(decl: &Declaration) -> Result<(Tz, i64)> {
     Ok((tz, capacity_i64))
 }
 
-fn apply_recipe(conn: &Connection) -> Result<()> {
+fn open_once(path: &Path, decl: &Declaration, tz: Tz, capacity_i64: i64) -> Result<Opened> {
+    let mut conn = Connection::open(path)?;
+    connection_pragmas(&conn)?;
+    // ① 先读版本。已声明的库不再碰 delete→WAL 转换。
+    let version = user_version(&conn)?;
+    if version == SCHEMA_VERSION {
+        ensure_journal_mode(&conn)?;
+        assert_recipe(&conn)?;
+        return finish_declared(conn, decl, tz, capacity_i64);
+    }
+    if version != 0 {
+        return Err(LedgerError::SchemaMismatch {
+            found: version,
+            expected: SCHEMA_VERSION,
+        });
+    }
+    // delete→WAL 要排他锁，且连接上已有共享锁时不走 busy handler。
+    // SQLite 禁止在事务里改 WAL，所以这一步紧挨在 BEGIN IMMEDIATE 之前。
+    ensure_journal_mode(&conn)?;
+    assert_recipe(&conn)?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    // ② 建库：连接态 pragma、建表、user_version 同一个 IMMEDIATE 事务。
+    tx.pragma_update(None, "foreign_keys", "ON")?;
+    tx.pragma_update(None, "synchronous", "NORMAL")?;
+    let version = user_version(&tx)?;
+    if version == SCHEMA_VERSION {
+        tx.rollback()?;
+        return finish_declared(conn, decl, tz, capacity_i64);
+    }
+    if version != 0 {
+        return Err(LedgerError::SchemaMismatch {
+            found: version,
+            expected: SCHEMA_VERSION,
+        });
+    }
+    let names = table_names(&tx)?;
+    if !names.is_empty() {
+        return Err(LedgerError::TornInitialization);
+    }
+    tx.execute_batch(DDL)?;
+    tx.execute(
+        "INSERT INTO declaration (id, meter_id, capacity, timezone, window_kind)
+         VALUES (1, ?1, ?2, ?3, ?4)",
+        params![
+            decl.meter_id,
+            capacity_i64,
+            decl.timezone,
+            decl.kind.as_str()
+        ],
+    )?;
+    tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    tx.commit()?;
+    let stored_version = user_version(&conn)?;
+    if stored_version != SCHEMA_VERSION {
+        return Err(LedgerError::SchemaMismatch {
+            found: stored_version,
+            expected: SCHEMA_VERSION,
+        });
+    }
+    Ok(Opened::Created(Ledger {
+        conn,
+        decl: decl.clone(),
+        tz,
+        capacity_i64,
+    }))
+}
+
+fn finish_declared(mut conn: Connection, decl: &Declaration, tz: Tz, capacity_i64: i64) -> Result<Opened> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let version = user_version(&tx)?;
+    if version != SCHEMA_VERSION {
+        return Err(LedgerError::SchemaMismatch {
+            found: version,
+            expected: SCHEMA_VERSION,
+        });
+    }
+    let names = table_names(&tx)?;
+    exact_tables(&names)?;
+    let stored = load_declaration(&tx)?;
+    ensure_same(decl, &stored)?;
+    tx.rollback()?;
+    Ok(Opened::AlreadyDeclared(Ledger {
+        conn,
+        decl: decl.clone(),
+        tz,
+        capacity_i64,
+    }))
+}
+
+fn connection_pragmas(conn: &Connection) -> Result<()> {
     conn.busy_timeout(Duration::from_millis(5_000))?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
-    conn.pragma_update(None, "journal_mode", "WAL")?;
+    Ok(())
+}
+
+fn assert_recipe(conn: &Connection) -> Result<()> {
     let recipe = read_recipe(conn)?;
     if recipe.journal_mode != "wal" {
         return Err(LedgerError::Recipe {
@@ -389,6 +447,42 @@ fn apply_recipe(conn: &Connection) -> Result<()> {
         });
     }
     Ok(())
+}
+
+/// 注入的首开退避。车道号让同时失败的线程错开醒来，不读业务时钟。
+fn cold_start_pause(attempt: u32) {
+    static LANES: AtomicU64 = AtomicU64::new(0);
+    let lane = LANES.fetch_add(1, Ordering::Relaxed) % 8;
+    let millis = u64::from(attempt.saturating_add(1)).saturating_add(lane);
+    std::thread::sleep(Duration::from_millis(millis));
+}
+
+fn cold_start_conflict(err: &LedgerError) -> bool {
+    let text = err.to_string().to_ascii_lowercase();
+    text.contains("database is locked")
+        || text.contains("database is busy")
+        || text.contains("database table is locked")
+        || text.contains("already exists")
+}
+
+fn ensure_journal_mode(conn: &Connection) -> Result<()> {
+    let mode: String = conn.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
+    if mode.eq_ignore_ascii_case("wal") {
+        return Ok(());
+    }
+    let mode: String = conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
+    if mode.eq_ignore_ascii_case("wal") {
+        Ok(())
+    } else {
+        Err(busy_locked().into())
+    }
+}
+
+fn busy_locked() -> rusqlite::Error {
+    rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+        Some("database is locked".into()),
+    )
 }
 
 fn read_recipe(conn: &Connection) -> Result<Recipe> {

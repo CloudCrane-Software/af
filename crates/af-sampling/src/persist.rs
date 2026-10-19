@@ -11,6 +11,7 @@
 //! `foreign_keys=ON`。绝对时刻只来自注入的 [`crate::Clock`]，测试不睡眠。
 
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -26,6 +27,9 @@ use crate::SamplingError;
 pub const SCHEMA_VERSION: i64 = 1;
 
 const BUSY_TIMEOUT: Duration = Duration::from_millis(5000);
+
+/// 首开窗口里对 `database is locked` / `already exists` 的重试次数。
+const COLD_START_ATTEMPTS: u32 = 16;
 
 const EXPECTED_TABLES: &[&str] = &[
     "golden_injection",
@@ -228,14 +232,34 @@ impl SamplingLedger {
     /// 打开（必要时创建）账本文件。
     ///
     /// `clock` 的 [`Clock::now_ms`] 写入绝对时刻。升迁判据不读这个钟。
+    /// 先读 `user_version`：已经是 [`SCHEMA_VERSION`] 就不再做 delete→WAL。
+    /// 空库在一个 `BEGIN IMMEDIATE` 里建表并写下版本。`user_version` 仍是 0
+    /// 但表和声明都对得上的旧库按 [`OpenFork::AlreadyDeclared`] 打开，不改水位。
+    /// `database is locked` 或 `already exists` 在首开窗口内按注入的退避重试，
+    /// 用尽仍失败则原样返回。
     pub fn open(
         path: impl AsRef<Path>,
         declaration: &LedgerDeclaration,
         clock: impl Clock + 'static,
     ) -> Result<(Self, OpenFork), SamplingError> {
         let prepared = prepare_declaration(declaration)?;
-        let conn = Connection::open(path)?;
-        Self::from_conn(conn, prepared, Arc::new(clock))
+        let clock: Arc<dyn Clock> = Arc::new(clock);
+        let path = path.as_ref();
+        let mut attempt = 0u32;
+        loop {
+            let opened = match Connection::open(path) {
+                Ok(conn) => Self::from_conn(conn, &prepared, Arc::clone(&clock)),
+                Err(err) => Err(SamplingError::from(err)),
+            };
+            match opened {
+                Ok(pair) => return Ok(pair),
+                Err(err) if cold_start_conflict(&err) && attempt + 1 < COLD_START_ATTEMPTS => {
+                    cold_start_pause(attempt);
+                    attempt += 1;
+                }
+                Err(err) => return Err(err),
+            }
+        }
     }
 
     /// 内存账本。连接关掉就没了，不能用来验证重启。
@@ -245,17 +269,32 @@ impl SamplingLedger {
     ) -> Result<(Self, OpenFork), SamplingError> {
         let prepared = prepare_declaration(declaration)?;
         let conn = Connection::open_in_memory()?;
-        Self::from_conn(conn, prepared, Arc::new(clock))
+        Self::from_conn(conn, &prepared, Arc::new(clock))
     }
 
     fn from_conn(
         mut conn: Connection,
-        prepared: PreparedDecl,
+        prepared: &PreparedDecl,
         clock: Arc<dyn Clock>,
     ) -> Result<(Self, OpenFork), SamplingError> {
-        apply_pragmas(&conn)?;
-        let now_ms = clock.now_ms();
-        let fork = bootstrap(&mut conn, &prepared, now_ms)?;
+        connection_pragmas(&conn)?;
+        // ① 先读版本。已声明的库不再碰 delete→WAL 转换。
+        let version = user_version(&conn)?;
+        let fork = if version == SCHEMA_VERSION {
+            ensure_journal_mode(&conn)?;
+            assert_connection_recipe(&conn)?;
+            load_declared(&mut conn, prepared)?
+        } else if version != 0 {
+            return Err(SamplingError::DeclarationMismatch(format!(
+                "user_version {version} 不是抽样账本 schema {SCHEMA_VERSION}"
+            )));
+        } else {
+            // delete→WAL 要排他锁。SQLite 禁止在事务里改 WAL，所以这一步紧挨在 BEGIN 之前。
+            ensure_journal_mode(&conn)?;
+            assert_connection_recipe(&conn)?;
+            let now_ms = clock.now_ms();
+            bootstrap(&mut conn, prepared, now_ms)?
+        };
         let recipe_json = stored_recipe(&conn)?;
         let engine = Engine::from_recipe_json(&recipe_json)
             .map_err(|err| SamplingError::LedgerCorrupt(format!("库内配方无法复原: {err}")))?;
@@ -489,11 +528,14 @@ fn prepare_declaration(decl: &LedgerDeclaration) -> Result<PreparedDecl, Samplin
     })
 }
 
-fn apply_pragmas(conn: &Connection) -> Result<(), SamplingError> {
+fn connection_pragmas(conn: &Connection) -> Result<(), SamplingError> {
     conn.busy_timeout(BUSY_TIMEOUT)?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
-    conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
+    Ok(())
+}
+
+fn assert_connection_recipe(conn: &Connection) -> Result<(), SamplingError> {
     let fk: i64 = conn.pragma_query_value(None, "foreign_keys", |row| row.get(0))?;
     if fk != 1 {
         return Err(SamplingError::LedgerCorrupt(
@@ -501,7 +543,7 @@ fn apply_pragmas(conn: &Connection) -> Result<(), SamplingError> {
         ));
     }
     let mode: String = conn.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
-    if !mode.eq_ignore_ascii_case("wal") && !mode.eq_ignore_ascii_case("memory") {
+    if !journal_mode_is_usable(&mode) {
         return Err(SamplingError::LedgerCorrupt(format!(
             "journal_mode 不是 WAL: {mode}"
         )));
@@ -521,24 +563,105 @@ fn apply_pragmas(conn: &Connection) -> Result<(), SamplingError> {
     Ok(())
 }
 
+fn load_declared(
+    conn: &mut Connection,
+    prepared: &PreparedDecl,
+) -> Result<OpenFork, SamplingError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let version = user_version(&tx)?;
+    if version != SCHEMA_VERSION {
+        return Err(SamplingError::DeclarationMismatch(format!(
+            "user_version {version} 不是抽样账本 schema {SCHEMA_VERSION}"
+        )));
+    }
+    let tables = list_tables(&tx)?;
+    check_tables(&tables)?;
+    check_declaration(&tx, prepared)?;
+    tx.rollback()?;
+    Ok(OpenFork::AlreadyDeclared)
+}
+
 fn bootstrap(
     conn: &mut Connection,
     prepared: &PreparedDecl,
     now_ms: i64,
 ) -> Result<OpenFork, SamplingError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    tx.pragma_update(None, "foreign_keys", "ON")?;
+    tx.pragma_update(None, "synchronous", "NORMAL")?;
+    let version = user_version(&tx)?;
+    if version == SCHEMA_VERSION {
+        let tables = list_tables(&tx)?;
+        check_tables(&tables)?;
+        check_declaration(&tx, prepared)?;
+        tx.rollback()?;
+        return Ok(OpenFork::AlreadyDeclared);
+    }
+    if version != 0 {
+        return Err(SamplingError::DeclarationMismatch(format!(
+            "user_version {version} 不是抽样账本 schema {SCHEMA_VERSION}"
+        )));
+    }
     let tables = list_tables(&tx)?;
     let fork = if tables.is_empty() {
         tx.execute_batch(SCHEMA_SQL)?;
         insert_initial(&tx, prepared, now_ms)?;
+        tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
         OpenFork::Created
     } else {
+        // 旧库没有写 user_version。表和声明一致就重入，不改水位、不补版本。
         check_tables(&tables)?;
         check_declaration(&tx, prepared)?;
         OpenFork::AlreadyDeclared
     };
     tx.commit()?;
     Ok(fork)
+}
+
+/// 注入的首开退避。车道号让同时失败的线程错开醒来，不读业务时钟。
+fn cold_start_pause(attempt: u32) {
+    static LANES: AtomicU64 = AtomicU64::new(0);
+    let lane = LANES.fetch_add(1, Ordering::Relaxed) % 8;
+    let millis = u64::from(attempt.saturating_add(1)).saturating_add(lane);
+    std::thread::sleep(Duration::from_millis(millis));
+}
+
+fn cold_start_conflict(err: &SamplingError) -> bool {
+    let text = err.to_string().to_ascii_lowercase();
+    text.contains("database is locked")
+        || text.contains("database is busy")
+        || text.contains("database table is locked")
+        || text.contains("already exists")
+}
+
+fn journal_mode_is_usable(mode: &str) -> bool {
+    let mode = mode.to_ascii_lowercase();
+    mode == "wal" || mode == "memory"
+}
+
+fn ensure_journal_mode(conn: &Connection) -> Result<(), SamplingError> {
+    let mode: String = conn.pragma_query_value(None, "journal_mode", |row| row.get(0))?;
+    if journal_mode_is_usable(&mode) {
+        return Ok(());
+    }
+    let mode: String =
+        conn.pragma_update_and_check(None, "journal_mode", "WAL", |row| row.get(0))?;
+    if journal_mode_is_usable(&mode) {
+        Ok(())
+    } else {
+        Err(busy_locked().into())
+    }
+}
+
+fn busy_locked() -> rusqlite::Error {
+    rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_BUSY),
+        Some("database is locked".to_string()),
+    )
+}
+
+fn user_version(conn: &Connection) -> Result<i64, SamplingError> {
+    Ok(conn.pragma_query_value(None, "user_version", |row| row.get(0))?)
 }
 
 fn insert_initial(
@@ -980,6 +1103,7 @@ mod tests {
     use crate::SamplingError;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{Arc, Barrier};
 
     const RECIPE: &str = r#"{
         "window": 5,
@@ -1530,5 +1654,49 @@ mod tests {
         let err = ledger.observe(&item, &verdict(true)).unwrap_err();
         assert!(matches!(err, SamplingError::Rejected(_)), "{err}");
         assert_eq!(ledger.golden().golden_seen(), 0);
+    }
+
+    /// F4：八个线程同时第一次打开同一个空库。只允许一个 `Created`。
+    #[test]
+    fn concurrent_first_open_one_creator() {
+        let tmp = TempDb::new();
+        let decl = ok_decl();
+        let threads = 8;
+        let barrier = Arc::new(Barrier::new(threads));
+        let results = std::thread::scope(|scope| {
+            let mut guards = Vec::new();
+            for _ in 0..threads {
+                let path = tmp.path().to_path_buf();
+                let decl = decl.clone();
+                let barrier = Arc::clone(&barrier);
+                guards.push(scope.spawn(move || {
+                    barrier.wait();
+                    open_at(&path, &decl, 50).map(|(_, fork)| fork)
+                }));
+            }
+            guards
+                .into_iter()
+                .map(|guard| guard.join().expect("open thread"))
+                .collect::<Vec<_>>()
+        });
+        let mut created = 0usize;
+        let mut declared = 0usize;
+        for result in &results {
+            match result {
+                Ok(OpenFork::Created) => created += 1,
+                Ok(OpenFork::AlreadyDeclared) => declared += 1,
+                Err(err) => panic!("cold start failed: {err}"),
+            }
+        }
+        assert_eq!(created, 1, "{results:?}");
+        assert_eq!(declared, threads - 1, "{results:?}");
+        let (ledger, fork) = open_at(tmp.path(), &decl, 99).unwrap();
+        assert_eq!(fork, OpenFork::AlreadyDeclared);
+        assert_eq!(ledger.watermark_updated_at_ms().unwrap(), 50);
+        let mode: String = ledger
+            .conn()
+            .pragma_query_value(None, "journal_mode", |row| row.get(0))
+            .unwrap();
+        assert_eq!(mode.to_ascii_lowercase(), "wal");
     }
 }
