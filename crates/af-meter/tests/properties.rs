@@ -10,7 +10,7 @@
 
 use std::cmp::Reverse;
 
-use af_meter::{BudgetError, BudgetLedger, Cents, Count, Meter, MeterError, Time};
+use af_meter::{BudgetError, BudgetLedger, Cents, Count, Meter, MeterError, Ticks, Time};
 use proptest::prelude::*;
 use proptest::test_runner::{FileFailurePersistence, TestCaseError};
 
@@ -174,22 +174,22 @@ fn advance_reset(reset_at: Time, window: Time, crossings: u64) -> Result<Time, T
     })
 }
 
-fn window_recovers_at(remaining: Count, capacity: Count, reset_at: Time) -> Option<Time> {
+fn window_recovers_at(remaining: Count, capacity: Count, reset_at: Time) -> Option<Ticks> {
     if remaining < capacity {
-        Some(reset_at)
+        Some(Ticks(reset_at))
     } else {
         None
     }
 }
 
-fn min_recovers_at(children: &[(Count, Option<Time>)]) -> Option<Time> {
+fn min_recovers_at(children: &[(Count, Option<Ticks>)]) -> Option<Ticks> {
     let min = children
         .iter()
         .map(|(available, _)| *available)
         .min()
         .unwrap();
     let mut forever = false;
-    let mut latest: Option<Time> = None;
+    let mut latest: Option<Ticks> = None;
     for (available, recovers_at) in children {
         if *available != min {
             continue;

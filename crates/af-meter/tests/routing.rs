@@ -3,7 +3,7 @@
 //! 核心验证：**日窗耗尽但周窗有余 → 日窗恢复前任务转 API，日窗重置后切回订阅。**
 
 use af_meter::demo::{self, DAY, SCHEDULE, WEEK};
-use af_meter::{route, Decision, Meter};
+use af_meter::{route, Decision, Meter, Ticks};
 
 #[test]
 fn daily_exhausted_but_weekly_surplus_switches_to_api_until_daily_resets() {
@@ -38,7 +38,7 @@ fn daily_exhausted_but_weekly_surplus_switches_to_api_until_daily_resets() {
         .meter
         .given(7_200);
     assert_eq!(r.available, 0);
-    assert_eq!(r.recovers_at, Some(DAY));
+    assert_eq!(r.recovers_at, Some(Ticks(DAY)));
 
     // 日窗恢复前 → 转 API。
     assert_eq!(demo::used(&route(&mut supplies, 5, 7_200)), Some("api"));
@@ -122,7 +122,7 @@ fn weekly_binding_recovers_at_weekly_reset() {
     let r = demo::find_mut(&mut supplies, "subscription")
         .meter
         .given(4 * DAY + 200);
-    assert_eq!(r.recovers_at, Some(WEEK));
+    assert_eq!(r.recovers_at, Some(Ticks(WEEK)));
     // 周窗重置后恢复订阅。
     assert_eq!(
         demo::used(&route(&mut supplies, 10, WEEK)),
@@ -151,7 +151,7 @@ fn defer_when_nothing_covers() {
     supplies[0].meter.try_consume(200, 0).unwrap();
     let d = route(&mut supplies, 20, 10);
     match d {
-        Decision::Defer { recovers_at } => assert_eq!(recovers_at, Some(DAY)),
+        Decision::Defer { recovers_at } => assert_eq!(recovers_at, Some(Ticks(DAY))),
         other => panic!("应 Defer，实际 {other:?}"),
     }
 

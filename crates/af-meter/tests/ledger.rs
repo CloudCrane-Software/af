@@ -11,7 +11,7 @@ use chrono::{Datelike, Days, NaiveDate, NaiveTime, TimeZone, Weekday};
 use chrono_tz::Tz;
 
 use af_meter::{
-    window_bounds, ConsumeResult, Declaration, Ledger, LedgerError, Opened, WindowKind,
+    window_bounds, ConsumeResult, Declaration, Ledger, LedgerError, Opened, UnixMillis, WindowKind,
     SCHEMA_VERSION,
 };
 
@@ -341,7 +341,7 @@ fn consume_is_idempotent_and_conflict_does_not_charge() {
     let snap = ledger.window_at(now).unwrap();
     assert_eq!(
         applied.reading().recovers_at,
-        Some(u64::try_from(snap.end_ms).unwrap())
+        Some(UnixMillis(u64::try_from(snap.end_ms).unwrap()))
     );
     assert!(snap.persisted);
     assert_eq!(snap.consumed, 4);
@@ -381,7 +381,7 @@ fn insufficient_rolls_back_and_restart_keeps_the_committed_charge() {
         } => {
             assert_eq!(need, 11);
             assert_eq!(available, 10);
-            assert_eq!(recovers_at, u64::try_from(snap.end_ms).unwrap());
+            assert_eq!(recovers_at, UnixMillis(u64::try_from(snap.end_ms).unwrap()));
         }
         other => panic!("{other:?}"),
     }
@@ -422,7 +422,7 @@ fn lazy_reset_opens_the_next_civil_window() {
     assert_ne!(snap.end_ms - snap.start_ms, 86_400_000);
     assert_eq!(
         applied.reading().recovers_at,
-        Some(u64::try_from(snap.end_ms).unwrap())
+        Some(UnixMillis(u64::try_from(snap.end_ms).unwrap()))
     );
     assert_eq!(ledger.reading(snap.end_ms - 1).unwrap().available, 0);
     assert!(!ledger.window_at(snap.end_ms).unwrap().persisted);
@@ -587,7 +587,7 @@ fn concurrent_consumers_conserve_the_window() {
     let snap = ledger.window_at(now).unwrap();
     assert_eq!(
         ledger.reading(now).unwrap().recovers_at,
-        Some(u64::try_from(snap.end_ms).unwrap())
+        Some(UnixMillis(u64::try_from(snap.end_ms).unwrap()))
     );
 }
 

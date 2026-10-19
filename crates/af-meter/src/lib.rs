@@ -13,6 +13,8 @@
 //!
 //! 语义约定（PoC 简化，均已用测试固定）：
 //! - `recovers_at` = 可用量下次**严格增加**的时刻；`None` = 不会自动恢复（如 Stock 用尽）。
+//!   内存树上这个时刻是 [`Ticks`]（注入的整数秒）。账本上是 [`UnixMillis`]（窗口终点的 Unix 毫秒）。
+//!   两个类型不能比较、不能相加。
 //! - `Min` 的 `recovers_at` = 所有"绑定子计量"（available 等于最小值者）恢复时刻的**最大值**；
 //!   任一绑定者永不恢复则整体 `None`。
 //! - `Max` 的 `recovers_at` = 各子计量恢复时刻的**最小值**（下界语义：最早"可能出现"
@@ -41,7 +43,54 @@ pub use ledger::{
 use serde::{Deserialize, Serialize};
 
 /// 模拟时钟：自任选纪元起的整数秒。由调用方注入，计量器不读墙钟。
+///
+/// 这是裸整数，方便窗口算术。读数里的恢复时刻用 [`Ticks`]，账本用 [`UnixMillis`]，
+/// 避免把这里的秒和 Unix 毫秒放进同一次比较。
 pub type Time = u64;
+
+/// 内存计量的恢复时刻。单位是调用方注入的整数秒，与 [`Time`] 相同，不是 Unix 毫秒。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Ticks(pub u64);
+
+impl Ticks {
+    pub const fn new(seconds: u64) -> Self {
+        Self(seconds)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for Ticks {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}s", self.0)
+    }
+}
+
+/// 账本窗口终点。单位是 Unix 毫秒。
+///
+/// 没有通向 [`Ticks`] 的 `From` / `PartialEq`。秒和毫秒要换算必须写在调用处。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct UnixMillis(pub u64);
+
+impl UnixMillis {
+    pub const fn new(milliseconds: u64) -> Self {
+        Self(milliseconds)
+    }
+
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
+
+impl std::fmt::Display for UnixMillis {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}ms", self.0)
+    }
+}
 
 /// 计数最小单位：调用次数、令牌个数、窗口配额。无符号。
 pub type Count = u64;
@@ -53,13 +102,15 @@ pub type Count = u64;
 /// 凭证签发的限额可以原样交给 [`BudgetLedger`]。
 pub type Cents = i64;
 
-/// `given(now)` 的读数：剩余可用量 + 最早恢复时刻。
+/// `given(now)` 或账本扣减的读数：剩余可用量 + 最早恢复时刻。
+///
+/// `U` 默认是 [`Ticks`]（内存计量，整数秒）。账本路径用 [`Reading<UnixMillis>`]。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Reading {
+pub struct Reading<U = Ticks> {
     /// 当前剩余可用量（计数）。
     pub available: Count,
-    /// 可用量下次严格增加的时刻；`None` = 不会自动恢复。
-    pub recovers_at: Option<Time>,
+    /// 可用量下次严格增加的时刻。单位是 `U`。`None` = 不会自动恢复。
+    pub recovers_at: Option<U>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -69,7 +120,7 @@ pub enum MeterError {
     Insufficient {
         need: Count,
         available: Count,
-        recovers_at: Option<Time>,
+        recovers_at: Option<Ticks>,
     },
     /// 该节点类型不支持此操作（如对 Concurrency 调 `try_consume`）。
     #[error("unsupported operation: {0}")]
@@ -224,7 +275,7 @@ impl Meter {
             } => Reading {
                 available: *remaining,
                 recovers_at: if *remaining < *capacity {
-                    Some(*reset_at)
+                    Some(Ticks(*reset_at))
                 } else {
                     None
                 },
@@ -236,7 +287,7 @@ impl Meter {
             } => Reading {
                 available: limit.saturating_sub(*in_use),
                 recovers_at: if *in_use >= *limit {
-                    releases.iter().copied().min()
+                    releases.iter().copied().min().map(Ticks)
                 } else {
                     None
                 },
@@ -250,7 +301,7 @@ impl Meter {
                 available: *tokens,
                 recovers_at: if *tokens < *burst && *per_second > 0 {
                     let deficit = *burst - *tokens;
-                    Some(last.saturating_add(deficit.div_ceil(*per_second)))
+                    Some(Ticks(last.saturating_add(deficit.div_ceil(*per_second))))
                 } else {
                     None
                 },
@@ -267,7 +318,7 @@ impl Meter {
                 // 绑定子计量 = available 等于最小值者；整体恢复 = 它们恢复时刻的最大值。
                 // 任一绑定者永不恢复则整体不恢复。
                 let mut forever = false;
-                let mut latest: Option<Time> = None;
+                let mut latest: Option<Ticks> = None;
                 for r in &readings {
                     if r.available != min {
                         continue;
@@ -402,8 +453,8 @@ pub enum Decision {
         supply: String,
         remaining_after: Count,
     },
-    /// 没有供给能覆盖预计消耗；`recovers_at` 为各供给中最早的恢复时刻。
-    Defer { recovers_at: Option<Time> },
+    /// 没有供给能覆盖预计消耗；`recovers_at` 为各供给中最早的恢复时刻（整数秒）。
+    Defer { recovers_at: Option<Ticks> },
 }
 
 /// 路由：按任务预计消耗选供给。按优先级序找第一个 available >= need 的供给并扣减；
@@ -411,7 +462,7 @@ pub enum Decision {
 pub fn route(supplies: &mut [Supply], need: Count, now: Time) -> Decision {
     let mut order: Vec<usize> = (0..supplies.len()).collect();
     order.sort_by_key(|&i| supplies[i].priority);
-    let mut earliest: Option<Time> = None;
+    let mut earliest: Option<Ticks> = None;
     for &i in &order {
         let r = supplies[i].meter.given(now);
         if r.available >= need {
@@ -441,6 +492,30 @@ mod tests {
     const WEEK: Time = 604_800;
 
     #[test]
+    fn ticks_and_unix_millis_are_different_types() {
+        assert_ne!(
+            std::any::TypeId::of::<Ticks>(),
+            std::any::TypeId::of::<UnixMillis>()
+        );
+        assert_ne!(
+            std::any::TypeId::of::<Reading<Ticks>>(),
+            std::any::TypeId::of::<Reading<UnixMillis>>()
+        );
+        assert_eq!(Ticks::new(86_400).get(), 86_400);
+        assert_eq!(UnixMillis::new(86_400_000).get(), 86_400_000);
+        let memory = Reading {
+            available: 1,
+            recovers_at: Some(Ticks::new(86_400)),
+        };
+        let ledger = Reading {
+            available: 1,
+            recovers_at: Some(UnixMillis::new(86_400_000)),
+        };
+        assert_eq!(memory.recovers_at, Some(Ticks(86_400)));
+        assert_eq!(ledger.recovers_at, Some(UnixMillis(86_400_000)));
+    }
+
+    #[test]
     fn stock_exhaust_reports_no_recovery() {
         let mut m = Meter::stock(10);
         m.try_consume(6, 0).unwrap();
@@ -468,7 +543,7 @@ mod tests {
         m.try_consume(200, 0).unwrap();
         let r = m.given(DAY - 1);
         assert_eq!(r.available, 0);
-        assert_eq!(r.recovers_at, Some(DAY));
+        assert_eq!(r.recovers_at, Some(Ticks(DAY)));
         assert!(m.try_consume(1, DAY - 1).is_err());
         // 重置后满血；空闲多个窗口不累积额度。
         let r = m.given(3 * DAY);
@@ -512,7 +587,7 @@ mod tests {
         let r = m.given(4 * DAY + 100);
         assert_eq!(r.available, 0);
         // 周窗、日窗同时绑定（都为 0）：最早恢复 = 两者恢复时刻的较大值 = 周重置。
-        assert_eq!(r.recovers_at, Some(WEEK));
+        assert_eq!(r.recovers_at, Some(Ticks(WEEK)));
     }
 
     #[test]
@@ -530,7 +605,7 @@ mod tests {
         // 整数秒采样与按秒连续回填一致：t=2 有 2 个令牌，回满仍是 t=10。
         let r = m.given(2);
         assert_eq!(r.available, 2);
-        assert_eq!(r.recovers_at, Some(10));
+        assert_eq!(r.recovers_at, Some(Ticks(10)));
         assert!(m.try_consume(3, 2).is_err());
         let r = m.given(10);
         assert_eq!(r.available, 10);
@@ -544,7 +619,7 @@ mod tests {
         m.try_consume(10, 0).unwrap();
         let r = m.given(3);
         assert_eq!(r.available, 9);
-        assert_eq!(r.recovers_at, Some(4));
+        assert_eq!(r.recovers_at, Some(Ticks(4)));
         let r = m.given(4);
         assert_eq!(r.available, 10);
         assert_eq!(r.recovers_at, None);
@@ -557,7 +632,7 @@ mod tests {
         m.acquire(0, 45).unwrap();
         let r = m.given(0);
         assert_eq!(r.available, 0);
-        assert_eq!(r.recovers_at, Some(30));
+        assert_eq!(r.recovers_at, Some(Ticks(30)));
         assert!(m.acquire(0, 60).is_err());
         let r = m.given(30);
         assert_eq!(r.available, 1);
@@ -623,7 +698,7 @@ mod tests {
         }];
         s2[0].meter.try_consume(200, 0).unwrap();
         match route(&mut s2, 1, 0) {
-            Decision::Defer { recovers_at } => assert_eq!(recovers_at, Some(DAY)),
+            Decision::Defer { recovers_at } => assert_eq!(recovers_at, Some(Ticks(DAY))),
             other => panic!("{other:?}"),
         }
     }

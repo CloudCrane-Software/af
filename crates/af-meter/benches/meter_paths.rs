@@ -9,7 +9,7 @@
 //! - `window_roll`：先扣空当前日窗，再 `given(now)` 跨过大量错过的日窗与周窗。
 //!   测的是 `refresh` 的滚转循环。滚完剩余量回到容量，不累积错过的窗口。
 
-use af_meter::{Count, Meter, Reading, Time};
+use af_meter::{Count, Meter, Reading, Ticks, Time};
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use std::hint::black_box;
 use std::time::{Duration, Instant};
@@ -59,7 +59,7 @@ fn window_fields(meter: &Meter) -> (Count, Time) {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct AccountSnap {
     available: Count,
-    recovers_at: Option<Time>,
+    recovers_at: Option<Ticks>,
     weekly_remaining: Count,
     daily_remaining: Count,
 }
@@ -86,7 +86,7 @@ fn assert_accounted(snap: AccountSnap) {
         DAILY_CAP - spent,
         "日窗剩余是可用量，且没有滚转"
     );
-    assert_eq!(snap.recovers_at, Some(T0 + DAY));
+    assert_eq!(snap.recovers_at, Some(Ticks(T0 + DAY)));
     assert_eq!(snap.daily_remaining, DAILY_CAP - spent);
     // Min 扣每一个子计量，不是只扣被读出来的那个。
     assert_eq!(snap.weekly_remaining, WEEKLY_CAP - spent);
@@ -130,7 +130,7 @@ fn per_event_accounting(c: &mut Criterion) {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct RollSnap {
     available: Count,
-    recovers_at: Option<Time>,
+    recovers_at: Option<Ticks>,
     weekly_remaining: Count,
     weekly_reset: Time,
     daily_remaining: Count,

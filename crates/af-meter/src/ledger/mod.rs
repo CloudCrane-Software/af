@@ -5,8 +5,9 @@
 //! 崩溃后已提交的行靠 WAL 还在；未标记发出的 outbox 由 [`Ledger::recover`] 再送一次。
 //! 恰好一次靠事件的幂等键：接收方用同一键去重。
 //!
-//! 账本读数复用 [`crate::Reading`]。这里的 `recovers_at` 是窗口终点的 Unix 毫秒。
-//! 内存 [`crate::Meter`] 的 [`crate::Time`] 是调用方注入的整数秒，两套数字不要混用。
+//! 账本读数是 [`crate::Reading<crate::UnixMillis>`]。`recovers_at` 是窗口终点的 Unix 毫秒。
+//! 内存 [`crate::Meter`] 的读数是 [`crate::Reading<crate::Ticks>`]，单位是注入的整数秒。
+//! 两个参数类型不能比较。
 
 mod bounds;
 mod consume;
@@ -100,7 +101,7 @@ pub enum LedgerError {
     /// 当地 00:00 整日都不存在。
     #[error("civil midnight of the window does not exist in the declared timezone")]
     UnmappedMidnight,
-    /// 窗口终点是负的 Unix 毫秒，放不进 [`crate::Time`]。
+    /// 窗口终点是负的 Unix 毫秒，放不进 [`crate::UnixMillis`]。
     #[error("window end {ms} is negative")]
     NegativeInstant { ms: i64 },
     /// 库存整数不能当成计数。
@@ -124,7 +125,7 @@ pub enum LedgerError {
     Insufficient {
         need: Count,
         available: Count,
-        recovers_at: crate::Time,
+        recovers_at: crate::UnixMillis,
     },
     /// 同一事务里窗口行在读和写之间变了。事务会回滚。
     #[error("window update lost its compare-and-swap")]
@@ -345,8 +346,10 @@ pub(super) fn count_from_i64(value: i64) -> Result<Count> {
     u64::try_from(value).map_err(|_| LedgerError::CorruptCount { value })
 }
 
-pub(super) fn ms_to_time(ms: i64) -> Result<crate::Time> {
-    u64::try_from(ms).map_err(|_| LedgerError::NegativeInstant { ms })
+pub(super) fn ms_to_time(ms: i64) -> Result<crate::UnixMillis> {
+    u64::try_from(ms)
+        .map(crate::UnixMillis)
+        .map_err(|_| LedgerError::NegativeInstant { ms })
 }
 
 fn validate(decl: &Declaration) -> Result<(Tz, i64)> {

@@ -8,20 +8,20 @@ use super::{
     count_from_i64, ms_to_time, EventRecord, Ledger, LedgerError, Result, Totals, WindowKind,
     WindowSnapshot,
 };
-use crate::{Count, Reading, Time};
+use crate::{Count, Reading, UnixMillis};
 
 /// 一次 `consume` 的结果。两种都带当前窗口的 [`Reading`]。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
 pub enum ConsumeResult {
     /// 本事务首次入账，已经扣减并写入 outbox。
-    Applied(Reading),
+    Applied(Reading<UnixMillis>),
     /// 幂等键已存在且数量相同。没有再次扣减。
-    AlreadyApplied(Reading),
+    AlreadyApplied(Reading<UnixMillis>),
 }
 
 impl ConsumeResult {
-    pub const fn reading(self) -> Reading {
+    pub const fn reading(self) -> Reading<UnixMillis> {
         match self {
             ConsumeResult::Applied(reading) | ConsumeResult::AlreadyApplied(reading) => reading,
         }
@@ -39,7 +39,7 @@ struct Charge<'a> {
     now_ms: i64,
     start_ms: i64,
     end_ms: i64,
-    recovers_at: Time,
+    recovers_at: UnixMillis,
     capacity_i64: i64,
     meter_id: &'a str,
     timezone: &'a str,
@@ -59,8 +59,8 @@ struct Compensation<'a> {
 }
 
 enum ChargeOutcome {
-    Applied(Reading),
-    AlreadyApplied(Reading),
+    Applied(Reading<UnixMillis>),
+    AlreadyApplied(Reading<UnixMillis>),
 }
 
 impl Ledger {
@@ -70,7 +70,7 @@ impl Ledger {
     /// 数量不同：[`LedgerError::IdempotencyConflict`]，账本不变。
     /// 剩余不足：[`LedgerError::Insufficient`]，事务回滚，不留空窗口。
     ///
-    /// 返回的 [`Reading::recovers_at`] 是该窗口终点的 Unix 毫秒。
+    /// 返回的 [`Reading::recovers_at`] 是该窗口终点的 [`UnixMillis`]。
     /// `now_ms` 由调用方注入，本函数不读墙钟。
     pub fn consume(&mut self, key: &str, amount: Count, now_ms: i64) -> Result<ConsumeResult> {
         if key.is_empty() {
@@ -119,7 +119,7 @@ impl Ledger {
     }
 
     /// 不写库。没有窗口行时剩余量等于容量。
-    pub fn reading(&self, now_ms: i64) -> Result<Reading> {
+    pub fn reading(&self, now_ms: i64) -> Result<Reading<UnixMillis>> {
         let (start_ms, end_ms) = window_bounds_tz(now_ms, self.tz, self.decl.kind)?;
         let consumed = peek_consumed(&self.conn, start_ms)?;
         reading_of(self.capacity_i64, consumed, end_ms)
@@ -340,7 +340,7 @@ fn peek_consumed(conn: &Connection, start_ms: i64) -> Result<i64> {
     Ok(consumed.unwrap_or(0))
 }
 
-fn reading_of(capacity_i64: i64, consumed: i64, end_ms: i64) -> Result<Reading> {
+fn reading_of(capacity_i64: i64, consumed: i64, end_ms: i64) -> Result<Reading<UnixMillis>> {
     if consumed < 0 || consumed > capacity_i64 {
         return Err(LedgerError::SchemaDrift {
             detail: format!("consumed {consumed} against capacity {capacity_i64}"),
