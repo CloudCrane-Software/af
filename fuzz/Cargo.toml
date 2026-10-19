@@ -26,6 +26,7 @@ path = "../crates/af-effect-gateway"
 # cargo 给出的修法是补一张空 [workspace]，让 fuzz 自成工作区，
 # 并且不进根 members（`cargo test --workspace` 不会编这些 target）。
 # `--fuzzing-workspace=true` 会写成 `members = ["."]`，这里按接入清单留空表。
+
 [workspace]
 
 [[bin]]
