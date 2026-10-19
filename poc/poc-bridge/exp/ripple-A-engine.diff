@@ -1,0 +1,35 @@
+--- exp/v1-baseline/engine_main.rs	2026-10-19 11:22:11.561640487 +0800
++++ exp/main_v2.rs	2026-10-19 11:22:42.185660087 +0800
+@@ -20,7 +20,7 @@
+ use serde::Deserialize;
+ 
+ /// 引擎版本号：随每次响应回带，供实验观测"哪个版本的引擎做了判定"。
+-const ENGINE_VERSION: &str = "v1";
++const ENGINE_VERSION: &str = "v2";
+ 
+ #[derive(Deserialize)]
+ struct Req {
+@@ -151,7 +151,22 @@
+             None => Err(bad_request("attach_artifact 需要 artifact")),
+         },
+         "transition" => match req.transition.as_deref().and_then(parse_transition) {
+-            Some(t) => order.transition(t).map(|_| ()).map_err(Fail::Gate),
++            Some(t) => {
++                // v2 新增前置条件（E3 涟漪实验）：release 额外要求 SLA deadline 已设置。
++                // 真实方案中该条件应加在 af-workorder::WorkOrder::release_missing()
++                // （Missing 枚举加一个变体 + 一行检查）；本 PoC 受"只在任务目录写文件"
++                // 纪律约束，加在引擎层，改动量同类。
++                if t == Transition::Release && order.sla().deadline.is_none() {
++                    Err(Fail::Raw(serde_json::json!({
++                        "kind": "PreconditionsNotMet",
++                        "detail": {"PreconditionsNotMet": {"transition": "Release",
++                                    "missing": ["SlaDeadlineNotSet"]}},
++                        "message": "门控拒绝 Release:前置条件缺失 [SlaDeadlineNotSet]（engine v2 新增前置）",
++                    })))
++                } else {
++                    order.transition(t).map(|_| ()).map_err(Fail::Gate)
++                }
++            }
+             None => Err(bad_request("transition 需要 release|start|complete|close|cancel")),
+         },
+         other => Err(bad_request(&format!("未知 op: {other}"))),

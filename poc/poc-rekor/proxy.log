@@ -1,0 +1,15 @@
+2026/10/19 11:28:57 proxy listening on 127.0.0.1:5239
+2026/10/19 11:29:00 POST /api/v2/log/entries -> write
+2026/10/19 11:29:32 POST /api/v2/log/entries -> write
+2026/10/19 11:30:18 GET /checkpoint -> read
+2026/10/19 11:30:18 POST /api/v2/log/entries -> write
+2026/10/19 11:30:18 http: proxy error: dial tcp 127.0.0.1:5232: connect: connection refused
+2026/10/19 11:30:39 GET /checkpoint -> read
+2026/10/19 11:30:54 GET /checkpoint -> read
+2026/10/19 11:30:54 POST /api/v2/log/entries -> write
+2026/10/19 11:31:27 GET /checkpoint -> read
+2026/10/19 11:31:37 POST /api/v2/log/entries -> write
+2026/10/19 11:32:03 POST /api/v2/log/entries -> write
+2026/10/19 11:34:09 GET /checkpoint -> read
+2026/10/19 11:34:23 GET /checkpoint -> read
+2026/10/19 11:34:23 POST /api/v2/log/entries -> write

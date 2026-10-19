@@ -1,0 +1,1410 @@
+{
+ "schemaVersion": 1,
+ "line": {
+  "id": "line-a",
+  "displayName": "总装 A 线（PoC 示例）",
+  "graphTemplates": {
+   "main": {
+    "templateId": "assembling-v3",
+    "version": "1.4.2",
+    "entry": "start"
+   },
+   "pack": {
+    "templateId": "packing-v1",
+    "version": "0.9.0",
+    "entry": "intake"
+   }
+  },
+  "evalFunctions": {
+   "cycleTimeSla": {
+    "name": "cycleTimeSla",
+    "kind": "threshold",
+    "timeoutMs": 2000
+   },
+   "defectRatio": {
+    "name": "defectRatio",
+    "kind": "ratio",
+    "timeoutMs": 3000
+   },
+   "tempDwell": {
+    "name": "tempDwell",
+    "kind": "dwell",
+    "timeoutMs": 1500
+   }
+  },
+  "tools": {
+   "plcGate": {
+    "name": "plcGate",
+    "driver": "opcua",
+    "endpoint": "opc.tcp://10.1.0.21:4840"
+   },
+   "vision": {
+    "name": "vision",
+    "driver": "http",
+    "endpoint": "http://10.1.0.22:8080"
+   },
+   "printer": {
+    "name": "printer",
+    "driver": "modbus",
+    "endpoint": "/dev/ttyUSB0:115200"
+   }
+  },
+  "andonRules": [
+   {
+    "id": "andon-1",
+    "severity": "warn",
+    "notify": [
+     "班组长"
+    ],
+    "escalateAfterMs": 300000,
+    "escalateTo": [
+     "值班经理"
+    ],
+    "trigger": "cycleTimeSla"
+   },
+   {
+    "id": "andon-2",
+    "severity": "critical",
+    "notify": [
+     "班组长",
+     "设备科"
+    ],
+    "escalateAfterMs": 0,
+    "trigger": "tempDwell"
+   }
+  ],
+  "artifactSchema": {
+   "kind": "unit",
+   "fields": {
+    "sn": {
+     "type": "string"
+    },
+    "qcScore": {
+     "type": "number"
+    },
+    "grade": {
+     "enumValues": [
+      "A",
+      "B",
+      "C"
+     ],
+     "type": "enum"
+    },
+    "builtAt": {
+     "type": "timestamp"
+    }
+   },
+   "required": [
+    "sn",
+    "builtAt"
+   ]
+  }
+ },
+ "rules": [
+  {
+   "id": "rule-0",
+   "kind": "threshold",
+   "desc": "gen threshold #0",
+   "enabled": true,
+   "params": {
+    "metric": "m0_sec",
+    "op": ">",
+    "value": 100
+   }
+  },
+  {
+   "id": "rule-1",
+   "kind": "ratio",
+   "desc": "gen ratio #1",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.015,
+    "critical": 0.03
+   }
+  },
+  {
+   "id": "rule-2",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #2",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-3",
+   "kind": "dwell",
+   "desc": "gen dwell #3",
+   "enabled": true,
+   "params": {
+    "metric": "m3_c",
+    "op": ">",
+    "value": 63,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-4",
+   "kind": "count",
+   "desc": "gen count #4",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-5",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #5",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-6",
+   "kind": "escalation",
+   "desc": "gen escalation #6",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-7",
+   "kind": "combo",
+   "desc": "gen combo #7",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-8",
+   "kind": "threshold",
+   "desc": "gen threshold #8",
+   "enabled": true,
+   "params": {
+    "metric": "m8_sec",
+    "op": ">",
+    "value": 108
+   }
+  },
+  {
+   "id": "rule-9",
+   "kind": "ratio",
+   "desc": "gen ratio #9",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.03,
+    "critical": 0.06
+   }
+  },
+  {
+   "id": "rule-10",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #10",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-11",
+   "kind": "dwell",
+   "desc": "gen dwell #11",
+   "enabled": true,
+   "params": {
+    "metric": "m11_c",
+    "op": ">",
+    "value": 71,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-12",
+   "kind": "count",
+   "desc": "gen count #12",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-13",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #13",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-14",
+   "kind": "escalation",
+   "desc": "gen escalation #14",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-15",
+   "kind": "combo",
+   "desc": "gen combo #15",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-16",
+   "kind": "threshold",
+   "desc": "gen threshold #16",
+   "enabled": true,
+   "params": {
+    "metric": "m16_sec",
+    "op": ">",
+    "value": 116
+   }
+  },
+  {
+   "id": "rule-17",
+   "kind": "ratio",
+   "desc": "gen ratio #17",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.02,
+    "critical": 0.04
+   }
+  },
+  {
+   "id": "rule-18",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #18",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-19",
+   "kind": "dwell",
+   "desc": "gen dwell #19",
+   "enabled": true,
+   "params": {
+    "metric": "m19_c",
+    "op": ">",
+    "value": 79,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-20",
+   "kind": "count",
+   "desc": "gen count #20",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-21",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #21",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-22",
+   "kind": "escalation",
+   "desc": "gen escalation #22",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-23",
+   "kind": "combo",
+   "desc": "gen combo #23",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-24",
+   "kind": "threshold",
+   "desc": "gen threshold #24",
+   "enabled": true,
+   "params": {
+    "metric": "m4_sec",
+    "op": ">",
+    "value": 124
+   }
+  },
+  {
+   "id": "rule-25",
+   "kind": "ratio",
+   "desc": "gen ratio #25",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.01,
+    "critical": 0.02
+   }
+  },
+  {
+   "id": "rule-26",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #26",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-27",
+   "kind": "dwell",
+   "desc": "gen dwell #27",
+   "enabled": true,
+   "params": {
+    "metric": "m7_c",
+    "op": ">",
+    "value": 87,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-28",
+   "kind": "count",
+   "desc": "gen count #28",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-29",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #29",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-30",
+   "kind": "escalation",
+   "desc": "gen escalation #30",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-31",
+   "kind": "combo",
+   "desc": "gen combo #31",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-32",
+   "kind": "threshold",
+   "desc": "gen threshold #32",
+   "enabled": true,
+   "params": {
+    "metric": "m12_sec",
+    "op": ">",
+    "value": 132
+   }
+  },
+  {
+   "id": "rule-33",
+   "kind": "ratio",
+   "desc": "gen ratio #33",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.025,
+    "critical": 0.05
+   }
+  },
+  {
+   "id": "rule-34",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #34",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-35",
+   "kind": "dwell",
+   "desc": "gen dwell #35",
+   "enabled": true,
+   "params": {
+    "metric": "m15_c",
+    "op": ">",
+    "value": 65,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-36",
+   "kind": "count",
+   "desc": "gen count #36",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-37",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #37",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-38",
+   "kind": "escalation",
+   "desc": "gen escalation #38",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-39",
+   "kind": "combo",
+   "desc": "gen combo #39",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-40",
+   "kind": "threshold",
+   "desc": "gen threshold #40",
+   "enabled": true,
+   "params": {
+    "metric": "m0_sec",
+    "op": ">",
+    "value": 140
+   }
+  },
+  {
+   "id": "rule-41",
+   "kind": "ratio",
+   "desc": "gen ratio #41",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.015,
+    "critical": 0.03
+   }
+  },
+  {
+   "id": "rule-42",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #42",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-43",
+   "kind": "dwell",
+   "desc": "gen dwell #43",
+   "enabled": true,
+   "params": {
+    "metric": "m3_c",
+    "op": ">",
+    "value": 73,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-44",
+   "kind": "count",
+   "desc": "gen count #44",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-45",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #45",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-46",
+   "kind": "escalation",
+   "desc": "gen escalation #46",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-47",
+   "kind": "combo",
+   "desc": "gen combo #47",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-48",
+   "kind": "threshold",
+   "desc": "gen threshold #48",
+   "enabled": true,
+   "params": {
+    "metric": "m8_sec",
+    "op": ">",
+    "value": 148
+   }
+  },
+  {
+   "id": "rule-49",
+   "kind": "ratio",
+   "desc": "gen ratio #49",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.03,
+    "critical": 0.06
+   }
+  },
+  {
+   "id": "rule-50",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #50",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-51",
+   "kind": "dwell",
+   "desc": "gen dwell #51",
+   "enabled": true,
+   "params": {
+    "metric": "m11_c",
+    "op": ">",
+    "value": 81,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-52",
+   "kind": "count",
+   "desc": "gen count #52",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-53",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #53",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-54",
+   "kind": "escalation",
+   "desc": "gen escalation #54",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-55",
+   "kind": "combo",
+   "desc": "gen combo #55",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-56",
+   "kind": "threshold",
+   "desc": "gen threshold #56",
+   "enabled": true,
+   "params": {
+    "metric": "m16_sec",
+    "op": ">",
+    "value": 106
+   }
+  },
+  {
+   "id": "rule-57",
+   "kind": "ratio",
+   "desc": "gen ratio #57",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.02,
+    "critical": 0.04
+   }
+  },
+  {
+   "id": "rule-58",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #58",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-59",
+   "kind": "dwell",
+   "desc": "gen dwell #59",
+   "enabled": true,
+   "params": {
+    "metric": "m19_c",
+    "op": ">",
+    "value": 89,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-60",
+   "kind": "count",
+   "desc": "gen count #60",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-61",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #61",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-62",
+   "kind": "escalation",
+   "desc": "gen escalation #62",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-63",
+   "kind": "combo",
+   "desc": "gen combo #63",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-64",
+   "kind": "threshold",
+   "desc": "gen threshold #64",
+   "enabled": true,
+   "params": {
+    "metric": "m4_sec",
+    "op": ">",
+    "value": 114
+   }
+  },
+  {
+   "id": "rule-65",
+   "kind": "ratio",
+   "desc": "gen ratio #65",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.01,
+    "critical": 0.02
+   }
+  },
+  {
+   "id": "rule-66",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #66",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-67",
+   "kind": "dwell",
+   "desc": "gen dwell #67",
+   "enabled": true,
+   "params": {
+    "metric": "m7_c",
+    "op": ">",
+    "value": 67,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-68",
+   "kind": "count",
+   "desc": "gen count #68",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-69",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #69",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-70",
+   "kind": "escalation",
+   "desc": "gen escalation #70",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-71",
+   "kind": "combo",
+   "desc": "gen combo #71",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-72",
+   "kind": "threshold",
+   "desc": "gen threshold #72",
+   "enabled": true,
+   "params": {
+    "metric": "m12_sec",
+    "op": ">",
+    "value": 122
+   }
+  },
+  {
+   "id": "rule-73",
+   "kind": "ratio",
+   "desc": "gen ratio #73",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.025,
+    "critical": 0.05
+   }
+  },
+  {
+   "id": "rule-74",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #74",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-75",
+   "kind": "dwell",
+   "desc": "gen dwell #75",
+   "enabled": true,
+   "params": {
+    "metric": "m15_c",
+    "op": ">",
+    "value": 75,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-76",
+   "kind": "count",
+   "desc": "gen count #76",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-77",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #77",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-78",
+   "kind": "escalation",
+   "desc": "gen escalation #78",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-79",
+   "kind": "combo",
+   "desc": "gen combo #79",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-80",
+   "kind": "threshold",
+   "desc": "gen threshold #80",
+   "enabled": true,
+   "params": {
+    "metric": "m0_sec",
+    "op": ">",
+    "value": 130
+   }
+  },
+  {
+   "id": "rule-81",
+   "kind": "ratio",
+   "desc": "gen ratio #81",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.015,
+    "critical": 0.03
+   }
+  },
+  {
+   "id": "rule-82",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #82",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-83",
+   "kind": "dwell",
+   "desc": "gen dwell #83",
+   "enabled": true,
+   "params": {
+    "metric": "m3_c",
+    "op": ">",
+    "value": 83,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-84",
+   "kind": "count",
+   "desc": "gen count #84",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-85",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #85",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-86",
+   "kind": "escalation",
+   "desc": "gen escalation #86",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-87",
+   "kind": "combo",
+   "desc": "gen combo #87",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-88",
+   "kind": "threshold",
+   "desc": "gen threshold #88",
+   "enabled": true,
+   "params": {
+    "metric": "m8_sec",
+    "op": ">",
+    "value": 138
+   }
+  },
+  {
+   "id": "rule-89",
+   "kind": "ratio",
+   "desc": "gen ratio #89",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.03,
+    "critical": 0.06
+   }
+  },
+  {
+   "id": "rule-90",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #90",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-91",
+   "kind": "dwell",
+   "desc": "gen dwell #91",
+   "enabled": true,
+   "params": {
+    "metric": "m11_c",
+    "op": ">",
+    "value": 61,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-92",
+   "kind": "count",
+   "desc": "gen count #92",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-93",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #93",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-94",
+   "kind": "escalation",
+   "desc": "gen escalation #94",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-95",
+   "kind": "combo",
+   "desc": "gen combo #95",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-96",
+   "kind": "threshold",
+   "desc": "gen threshold #96",
+   "enabled": true,
+   "params": {
+    "metric": "m16_sec",
+    "op": ">",
+    "value": 146
+   }
+  },
+  {
+   "id": "rule-97",
+   "kind": "ratio",
+   "desc": "gen ratio #97",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.02,
+    "critical": 0.04
+   }
+  },
+  {
+   "id": "rule-98",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #98",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-99",
+   "kind": "dwell",
+   "desc": "gen dwell #99",
+   "enabled": true,
+   "params": {
+    "metric": "m19_c",
+    "op": ">",
+    "value": 69,
+    "samples": 3
+   }
+  }
+ ]
+}

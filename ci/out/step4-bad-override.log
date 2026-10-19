@@ -1,0 +1,7 @@
+scheduling.retry.maxAttempts: 2 errors in empty disjunction:
+scheduling.retry.maxAttempts: conflicting values 3 and 99:
+    ./poc/poc-cue/recipe/operator-override-bad.cue:4:33
+    ./poc/poc-cue/recipe/recipe-default.cue:12:17
+scheduling.retry.maxAttempts: invalid value 99 (out of bound <=10):
+    ./poc/poc-cue/recipe/recipe-default.cue:12:33
+    ./poc/poc-cue/recipe/operator-override-bad.cue:4:33

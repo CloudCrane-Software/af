@@ -1,0 +1,17 @@
+{
+  "artifactType": "application/vnd.af.artifact.v1+json",
+  "config": {
+    "digest": "sha256:fd5693177d4b5b30105ca8b41383c2ccd1d4c63724032b61f871ad3c21a854a1",
+    "mediaType": "application/vnd.af.artifact.config.v1+json",
+    "size": 174
+  },
+  "layers": [
+    {
+      "digest": "sha256:38a757a63e8a3d0937d0bd7d534b3446e7f6fb06ee480a8ebe893dc94e8e5219",
+      "mediaType": "application/vnd.af.artifact.layer.v1.raw",
+      "size": 77
+    }
+  ],
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "schemaVersion": 2
+}

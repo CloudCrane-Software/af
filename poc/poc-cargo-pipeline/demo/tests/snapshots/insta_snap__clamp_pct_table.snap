@@ -1,0 +1,15 @@
+---
+source: tests/insta_snap.rs
+expression: results
+---
+[
+    0,
+    0,
+    0,
+    1,
+    50,
+    99,
+    100,
+    100,
+    100,
+]

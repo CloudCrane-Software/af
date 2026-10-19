@@ -1,0 +1,14 @@
+time=2026-10-19T11:23:20.558+08:00 level=INFO msg="starting rekor-server" version="{GitVersion:v2.0.0-20261016162638-3ef36dadedc6 GitCommit:3ef36dadedc6b7ac4c13f52d606477962fcf93e9 GitTreeState:clean BuildDate:2026-10-16T16:26:38 GoVersion:go1.27.0 Compiler:gc Platform:linux/amd64 ASCIIName:true FontName: Name: Description:}"
+time=2026-10-19T11:23:20.559+08:00 level=INFO msg="Loaded signing key" "pubkey in base64 DER"="MCowBQYDK2VwAyEA7Peseg/ZjDpbdEYkbDvmH3A3Z8JWPOp5Uqimt/dRaQY="
+time=2026-10-19T11:23:20.559+08:00 level=INFO msg="starting Tessera sequencer"
+time=2026-10-19T11:23:20.560+08:00 level=INFO msg="Starting gRPC server" address=127.0.0.1:5233
+time=2026-10-19T11:23:20.561+08:00 level=INFO msg="starting HTTP proxy" address=127.0.0.1:5232
+time=2026-10-19T11:23:20.561+08:00 level=INFO msg="starting http metrics" address=127.0.0.1:5234
+time=2026-10-19T11:24:14.563+08:00 level=INFO msg="stopped http metrics Server"
+time=2026-10-19T11:24:14.563+08:00 level=INFO msg="stopped server" protocol=HTTP
+time=2026-10-19T11:24:14.563+08:00 level=INFO msg="http metrics Server shutdown"
+time=2026-10-19T11:24:14.563+08:00 level=INFO msg="server shutdown complete" protocol=HTTP
+time=2026-10-19T11:24:14.564+08:00 level=INFO msg="stopped gRPC server"
+time=2026-10-19T11:24:14.564+08:00 level=INFO msg="gRPC Server shutdown"
+time=2026-10-19T11:24:14.564+08:00 level=INFO msg="shutting down Tessera sequencer"
+time=2026-10-19T11:24:14.564+08:00 level=INFO msg="stopped Tessera sequencer"

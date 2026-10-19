@@ -1,0 +1,6 @@
+step1  FAIL  226ms  cargo fmt --check  (exit=1, 日志: ci/out/step1.log)
+step2  PASS  808ms  cargo clippy + clippy_gate
+step3  PASS  6369ms  cargo test -j4 --workspace
+step4  PASS  86ms  cue recipe vet+export+断言
+step5  PASS  394ms  parse_scrub × 7 真实日志
+step6  PASS  160ms  cosign 断网 verify-blob

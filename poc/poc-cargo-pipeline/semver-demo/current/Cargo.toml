@@ -1,0 +1,8 @@
+[package]
+name = "semdemo"
+version = "1.2.0"
+edition = "2021"
+
+[dependencies]
+
+[workspace]

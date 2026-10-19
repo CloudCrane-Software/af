@@ -1,0 +1,18 @@
+[package]
+name = "writer"
+version = "0.1.0"
+edition = "2021"
+
+# 独立工程：空 [workspace] 表防止被挂进 AF workspace
+[workspace]
+
+[dependencies]
+# 官方 clickhouse crate：底层是 HTTP + RowBinary（默认 lz4 压缩），并非 native TCP
+clickhouse = { version = "0.15.3", features = ["chrono"] }
+reqwest = { version = "0.13", default-features = false }
+tokio = { version = "1.53", features = ["rt", "macros"] }
+chrono = "0.4"
+serde = { version = "1", features = ["derive"] }
+
+[profile.release]
+debug = false

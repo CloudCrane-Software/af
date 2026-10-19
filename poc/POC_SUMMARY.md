@@ -125,3 +125,18 @@
 | 9 | cuengine FFI | ✅ 可行：真包装 cuelang.org/go（源码实证）、p50 0.55ms≈CLI 1/33、断网可用；代价 Go≥1.25+CGO+45MB；主路线仍预编译 JSON | `poc-cue/VERIFY-FFI.md` |
 
 **附带产出**：修复 af-credential 负载敏感 flake（biscuit 默认 RunLimits max_time=1ms 满载偶发超限→显式 50ms，"授权判定必须显式配限额"入设计输入，见其 RESULT.md ④-6）；workspace 全量 `-j 6` 两轮全绿（174+1 ignored）、零警告（proc-macro-error2 已登记除外）。
+
+---
+
+## 五、开工前补验第二批（2026-10-19，12 项接缝验证 + 7 对象外部研究）
+
+主代理工作流（22 子代理并行：12×GLM-5.3-Flash 验证 + 5×step-5-preview + 5×MiniMax-M3.1-Flash-Preview 研究），全部真实执行，主代理已复核（研究结论经 GitHub API 存在性抽查核实）。报告位置见各条。
+
+**接缝验证 12/12 通过**（结论表与技术裁决见《Agent工厂底座_实施方案_v1.md》§三之三、§四 5-8）：
+- **poc-bridge**：薄壳形态定案（门控变更 0 行 workflow 改动 vs 镜像形态 TMPRL1100 中毒）
+- **poc-ledger**：分库+outbox 定案（WAL 跨库无原子性 8/8 实证；窗口边界只准钟面解析）
+- **poc-otel**：红色发现——OTel 出口有损，critical lane 必须自有落盘
+- **cue-loading**：红色告警——千条 or() 近平方爆炸，引用完整性移入装载器
+- **poc-bifrost/poc-cas-rust/poc-mes/poc-sandbox/poc-rekor/poc-kernelrun/poc-cargo-pipeline/ci**：各有裁决入方案
+
+**外部研究（默认拒绝姿态）**：7 对象全部找到真实项目，无一整体引入；采纳全部为"抄设计零依赖"级（合计 20+ 条设计吸收），报告在 `temp2/外部项目研究/`。研究轮四问清单（省什么/效果证据/成本/对接哪层+退出成本）成为标准评估语料。

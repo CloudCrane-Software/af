@@ -1,0 +1,695 @@
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded cargo-fuzz v0.13.2
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded cargo-insta v1.49.0
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded cargo-semver-checks v0.51.0
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded cargo-deny v0.20.2
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded cargo-audit v0.22.2
+  Installing cargo-fuzz v0.13.2
+    Updating crates.io index
+     Locking 65 packages to highest compatible versions
+ Downloading crates ...
+  Downloaded anstream v1.0.0
+  Downloaded anstyle-parse v1.0.0
+  Downloaded camino v1.2.6
+  Downloaded anstyle-query v1.1.5
+  Downloaded cargo-platform v0.3.3
+  Downloaded cargo_metadata v0.23.1
+  Downloaded clap_lex v1.1.1
+  Downloaded is_terminal_polyfill v1.70.2
+  Downloaded colorchoice v1.0.5
+  Downloaded clap v4.6.7
+  Downloaded clap_builder v4.6.7
+  Downloaded crossbeam-deque v0.8.8
+  Downloaded crossbeam-epoch v0.9.21
+  Downloaded current_platform v0.2.0
+  Downloaded clap_derive v4.6.7
+  Downloaded utf8parse v0.2.2
+  Downloaded num_cpus v1.17.0
+  Downloaded rayon-core v1.13.0
+  Downloaded rayon v1.12.0
+   Compiling serde_core v1.0.229
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling crossbeam-utils v0.8.23
+   Compiling crossbeam-epoch v0.9.21
+   Compiling libc v0.2.191
+   Compiling zmij v1.0.23
+   Compiling syn v3.0.9
+   Compiling crossbeam-deque v0.8.8
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling serde_json v1.0.154
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling getrandom v0.4.3
+   Compiling thiserror v2.0.21
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling anstyle v1.0.14
+   Compiling rustix v1.1.5
+   Compiling serde v1.0.229
+   Compiling rayon-core v1.13.0
+   Compiling camino v1.2.6
+   Compiling semver v1.0.28
+   Compiling anstream v1.0.0
+   Compiling bitflags v2.13.2
+   Compiling anyhow v1.0.104
+   Compiling heck v0.5.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling current_platform v0.2.0
+   Compiling memchr v2.8.3
+   Compiling cfg-if v1.0.5
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.1
+   Compiling winnow v1.0.4
+   Compiling itoa v1.0.18
+   Compiling thiserror-impl v2.0.21
+   Compiling serde_derive v1.0.229
+   Compiling clap_derive v4.6.7
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling clap_builder v4.6.7
+   Compiling serde_spanned v1.1.2
+   Compiling toml_datetime v1.1.2+spec-1.1.0
+   Compiling cargo-platform v0.3.3
+   Compiling once_cell v1.21.4
+   Compiling fastrand v2.5.0
+   Compiling toml_writer v1.1.3+spec-1.1.0
+   Compiling either v1.19.0
+   Compiling rayon v1.12.0
+   Compiling toml v1.1.8+spec-1.1.0
+   Compiling tempfile v3.27.0
+   Compiling cargo_metadata v0.23.1
+   Compiling clap v4.6.7
+   Compiling rustc_version v0.4.1
+   Compiling num_cpus v1.17.0
+   Compiling cargo-fuzz v0.13.2
+    Finished `release` profile [optimized] target(s) in 21.03s
+  Installing /home/pan-ding/.cargo/bin/cargo-fuzz
+   Installed package `cargo-fuzz v0.13.2` (executable `cargo-fuzz`)
+  Installing cargo-insta v1.49.0
+    Updating crates.io index
+     Locking 92 packages to highest compatible versions
+      Adding cargo_metadata v0.18.1 (available: v0.23.1)
+      Adding itertools v0.10.5 (available: v0.15.0)
+      Adding psm v0.1.24 (available: v0.1.32)
+      Adding syn v2.0.119 (available: v3.0.9)
+ Downloading crates ...
+  Downloaded cargo-platform v0.1.9
+  Downloaded bstr v1.13.1
+  Downloaded cargo_metadata v0.18.1
+  Downloaded globset v0.4.20
+  Downloaded is-wsl v0.4.0
+  Downloaded is-docker v0.2.0
+  Downloaded ignore v0.4.33
+  Downloaded console v0.16.6
+  Downloaded insta v1.49.0
+  Downloaded psm v0.1.24
+  Downloaded pest_derive v2.9.4
+  Downloaded ucd-trie v0.1.7
+  Downloaded pest v2.9.4
+  Downloaded pest_meta v2.9.4
+  Downloaded open v5.4.4
+  Downloaded pest_generator v2.9.4
+  Downloaded similar v2.7.0
+   Compiling shlex v2.0.1
+   Compiling libc v0.2.191
+   Compiling find-msvc-tools v0.1.14
+   Compiling proc-macro2 v1.0.107
+   Compiling cc v1.8.0
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling memchr v2.8.3
+   Compiling serde_core v1.0.229
+   Compiling syn v3.0.9
+   Compiling psm v0.1.24
+   Compiling stacker v0.1.25
+   Compiling cfg-if v1.0.5
+   Compiling ucd-trie v0.1.7
+   Compiling serde v1.0.229
+   Compiling getrandom v0.4.3
+   Compiling once_cell v1.21.4
+   Compiling crossbeam-utils v0.8.23
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling pest v2.9.4
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling crossbeam-epoch v0.9.21
+   Compiling zmij v1.0.23
+   Compiling anstyle v1.0.14
+   Compiling rustix v1.1.5
+   Compiling anstream v1.0.0
+   Compiling pest_meta v2.9.4
+   Compiling serde_derive v1.0.229
+   Compiling syn v2.0.119
+   Compiling aho-corasick v1.1.5
+   Compiling crossbeam-deque v0.8.8
+   Compiling thiserror v1.0.69
+   Compiling linux-raw-sys v0.12.1
+   Compiling regex-syntax v0.8.11
+   Compiling strsim v0.11.1
+   Compiling clap_lex v1.1.1
+   Compiling bitflags v2.13.2
+   Compiling heck v0.5.0
+   Compiling camino v1.2.6
+   Compiling serde_json v1.0.154
+   Compiling regex-automata v0.4.18
+   Compiling clap_derive v4.6.7
+   Compiling clap_builder v4.6.7
+   Compiling thiserror-impl v1.0.69
+   Compiling pest_generator v2.9.4
+   Compiling is-docker v0.2.0
+   Compiling bstr v1.13.1
+   Compiling itoa v1.0.18
+   Compiling log v0.4.34
+   Compiling same-file v1.0.6
+   Compiling fastrand v2.5.0
+   Compiling unicode-width v0.2.2
+   Compiling tempfile v3.27.0
+   Compiling console v0.16.6
+   Compiling walkdir v2.5.0
+   Compiling globset v0.4.20
+   Compiling clap v4.6.7
+   Compiling is-wsl v0.4.0
+   Compiling pest_derive v2.9.4
+   Compiling cargo-platform v0.1.9
+   Compiling semver v1.0.28
+   Compiling similar v2.7.0
+   Compiling either v1.19.0
+   Compiling itertools v0.10.5
+   Compiling cargo_metadata v0.18.1
+   Compiling insta v1.49.0
+   Compiling ignore v0.4.33
+   Compiling open v5.4.4
+   Compiling uuid v1.28.0
+   Compiling cargo-insta v1.49.0
+    Finished `release` profile [optimized] target(s) in 58.88s
+  Installing /home/pan-ding/.cargo/bin/cargo-insta
+   Installed package `cargo-insta v1.49.0` (executable `cargo-insta`)
+  Installing cargo-semver-checks v0.51.0
+    Updating crates.io index
+     Locking 395 packages to highest compatible versions
+      Adding clap-cargo v0.18.3 (available: v0.19.0)
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding gix v0.85.0 (available: v0.89.0)
+      Adding psm v0.1.24 (available: v0.1.32)
+ Downloading crates ...
+  Downloaded addr2line v0.25.1
+  Downloaded arrayvec v0.7.8
+  Downloaded backtrace v0.3.76
+  Downloaded async-graphql-value v7.2.1
+  Downloaded arc-swap v1.9.3
+  Downloaded async-compression v0.4.51
+  Downloaded byteorder v1.5.0
+  Downloaded async-graphql-parser v7.2.1
+  Downloaded block-buffer v0.12.1
+  Downloaded bugreport v0.6.0
+  Downloaded cargo_toml v1.0.1
+  Downloaded cargo-config2 v0.1.45
+  Downloaded clap-cargo v0.18.3
+  Downloaded compression-codecs v0.4.46
+  Downloaded core_detect v1.0.0
+  Downloaded derive_builder_core v0.20.2
+  Downloaded directories v6.0.0
+  Downloaded crypto-common v0.2.2
+  Downloaded gimli v0.32.3
+  Downloaded gix-hashtable v0.15.2
+  Downloaded clap-verbosity-flag v3.0.4
+  Downloaded gix-error v0.2.5
+  Downloaded compression-core v0.4.34
+  Downloaded git-version v0.3.9
+  Downloaded fs-err v3.3.2
+  Downloaded git-version-macro v0.3.9
+  Downloaded generic-array v0.14.7
+  Downloaded gix-bitmap v0.3.3
+  Downloaded crypto-common v0.1.7
+  Downloaded gix-chunk v0.7.3
+  Downloaded gix-lock v23.0.1
+  Downloaded darling_macro v0.20.11
+  Downloaded defmt v0.3.101
+  Downloaded derive_builder_macro v0.20.2
+  Downloaded gix-command v0.9.2
+  Downloaded gix-actor v0.41.2
+  Downloaded filetime v0.2.29
+  Downloaded faster-hex v0.10.1
+  Downloaded gix-shallow v0.12.1
+  Downloaded gix-config-value v0.18.1
+  Downloaded sha1 v0.10.7
+  Downloaded gix-quote v0.7.2
+  Downloaded gix-utils v0.3.6
+  Downloaded hash32 v0.3.1
+  Downloaded gix-trace v0.1.21
+  Downloaded gix-sec v0.14.2
+  Downloaded gix-validate v0.11.4
+  Downloaded multiversion_no_op v1.0.0
+  Downloaded gix-date v0.15.6
+  Downloaded gix-fs v0.21.2
+  Downloaded gix-glob v0.26.1
+  Downloaded digest v0.11.3
+  Downloaded gix-commitgraph v0.37.1
+  Downloaded maplit v1.0.2
+  Downloaded shell-words v1.1.1
+  Downloaded gix-hash v0.25.1
+  Downloaded clru v0.6.3
+  Downloaded darling v0.20.11
+  Downloaded trustfall_derive v0.3.1
+  Downloaded unicode-bom v2.0.3
+  Downloaded gix-discover v0.53.0
+  Downloaded maybe-async v0.2.11
+  Downloaded rustc-demangle v0.1.28
+  Downloaded gix-revision v0.47.0
+  Downloaded rustc-hash v2.1.3
+  Downloaded gix-traverse v0.59.0
+  Downloaded gix-refspec v0.43.0
+  Downloaded shell-escape v0.1.5
+  Downloaded gix-features v0.48.1
+  Downloaded gix-packetline v0.21.5
+  Downloaded kstring v2.0.5
+  Downloaded derive_builder v0.20.2
+  Downloaded gix-attributes v0.33.2
+  Downloaded gix-revwalk v0.33.0
+  Downloaded gix-url v0.36.2
+  Downloaded gix-tempfile v23.0.2
+  Downloaded ipnet v2.12.2
+  Downloaded const-oid v0.10.2
+  Downloaded darling_core v0.20.11
+  Downloaded num-order v1.2.0
+  Downloaded uluru v3.1.0
+  Downloaded human-panic v2.0.8
+  Downloaded memmap2 v0.9.11
+  Downloaded simdutf8 v0.1.5
+  Downloaded urlencoding v2.1.3
+  Downloaded static_assertions v1.1.0
+  Downloaded hyper-rustls v0.27.10
+  Downloaded gix-path v0.12.6
+  Downloaded hybrid-array v0.4.15
+  Downloaded gix-worktree-stream v0.34.0
+  Downloaded trustfall_rustdoc v0.41.0
+  Downloaded gix-index v0.53.0
+  Downloaded gix-filter v0.32.0
+  Downloaded rustdoc-types v0.60.0
+  Downloaded gix-protocol v0.63.0
+  Downloaded sha2 v0.11.1
+  Downloaded rustdoc-types v0.57.4
+  Downloaded twox-hash v2.1.5
+  Downloaded rustc-stable-hash v0.1.2
+  Downloaded rustdoc-types v0.61.0
+  Downloaded num-modular v0.6.5
+  Downloaded gix-odb v0.82.0
+  Downloaded toml-span v0.7.2
+  Downloaded gix-ref v0.65.0
+  Downloaded gix-transport v0.57.2
+  Downloaded gix-config v0.58.0
+  Downloaded gix-diff v0.65.0
+  Downloaded heapless v0.8.0
+  Downloaded miniz_oxide v0.8.9
+  Downloaded gix-object v0.62.0
+  Downloaded rustls-platform-verifier v0.7.1
+  Downloaded trustfall v0.8.1
+  Downloaded tame-index v0.26.3
+  Downloaded gix-pack v0.72.0
+  Downloaded prodash v31.0.1
+  Downloaded handlebars v6.4.4
+  Downloaded ron v0.12.2
+  Downloaded itertools v0.13.0
+  Downloaded trustfall-rustdoc-adapter v57.1.2
+  Downloaded reqwest v0.13.5
+  Downloaded trustfall-rustdoc-adapter v60.0.2
+  Downloaded tower-http v0.6.11
+  Downloaded sysinfo v0.33.1
+  Downloaded trustfall-rustdoc-adapter v61.0.2
+  Downloaded gix v0.85.0
+  Downloaded object v0.37.3
+  Downloaded trustfall_core v0.8.1
+  Downloaded encoding_rs v0.8.42
+  Downloaded sha1-checked v0.10.0
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.229
+   Compiling libc v0.2.191
+   Compiling memchr v2.8.3
+   Compiling syn v3.0.9
+   Compiling serde v1.0.229
+   Compiling cfg-if v1.0.5
+   Compiling aho-corasick v1.1.5
+   Compiling regex-syntax v0.8.11
+   Compiling crossbeam-utils v0.8.23
+   Compiling thiserror v2.0.21
+   Compiling itoa v1.0.18
+   Compiling stable_deref_trait v1.2.1
+   Compiling regex-automata v0.4.18
+   Compiling once_cell v1.21.4
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+   Compiling cc v1.8.0
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.21
+   Compiling allocator-api2 v0.2.21
+   Compiling getrandom v0.4.3
+   Compiling foldhash v0.2.0
+   Compiling bstr v1.13.1
+   Compiling rand_core v0.10.1
+   Compiling equivalent v1.0.3
+   Compiling crc32fast v1.5.2
+   Compiling hashbrown v0.17.1
+   Compiling typenum v1.20.1
+   Compiling gix-trace v0.1.21
+   Compiling gix-validate v0.11.4
+   Compiling smallvec v1.16.3
+   Compiling parking_lot_core v0.9.12
+   Compiling tinyvec v1.13.3
+   Compiling fastrand v2.5.0
+   Compiling gix-path v0.12.6
+   Compiling scopeguard v1.2.0
+   Compiling lock_api v0.4.14
+   Compiling unicode-normalization v0.1.26
+   Compiling version_check v0.9.5
+   Compiling autocfg v1.5.1
+   Compiling same-file v1.0.6
+   Compiling gix-utils v0.3.6
+   Compiling walkdir v2.5.0
+   Compiling generic-array v0.14.7
+   Compiling parking_lot v0.12.5
+   Compiling crossbeam-channel v0.5.17
+   Compiling prodash v31.0.1
+   Compiling zlib-rs v0.6.8
+   Compiling bytes v1.12.1
+   Compiling bitflags v2.13.2
+   Compiling heapless v0.8.0
+   Compiling byteorder v1.5.0
+   Compiling hash32 v0.3.1
+   Compiling faster-hex v0.10.1
+   Compiling hybrid-array v0.4.15
+   Compiling gix-error v0.2.5
+   Compiling syn v2.0.119
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling cpufeatures v0.3.1
+   Compiling digest v0.10.7
+   Compiling block-buffer v0.12.1
+   Compiling crypto-common v0.2.2
+   Compiling gix-features v0.48.1
+   Compiling cpufeatures v0.2.17
+   Compiling const-oid v0.10.2
+   Compiling digest v0.11.3
+   Compiling sha1 v0.10.7
+   Compiling psm v0.1.24
+   Compiling synstructure v0.14.0
+   Compiling sha1-checked v0.10.0
+   Compiling sha2 v0.11.1
+   Compiling stacker v0.1.25
+   Compiling zerofrom-derive v0.1.8
+   Compiling jiff-core v0.1.1
+   Compiling gix-hash v0.25.1
+   Compiling zerofrom v0.1.8
+   Compiling jiff v0.2.38
+   Compiling yoke-derive v0.8.4
+   Compiling zmij v1.0.23
+   Compiling pin-project-lite v0.2.17
+   Compiling gix-hashtable v0.15.2
+   Compiling indexmap v2.14.2
+   Compiling zerovec-derive v0.11.6
+   Compiling yoke v0.8.3
+   Compiling serde_json v1.0.154
+   Compiling displaydoc v0.2.7
+   Compiling memmap2 v0.9.11
+   Compiling zerovec v0.11.8
+   Compiling crossbeam-epoch v0.9.21
+   Compiling rustix v1.1.5
+   Compiling futures-core v0.3.34
+   Compiling mio v1.2.4
+   Compiling socket2 v0.6.5
+   Compiling either v1.19.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling crossbeam-deque v0.8.8
+   Compiling tokio v1.53.3
+   Compiling gix-date v0.15.6
+   Compiling gix-actor v0.41.2
+   Compiling gix-object v0.62.0
+   Compiling percent-encoding v2.3.2
+   Compiling futures-sink v0.3.34
+   Compiling tempfile v3.27.0
+   Compiling tinystr v0.8.4
+   Compiling gix-fs v0.21.2
+   Compiling ring v0.17.14
+   Compiling adler2 v2.0.1
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.3
+   Compiling rayon-core v1.13.0
+   Compiling log v0.4.34
+   Compiling icu_locale_core v2.3.0
+   Compiling potential_utf v0.1.6
+   Compiling zerotrie v0.2.5
+   Compiling http v1.5.0
+   Compiling gix-chunk v0.7.3
+   Compiling semver v1.0.28
+   Compiling slab v0.4.12
+   Compiling ucd-trie v0.1.7
+   Compiling icu_properties_data v2.3.0
+   Compiling nonempty v0.12.0
+   Compiling zeroize v1.9.1
+   Compiling camino v1.2.6
+   Compiling icu_normalizer_data v2.3.0
+   Compiling utf8_iter v1.0.4
+   Compiling winnow v1.0.4
+   Compiling icu_collections v2.3.0
+   Compiling rustls-pki-types v1.15.1
+   Compiling toml_parser v1.1.5+spec-1.1.0
+   Compiling pest v2.9.4
+   Compiling icu_provider v2.3.1
+   Compiling gix-tempfile v23.0.2
+   Compiling serde_spanned v1.1.2
+   Compiling toml_datetime v1.1.2+spec-1.1.0
+   Compiling getrandom v0.2.17
+   Compiling untrusted v0.9.0
+   Compiling fnv v1.0.7
+   Compiling toml_writer v1.1.3+spec-1.1.0
+   Compiling thiserror v1.0.69
+   Compiling rayon v1.12.0
+   Compiling toml v1.1.8+spec-1.1.0
+   Compiling gix-lock v23.0.1
+   Compiling http-body v1.1.0
+   Compiling tokio-util v0.7.20
+   Compiling async-graphql-value v7.2.1
+   Compiling thiserror-impl v1.0.69
+   Compiling tracing-core v0.1.36
+   Compiling strsim v0.11.1
+   Compiling futures-task v0.3.34
+   Compiling ident_case v1.0.1
+   Compiling httparse v1.10.1
+   Compiling rustls v0.23.46
+   Compiling utf8parse v0.2.2
+   Compiling futures-io v0.3.34
+   Compiling simd-adler32 v0.3.10
+   Compiling anyhow v1.0.104
+   Compiling rustc-hash v2.1.3
+   Compiling miniz_oxide v0.9.1
+   Compiling futures-util v0.3.34
+   Compiling anstyle-parse v1.0.0
+   Compiling darling_core v0.20.11
+   Compiling rustls-webpki v0.103.15
+   Compiling tracing v0.1.44
+   Compiling async-graphql-parser v7.2.1
+   Compiling icu_normalizer v2.3.0
+   Compiling icu_properties v2.3.0
+   Compiling gix-commitgraph v0.37.1
+   Compiling itertools v0.13.0
+   Compiling regex v1.13.1
+   Compiling cargo-platform v0.3.3
+   Compiling anstyle-query v1.1.5
+   Compiling subtle v2.6.1
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling try-lock v0.2.5
+   Compiling atomic-waker v1.1.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle v1.0.14
+   Compiling tower-service v0.3.3
+   Compiling maplit v1.0.2
+   Compiling anstream v1.0.0
+   Compiling h2 v0.4.20
+   Compiling trustfall_core v0.8.1
+   Compiling want v0.3.2
+   Compiling cargo_metadata v0.23.1
+error: failed to write /tmp/cargo-install0xlBMS/release/deps/rustc6wcETU/lib.rmeta: Disk quota exceeded (os error 122)
+
+error: could not compile `h2` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: failed to write bytecode to /tmp/cargo-install0xlBMS/release/deps/cargo_metadata-3b4cc1fa46c13fad.cargo_metadata.1cc75119f7fae445-cgu.0.rcgu.bc: Disk quota exceeded (os error 122)
+
+error: could not compile `cargo_metadata` (lib) due to 1 previous error
+error: failed to write bytecode to /tmp/cargo-install0xlBMS/release/deps/rustls-37448dd2755018a2.rustls.55c04a3ebd006efe-cgu.0.rcgu.bc: Disk quota exceeded (os error 122)
+
+error: could not compile `rustls` (lib) due to 1 previous error
+error: failed to write bytecode to /tmp/cargo-install0xlBMS/release/deps/trustfall_core-4c9a4d2082fb48d3.trustfall_core.ea8d6ff5b31387b6-cgu.0.rcgu.bc: Disk quota exceeded (os error 122)
+
+error: could not compile `trustfall_core` (lib) due to 1 previous error
+  Installing cargo-deny v0.20.2
+    Updating crates.io index
+     Locking 169 packages to highest compatible versions
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding indexmap v2.9.0 (available: v2.14.2)
+      Adding petgraph v0.8.1 (available: v0.8.3)
+ Downloading crates ...
+  Downloaded cfg-expr v0.20.10
+  Downloaded bitvec v1.1.1
+  Downloaded crossbeam v0.8.5
+  Downloaded codespan-reporting v0.13.1
+  Downloaded crossbeam-queue v0.3.14
+  Downloaded codespan v0.13.1
+  Downloaded funty v2.0.0
+  Downloaded fern v0.7.1
+  Downloaded plain v0.2.3
+  Downloaded strum v0.28.0
+  Downloaded tap v1.0.1
+  Downloaded radium v0.7.0
+  Downloaded zstd-safe v7.3.0
+  Downloaded zstd v0.13.3
+  Downloaded scroll_derive v0.13.2
+  Downloaded target-lexicon v0.13.5
+  Downloaded jobserver v0.1.35
+  Downloaded strum_macros v0.28.0
+  Downloaded termcolor v1.4.1
+  Downloaded scroll v0.13.0
+  Downloaded wyz v0.5.1
+  Downloaded krates v0.21.3
+  Downloaded indexmap v2.9.0
+  Downloaded goblin v0.10.7
+  Downloaded zstd-sys v2.1.2+zstd.1.5.7
+  Downloaded petgraph v0.8.1
+  Downloaded spdx v0.13.6
+warning: profile package spec `insta` in profile `dev` did not match any packages
+
+help: a package with a similar name exists: `bstr`
+warning: profile package spec `similar` in profile `dev` did not match any packages
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling libc v0.2.191
+error: failed to write `/tmp/cargo-installa71keq/release/.fingerprint/proc-macro2-5e7debc516a12995/invoked.timestamp`
+
+Caused by:
+  Disk quota exceeded (os error 122)
+warning: build failed, waiting for other jobs to finish...
+error: failed to write `/tmp/cargo-installa71keq/release/.fingerprint/unicode-ident-0f31f8b136d66a33/invoked.timestamp`
+
+Caused by:
+  Disk quota exceeded (os error 122)
+error: failed to write `/tmp/cargo-installa71keq/release/.fingerprint/quote-1f11b4ef1aa01368/invoked.timestamp`
+
+Caused by:
+  Disk quota exceeded (os error 122)
+error: failed to write `/tmp/cargo-installa71keq/release/.fingerprint/libc-3fb416c308443baf/invoked.timestamp`
+
+Caused by:
+  Disk quota exceeded (os error 122)
+  Installing cargo-audit v0.22.2
+    Updating crates.io index
+     Locking 380 packages to highest compatible versions
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding object v0.39.1 (available: v0.40.0)
+      Adding syn v2.0.119 (available: v3.0.9)
+ Downloading crates ...
+  Downloaded abscissa_core v0.9.0
+  Downloaded auditable-extract v0.3.5
+  Downloaded auditable-serde v0.9.0
+  Downloaded abscissa_derive v0.9.0
+  Downloaded auditable-info v0.10.1
+  Downloaded binfarce v0.2.2
+  Downloaded canonical-path v2.0.2
+  Downloaded cargo-lock v11.1.0
+  Downloaded aws-lc-rs v1.18.2
+  Downloaded gix-ignore v0.21.1
+  Downloaded gix-negotiate v0.32.0
+  Downloaded topological-sort v0.2.2
+  Downloaded wait-timeout v0.2.1
+  Downloaded io-close v0.3.7
+  Downloaded indenter v0.3.4
+  Downloaded dunce v1.0.5
+  Downloaded quitters v0.1.0
+  Downloaded secrecy v0.10.3
+  Downloaded gix-prompt v0.15.1
+  Downloaded lru-slab v0.1.3
+  Downloaded mime v0.3.17
+  Downloaded cmake v0.1.58
+  Downloaded gix-revwalk v0.32.0
+  Downloaded gix-worktree v0.53.0
+  Downloaded display-error-chain v0.2.2
+  Downloaded gix-worktree-stream v0.33.0
+  Downloaded gix-refspec v0.42.0
+  Downloaded home v0.5.12
+  Downloaded gix-credentials v0.38.2
+  Downloaded gix-traverse v0.58.0
+  Downloaded gix-submodule v0.31.0
+  Downloaded fs_extra v1.3.0
+  Downloaded tracing-log v0.2.0
+  Downloaded gix-pathspec v0.18.1
+  Downloaded toml_datetime v0.7.5+spec-1.1.0
+  Downloaded synstructure v0.13.2
+  Downloaded gix-revision v0.46.0
+  Downloaded gix-worktree-state v0.31.0
+  Downloaded owo-colors v4.4.0
+  Downloaded gix-filter v0.31.0
+  Downloaded quinn-udp v0.5.16
+  Downloaded platforms v3.12.0
+  Downloaded gix-discover v0.52.0
+  Downloaded gix-index v0.52.0
+  Downloaded eyre v0.6.14
+  Downloaded gix-protocol v0.62.0
+  Downloaded cvss v2.2.0
+  Downloaded gix-object v0.61.0
+  Downloaded toml v0.9.12+spec-1.1.0
+  Downloaded gix-diff v0.64.0
+  Downloaded gix-odb v0.81.0
+  Downloaded gix-ref v0.64.0
+  Downloaded quinn v0.11.12
+  Downloaded gix-config v0.57.0
+  Downloaded rustsec v0.33.0
+  Downloaded gix-pack v0.71.0
+  Downloaded wasmparser v0.207.0
+  Downloaded winnow v0.7.15
+  Downloaded quinn-proto v0.11.19
+  Downloaded gix v0.84.0
+  Downloaded wasmparser v0.247.0
+  Downloaded color-eyre v0.6.5
+  Downloaded aws-lc-sys v0.46.0
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling libc v0.2.191
+error: failed to write `/tmp/cargo-installisxu2r/release/.fingerprint/libc-cda79ff38737910e/invoked.timestamp`
+
+Caused by:
+  Disk quota exceeded (os error 122)
+warning: build failed, waiting for other jobs to finish...
+error: failed to write `/tmp/cargo-installisxu2r/release/.fingerprint/proc-macro2-ec1fa8d2755b1122/invoked.timestamp`
+
+Caused by:
+  Disk quota exceeded (os error 122)
+error: failed to write `/tmp/cargo-installisxu2r/release/.fingerprint/unicode-ident-82952c4e5edf73c0/invoked.timestamp`
+
+Caused by:
+  Disk quota exceeded (os error 122)
+error: failed to write `/tmp/cargo-installisxu2r/release/.fingerprint/quote-2165c0071fef8d8b/invoked.timestamp`
+
+Caused by:
+  Disk quota exceeded (os error 122)
+error: failed to compile `cargo-semver-checks v0.51.0`, intermediate artifacts can be found at `/tmp/cargo-install0xlBMS`.
+To reuse those artifacts with a future compilation, set the environment variable `CARGO_BUILD_BUILD_DIR` to that path.
+error: failed to compile `cargo-deny v0.20.2`, intermediate artifacts can be found at `/tmp/cargo-installa71keq`.
+To reuse those artifacts with a future compilation, set the environment variable `CARGO_BUILD_BUILD_DIR` to that path.
+error: failed to compile `cargo-audit v0.22.2`, intermediate artifacts can be found at `/tmp/cargo-installisxu2r`.
+To reuse those artifacts with a future compilation, set the environment variable `CARGO_BUILD_BUILD_DIR` to that path.
+     Summary Successfully installed cargo-fuzz, cargo-insta! Failed to install cargo-semver-checks, cargo-deny, cargo-audit (see error(s) above).
+error: some crates failed to install
+EXIT=101

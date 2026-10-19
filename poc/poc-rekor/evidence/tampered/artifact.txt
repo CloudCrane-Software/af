@@ -1,0 +1,6 @@
+af-trace-checkpoint v1
+trace_id: poc-rekor-trace-0001
+seq: 43
+timestamp_utc: 2026-10-19T03:09:45Z
+payload_sha256: c5b17b7a1bbfc8d6307842c9d9fb0c8be4a2bdc485a5d8a66cd739affcd380d9
+producer: af-poc-rekor

@@ -1,0 +1,10 @@
+mode=crate	batch=1000	total=1000000	inserts=1000	elapsed_s=60.626	rows_per_s=16495	avg_batch_ms=60.63	max_batch_ms=69.8
+mode=http	batch=1000	total=1000000	inserts=1000	elapsed_s=60.638	rows_per_s=16491	avg_batch_ms=60.64	max_batch_ms=71.2
+mode=crate	batch=10000	total=1000000	inserts=100	elapsed_s=7.127	rows_per_s=140310	avg_batch_ms=71.27	max_batch_ms=81.7
+mode=http	batch=10000	total=1000000	inserts=100	elapsed_s=7.383	rows_per_s=135453	avg_batch_ms=73.83	max_batch_ms=107.2
+mode=crate	batch=50000	total=1000000	inserts=20	elapsed_s=2.209	rows_per_s=452787	avg_batch_ms=110.43	max_batch_ms=125.2
+mode=http	batch=50000	total=1000000	inserts=20	elapsed_s=2.648	rows_per_s=377682	avg_batch_ms=132.39	max_batch_ms=169.3
+mode=crate	batch=200000	total=1000000	inserts=5	elapsed_s=1.417	rows_per_s=705902	avg_batch_ms=283.33	max_batch_ms=378.9
+mode=http	batch=200000	total=1000000	inserts=5	elapsed_s=1.755	rows_per_s=569787	avg_batch_ms=351.01	max_batch_ms=382.2
+mode=crate	batch=1000000	total=1000000	inserts=1	elapsed_s=0.847	rows_per_s=1180627	avg_batch_ms=847.01	max_batch_ms=847.0
+mode=http	batch=1000000	total=1000000	inserts=1	elapsed_s=0.993	rows_per_s=1007487	avg_batch_ms=992.57	max_batch_ms=992.6

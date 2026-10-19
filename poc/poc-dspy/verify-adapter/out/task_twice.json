@@ -1,0 +1,125 @@
+{
+  "task_id": "roundtrip-twice",
+  "program": {
+    "ir_version": 1,
+    "name": "qa_program",
+    "root": {
+      "id": "prog",
+      "kind": "module",
+      "children": [
+        {
+          "id": "answerer",
+          "kind": "Predict",
+          "signature": {
+            "instructions": "根据上下文回答问题。",
+            "fields": [
+              {
+                "name": "context",
+                "kind": "input",
+                "type": "str",
+                "desc": "相关背景资料",
+                "prefix": "背景:"
+              },
+              {
+                "name": "question",
+                "kind": "input",
+                "type": "str",
+                "desc": "用户的问题",
+                "prefix": "问题:"
+              },
+              {
+                "name": "answer",
+                "kind": "output",
+                "type": "str",
+                "desc": "一句话答案",
+                "prefix": "答案:"
+              }
+            ]
+          },
+          "demos": [
+            {
+              "inputs": {
+                "context": "cA",
+                "question": "qA"
+              },
+              "outputs": {
+                "answer": "aA"
+              }
+            }
+          ]
+        },
+        {
+          "id": "solver",
+          "kind": "ChainOfThought",
+          "signature": {
+            "instructions": "根据上下文回答问题。",
+            "fields": [
+              {
+                "name": "context",
+                "kind": "input",
+                "type": "str",
+                "desc": "相关背景资料",
+                "prefix": "背景:"
+              },
+              {
+                "name": "question",
+                "kind": "input",
+                "type": "str",
+                "desc": "用户的问题",
+                "prefix": "问题:"
+              },
+              {
+                "name": "answer",
+                "kind": "output",
+                "type": "str",
+                "desc": "一句话答案",
+                "prefix": "答案:"
+              }
+            ]
+          },
+          "demos": [
+            {
+              "inputs": {
+                "context": "cB",
+                "question": "qB"
+              },
+              "outputs": {
+                "answer": "aB",
+                "reasoning": "rB"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "execute": [
+    {
+      "module": "answerer",
+      "inputs": {
+        "context": "C1",
+        "question": "Q1"
+      },
+      "lm_script": [
+        {
+          "answer": "A-EXEC-1"
+        }
+      ],
+      "append_result_as_demo": true
+    },
+    {
+      "module": "solver",
+      "inputs": {
+        "context": "C2",
+        "question": "Q2"
+      },
+      "lm_script": [
+        {
+          "answer": "A-EXEC-2",
+          "reasoning": "R-EXEC-2"
+        }
+      ],
+      "append_result_as_demo": false
+    }
+  ]
+}

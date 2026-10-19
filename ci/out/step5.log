@@ -1,0 +1,7 @@
+PASS-EXPECTED  exit=0  scrub-baseline.log
+PASS-EXPECTED  exit=0  scrub-after-gc.log
+FAIL-EXPECTED  exit=1  scrub-corrupt1.log
+FAIL-EXPECTED  exit=1  scrub-corrupt2.log
+FAIL-EXPECTED  exit=1  scrub-corrupt3a.log
+FAIL-EXPECTED  exit=1  scrub-corrupt3b-consistent.log
+FAIL-EXPECTED  exit=1  scrub-corrupt3b-inplace.log

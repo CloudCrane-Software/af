@@ -1,0 +1,21 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 127.0.0.1:4317
+      http:
+        endpoint: 127.0.0.1:4318
+
+exporters:
+  file:
+    path: /home/pan-ding/workspace/临时工作区/temp2/af/poc/poc-otel/out/e2a-d5000-b512.json
+    flush_interval: 100ms
+
+service:
+  telemetry:
+    logs:
+      level: error
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [file]

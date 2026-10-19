@@ -1,0 +1,16 @@
+time=2026-10-19T11:21:30.927+08:00 level=INFO msg="starting rekor-server" version="{GitVersion:v2.0.0-20261016162638-3ef36dadedc6 GitCommit:3ef36dadedc6b7ac4c13f52d606477962fcf93e9 GitTreeState:clean BuildDate:2026-10-16T16:26:38 GoVersion:go1.27.0 Compiler:gc Platform:linux/amd64 ASCIIName:true FontName: Name: Description:}"
+time=2026-10-19T11:21:31.105+08:00 level=INFO msg="Loaded signing key" "pubkey in base64 DER"="MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEP57Bb00YAS4HFQRtwxElJ/XiTo+/f6p9IMRyPNN46s0KAAiujS+PySY0rfEmBXvOvYKiMlmI64crRHmLKWkdbA=="
+time=2026-10-19T11:21:31.130+08:00 level=INFO msg="Initializing directory for POSIX log at \"/home/pan-ding/workspace/临时工作区/temp2/af/poc/poc-rekor/data/storage-cosign\" (this should only happen ONCE per log!)"
+time=2026-10-19T11:21:31.146+08:00 level=INFO msg="Failed to fetch old checkpoint: file does not exist"
+time=2026-10-19T11:21:31.162+08:00 level=INFO msg="starting Tessera sequencer"
+time=2026-10-19T11:21:31.164+08:00 level=INFO msg="Starting gRPC server" address=127.0.0.1:5237
+time=2026-10-19T11:21:31.165+08:00 level=INFO msg="starting HTTP proxy" address=127.0.0.1:5236
+time=2026-10-19T11:21:31.165+08:00 level=INFO msg="starting http metrics" address=127.0.0.1:5238
+time=2026-10-19T11:23:04.204+08:00 level=INFO msg="stopped server" protocol=HTTP
+time=2026-10-19T11:23:04.204+08:00 level=INFO msg="server shutdown complete" protocol=HTTP
+time=2026-10-19T11:23:04.204+08:00 level=INFO msg="stopped http metrics Server"
+time=2026-10-19T11:23:04.204+08:00 level=INFO msg="http metrics Server shutdown"
+time=2026-10-19T11:23:04.204+08:00 level=INFO msg="stopped gRPC server"
+time=2026-10-19T11:23:04.204+08:00 level=INFO msg="gRPC Server shutdown"
+time=2026-10-19T11:23:04.204+08:00 level=INFO msg="shutting down Tessera sequencer"
+time=2026-10-19T11:23:04.204+08:00 level=INFO msg="stopped Tessera sequencer"

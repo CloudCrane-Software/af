@@ -1,0 +1,545 @@
+==== E1 raw: exporter 往返时延 (payload=1024B) ====
+--- E1 raw grpc batch=1 total=2000 11:41:33 ---
+{
+  "batch": 1,
+  "call_latency_us": {
+    "avg": 231,
+    "max": 9142,
+    "n": 2000,
+    "p50": 160,
+    "p95": 318
+  },
+  "calls": 2000,
+  "driver": "tokio",
+  "endpoint": "http://127.0.0.1:4317",
+  "export_errors": 0,
+  "mode": "raw",
+  "payload_bytes": 1024,
+  "throughput_spans_per_s": 4282.655246252676,
+  "total_spans": 2000,
+  "transport": "grpc",
+  "wall_ms": 467
+}
+--- E1 raw grpc batch=64 total=40000 11:41:34 ---
+{
+  "batch": 64,
+  "call_latency_us": {
+    "avg": 1047,
+    "max": 3887,
+    "n": 625,
+    "p50": 929,
+    "p95": 1818
+  },
+  "calls": 625,
+  "driver": "tokio",
+  "endpoint": "http://127.0.0.1:4317",
+  "export_errors": 0,
+  "mode": "raw",
+  "payload_bytes": 1024,
+  "throughput_spans_per_s": 58823.5294117647,
+  "total_spans": 40000,
+  "transport": "grpc",
+  "wall_ms": 680
+}
+--- E1 raw grpc batch=512 total=40000 11:41:35 ---
+{
+  "batch": 512,
+  "call_latency_us": {
+    "avg": 8177,
+    "max": 25320,
+    "n": 79,
+    "p50": 7316,
+    "p95": 14317
+  },
+  "calls": 79,
+  "driver": "tokio",
+  "endpoint": "http://127.0.0.1:4317",
+  "export_errors": 0,
+  "mode": "raw",
+  "payload_bytes": 1024,
+  "throughput_spans_per_s": 59171.59763313609,
+  "total_spans": 40000,
+  "transport": "grpc",
+  "wall_ms": 676
+}
+--- E1 raw grpc batch=2048 total=40000 11:41:35 ---
+{
+  "batch": 2048,
+  "call_latency_us": {
+    "avg": 33372,
+    "max": 49243,
+    "n": 20,
+    "p50": 34245,
+    "p95": 48529
+  },
+  "calls": 20,
+  "driver": "tokio",
+  "endpoint": "http://127.0.0.1:4317",
+  "export_errors": 0,
+  "mode": "raw",
+  "payload_bytes": 1024,
+  "throughput_spans_per_s": 57306.59025787966,
+  "total_spans": 40000,
+  "transport": "grpc",
+  "wall_ms": 698
+}
+--- E1 raw http batch=1 total=2000 11:41:38 ---
+{
+  "batch": 1,
+  "call_latency_us": {
+    "avg": 149,
+    "max": 3331,
+    "n": 2000,
+    "p50": 112,
+    "p95": 232
+  },
+  "calls": 2000,
+  "driver": "std-thread+futures-executor",
+  "endpoint": "http://127.0.0.1:4318/v1/traces",
+  "export_errors": 0,
+  "mode": "raw",
+  "payload_bytes": 1024,
+  "throughput_spans_per_s": 6600.660066006601,
+  "total_spans": 2000,
+  "transport": "http",
+  "wall_ms": 303
+}
+--- E1 raw http batch=64 total=40000 11:41:38 ---
+{
+  "batch": 64,
+  "call_latency_us": {
+    "avg": 1055,
+    "max": 9430,
+    "n": 625,
+    "p50": 892,
+    "p95": 1888
+  },
+  "calls": 625,
+  "driver": "std-thread+futures-executor",
+  "endpoint": "http://127.0.0.1:4318/v1/traces",
+  "export_errors": 0,
+  "mode": "raw",
+  "payload_bytes": 1024,
+  "throughput_spans_per_s": 58055.15239477504,
+  "total_spans": 40000,
+  "transport": "http",
+  "wall_ms": 689
+}
+--- E1 raw http batch=512 total=40000 11:41:39 ---
+{
+  "batch": 512,
+  "call_latency_us": {
+    "avg": 7446,
+    "max": 12258,
+    "n": 79,
+    "p50": 7552,
+    "p95": 9837
+  },
+  "calls": 79,
+  "driver": "std-thread+futures-executor",
+  "endpoint": "http://127.0.0.1:4318/v1/traces",
+  "export_errors": 0,
+  "mode": "raw",
+  "payload_bytes": 1024,
+  "throughput_spans_per_s": 64724.91909385113,
+  "total_spans": 40000,
+  "transport": "http",
+  "wall_ms": 618
+}
+--- E1 raw http batch=2048 total=40000 11:41:40 ---
+{
+  "batch": 2048,
+  "call_latency_us": {
+    "avg": 30669,
+    "max": 59386,
+    "n": 20,
+    "p50": 30276,
+    "p95": 40690
+  },
+  "calls": 20,
+  "driver": "std-thread+futures-executor",
+  "endpoint": "http://127.0.0.1:4318/v1/traces",
+  "export_errors": 0,
+  "mode": "raw",
+  "payload_bytes": 1024,
+  "throughput_spans_per_s": 62402.49609984399,
+  "total_spans": 40000,
+  "transport": "http",
+  "wall_ms": 641
+}
+==== E1 pipe: 全链路吞吐 gRPC vs HTTP (20000 spans, b512/d200ms/q65536) ====
+--- E1 pipe grpc 11:41:42 ---
+{
+  "arrived": 20000,
+  "delay_ms": 200,
+  "e2e_latency_ms": {
+    "avg": 222,
+    "max": 375,
+    "n": 20000,
+    "p50": 225,
+    "p95": 365
+  },
+  "e2e_throughput_spans_per_s": 55096.41873278237,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 0,
+  "send_ms": 43,
+  "send_throughput_spans_per_s": 465116.2790697675,
+  "shutdown_err": null,
+  "shutdown_ms": 320,
+  "shutdown_ok": true,
+  "total": 20000,
+  "transport": "grpc",
+  "wall_ms": 363
+}
+collector_file_spans: 20000
+--- E1 pipe http 11:41:45 ---
+{
+  "arrived": 20000,
+  "delay_ms": 200,
+  "e2e_latency_ms": {
+    "avg": 181,
+    "max": 369,
+    "n": 20000,
+    "p50": 190,
+    "p95": 300
+  },
+  "e2e_throughput_spans_per_s": 60975.60975609756,
+  "endpoint": "http://127.0.0.1:4318/v1/traces",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 0,
+  "send_ms": 42,
+  "send_throughput_spans_per_s": 476190.47619047615,
+  "shutdown_err": null,
+  "shutdown_ms": 285,
+  "shutdown_ok": true,
+  "total": 20000,
+  "transport": "http",
+  "wall_ms": 328
+}
+collector_file_spans: 20000
+==== E2a: 批量参数-吞吐 (grpc, 20000 spans, 最快速率) ====
+--- E2a delay=100ms batch=512 11:41:48 ---
+{
+  "arrived": 0,
+  "delay_ms": 100,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 57803.46820809249,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 0,
+  "send_ms": 42,
+  "send_throughput_spans_per_s": 476190.47619047615,
+  "shutdown_err": null,
+  "shutdown_ms": 304,
+  "shutdown_ok": true,
+  "total": 20000,
+  "transport": "grpc",
+  "wall_ms": 346
+}
+--- E2a delay=500ms batch=512 11:41:52 ---
+{
+  "arrived": 0,
+  "delay_ms": 500,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 61538.46153846154,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 0,
+  "send_ms": 45,
+  "send_throughput_spans_per_s": 444444.44444444444,
+  "shutdown_err": null,
+  "shutdown_ms": 279,
+  "shutdown_ok": true,
+  "total": 20000,
+  "transport": "grpc",
+  "wall_ms": 325
+}
+--- E2a delay=1000ms batch=512 11:41:56 ---
+{
+  "arrived": 0,
+  "delay_ms": 1000,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 60422.96072507553,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 0,
+  "send_ms": 51,
+  "send_throughput_spans_per_s": 392156.8627450981,
+  "shutdown_err": null,
+  "shutdown_ms": 280,
+  "shutdown_ok": true,
+  "total": 20000,
+  "transport": "grpc",
+  "wall_ms": 331
+}
+--- E2a delay=5000ms batch=512 11:41:59 ---
+{
+  "arrived": 0,
+  "delay_ms": 5000,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 72463.76811594202,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 0,
+  "send_ms": 41,
+  "send_throughput_spans_per_s": 487804.8780487805,
+  "shutdown_err": null,
+  "shutdown_ms": 235,
+  "shutdown_ok": true,
+  "total": 20000,
+  "transport": "grpc",
+  "wall_ms": 276
+}
+--- E2a delay=500ms batch=64 11:42:03 ---
+{
+  "arrived": 0,
+  "delay_ms": 500,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 54347.82608695652,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 64,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 0,
+  "send_ms": 48,
+  "send_throughput_spans_per_s": 416666.6666666667,
+  "shutdown_err": null,
+  "shutdown_ms": 319,
+  "shutdown_ok": true,
+  "total": 20000,
+  "transport": "grpc",
+  "wall_ms": 368
+}
+--- E2a delay=500ms batch=2048 11:42:07 ---
+{
+  "arrived": 0,
+  "delay_ms": 500,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 54054.05405405405,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 2048,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 0,
+  "send_ms": 36,
+  "send_throughput_spans_per_s": 555555.5555555556,
+  "shutdown_err": null,
+  "shutdown_ms": 334,
+  "shutdown_ok": true,
+  "total": 20000,
+  "transport": "grpc",
+  "wall_ms": 370
+}
+collector_file_spans_total: 120000
+==== E2b: 批量参数-时延 (grpc, 1000 spans @50/s, tail 时延) ====
+--- E2b delay=100ms batch=512 rate=50 11:42:14 ---
+{
+  "arrived": 0,
+  "delay_ms": 100,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 49.69437956567112,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 50,
+  "send_ms": 20123,
+  "send_throughput_spans_per_s": 49.69437956567112,
+  "shutdown_err": null,
+  "shutdown_ms": 0,
+  "shutdown_ok": true,
+  "total": 1000,
+  "transport": "grpc",
+  "wall_ms": 20123
+}
+--- E2b delay=500ms batch=512 rate=50 11:42:37 ---
+{
+  "arrived": 0,
+  "delay_ms": 500,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 49.73392350922565,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 50,
+  "send_ms": 20106,
+  "send_throughput_spans_per_s": 49.73639709539441,
+  "shutdown_err": null,
+  "shutdown_ms": 0,
+  "shutdown_ok": true,
+  "total": 1000,
+  "transport": "grpc",
+  "wall_ms": 20107
+}
+--- E2b delay=1000ms batch=512 rate=50 11:43:00 ---
+{
+  "arrived": 0,
+  "delay_ms": 1000,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 49.72403162448411,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 50,
+  "send_ms": 20110,
+  "send_throughput_spans_per_s": 49.72650422675286,
+  "shutdown_err": null,
+  "shutdown_ms": 0,
+  "shutdown_ok": true,
+  "total": 1000,
+  "transport": "grpc",
+  "wall_ms": 20111
+}
+--- E2b delay=5000ms batch=512 rate=50 11:43:24 ---
+{
+  "arrived": 0,
+  "delay_ms": 5000,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 49.72897707494156,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 50,
+  "send_ms": 20108,
+  "send_throughput_spans_per_s": 49.731450169086926,
+  "shutdown_err": null,
+  "shutdown_ms": 0,
+  "shutdown_ok": true,
+  "total": 1000,
+  "transport": "grpc",
+  "wall_ms": 20109
+}
+--- E2b http delay=500 batch=512 rate=50 11:43:47 ---
+{
+  "arrived": 0,
+  "delay_ms": 500,
+  "e2e_latency_ms": null,
+  "e2e_throughput_spans_per_s": 49.68944099378882,
+  "endpoint": "http://127.0.0.1:4318/v1/traces",
+  "export_batch": 512,
+  "mode": "pipe",
+  "payload_bytes": 1024,
+  "queue": 65536,
+  "rate_per_s": 50,
+  "send_ms": 20124,
+  "send_throughput_spans_per_s": 49.69191015702644,
+  "shutdown_err": null,
+  "shutdown_ms": 1,
+  "shutdown_ok": true,
+  "total": 1000,
+  "transport": "http",
+  "wall_ms": 20125
+}
+==== E3: collector 挂掉行为 ====
+--- E3 grpc recover 11:44:11 ---
+{
+  "after_baseline": 500,
+  "baseline": 500,
+  "burst": 4000,
+  "burst_send_ms": 6,
+  "delay_ms": 200,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "final_arrived": 500,
+  "just_after_burst": 500,
+  "lost": 4000,
+  "mode": "down/recover",
+  "outage_secs": 10,
+  "queue": 8192,
+  "shutdown_err": null,
+  "shutdown_ms": 0,
+  "shutdown_ok": true,
+  "transport": "grpc"
+}
+collector_file_spans: 0
+--- E3 grpc shutdown_down 11:44:32 ---
+{
+  "after_baseline": 500,
+  "baseline": 500,
+  "burst": 4000,
+  "burst_send_ms": 8,
+  "delay_ms": 200,
+  "endpoint": "http://127.0.0.1:4317",
+  "export_batch": 512,
+  "final_arrived": 500,
+  "just_after_burst": 500,
+  "lost": 4000,
+  "mode": "down/shutdown_down",
+  "outage_secs": 10,
+  "queue": 8192,
+  "shutdown_err": "Operation failed: Shutdown errors: [Timeout(5s)]",
+  "shutdown_ms": 5000,
+  "shutdown_ok": false,
+  "transport": "grpc"
+}
+collector_file_spans: 0
+--- E3 http recover 11:44:45 ---
+{
+  "after_baseline": 500,
+  "baseline": 500,
+  "burst": 4000,
+  "burst_send_ms": 9,
+  "delay_ms": 200,
+  "endpoint": "http://127.0.0.1:4318/v1/traces",
+  "export_batch": 512,
+  "final_arrived": 500,
+  "just_after_burst": 500,
+  "lost": 4000,
+  "mode": "down/recover",
+  "outage_secs": 10,
+  "queue": 8192,
+  "shutdown_err": null,
+  "shutdown_ms": 0,
+  "shutdown_ok": true,
+  "transport": "http"
+}
+collector_file_spans: 0
+--- E3 http shutdown_down 11:45:06 ---
+{
+  "after_baseline": 500,
+  "baseline": 500,
+  "burst": 4000,
+  "burst_send_ms": 6,
+  "delay_ms": 200,
+  "endpoint": "http://127.0.0.1:4318/v1/traces",
+  "export_batch": 512,
+  "final_arrived": 500,
+  "just_after_burst": 500,
+  "lost": 4000,
+  "mode": "down/shutdown_down",
+  "outage_secs": 10,
+  "queue": 8192,
+  "shutdown_err": "Operation failed: Shutdown errors: [Timeout(5s)]",
+  "shutdown_ms": 5000,
+  "shutdown_ok": false,
+  "transport": "http"
+}
+collector_file_spans: 0

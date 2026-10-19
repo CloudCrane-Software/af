@@ -1,0 +1,134 @@
+{
+ "vouchers": {
+  "e1-b": {
+   "voucher_id": "bv-e1-b",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e1b-normal": {
+   "voucher_id": "bv-e1b-normal",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e1b": {
+   "voucher_id": "bv-e1b",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e2b2": {
+   "voucher_id": "bv-e2b2",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e3b-old": {
+   "voucher_id": "bv-e3b-old",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e3b-old2": {
+   "voucher_id": "bv-e3b-old2",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e3b-old3": {
+   "voucher_id": "bv-e3b-old3",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e3b-mid": {
+   "voucher_id": "bv-e3b-mid",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e3b-ok": {
+   "voucher_id": "bv-e3b-ok",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e4b": {
+   "voucher_id": "bv-e4b",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  }
+ },
+ "artifacts": {
+  "e1b-normal": {
+   "artifact_id": "fa-e1b-normal",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e1b": {
+   "artifact_id": "fa-e1b",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e2b2": {
+   "artifact_id": "fa-e2b2",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e3b-old": {
+   "artifact_id": "fa-e3b-old",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e3b-old2": {
+   "artifact_id": "fa-e3b-old2",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e3b-old3": {
+   "artifact_id": "fa-e3b-old3",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e3b-ok": {
+   "artifact_id": "fa-e3b-ok",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e4b": {
+   "artifact_id": "fa-e4b",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  }
+ },
+ "ops_log": [
+  "sign_voucher order=e1-b attempt=1",
+  "sign_voucher order=e1b-normal attempt=1",
+  "forge_artifact order=e1b-normal attempt=1 t=11:14:11",
+  "sign_voucher order=e1b attempt=1",
+  "forge_artifact order=e1b attempt=1 t=11:15:33",
+  "sign_voucher order=e2b2 attempt=1",
+  "forge_artifact order=e2b2 attempt=1 t=11:20:55",
+  "sign_voucher order=e3b-old attempt=1",
+  "forge_artifact order=e3b-old attempt=1 t=11:24:43",
+  "sign_voucher order=e3b-old2 attempt=1",
+  "forge_artifact order=e3b-old2 attempt=1 t=11:26:15",
+  "sign_voucher order=e3b-old3 attempt=1",
+  "forge_artifact order=e3b-old3 attempt=1 t=11:27:46",
+  "sign_voucher order=e3b-mid attempt=1",
+  "sign_voucher order=e3b-ok attempt=1",
+  "forge_artifact order=e3b-ok attempt=1 t=11:30:44",
+  "sign_voucher order=e4b attempt=1",
+  "forge_artifact order=e4b attempt=1 t=11:31:25"
+ ]
+}

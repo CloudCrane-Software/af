@@ -1,0 +1,233 @@
+{
+ "schemaVersion": 2,
+ "line": {
+  "id": "line-a",
+  "displayName": "总装 A 线（PoC 示例）",
+  "graphTemplates": {
+   "main": {
+    "templateId": "assembling-v3",
+    "version": "1.4.2",
+    "entry": "start"
+   },
+   "pack": {
+    "templateId": "packing-v1",
+    "version": "0.9.0",
+    "entry": "intake"
+   }
+  },
+  "evalFunctions": {
+   "cycleTimeSla": {
+    "name": "cycleTimeSla",
+    "kind": "threshold",
+    "timeoutMs": 2000
+   },
+   "defectRatio": {
+    "name": "defectRatio",
+    "kind": "ratio",
+    "timeoutMs": 3000
+   },
+   "tempDwell": {
+    "name": "tempDwell",
+    "kind": "dwell",
+    "timeoutMs": 1500
+   }
+  },
+  "tools": {
+   "plcGate": {
+    "name": "plcGate",
+    "driver": "opcua",
+    "endpoint": "opc.tcp://10.1.0.21:4840"
+   },
+   "vision": {
+    "name": "vision",
+    "driver": "http",
+    "endpoint": "http://10.1.0.22:8080"
+   },
+   "printer": {
+    "name": "printer",
+    "driver": "modbus",
+    "endpoint": "/dev/ttyUSB0:115200"
+   }
+  },
+  "andonRules": [
+   {
+    "id": "andon-1",
+    "severity": "warn",
+    "notify": [
+     "班组长"
+    ],
+    "escalateAfterMs": 300000,
+    "escalateTo": [
+     "值班经理"
+    ],
+    "trigger": "cycleTimeSla"
+   },
+   {
+    "id": "andon-2",
+    "severity": "critical",
+    "notify": [
+     "班组长",
+     "设备科"
+    ],
+    "escalateAfterMs": 0,
+    "trigger": "tempDwell"
+   }
+  ],
+  "artifactSchema": {
+   "kind": "unit",
+   "fields": {
+    "sn": {
+     "type": "string"
+    },
+    "qcScore": {
+     "type": "number"
+    },
+    "grade": {
+     "enumValues": [
+      "A",
+      "B",
+      "C"
+     ],
+     "type": "enum"
+    },
+    "builtAt": {
+     "type": "timestamp"
+    }
+   },
+   "required": [
+    "sn",
+    "builtAt"
+   ]
+  }
+ },
+ "rules": [
+  {
+   "id": "rule-0",
+   "kind": "threshold",
+   "desc": "gen threshold #0",
+   "enabled": true,
+   "params": {
+    "metric": "m0_sec",
+    "op": ">",
+    "value": 100
+   }
+  },
+  {
+   "id": "rule-1",
+   "kind": "ratio",
+   "desc": "gen ratio #1",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.015,
+    "critical": 0.03
+   }
+  },
+  {
+   "id": "rule-2",
+   "kind": "timeWindow",
+   "desc": "gen timeWindow #2",
+   "enabled": true,
+   "params": {
+    "start": "22:00",
+    "end": "06:00"
+   }
+  },
+  {
+   "id": "rule-3",
+   "kind": "dwell",
+   "desc": "gen dwell #3",
+   "enabled": true,
+   "params": {
+    "metric": "m3_c",
+    "op": ">",
+    "value": 63,
+    "samples": 3
+   }
+  },
+  {
+   "id": "rule-4",
+   "kind": "count",
+   "desc": "gen count #4",
+   "enabled": true,
+   "params": {
+    "metric": "unit_fail",
+    "op": ">=",
+    "atLeast": 3,
+    "within": "10m"
+   }
+  },
+  {
+   "id": "rule-5",
+   "kind": "fingerprint",
+   "desc": "gen fingerprint #5",
+   "enabled": true,
+   "params": {
+    "fields": [
+     "station",
+     "error_code"
+    ],
+    "ttl": "30m"
+   }
+  },
+  {
+   "id": "rule-6",
+   "kind": "escalation",
+   "desc": "gen escalation #6",
+   "enabled": true,
+   "params": {
+    "chain": [
+     {
+      "afterMs": 300000,
+      "notify": [
+       "班组长"
+      ],
+      "action": "notify"
+     },
+     {
+      "afterMs": 900000,
+      "notify": [
+       "值班经理"
+      ],
+      "action": "page"
+     }
+    ]
+   }
+  },
+  {
+   "id": "rule-7",
+   "kind": "combo",
+   "desc": "gen combo #7",
+   "enabled": true,
+   "params": {
+    "allOf": [
+     "rule-0"
+    ]
+   }
+  },
+  {
+   "id": "rule-8",
+   "kind": "threshold",
+   "desc": "gen threshold #8",
+   "enabled": true,
+   "params": {
+    "metric": "m8_sec",
+    "op": ">",
+    "value": 108
+   }
+  },
+  {
+   "id": "rule-9",
+   "kind": "ratio",
+   "desc": "gen ratio #9",
+   "enabled": true,
+   "params": {
+    "numerator": "ng_count",
+    "denominator": "total_count",
+    "warn": 0.03,
+    "critical": 0.06
+   }
+  }
+ ]
+}

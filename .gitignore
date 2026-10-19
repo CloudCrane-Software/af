@@ -6,3 +6,20 @@ poc/*/.venv
 *.tar.gz
 *.db
 __pycache__/
+
+# ── 第二批补验大体积产物（报告/源码/配置/小体积证据保留；大产物可按各 REPORT.md ②节重建）
+**/target/
+poc/poc-sandbox/CubeSandbox/
+poc/poc-sandbox/downloads/
+poc/poc-sandbox/*.log
+poc/poc-sandbox/probe_memory.out
+poc/poc-bifrost/run/
+poc/poc-cas-rust/data/
+poc/poc-cas-rust/work/
+poc/poc-ledger/runs/
+poc/poc-otel/out/
+poc/poc-otel/bin/
+poc/poc-otel/collector/build/
+poc/poc-rekor/bin/
+poc/poc-rekor/.gocache/
+poc/poc-rekor/rekor-tiles/

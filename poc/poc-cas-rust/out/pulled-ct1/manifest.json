@@ -1,0 +1,20 @@
+{
+  "annotations": {
+    "org.opencontainers.image.created": "2026-10-19T03:10:11Z"
+  },
+  "artifactType": "application/vnd.af.artifact.v1+json",
+  "config": {
+    "digest": "sha256:3a8891f87009764eab5e768253ab2f50d207dc8697305fe6164e94202c9d21d9",
+    "mediaType": "application/vnd.af.artifact.config.v1+json",
+    "size": 301
+  },
+  "layers": [
+    {
+      "digest": "sha256:38a757a63e8a3d0937d0bd7d534b3446e7f6fb06ee480a8ebe893dc94e8e5219",
+      "mediaType": "application/vnd.af.artifact.layer.v1.raw",
+      "size": 77
+    }
+  ],
+  "mediaType": "application/vnd.oci.image.manifest.v1+json",
+  "schemaVersion": 2
+}
