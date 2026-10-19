@@ -1,4 +1,87 @@
-# RESULT-UPDATE — T5 + T6 · af-workorder 哈希与签名
+# RESULT-UPDATE — C5 · insta 快照接入 af-workorder
+
+日期：2026-10-19。分支 `task-C5`。业务语义沿用已合流的 T4 / T56：SLA 截止是日历解析出的 `DateTime<Utc>`，`payload_hash` 是 SHA-256 小写十六进制，变更单签名是注入种子的 ed25519。本任务只加 JSON 快照，不改这些语义。
+
+源码改动在 `crates/af-workorder/**`。根 `Cargo.lock` 同时更新：新增 crates.io dev-dependency 必须落锁。其他 crate 的源码与清单没有改。
+
+提交：`c05a9bb`（依赖）、`6699b4a`（测试与 `.snap`）。
+
+## 结论
+
+通过。dev-dependency 为 `insta = 1.49.0`（crates.io 当前最新稳定版）。`default-features = false`，只开 `json` 与 `redactions`。
+
+三条 `assert_json_snapshot!`：
+
+| 快照 | 覆盖 |
+|---|---|
+| `qualified_final_artifact_release_decision` | 合格终态工件 `fa-1`（`is_final && qualified`）挂上后 `close` 得到 `Closed`。审批人签发 `Decision::Approve`。`payload_hash` 涂成 `[payload_hash]`，`signature` 涂成 `[signature]` |
+| `reject_decision_names_missing_qualified_final_artifact` | 只有「终态不合格」和「合格但非终态」工件时 `close` 被拒。审批人签发 `Decision::Reject`。快照写出 `missing: ["NoQualifiedFinalArtifact"]`、`detail: ["缺少合格的终态工件"]`，以及门控原文 `门控拒绝 Close:前置条件缺失 [NoQualifiedFinalArtifact]`。签名与哈希同样涂红 |
+| `signed_change_order_roundtrip` | `SignedChangeOrder` 经 `serde_json` 往返后与原文相等，公钥验签通过，并能生成绑定 `g-4`、`supersedes = wo-1` 的后继单。`.signature` 涂成 `[signature]` |
+
+`.snap` 在 `tests/snapshots/`。`INSTA_UPDATE=no` 连续跑两次，三份快照的 SHA-256 不变，没有 `.snap.new`。
+
+测试数字：单测仍是 42。集成测试 6 → 9，多出来的 3 个都在 `tests/json_snapshots.rs`。已有测试没有改断言。
+
+## 步骤
+
+1. `Cargo.toml` 增加 insta 1.49.0。`Cargo.lock` 增加 insta 1.49.0，以及传递依赖 pest 2.9.2、pest_derive 2.9.2、pest_generator 2.9.2、pest_meta 2.9.2、similar 2.7.0、ucd-trie 0.1.7。这些许可证是 Apache-2.0 或 MIT OR Apache-2.0，落在仓库 `deny.toml` 已有 allow 列表里。
+2. 新增 `tests/json_snapshots.rs`。决策视图用 `#[serde(flatten)]` 把 `DecisionArtifact` 的 serde 字段摊到 JSON 根上，涂红选择器因此是 `.signature` 与 `.payload_hash`。变更单直接对 `SignedChangeOrder` 涂红 `.signature`。快照落盘后，测试读 `.snap` 文本，断言含占位、不含哈希原文、key_id，以及占位签名字节对应的 JSON 数字 `222`（`0xde`）。
+3. `INSTA_UPDATE=1` 生成三份 `.snap`。之后用 `INSTA_UPDATE=no` 复跑，确认无 diff。截止时刻与签名种子都是测试里的常量，不读系统钟，也不读系统熵。
+
+## 证据
+
+```text
+source /data/af-factory/env.sh
+cargo check -j 4 -p af-workorder
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.07s
+# exit 0
+
+cargo fmt -p af-workorder
+
+cargo clippy --all-targets -j 4 -p af-workorder -- -D warnings
+# Checking af-workorder
+# Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.65s
+# exit 0，无警告
+
+INSTA_UPDATE=no cargo test -j 4 -p af-workorder
+# unittests src/lib.rs: ok. 42 passed; 0 failed
+# tests/calendar_sla.rs: ok. 3 passed; 0 failed
+# tests/json_snapshots.rs: ok. 3 passed; 0 failed
+# tests/lifecycle.rs: ok. 3 passed; 0 failed
+# Doc-tests af_workorder: ok. 0 passed; 0 failed
+
+INSTA_UPDATE=no cargo test -j 4 -p af-workorder --test json_snapshots
+# ok. 3 passed; 0 failed
+```
+
+二次运行前后三份 `.snap` 的 SHA-256 相同：
+
+```text
+a1ed9dd7a24c75f3fdf1db8d5db54a178e514138c0690ff1118fbb1dffc537d2  json_snapshots__qualified_final_artifact_release_decision.snap
+b9c75f07a31983b72c1e9d639d9e34fd85b387380a3585fc8dab115c8d300a04  json_snapshots__reject_decision_names_missing_qualified_final_artifact.snap
+6bfb6ffb3bc3e2a2d8796bf305972207e86aa49f9dd520c8f971391659425c12  json_snapshots__signed_change_order_roundtrip.snap
+```
+
+`find crates/af-workorder -name '*.snap.new'` 无输出。
+
+## 反馈
+
+1. 注入种子的 ed25519 签名字节是确定的（T6 已用同一种子签两次对过）。本快照用固定种子 `0x7a` 重复 32 字节。涂红的作用是不把 `key_id`（公钥字节的小写十六进制）和签名字节钉进快照；换种子或换钥时，未涂红的快照会 diff。决策工件的签名仍是 `DecisionArtifact::seal` 的占位：算法标签 `ed25519-placeholder`，64 个 `0xde`。`validate_against` 的四层顺序没有动。
+2. `payload_hash` 对固定 payload 也是确定的 SHA-256。快照仍按任务把它涂成 `[payload_hash]`。涂红之前，测试断言长度等于 `SHA256_HEX_LEN`，且等于 `sha256_hex(payload)`。
+3. `DecisionArtifact` 的字段里没有「缺什么」。拒绝快照在工件 serde 字段旁边放了门控的 `missing`、`detail` 和 `gate_message`，`.snap` 里可以直接看到缺的是合格终态工件。工件本身的字段名与顺序没有改。
+4. insta 1.49.0 的 `json` feature 只打开 serde，不另带一份 serde_json。`redactions` 带入 pest。关掉 default features 后没有 console。`cargo add` 把 pest 锁在 2.9.2（当时索引上另有 2.9.4）。insta 要求 `pest ^2.1.3`，2.9.2 满足，锁文件保持 `cargo add` 的解析结果。
+5. 更新已入库快照的方式是 `INSTA_UPDATE=1`（或 `always`）。默认的 `auto` 在失败时会写 `.snap.new` 而不是改 `.snap`。
+
+## 遗留
+
+- 决策工件仍是占位验签。真 ed25519 只在变更单上。若要把决策工件也改成真签名，要改 `seal` / `validate_against` 并替换占位测试，应单独做；那时快照里的签名选择器可以保持不变。
+- 整段 `.signature` 被涂成一个字符串后，`.snap` 正文不再包含算法标签。算法由测试断言保住：决策工件是 `ed25519-placeholder`，变更单是 `ed25519`。
+- 没有安装或调用 `cargo-insta`。审查流程不在本任务里。
+- 根 `README.md` 与 `deny.toml` 未改。新依赖的许可证已经在 allow 列表中。
+
+---
+
+# 历史 · T5 + T6 · af-workorder 哈希与签名
 
 日期：2026-10-19。分支 `task-T56`。未改 `af-credential` 源码与其公共 API。`Cargo.lock` 只给 `af-workorder` 补了直接依赖边（`sha2 0.10.9`、`ed25519-dalek`，版本都是锁里已有的），没有升版本。
 
