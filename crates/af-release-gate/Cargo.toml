@@ -21,3 +21,5 @@ workspace = true
 # 默认特性含 fork、timeout、bit-set；bit-set 会经 bit-vec 把 borsh derive
 # 特性统一进工作区，故只开 std。
 proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
+# 集成测试要自己构造工单。与上面的路径依赖是同一个 crate，不是新的第三方包。
+af-workorder = { path = "../af-workorder" }
