@@ -15,3 +15,42 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 thiserror = "2.0.21"
+
+# 编译期 lint。各成员 crate 以 `[lints] workspace = true` 继承。
+# 起步集：unsafe_code 为 forbid；其余停在 warn，不升 deny。
+# 只收 unused_* / dead_code 及同类保守项。不启用 clippy pedantic、nursery、restriction、cargo。
+[workspace.lints.rust]
+unsafe_code = "forbid"
+dead_code = "warn"
+deprecated = "warn"
+non_camel_case_types = "warn"
+non_snake_case = "warn"
+non_upper_case_globals = "warn"
+path_statements = "warn"
+redundant_semicolons = "warn"
+unreachable_code = "warn"
+unreachable_patterns = "warn"
+unused_allocation = "warn"
+unused_assignments = "warn"
+unused_associated_type_bounds = "warn"
+unused_attributes = "warn"
+unused_braces = "warn"
+unused_comparisons = "warn"
+unused_doc_comments = "warn"
+unused_features = "warn"
+unused_imports = "warn"
+unused_labels = "warn"
+unused_macros = "warn"
+unused_must_use = "warn"
+unused_mut = "warn"
+unused_parens = "warn"
+unused_unsafe = "warn"
+unused_variables = "warn"
+unused_visibilities = "warn"
+
+[workspace.lints.clippy]
+# 与上面同风格，且属于 clippy 默认组（style / complexity），不是 pedantic。
+let_unit_value = "warn"
+no_effect = "warn"
+unnecessary_operation = "warn"
+unused_unit = "warn"
