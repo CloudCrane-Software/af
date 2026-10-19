@@ -2,4 +2,5 @@
 //!
 //! 字节布局放在这里，避免 harness 和种子测试各写一套。
 
+pub mod graph;
 pub mod sampling;

@@ -15,6 +15,7 @@ serde_json = "1.0.154"
 # 注入 SLA 判定时刻。版本与主工作区锁一致。不读系统钟。
 chrono = "0.4.45"
 
+
 [dependencies.af-workorder]
 path = "../crates/af-workorder"
 
@@ -26,6 +27,7 @@ path = "../crates/af-effect-gateway"
 # cargo 给出的修法是补一张空 [workspace]，让 fuzz 自成工作区，
 # 并且不进根 members（`cargo test --workspace` 不会编这些 target）。
 # `--fuzzing-workspace=true` 会写成 `members = ["."]`，这里按接入清单留空表。
+
 
 [workspace]
 
@@ -40,6 +42,13 @@ bench = false
 name = "af_effect_gateway_idempotency"
 path = "fuzz_targets/af_effect_gateway_idempotency.rs"
 
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "af_graph_schema_parse"
+path = "fuzz_targets/af_graph_schema_parse.rs"
 test = false
 doc = false
 bench = false
