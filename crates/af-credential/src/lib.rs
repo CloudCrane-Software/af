@@ -8,8 +8,11 @@
 //! 事实词表（biscuit 6 无 schema/词表机制，词表只能靠这里的常量约定）：
 //! - `tool("git")` / `tool("test")`        —— 凭证携带的能力（authority 块）
 //! - `namespace("line-a")`                 —— 凭证绑定的命名空间
-//! - `budget_cents(1000)`                  —— 凭证预算（biscuit 6 已删除 Float，用“美分”整数）
+//! - `budget_cents(1000)`                  —— 凭证 per-call 上限（`Cents` = i64 美分）
 //! - `request_tool` / `request_ns` / `spend_cents` —— 验证方（网关）声明的本次请求事实
+//!
+//! 金额词表与 af-meter 对齐：`budget_cents` / `spend_cap_cents` / `spend_cents` 都是 [`Cents`]（i64 美分）。
+//! 累计消耗不在凭证里，账本在 af-meter。
 //!
 //! 注意：衰减（append 新块）只能**加** check，不能删事实——这是 biscuit 的单调性设计。
 
@@ -18,8 +21,9 @@ mod judge;
 mod policy;
 
 pub use credential::{
-    attenuate, authorize, deserialize_verify, inspect, issue_root, serialize, ChildSpec, RootSpec,
-    TokenCaps, F_BUDGET_CENTS, F_NAMESPACE, F_REQUEST_NS, F_REQUEST_TOOL, F_SPEND_CENTS, F_TOOL,
+    attenuate, authorize, deserialize_verify, inspect, issue_root, serialize, Cents, ChildSpec,
+    RootSpec, TokenCaps, F_BUDGET_CENTS, F_NAMESPACE, F_REQUEST_NS, F_REQUEST_TOOL, F_SPEND_CENTS,
+    F_TOOL,
 };
 pub use judge::{evaluate, AccessQuery, Verdict};
 pub use policy::{cedar_allows, CEDAR_POLICIES};

@@ -29,19 +29,27 @@ pub const F_REQUEST_TOOL: &str = "request_tool";
 pub const F_REQUEST_NS: &str = "request_ns";
 pub const F_SPEND_CENTS: &str = "spend_cents";
 
+/// 金额最小单位：美分，有符号。
+///
+/// `Cents` 是 `i64` 的别名。af-meter 的 `Cents` 同样是 `i64`：
+/// `budget_cents`、`spend_cap_cents`、`spend_cents` 这三个词在两边都是这个类型，
+/// 签发值可以原样交给账本。
+pub type Cents = i64;
+
 /// 根凭证签发参数。
 pub struct RootSpec {
     pub tools: Vec<String>,
     pub namespace: String,
-    pub budget_cents: i64,
+    /// 根块 per-call 上限（美分）。事实名 `budget_cents`，check 为 `spend_cents <= budget_cents`。
+    pub budget_cents: Cents,
 }
 
 /// 子 agent 衰减参数。
 pub struct ChildSpec {
     /// 衰减后允许的工具白名单（是根白名单的子集才有意义）。
     pub tools: Vec<String>,
-    /// 衰减后单次调用开销上限（美分）。
-    pub spend_cap_cents: i64,
+    /// 衰减后单次调用开销上限（美分）。与 af-meter `try_spend` 的同名参数是同一个整数。
+    pub spend_cap_cents: Cents,
 }
 
 /// 根凭证：根密钥 + 已签发的 token。
@@ -109,7 +117,7 @@ pub fn attenuate(token: &Biscuit, child: &ChildSpec) -> Result<Biscuit> {
 pub struct TokenCaps {
     pub tools: HashSet<String>,
     pub namespace: Option<String>,
-    pub budget_cents: Option<i64>,
+    pub budget_cents: Option<Cents>,
     pub block_count: usize,
     /// 每个 block 的 Datalog 源码（供测试断言与展示）。
     pub block_sources: Vec<String>,
@@ -126,7 +134,7 @@ pub fn inspect(token: &Biscuit) -> Result<TokenCaps> {
     for (_, t) in pairs {
         tools.insert(t);
     }
-    let nb: Vec<(String, i64)> = auth.query_with_limits(
+    let nb: Vec<(String, Cents)> = auth.query_with_limits(
         format!("nb($ns, $v) <- {F_NAMESPACE}($ns), {F_BUDGET_CENTS}($v)").as_str(),
         verify_limits(),
     )?;
@@ -157,7 +165,7 @@ pub fn inspect(token: &Biscuit) -> Result<TokenCaps> {
 /// 语义坑：biscuit 的 check 是**存在性**查询——若验证方注入多个 request_tool 事实，
 /// 只要有一个落在白名单 check 就过。因此网关必须保证“一次请求只声明一个
 /// request_tool”（此处按约定实现，未在 biscuit 内强制）。
-pub fn authorize(token: &Biscuit, tool: &str, namespace: &str, spend_cents: i64) -> Result<bool> {
+pub fn authorize(token: &Biscuit, tool: &str, namespace: &str, spend_cents: Cents) -> Result<bool> {
     let allow_policy = format!(
         "allow if {F_REQUEST_TOOL}($t), {F_TOOL}($t), {F_REQUEST_NS}($n), {F_NAMESPACE}($n)"
     );

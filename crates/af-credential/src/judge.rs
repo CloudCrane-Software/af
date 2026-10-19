@@ -3,7 +3,7 @@
 use anyhow::Result;
 use biscuit_auth::Biscuit;
 
-use crate::credential::{authorize, inspect, TokenCaps};
+use crate::credential::{authorize, inspect, Cents, TokenCaps};
 use crate::policy::cedar_allows;
 
 /// 一次工具调用请求（主体角色 + 工具 + 命名空间 + 本次申报开销）。
@@ -11,7 +11,8 @@ pub struct AccessQuery {
     pub role: String,
     pub tool: String,
     pub namespace: String,
-    pub spend_cents: i64,
+    /// 本次申报开销（美分）。与 af-meter `try_spend` 的 `spend_cents` 是同一个整数。
+    pub spend_cents: Cents,
 }
 
 /// 判定结果：两侧各自的结论 + 最终交集结论。
