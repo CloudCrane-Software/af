@@ -1,9 +1,10 @@
 //! af-release-gate 属性测试。语义以本 crate 的 RESULT.md 为准，只观察闸门、不改规则。
 //!
-//! 三组：
+//! 四组：
 //! 1. CONWIP：任意操作序列下已准入 WIP 不超过上限，精确等号可以入队。
 //! 2. 渐放：同一批次内探针计数只增不减且不超过封顶；晋升之后本批次不再回到 gated。
 //! 3. 拒绝：失败的准入、完成、重复开启不改写已经提交的准入状态。
+//! 4. 重启：序列中途关账本再打开，在制与渐放游标跟未重启的闸门一致，且 WIP 不超过上限。
 //!
 //! `seed_wip` 按 RESULT 不走准入、不衡上限，不进入这三组的操作序列。
 //! 夜间信用在 WIP 判定之前扣减（RESULT 反馈 4）。拒绝断言锁住准入提交，
@@ -11,9 +12,13 @@
 //!
 //! 时刻全部由用例注入。失败时 proptest 打印缩到最小的输入。不写回归文件。
 
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use af_release_gate::{
-    AdmitError, CanaryStatus, EvalReport, GateConfig, GateError, GateEvent, Item, MinuteOfDay,
-    NightWindow, ReleaseGate,
+    AdmitError, CanaryStatus, CompletedItem, DurableGate, EvalReport, GateConfig, GateError,
+    GateEvent, Item, ManualClock, MinuteOfDay, NightWindow, OpenOutcome, PersistError, ReleaseGate,
+    Ticket,
 };
 use proptest::prelude::*;
 use proptest::test_runner::FileFailurePersistence;
@@ -1384,6 +1389,353 @@ fn walk_rejection(case: &Case) -> Result<(), TestCaseError> {
     Ok(())
 }
 
+// --- 组 4：重启后 CONWIP 不超发 ----------------------------------------------
+
+struct RestartFile {
+    path: PathBuf,
+}
+
+impl RestartFile {
+    fn new() -> Self {
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "af-release-gate-prop-{}-{n}.db",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&path);
+        Self { path }
+    }
+
+    fn path(&self) -> &Path {
+        &self.path
+    }
+}
+
+impl Drop for RestartFile {
+    fn drop(&mut self) {
+        let display = self.path.display().to_string();
+        let _ = std::fs::remove_file(&self.path);
+        let _ = std::fs::remove_file(format!("{display}-wal"));
+        let _ = std::fs::remove_file(format!("{display}-shm"));
+    }
+}
+
+fn arb_restart() -> impl Strategy<Value = (Case, usize)> {
+    arb_case().prop_flat_map(|case| {
+        let len = case.ops.len();
+        (Just(case), 0..=len)
+    })
+}
+
+fn split_admit(
+    result: Result<Ticket, PersistError>,
+) -> Result<Result<Ticket, AdmitError>, TestCaseError> {
+    match result {
+        Ok(ticket) => Ok(Ok(ticket)),
+        Err(PersistError::Admit(err)) => Ok(Err(err)),
+        Err(err) => Err(TestCaseError::fail(err.to_string())),
+    }
+}
+
+fn split_complete(
+    result: Result<CompletedItem, PersistError>,
+) -> Result<Result<CompletedItem, GateError>, TestCaseError> {
+    match result {
+        Ok(done) => Ok(Ok(done)),
+        Err(PersistError::Gate(err)) => Ok(Err(err)),
+        Err(err) => Err(TestCaseError::fail(err.to_string())),
+    }
+}
+
+fn split_begin(result: Result<(), PersistError>) -> Result<Result<(), GateError>, TestCaseError> {
+    match result {
+        Ok(()) => Ok(Ok(())),
+        Err(PersistError::Gate(err)) => Ok(Err(err)),
+        Err(err) => Err(TestCaseError::fail(err.to_string())),
+    }
+}
+
+fn assert_restart_books(
+    memory: &ReleaseGate,
+    durable: &DurableGate,
+    upper: u16,
+    step: usize,
+) -> Result<(), TestCaseError> {
+    prop_assert_eq!(
+        memory.wip_minutes().to_bits(),
+        durable.wip_minutes().to_bits(),
+        "step={}",
+        step
+    );
+    prop_assert_eq!(
+        memory.in_process_count(),
+        durable.in_process_count(),
+        "step={}",
+        step
+    );
+    let left = memory.in_process();
+    let right = durable.in_process();
+    prop_assert_eq!(left.len(), right.len(), "step={}", step);
+    for (index, (mem_item, dur_item)) in left.iter().zip(right.iter()).enumerate() {
+        prop_assert_eq!(mem_item.id, dur_item.id, "step={} i={}", step, index);
+        prop_assert_eq!(
+            mem_item.config.as_str(),
+            dur_item.config.as_str(),
+            "step={} i={}",
+            step,
+            index
+        );
+        prop_assert_eq!(
+            mem_item.weight.to_bits(),
+            dur_item.weight.to_bits(),
+            "step={} i={}",
+            step,
+            index
+        );
+        prop_assert_eq!(
+            mem_item.admitted_at,
+            dur_item.admitted_at,
+            "step={} i={}",
+            step,
+            index
+        );
+    }
+    prop_assert_eq!(
+        memory.canary_cursor(),
+        durable.canary_cursor(),
+        "step={}",
+        step
+    );
+    let mem_night = memory.night_view();
+    let dur_night = durable.night_view();
+    prop_assert_eq!(
+        mem_night.credit.to_bits(),
+        dur_night.credit.to_bits(),
+        "step={}",
+        step
+    );
+    prop_assert_eq!(mem_night.requests, dur_night.requests, "step={}", step);
+    prop_assert_eq!(mem_night.admitted, dur_night.admitted, "step={}", step);
+    prop_assert_eq!(
+        mem_night.prev_in_window,
+        dur_night.prev_in_window,
+        "step={}",
+        step
+    );
+    let wip = durable.wip_minutes();
+    prop_assert!(
+        wip <= f64::from(upper) + 1e-9,
+        "step={} over-release wip={} upper={}",
+        step,
+        wip,
+        upper
+    );
+    let sum = right.iter().fold(0.0, |acc, item| acc + item.weight);
+    prop_assert_eq!(sum.to_bits(), wip.to_bits(), "step={} wip vs items", step);
+    Ok(())
+}
+
+fn reopen_durable(
+    durable: DurableGate,
+    memory: &mut ReleaseGate,
+    path: &Path,
+    case: &Case,
+    active_pred: Option<Pred>,
+    clock: &ManualClock,
+    step: usize,
+) -> Result<DurableGate, TestCaseError> {
+    let _ = memory.drain_events();
+    drop(durable);
+    let (mut reloaded, outcome) = DurableGate::open_with_clock(
+        path,
+        &case.gate.config(),
+        active_pred.map(predicate),
+        clock.clone(),
+    )
+    .map_err(|err| TestCaseError::fail(err.to_string()))?;
+    prop_assert!(
+        matches!(outcome, OpenOutcome::AlreadyDeclared),
+        "step={} outcome={:?}",
+        step,
+        outcome
+    );
+    assert_restart_books(memory, &reloaded, case.gate.upper, step)?;
+    prop_assert!(
+        reloaded.drain_events().is_empty(),
+        "step={} restart replayed events",
+        step
+    );
+    Ok(reloaded)
+}
+
+fn apply_pair(
+    memory: &mut ReleaseGate,
+    durable: &mut DurableGate,
+    op: Op,
+    held: &mut Vec<Held>,
+    next_id: &mut u64,
+    active_pred: &mut Option<Pred>,
+    step: usize,
+) -> Result<(), TestCaseError> {
+    match op {
+        Op::Admit {
+            config,
+            weight,
+            minute,
+        } => {
+            let id = *next_id;
+            *next_id += 1;
+            let pending = item(id, config, f64::from(weight));
+            let now = u32::from(minute);
+            let mem_result = memory.try_admit(&pending, now);
+            let dur_result = split_admit(durable.try_admit(&pending, now))?;
+            match (mem_result, dur_result) {
+                (Ok(left), Ok(right)) => {
+                    prop_assert_eq!(left.item_id, right.item_id, "step={}", step);
+                    prop_assert_eq!(left.config, right.config, "step={}", step);
+                    prop_assert_eq!(
+                        left.weight.to_bits(),
+                        right.weight.to_bits(),
+                        "step={}",
+                        step
+                    );
+                    prop_assert_eq!(left.admitted_at, right.admitted_at, "step={}", step);
+                    held.push(Held { id, config, weight });
+                }
+                (Err(left), Err(right)) => {
+                    prop_assert_eq!(left, right, "step={}", step);
+                }
+                (left, right) => {
+                    return Err(TestCaseError::fail(format!(
+                        "step={step} admit diverged {left:?} vs {right:?}"
+                    )));
+                }
+            }
+        }
+        Op::Complete {
+            known,
+            slot,
+            defects,
+            minute,
+        } => {
+            let id = pick_id(held, known, slot, next_id);
+            let now = u32::from(minute);
+            let defects = u64::from(defects);
+            let mem_result = memory.complete(id, now, defects);
+            let dur_result = split_complete(durable.complete(id, now, defects))?;
+            match (mem_result, dur_result) {
+                (Ok(left), Ok(right)) => {
+                    prop_assert_eq!(left.ticket.item_id, right.ticket.item_id, "step={}", step);
+                    prop_assert_eq!(left.ticket.config, right.ticket.config, "step={}", step);
+                    prop_assert_eq!(
+                        left.ticket.weight.to_bits(),
+                        right.ticket.weight.to_bits(),
+                        "step={}",
+                        step
+                    );
+                    prop_assert_eq!(left.completed_at, right.completed_at, "step={}", step);
+                    if let Some(pos) = held.iter().position(|held| held.id == id) {
+                        held.remove(pos);
+                    }
+                }
+                (Err(left), Err(right)) => {
+                    prop_assert_eq!(left, right, "step={}", step);
+                }
+                (left, right) => {
+                    return Err(TestCaseError::fail(format!(
+                        "step={step} complete diverged {left:?} vs {right:?}"
+                    )));
+                }
+            }
+        }
+        Op::BeginCanary {
+            config,
+            max_probes,
+            pred,
+        } => {
+            let mem_result = memory.begin_canary(config, usize::from(max_probes), predicate(pred));
+            let dur_result = split_begin(durable.begin_canary(
+                config,
+                usize::from(max_probes),
+                predicate(pred),
+            ))?;
+            match (&mem_result, &dur_result) {
+                (Ok(()), Ok(())) => *active_pred = Some(pred),
+                (Err(left), Err(right)) => {
+                    prop_assert_eq!(left, right, "step={}", step);
+                }
+                _ => {
+                    return Err(TestCaseError::fail(format!(
+                        "step={step} begin diverged {mem_result:?} vs {dur_result:?}"
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn walk_restart(case: &Case, cut: usize) -> Result<(), TestCaseError> {
+    let file = RestartFile::new();
+    let clock = ManualClock::new(1_700_000_000_000);
+    let (mut durable, outcome) =
+        DurableGate::open_with_clock(file.path(), &case.gate.config(), None, clock.clone())
+            .map_err(|err| TestCaseError::fail(err.to_string()))?;
+    prop_assert!(matches!(outcome, OpenOutcome::Created));
+    let mut memory = case.gate.open();
+    let mut held = Vec::new();
+    let mut next_id = 1u64;
+    let mut active_pred = None;
+    assert_restart_books(&memory, &durable, case.gate.upper, 0)?;
+
+    for (step, op) in case.ops.iter().enumerate() {
+        if step == cut {
+            durable = reopen_durable(
+                durable,
+                &mut memory,
+                file.path(),
+                case,
+                active_pred,
+                &clock,
+                step,
+            )?;
+        }
+        apply_pair(
+            &mut memory,
+            &mut durable,
+            *op,
+            &mut held,
+            &mut next_id,
+            &mut active_pred,
+            step,
+        )?;
+        assert_restart_books(&memory, &durable, case.gate.upper, step + 1)?;
+        let mem_events = memory.drain_events();
+        let dur_events = durable.drain_events();
+        prop_assert_eq!(mem_events, dur_events, "step={} events", step);
+    }
+    if cut == case.ops.len() {
+        durable = reopen_durable(
+            durable,
+            &mut memory,
+            file.path(),
+            case,
+            active_pred,
+            &clock,
+            cut,
+        )?;
+    }
+    let wip = durable.wip_minutes();
+    prop_assert!(
+        wip <= f64::from(case.gate.upper) + 1e-9,
+        "final over-release wip={} upper={}",
+        wip,
+        case.gate.upper
+    );
+    Ok(())
+}
+
 proptest! {
     #![proptest_config(proptest_cfg())]
 
@@ -1408,5 +1760,11 @@ proptest! {
         script_night_rejection_is_atomic()?;
         script_canary_rejection_is_atomic()?;
         walk_rejection(&case)?;
+    }
+
+    /// 组 4。中途关库再打开后，在制权重和渐放游标与未重启的闸门一致，WIP 不超过上限。
+    #[test]
+    fn conwip_does_not_over_release_after_restart((case, cut) in arb_restart()) {
+        walk_restart(&case, cut)?;
     }
 }
