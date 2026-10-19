@@ -133,3 +133,77 @@ Collecting 10 samples in estimated 3.0008 s (32k iterations)
 - 每组 10 个样本。升迁的标准差偏大，只适合看数量级，不能当成稳定的性能回归线。
 - `ci/clippy-baseline.txt` 仍列着 `assertions_on_constants` / `csp1.rs` 这一条。源码里这条已经没了。基线文件不在本任务改动范围内，没有收紧。门禁对“比基线更少”是放行的。
 - 金标注入、队列乱序、滑动窗口都没有进基准。与 `RESULT.md` ⑤ 和上一节 R4 相同。
+
+---
+
+# RESULT-UPDATE — W2B：af-sampling 抽样账本持久化
+
+## ① 结论
+
+**通过**。抽样账本落在单个 SQLite 文件里：谱系轨迹、当前水位（含未清空的判据窗口）、金标注入记录。首启返回 `OpenFork::Created`，重入且声明一致返回 `OpenFork::AlreadyDeclared`。schema 版本、升迁配方或金标注入参数对不上则启动失败，不改已有库。重启后水位与轨迹原样可读，后续 `record` 的处置与未重启的 `Engine` 一致。
+
+没有改 CSP-1 / 金标对账 / 升迁状态机的已验证语义。恢复是把落盘的 `RunOutcome` 重放进 `Engine::record`，再与水位行、窗口行对账；对不上拒绝启动。连净回升仍然不清窗口，并且优先于判据晋升。
+
+`cargo test -p af-sampling` **44 全绿**（39 单元 + 1 端到端 + 4 个 proptest，0 失败）。原先 26。`cargo clippy --all-targets -p af-sampling -- -D warnings` 无警告。没有新的第三方 crate：`rusqlite` 用工作区已有的 0.32.1（`bundled`）。
+
+测试数 26 → 44：
+- 单元 22 → 39：时钟 2 个，账本 15 个。
+- 属性测试 3 → 4：新增 `restart_does_not_drop_watermark`（256 例）。
+- 端到端仍是 1 个。原有断言没有改语义。
+
+## ② 步骤
+
+1. 读完 `RESULT.md`、`RESULT-UPDATE.md` 与 `csp1` / `golden` / `promotion` / `tests/properties.rs` / `tests/end_to_end.rs`。升迁判据、双水位、回升不清窗口都保持原样。
+2. `src/clock.rs`：`Clock::now_ms` 注入绝对时刻。`ManualClock` 可设、可推进，测试不睡眠。本账本没有按时间过期的判定，升迁窗口仍按条数计。
+3. `src/persist.rs`：`SamplingLedger::open`。开库设 WAL、`busy_timeout=5000ms`、`synchronous=NORMAL`、`foreign_keys=ON`，并在打开时读回核对。表：`ledger_root`、`sampling_decl`、`watermark`、`window_slot`、`lineage_event`、`golden_injection`。子表外键指向 `ledger_root`。
+4. 声明是 schema 版本 1、校验后的配方规范 JSON、注入率 `p` 与 `defect_share` 的 IEEE 位。空白不同但解析结果相同的配方算同一声明。版本或关键参数不同返回 `DeclarationMismatch`，事务回滚，不覆盖旧水位。库内水位与轨迹重放不一致、表集合不是这一版 schema、轨迹被改写，都返回 `LedgerCorrupt`，不静默修复。
+5. `record` 在克隆出的引擎上调用 `Engine::record`，同一事务写入轨迹、整段替换窗口、更新水位；提交成功后才换内存镜像。`observe` 只记金标件，真实件忽略；重复序号拒绝且计数不变。
+6. 重启测试：固定配方下注入 8 步（晋升、熔断、窗口中段）→ drop → 重开 → 第 9 步仍是 `Recovered(Hybrid)`，第 11 步仍是 `Promoted(Deterministic)`，与未落盘的引擎逐步一致。另有一条专门覆盖“回升留下满窗口”。金标四类处置写完重开，计数与时刻原样。
+7. `tests/properties.rs` 增加 `restart_does_not_drop_watermark`。任意合法配方、任意结果序列、任意切分点：切分处重开后的 current / attained / clean_streak / 窗口 / 轨迹等于未重启引擎，之后每一步处置也相等；序列结束后再重开一次仍相等。轨迹上的 `recorded_at_ms` 必须是注入的 10000。
+8. `cargo fmt -p af-sampling`，然后 clippy 与 `cargo test -p af-sampling`。
+
+## ③ 证据
+
+命令都在 `source /data/af-factory/env.sh` 之后执行。
+
+`cargo check -p af-sampling --tests --benches`：`Finished dev profile`，退出码 0。
+
+`cargo clippy --all-targets -p af-sampling -- -D warnings`：`Finished dev profile [unoptimized + debuginfo] target(s) in 3.02s`，退出码 0，无警告。
+
+`cargo test -p af-sampling`：
+
+```
+running 39 tests
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+running 1 test
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+running 4 tests
+test three_invariants_hold_for_any_injection_sequence ... ok
+test golden_injection_does_not_change_lineage_counts ... ok
+test dual_watermark_moves_only_on_threshold_crossing ... ok
+test restart_does_not_drop_watermark ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+Doc-tests af_sampling
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+属性测试整组 1.40s。其中 `restart_does_not_drop_watermark` 单独跑是 1.23s（256 例，每例两次打开 SQLite，无 sleep）。
+
+新增单元测试：`manual_clock_set_and_advance_are_shared_by_clones`、`system_clock_reads_unix_millis`、`invalid_declaration_does_not_create_a_file`、`first_open_is_created_and_reentry_is_already_declared`、`file_pragmas_and_foreign_key_are_enforced`、`memory_open_uses_foreign_keys_and_normal_sync`、`declaration_mismatch_fails_closed_and_keeps_prior_state`、`schema_version_mismatch_fails_closed`、`foreign_table_is_not_this_ledger`、`non_sqlite_file_fails_closed`、`tampered_watermark_or_window_refuses_startup`、`tampered_trajectory_action_refuses_startup`、`restart_restores_promotion_and_continues_like_the_live_engine`、`restart_keeps_full_window_left_by_recover`、`restart_restores_golden_records_and_rejects_duplicates`、`outcome_bits_roundtrip_across_restart`、`seq_above_i64_is_rejected`。
+
+## ④ 反馈
+
+1. 恢复必须重放 `Engine::record`，不能在账本里再写一套升迁。连净回升优先于窗口积满评估，而且不清窗口，所以窗口行数可以等于配方 `window`。把“长度达到 window”当成损坏会在回升那一步把合法账本拒掉。`restart_keeps_full_window_left_by_recover` 把这个坑钉住了。
+2. 声明比较用的是校验后的规范 JSON 和 `f64` 位型，不是调用方原文。同一配方的空白差异可以重入；`p` 或 `defect_share` 的位不同（包括 `-0.0` 与 `0.0`）算不符。
+3. 水位时刻和金标 `observed_at_ms` 只审计。重入不改写旧时刻。判据不读钟。测试把钟拨到已知毫秒，用来区分“注入的时刻”和本机墙钟。
+4. `PRAGMA foreign_keys` 不落盘，每条连接都要再打开。文件库的 `journal_mode` 是 `wal`；内存库 SQLite 回报 `memory`，这是内存库的行为，外键和 `synchronous=NORMAL` 仍然打开。坏的 `root_id` 会被外键拒绝。
+5. 金标记录记在放行点 `observe`，不记注入器的随机数状态。真实件不入账。同一序号再写直接拒绝，避免告警被加两次。谱系判定与金标计数仍然没有共享状态，和 R4 的属性测试一致。
+
+## ⑤ 遗留
+
+1. CSP-1 的相位、连续合格计数和抽检随机数没有进这个账本。任务要求的是谱系轨迹、水位和金标注入记录。抽样状态机重启后续跑需要调用方自己保存。
+2. 打开时按轨迹重放，代价随事件条数增长。PoC 序列很短，没有另做快照捷径。快照如果和 `Engine::record` 分叉，就会悄悄改掉双水位。
+3. schema 版本固定为 1。版本不符直接失败，没有迁移。
+4. `restart_does_not_drop_watermark` 是 256 例抽样，不是穷尽证明。切分点覆盖空序列、中段和末尾。反例仍只出现在测试输出里，不写 `proptest-regressions`。
+5. `Cargo.lock` 只在 `af-sampling` 的依赖列表里加上已有的 `rusqlite`。锁文件不在 `crates/af-sampling/**` 里，但不改它，工作区就锁不住这次依赖。没有改其他 crate。
+
