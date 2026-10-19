@@ -1,82 +1,99 @@
-# RESULT-UPDATE — R3：af-trace criterion 基准（波次 1 ⑦/T9-6 部分）
+# RESULT-UPDATE — W2E：af-trace critical 自有落盘轨
 
 ## ① 结论
 
-**通过**。`af-trace` 增加 criterion 0.8.2 基准，覆盖常载入队、10 万事件洪峰背压、缺口计数扫描。`cargo test -p af-trace` 全绿（4 单元 + 1 集成，数量与 `RESULT.md` 一致，未增未减）。`cargo bench -p af-trace` 退出码 0，三条基准都跑完。`cargo clippy --all-targets -p af-trace -- -D warnings` 无新增警告。
+**通过**。critical 从内存 Vec 换成调用方目录里的 JSONL：落盘线程把整行写入 `critical.jsonl` 并 `sync_data`，成功后才推进镜像。写盘失败走 fail-closed（`PersistFailed` 退还事件，后续 `write_critical` 不再入队）。normal 仍是异步追加 `normal.jsonl`，队列满或写盘失败都记缺口。有界 `try_send`、事件原样退还、gap span 合并都保持 RESULT 已验证的语义。
 
-任务卡写「现有 14 测试」。本 crate 的 `#[test]` 实际是 5 个（`src/trace.rs` 4 个 + `tests/flood.rs` 1 个），与已验证的 `RESULT.md` 相同。没有为凑数加测试，也没有改这 5 个测试的断言。
+`trace.db` 用工作区已有的 rusqlite 0.32.1（bundled）：WAL、`busy_timeout=5000`、`synchronous=NORMAL`、`foreign_keys=ON`。`open` 返回 `Created` 或 `AlreadyDeclared`。schema 版本、行格式、critical 同步耐久性对不上，或库内缺口计数与 critical 文件的 `Σ(gap.count)` 不一致，启动失败。干净关闭后重开，critical 文件、缺口计数和 seq 原样可读。
+
+`cargo test -p af-trace` 全绿：单元 13（原 4 + 新 9）+ 洪峰 1。洪峰仍是 10 万 normal 事件，并满足「落盘文件行数 = 事件数 + 缺口数」。`cargo clippy --all-targets -p af-trace -- -D warnings` 无警告。`cargo bench -p af-trace` 退出码 0，三条基准都跑完。
 
 ## ② 步骤
 
-- `Cargo.toml`：dev-dependency `criterion = "0.8.2"`（引入时 crates.io 上的最新稳定版）。`[[bench]] name = "trace_paths"`，`harness = false`。bench target 默认不带 `test = true`，`cargo test` 不会执行它。
-- 工作区 `Cargo.lock`：只追加 criterion 0.8.2 及其传递依赖。根 `Cargo.toml` 未改。其他 crate 未改。
-- `Trace::hold_consumers` / `ConsumerHold`：挡住两侧落盘线程，使有界队列保持满。不改变 `write_critical` / `write_normal` 的语义。锁顺序固定为 critical → normal。`shutdown` 前必须 drop，否则补发缺口时 critical 缓冲一直满。
-- `benches/trace_paths.rs` 三条基准，计时窗口不含 `spawn` / `shutdown`：
-  - `steady_enqueue/write_normal_under_capacity`：容量 8192，每轮 1024 次 `write_normal`。批次小于容量，断言 `gap_counter == 0`（入队路径）。
-  - `flood_backpressure/write_normal_100k_full_queue`：与洪峰集成测试相同容量（normal 512 / critical 8192），消费延迟为 0。先 `hold_consumers` 再打满队列，然后计时 10 万次 `write_normal`。断言本轮丢弃数 ≥ 100_000 − 2，且 shutdown 后 `gap_reported == gap_counter`。不用 sleep 制造背压。
-  - `gap_count_scan/sum_gap_span_counts`：10 万条注入 `ts_ms` 的事件，按集成测试同一公式对 `gap.count` 求和（不是数 span 条数）。开跑前用夹具期望值自检。
-- 采样收成每组 10 个样本，避免默认 100 样本把 10 万事件路径重复过多次。
+- 先读 `RESULT.md`、`RESULT-UPDATE.md`（上一轮基准）和 `benches/trace_paths.rs`。未改有界缓冲、合并缺口、`shutdown` 顺序。
+- `src/clock.rs`：`Clock` / `SystemClock` / `ManualClock`。事件 `ts_ms` 只读注入钟。新测试用手动钟，不 `sleep`。
+- `src/store.rs`：`dir/trace.db`。首启 `Created`（建 `declaration` + `gap_state`），重入 `AlreadyDeclared` 并核对 `schema_version=1`、`line_format=jsonl`、`critical_durability=sync`。不符即 `DeclarationMismatch`，不改已有行。
+- `src/trace.rs`：`TraceConfig.dir` 必填。`spawn_consumer` 在写文件前拿镜像锁（`hold_consumers` 仍能把队列钉满）。critical 追加并 `sync_data` 后才 `push` 镜像；失败把事件放进 `unpersisted`，`shutdown` 返回 `PersistFailed`。normal 追加但不逐条 fsync，失败调用既有 `record_gap`。`shutdown` 成功时把 `gap_counter` / `gap_reported` 写成与 critical 文件一致的值。
+- 重开从文件恢复 seq（最大 seq + 1）和缺口基数。只有 jsonl、没有 `trace.db` 时拒绝当成首启。坏 JSONL 行拒绝打开。
+- `tests/flood.rs`：保留 10 万洪峰。补文件行数恒等，并 `drop` 后重开核对 `AlreadyDeclared` 与缺口基数。
+- 基准每个迭代使用独立临时目录，计时窗口仍不含 `spawn` / `shutdown`。
+- `Cargo.toml` 增加 `rusqlite = { workspace = true }`。`Cargo.lock` 只给 af-trace 加上已有的 `rusqlite` 边，没有新包。根 `Cargo.toml` 与其他 crate 未改。
 
 ## ③ 证据
 
-命令均在 `source /data/af-factory/env.sh` 之后执行。
+命令都在 `source /data/af-factory/env.sh` 之后执行。
 
-`cargo check -p af-trace --all-targets`：`Finished dev profile ... in 18.65s`（含 bench 目标）。
+`cargo check -p af-trace --all-targets`：`Finished dev profile ... target(s)`，退出码 0。
 
-`cargo fmt -p af-trace` 后 `cargo clippy --all-targets -p af-trace -- -D warnings`：`Finished dev profile ... in 0.16s`，无警告。
+`cargo fmt -p af-trace` 后 `cargo clippy --all-targets -p af-trace -- -D warnings`：`Finished dev profile ... in 0.82s`，无警告。
 
-`cargo test -p af-trace`（未出现 `Running benches/`）：
+`cargo test -p af-trace -- --nocapture`：
 
 ```
-running 4 tests
+running 13 tests
+test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
+test trace::tests::append_line_on_dev_full_returns_error ... ok
+test trace::tests::orphan_jsonl_and_bad_dir_fail_closed ... ok
+test store::tests::pragmas_created_then_already_declared_keeps_gap ... ok
+test trace::tests::critical_persist_failure_is_fail_closed ... ok
+test trace::tests::restart_restores_critical_log_gap_counter_seq_and_clock ... ok
+test trace::tests::declaration_gap_and_corrupt_log_fail_closed ... ok
+test store::tests::declaration_mismatch_fails_closed_without_rewriting ... ok
 test trace::tests::zero_loss_when_under_capacity_and_closed_channel_errors ... ok
+test trace::tests::normal_persist_failure_counts_gap ... ok
 test trace::tests::normal_overflow_drops_and_counts_gap ... ok
 test trace::tests::gap_spans_coalesce_when_critical_is_also_full ... ok
 test trace::tests::critical_full_returns_err_and_event_is_preserved ... ok
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.00s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.01s
 
 running 1 test
+==== 洪峰结果 ====
+normal 发送: 100000, 落盘: 968, 丢弃: 99032 (99.03%)
+gap_counter == gap_reported == 99032（gap span 条数: 11291）
+critical 落盘: 11391 行（检查点 100 + gap span 11291），重试次数: 113（被拒 seq 数: 113）
+落盘文件行数 12359 = 事件数 1068 + 缺口数 11291
 test flood_100k_normal_events ... ok
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.08s
 
 Doc-tests af_trace
 test result: ok. 0 passed; 0 failed
 ```
 
-`cargo bench -p af-trace`：`Finished bench profile [optimized] in 16.89s`，退出码 0。libtest 把 4 个单元测试标为 ignored（bench 剖面只跑基准，不跑 `#[test]`）；语义回归以上面的 `cargo test` 为准。
+原测试 5 个（`trace.rs` 4 + `flood.rs` 1）都还在。新增 9 个单元测试，所以是 13 + 1。洪峰里 1068 = 检查点 100 + normal 落盘 968，11291 是 gap span 行数；12359 = 1068 + 11291。丢弃条数仍由 `Σ(gap.count) == 99032` 对账，不把合并后的行数当成丢弃条数。
+
+`cargo bench -p af-trace`：`Finished bench profile [optimized] in 1m 28s`，退出码 0。libtest 把 13 个单元测试标为 ignored（bench 剖面不跑 `#[test]`）。
 
 ```
-Gnuplot not found, using plotters backend
 steady_enqueue/write_normal_under_capacity
-                        time:   [1.2664 ms 1.3363 ms 1.4473 ms]
-                        thrpt:  [707.53 Kelem/s 766.27 Kelem/s 808.58 Kelem/s]
-（Collecting 10 samples in estimated 3.0737 s (1705 iterations)；每轮 gap_counter == 0，否则 panic）
+                        time:   [634.83 µs 704.37 µs 765.35 µs]
+                        thrpt:  [1.3380 Melem/s 1.4538 Melem/s 1.6130 Melem/s]
+（Collecting 10 samples in estimated 3.0212 s (715 iterations)；每轮 gap_counter == 0）
 
 flood_backpressure/write_normal_100k_full_queue
-                        time:   [26.442 ms 26.593 ms 26.803 ms]
-                        thrpt:  [3.7310 Melem/s 3.7604 Melem/s 3.7818 Melem/s]
-（Collecting 10 samples in estimated 5.4176 s (165 iterations)；每轮丢弃数 ≥ 99998 且 shutdown 后 reported == counter）
+                        time:   [45.089 ms 45.923 ms 46.766 ms]
+                        thrpt:  [2.1383 Melem/s 2.1775 Melem/s 2.2178 Melem/s]
+（Collecting 10 samples in estimated 5.1930 s (55 iterations)；每轮 shutdown 后 reported == counter）
+Found 1 outliers among 10 measurements (10.00%)
+  1 (10.00%) high severe
 
 gap_count_scan/sum_gap_span_counts
-                        time:   [291.60 µs 293.58 µs 295.56 µs]
-                        thrpt:  [338.34 Melem/s 340.62 Melem/s 342.94 Melem/s]
-Found 1 outliers among 10 measurements (10.00%)
-  1 (10.00%) high mild
-（10 万事件求和；Collecting 10 samples in estimated 2.0115 s (6875 iterations)）
+                        time:   [351.95 µs 352.99 µs 354.28 µs]
+                        thrpt:  [282.26 Melem/s 283.29 Melem/s 284.13 Melem/s]
 ```
 
-洪峰单次约 26.6 ms / 10 万次，高于常载的约 1.3 ms / 1024 次（折合约 3.8 Melem/s 对 0.77 Melem/s）。背压路径在 critical 缓冲打满后走 `try_send` 失败并合并 pending，不再每条都成功入队，所以单条更短。这是现有 `record_gap` 的实测，不是另一套语义。
+环境没有 gnuplot，criterion 改用 plotters，基准不算失败。
 
 ## ④ 反馈
 
-- `Ok(seq)` / 事件原样退还 / `Σ(gap.count) == gap_counter` 都没改。基准只在这些不变量上加了断言，用来保证测到的是入队或丢弃，而不是跑偏的路径。
-- 洪峰集成测试仍用 `normal_consume_delay_us = 200` 证明慢消费者下的丢弃比例。基准把延迟设为 0，用 `hold_consumers` 把队列钉满，量的是 CPU 上的丢弃与缺口记账，不是 sleep 被算进时间。
-- `hold_consumers` 是为基准暴露的公开守卫。生产调用方若在 `shutdown` 前一直持有它，`flush_pending_gap` 会撞上既有的自旋上限。类型文档已写明必须先 drop。
-- 环境没有 gnuplot。criterion 自动改用 plotters，统计结果仍然打印，基准不算失败。
+- `Ok(seq)` 仍表示事件已进入有界缓冲，不是调用线程已经 fsync。确认发生在落盘线程：`write` + `sync_data` 成功后才进入镜像；`shutdown` 返回 `Ok` 时，该 seq 已在 `critical.jsonl`。若让 `write_critical` 自己等 fsync，缓冲会边等边被排空，RESULT 里「容量满立即 `CriticalFull`」的测试不再成立。写盘失败时事件在 `PersistFailed` 里，不在文件里。
+- 内存 `Vec` 还在，只做本次进程的镜像和 `hold_consumers` 的锁。持久事实是目录里的 JSONL 与 `trace.db`。重开后的历史用 `read_trace_log` 读文件，不在新镜像里。
+- 洪峰恒等式里的「缺口数」是 gap span 的行数。已验证的合并会把多次丢弃合成一行，丢弃条数仍看 `count` 之和。本轮洪峰是 11291 行 span、99032 次丢弃。
+- 慢消费者测试里原有的 `sleep` 留着，那是 RESULT 用来打满队列的手段。本轮新测试的时刻用 `ManualClock`，背压用 `hold_consumers`，不用 `sleep` 推断时间。
+- 没有新增第三方 crate。rusqlite 0.32.1 是工作区依赖，af-station / af-effect-gateway 已在用。
 
 ## ⑤ 遗留
 
-- 基准样本数为 10，只说明路径可跑、数量级稳定。不替代 `tests/flood.rs` 的不变量证明。
-- `record_gap` 在 critical 已满时仍会先构造再丢掉一条 gap 事件。这是已验证实现，本次不改。
-- `flush_pending_gap` 里原有的 `sleep(100µs)` 重试还在，位于 shutdown，不在计时窗口内。
-- 未做多进程崩溃恢复，也未把内存 sink 换成真实文件。与 `RESULT.md` ⑤ 相同，本次范围不含。
+- 进程在 critical 行已经 `sync_data`、`shutdown` 还没把缺口计数写进 `trace.db` 时被杀死，重开会因计数与文件不一致而失败，不会自动选边修复。未刷出的 pending gap 仍随进程消失，与 RESULT ⑤ 相同。
+- 没有日志轮转，也没有多进程同时写同一目录。
+- critical 是每条 `sync_data`。洪峰计时窗口外的 shutdown 会把已入队的 gap span 逐条同步。
+- 基准的丢弃路径从约 26.6 ms / 10 万次变成约 45.9 ms。计时窗口仍是 `hold_consumers` 钉满队列后的 `write_normal`，文件同步在窗口外。变慢来自每条缺口都要经注入钟构造 span，不是另一套丢弃语义。`gap_count_scan` 仍是基准文件里的本地求和，约 353 µs，不读盘。
