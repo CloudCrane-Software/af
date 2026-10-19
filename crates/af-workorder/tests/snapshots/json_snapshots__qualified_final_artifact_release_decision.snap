@@ -1,0 +1,24 @@
+---
+source: crates/af-workorder/tests/json_snapshots.rs
+expression: view
+---
+{
+  "actor_id": "user-approver",
+  "role": "Approver",
+  "permissions": [
+    "Read",
+    "Approve"
+  ],
+  "decision": "Approve",
+  "payload_hash": "[payload_hash]",
+  "signature": "[signature]",
+  "outcome": "closed",
+  "qualified_final_artifact": {
+    "artifact_id": "fa-1",
+    "is_final": true,
+    "qualified": true
+  },
+  "missing": [],
+  "detail": [],
+  "gate_message": "close 放行"
+}
