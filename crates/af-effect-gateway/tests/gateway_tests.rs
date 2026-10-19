@@ -233,6 +233,13 @@ fn t3_withdraw_within_window_means_never_sent() {
         err
     );
     assert_eq!(call_count(&counter), 0, "撤回后绝不发送");
+    let err = gw
+        .record_receipt(&s, &k, &json!({ "ok": true }))
+        .unwrap_err();
+    assert!(
+        matches!(err, GatewayError::Withdrawn { .. }),
+        "撤回后不能补回执: {err:?}"
+    );
 
     // 对照组：另一个意图窗口已关才去撤回 → 撤回失败（窗口保护有效）
     let k2 = key("WO-3003", "send_sms", 2);
@@ -310,6 +317,27 @@ fn t4_stale_epoch_requests_rejected() {
             current_epoch: 2
         }
     ));
+
+    // 分步回执不看窗口：窗口还开着也能落库，重复写入保留第一份，execute 只重放。
+    let k_rec = key("WO-4004", "dispatch_truck", 2);
+    gw.declare_intent(&s_newer, &k_rec, &json!({ "truck": "B-02" }), &wo)
+        .unwrap();
+    assert_eq!(
+        gw.record_receipt(&s_newer, &k_rec, &json!({ "ok": true }))
+            .unwrap(),
+        RecordOutcome::Recorded
+    );
+    assert_eq!(
+        gw.record_receipt(&s_newer, &k_rec, &json!({ "ok": false }))
+            .unwrap(),
+        RecordOutcome::AlreadyRecorded
+    );
+    let replay = gw
+        .execute(&s_newer, &k_rec, &wo, counting_effect(counter.clone()))
+        .unwrap();
+    assert!(replay.is_replay());
+    assert_eq!(replay.into_inner()["ok"], true, "后写的回执不能覆盖");
+    assert_eq!(call_count(&counter), 0);
 
     // 新纪元 session 可继续操作旧纪元声明的意图（崩溃恢复重放的路必须通）
     clock.advance(Duration::from_millis(30)); // 单调钟越过 30ms 窗口
@@ -788,19 +816,23 @@ fn t9_same_epoch_concurrent_execute_calls_out_once() {
     }
 
     let mut ran_fresh = 0usize;
-    let mut others = Vec::new();
+    let mut blocked = 0usize;
     for handle in handles {
         match handle.join().unwrap() {
             Ok(ExecuteOutcome::RanFresh { .. }) => ran_fresh += 1,
-            other => others.push(format!("{other:?}")),
+            Ok(ExecuteOutcome::Replayed { .. }) | Err(GatewayError::ExecutionInDoubt { .. }) => {
+                blocked += 1
+            }
+            other => panic!("F2: 非胜出方只能是重放或执行不明，实际 {other:?}"),
         }
     }
     assert_eq!(
         call_count(&counter),
         1,
-        "F2: 同纪元双连接并发 execute 外呼计数必须为 1，其他结果 {others:?}"
+        "F2: 同纪元双连接并发 execute 外呼计数必须为 1"
     );
-    assert_eq!(ran_fresh, 1, "F2: 恰好一方 RanFresh，其他结果 {others:?}");
+    assert_eq!(ran_fresh, 1, "F2: 恰好一方 RanFresh");
+    assert_eq!(blocked, 1, "F2: 另一方不得外呼");
 
     let gw = Gateway::open_with_clock(&db, window, clock).unwrap();
     let s = gw.attach().unwrap();
@@ -810,7 +842,235 @@ fn t9_same_epoch_concurrent_execute_calls_out_once() {
     assert!(again.is_replay(), "回执落库后只能重放");
     assert_eq!(call_count(&counter), 1, "重放不得再外呼");
 
+    let snap = gw.snapshot_intent(&k).unwrap().unwrap();
+    assert_eq!(snap.state, IntentState::Executed);
+    assert!(snap.receipt_json.is_some());
+
     let _ = std::fs::remove_file(&db);
+}
+
+// ===========================================================================
+// F2：崩溃留在 executing 时不自动重发。人工接管或显式 resume_execution。
+// ===========================================================================
+#[test]
+fn t10_executing_without_receipt_is_not_resent() {
+    let db = temp_db("t10");
+    let clock = manual_clock();
+    let window = Duration::from_millis(10);
+    let wo = in_progress_order("WO-F2B");
+    let payload = json!({ "n": 1 });
+    let k_take = key("WO-F2B", "pay", 1);
+    let k_resume = key("WO-F2B", "pay", 2);
+
+    {
+        let gw = Gateway::open_with_clock(&db, window, clock.clone()).unwrap();
+        let s = gw.attach().unwrap();
+        gw.declare_intent(&s, &k_take, &payload, &wo).unwrap();
+        gw.declare_intent(&s, &k_resume, &payload, &wo).unwrap();
+        clock.advance(window);
+        // 把已经走到的逻辑毫秒写回。否则重开的连接从高水位 0 起算，窗口看起来还开着。
+        gw.declare_intent(&s, &key("WO-F2B", "stamp", 9), &payload, &wo)
+            .unwrap();
+    }
+    crash_after_claim(&db, &clock, window, &k_take, &wo);
+    crash_after_claim(&db, &clock, window, &k_resume, &wo);
+
+    let counter = Arc::new(AtomicUsize::new(0));
+    let gw = Gateway::open_with_clock(&db, window, clock.clone()).unwrap();
+    let s = gw.attach().unwrap();
+    assert_eq!(s.epoch, 0);
+
+    let err = gw
+        .execute(&s, &k_take, &wo, counting_effect(counter.clone()))
+        .unwrap_err();
+    assert!(
+        matches!(err, GatewayError::ExecutionInDoubt { claim_epoch: 0, .. }),
+        "{err:?}"
+    );
+    assert_eq!(call_count(&counter), 0, "重入 executing 不得自动外呼");
+
+    let receipt = json!({ "txn_id": "T-manual" });
+    assert_eq!(
+        gw.record_receipt(&s, &k_take, &receipt).unwrap(),
+        RecordOutcome::Recorded
+    );
+    let replay = gw
+        .execute(&s, &k_take, &wo, counting_effect(counter.clone()))
+        .unwrap();
+    match replay {
+        ExecuteOutcome::Replayed { result, .. } => assert_eq!(result["txn_id"], "T-manual"),
+        ExecuteOutcome::RanFresh { .. } => panic!("接管后的回执必须重放"),
+    }
+    assert_eq!(call_count(&counter), 0);
+
+    // 纪元 +1 不把另一条 executing 放回 declared。
+    let err = gw
+        .execute(&s, &k_resume, &wo, counting_effect(counter.clone()))
+        .unwrap_err();
+    assert!(
+        matches!(err, GatewayError::ExecutionInDoubt { .. }),
+        "{err:?}"
+    );
+    let s2 = gw.resume().unwrap();
+    assert_eq!(s2.epoch, 1);
+    assert_eq!(
+        gw.snapshot_intent(&k_resume).unwrap().unwrap().state,
+        IntentState::Executing,
+        "resume 只推进纪元"
+    );
+    let err = gw
+        .execute(&s, &k_resume, &wo, counting_effect(counter.clone()))
+        .unwrap_err();
+    assert!(matches!(err, GatewayError::StaleEpoch { .. }), "{err:?}");
+    let err = gw
+        .execute(&s2, &k_resume, &wo, counting_effect(counter.clone()))
+        .unwrap_err();
+    assert!(
+        matches!(err, GatewayError::ExecutionInDoubt { .. }),
+        "{err:?}"
+    );
+    assert_eq!(call_count(&counter), 0, "新纪元重入仍不自动重发");
+
+    assert_eq!(
+        gw.resume_execution(&s2, &k_resume).unwrap(),
+        ResumeExecutionOutcome::Released
+    );
+    assert_eq!(
+        gw.snapshot_intent(&k_resume).unwrap().unwrap().state,
+        IntentState::Declared
+    );
+    let exec = gw
+        .execute(&s2, &k_resume, &wo, counting_effect(counter.clone()))
+        .unwrap();
+    assert!(!exec.is_replay(), "显式放回之后才允许再外呼一次");
+    assert_eq!(call_count(&counter), 1);
+    let again = gw
+        .execute(&s2, &k_resume, &wo, counting_effect(counter.clone()))
+        .unwrap();
+    assert!(again.is_replay());
+    assert_eq!(call_count(&counter), 1);
+
+    let _ = std::fs::remove_file(&db);
+}
+
+/// 外呼进行中纪元被推进：回执不得由旧会话落库，新会话也不得自动重发。
+#[test]
+fn t11_epoch_bumped_during_call_does_not_store_or_resend() {
+    let db = temp_db("t11");
+    let clock = manual_clock();
+    let window = Duration::from_millis(5);
+    let gw = Gateway::open_with_clock(&db, window, clock.clone()).unwrap();
+    let s = gw.attach().unwrap();
+    let wo = in_progress_order("WO-F2C");
+    let k = key("WO-F2C", "pay", 1);
+    gw.declare_intent(&s, &k, &json!({ "n": 1 }), &wo).unwrap();
+    clock.advance(window);
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let db_for_call = db.clone();
+    let clock_for_call = clock.clone();
+    let calls_for_call = Arc::clone(&calls);
+    let err = gw
+        .execute(&s, &k, &wo, move |_payload: &Value| {
+            calls_for_call.fetch_add(1, Ordering::SeqCst);
+            let other = Gateway::open_with_clock(&db_for_call, window, clock_for_call).unwrap();
+            let bumped = other.resume().unwrap();
+            assert_eq!(bumped.epoch, 1);
+            Ok(json!({ "txn_id": "T-inflight" }))
+        })
+        .unwrap_err();
+    match err {
+        GatewayError::StaleEpoch {
+            request_epoch,
+            current_epoch,
+        } => {
+            assert_eq!(request_epoch, 0);
+            assert_eq!(current_epoch, 1);
+        }
+        other => panic!("外呼期间纪元变化后不得把回执写成 RanFresh: {other:?}"),
+    }
+    assert_eq!(call_count(&calls), 1);
+    let snap = gw.snapshot_intent(&k).unwrap().unwrap();
+    assert_eq!(snap.state, IntentState::Executing);
+    assert!(snap.receipt_json.is_none());
+
+    let err = gw
+        .record_receipt(&s, &k, &json!({ "txn_id": "T-inflight" }))
+        .unwrap_err();
+    assert!(
+        matches!(err, GatewayError::StaleEpoch { .. }),
+        "旧纪元不能补回执: {err:?}"
+    );
+
+    let s2 = gw.attach().unwrap();
+    assert_eq!(s2.epoch, 1);
+    let err = gw
+        .execute(&s2, &k, &wo, counting_effect(calls.clone()))
+        .unwrap_err();
+    assert!(
+        matches!(err, GatewayError::ExecutionInDoubt { .. }),
+        "{err:?}"
+    );
+    assert_eq!(call_count(&calls), 1, "新纪元重入不得自动重发");
+
+    assert_eq!(
+        gw.record_receipt(&s2, &k, &json!({ "txn_id": "T-inflight" }))
+            .unwrap(),
+        RecordOutcome::Recorded
+    );
+    let replay = gw
+        .execute(&s2, &k, &wo, counting_effect(calls.clone()))
+        .unwrap();
+    assert!(replay.is_replay());
+    assert_eq!(replay.into_inner()["txn_id"], "T-inflight");
+    assert_eq!(call_count(&calls), 1);
+
+    let _ = std::fs::remove_file(&db);
+}
+
+fn crash_after_claim(
+    db: &std::path::Path,
+    clock: &ManualClock,
+    window: Duration,
+    key: &IntentKey,
+    wo: &WorkOrder,
+) {
+    let gw = Gateway::open_with_clock(db, window, clock.clone()).unwrap();
+    let session = gw.attach().unwrap();
+    let observed_db = db.to_path_buf();
+    let observed_clock = clock.clone();
+    let observed_key = key.clone();
+    let caught = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = gw.execute(
+            &session,
+            key,
+            wo,
+            move |_payload: &Value| -> Result<Value> {
+                let obs =
+                    Gateway::open_with_clock(&observed_db, window, observed_clock.clone()).unwrap();
+                let snap = obs.snapshot_intent(&observed_key).unwrap().unwrap();
+                assert_eq!(snap.state, IntentState::Executing, "外呼前必须已经提交抢占");
+                assert!(snap.receipt_json.is_none());
+                assert_eq!(snap.claim_epoch, Some(session.epoch));
+                panic!("crash before receipt");
+            },
+        );
+    }));
+    let message = panic_message(caught.expect_err("闭包必须在落回执前崩溃"));
+    assert!(
+        message.contains("crash before receipt"),
+        "崩溃点不对: {message}"
+    );
+}
+
+fn panic_message(err: Box<dyn std::any::Any + Send>) -> String {
+    if let Some(message) = err.downcast_ref::<&str>() {
+        return (*message).to_string();
+    }
+    if let Some(message) = err.downcast_ref::<String>() {
+        return message.clone();
+    }
+    "unknown panic".to_string()
 }
 
 fn assert_order_state_rejected(
