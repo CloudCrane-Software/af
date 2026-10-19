@@ -4,5 +4,6 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { workspace = true }
+# 1.0.69。与根上的 thiserror 2.0.21 主版本不同，继承 `thiserror` 会升到 2。
 thiserror = "1.0"
