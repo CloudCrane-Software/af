@@ -12,6 +12,7 @@
 //!
 //! JIT 护栏挂在本 crate 上，不改 schema v1 的校验语义。
 //! best-of-N 之前走 [`Guardrails::screen_before_best_of_n`]。
+//! 修复之前走 [`Guardrails::judge_repair`]：只修崩溃，不修低分。
 //! 时刻用 [`Clock`] 注入，只抄进 [`Ledger`]，不参与放行。
 
 mod archive;
@@ -34,7 +35,8 @@ pub use codes::{
 pub use error::{ErrorCode, IrError, IrFailure};
 pub use fields::{FieldSpec, V1_FIELDS};
 pub use guardrail::{
-    AdmittedCandidate, Candidate, CandidateIr, Guardrails, RejectedCandidate, ScreenBatch,
+    AdmittedCandidate, Candidate, CandidateIr, CrashCode, FailureClass, Guardrails,
+    RejectedCandidate, RepairDenial, RepairPermit, RepairVerdict, RunResult, ScreenBatch,
 };
 pub use ledger::{GuardEvent, GuardReason, Ledger, LedgerEntry, LedgerError, LEDGER_VERSION};
 pub use model::{

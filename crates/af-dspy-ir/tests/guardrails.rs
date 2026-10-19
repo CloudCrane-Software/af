@@ -1,12 +1,13 @@
-//! best-of-N 前的静态 schema 预筛。不合格候选不得进入放行列表。
+//! JIT 护栏：best-of-N 前的静态 schema 预筛，以及 repair_only_on_error。
 
 use std::collections::BTreeMap;
 
 use af_dspy_ir::{
-    parse_program, to_json, Candidate, CandidateIr, Clock, Demo, ErrorCode, Field, GuardEvent,
-    Guardrails, Ledger, ManualClock, OptimizationState, OptimizationStatus, Predictor,
-    PredictorConfig, Program, Signature, IR_VERSION, JG_BLANK_BATCH, JG_BLANK_CANDIDATE,
-    JG_DUPLICATE_CANDIDATE,
+    parse_program, to_json, Candidate, CandidateIr, Clock, CrashCode, Demo, ErrorCode,
+    FailureClass, Field, GuardEvent, Guardrails, Ledger, ManualClock, OptimizationState,
+    OptimizationStatus, Predictor, PredictorConfig, Program, RunResult, Signature, SystemClock,
+    E_INFRA, E_LOW_SCORE, E_SCORE, E_SUBJECT, IR_VERSION, JG_BLANK_BATCH, JG_BLANK_CANDIDATE,
+    JG_BLANK_RUN, JG_DUPLICATE_CANDIDATE, JG_LOW_SCORE, JG_NOT_A_CRASH, JG_SCORE_ON_CRASH,
 };
 use serde_json::{json, Value};
 
@@ -434,4 +435,302 @@ fn restored_ledger_does_not_mint_admissions() {
     assert!(batch.rejected()[0].has_code(ErrorCode::MissingFieldName.as_str()));
     assert_eq!(guards.ledger().entries()[1].at_ms, 12);
     assert_eq!(guards.ledger().len(), 2);
+}
+
+fn run(id: &str, failure: Option<FailureClass>, scored: bool) -> RunResult {
+    RunResult {
+        run_id: id.to_string(),
+        failure,
+        scored,
+    }
+}
+
+#[test]
+fn failure_codes_parse_only_on_exact_match() {
+    assert_eq!(FailureClass::parse(E_INFRA), FailureClass::Infra);
+    assert_eq!(FailureClass::parse(E_SUBJECT), FailureClass::Subject);
+    assert_eq!(FailureClass::parse(E_SCORE), FailureClass::LowScore);
+    assert_eq!(FailureClass::parse(E_LOW_SCORE), FailureClass::LowScore);
+    assert_eq!(FailureClass::Infra.as_code(), E_INFRA);
+    assert_eq!(FailureClass::Subject.as_code(), E_SUBJECT);
+    assert_eq!(FailureClass::LowScore.as_code(), E_SCORE);
+    assert_eq!(
+        FailureClass::parse("E_INFRA_EXTRA"),
+        FailureClass::Other("E_INFRA_EXTRA".to_string())
+    );
+    assert_eq!(
+        FailureClass::parse("e_infra"),
+        FailureClass::Other("e_infra".to_string())
+    );
+    assert_eq!(
+        FailureClass::parse("E_SUBJECT\n"),
+        FailureClass::Other("E_SUBJECT\n".to_string())
+    );
+}
+
+#[test]
+fn repair_allows_only_unscored_infra_and_subject() {
+    let (clock, mut guards) = guards(42);
+    let cases = [
+        ("run-infra", Some(FailureClass::Infra), CrashCode::Infra),
+        (
+            "run-subject",
+            Some(FailureClass::Subject),
+            CrashCode::Subject,
+        ),
+        (
+            "run-infra-text",
+            Some(FailureClass::Other(E_INFRA.to_string())),
+            CrashCode::Infra,
+        ),
+        (
+            "run-subject-text",
+            Some(FailureClass::Other(E_SUBJECT.to_string())),
+            CrashCode::Subject,
+        ),
+    ];
+    for (id, failure, code) in cases {
+        let verdict = guards.judge_repair(&run(id, failure, false));
+        let permit = verdict.permit().expect(id);
+        assert!(verdict.denial().is_none());
+        assert_eq!(permit.run_id(), id);
+        assert_eq!(permit.code(), code);
+        assert_eq!(permit.code().as_str(), code.as_str());
+        assert_eq!(permit.code().to_string(), code.as_str());
+    }
+    assert!(guards
+        .ledger()
+        .entries()
+        .iter()
+        .all(|entry| entry.at_ms == 42));
+
+    clock.set(-8);
+    let later = guards.judge_repair(&run("run-later", Some(FailureClass::Infra), false));
+    assert_eq!(later.permit().expect("later").code(), CrashCode::Infra);
+    assert_eq!(guards.ledger().entries()[4].at_ms, -8);
+    assert_eq!(guards.ledger().entries()[0].at_ms, 42);
+    match &guards.ledger().entries()[4].event {
+        GuardEvent::RepairAllow {
+            run_id,
+            code,
+            scored,
+        } => {
+            assert_eq!(run_id, "run-later");
+            assert_eq!(code, E_INFRA);
+            assert!(!*scored);
+        }
+        other => panic!("应为放行 {other:?}"),
+    }
+    let loaded = Ledger::from_json(&guards.ledger().to_json().expect("json")).expect("reload");
+    assert_eq!(loaded.entries(), guards.ledger().entries());
+}
+
+#[test]
+fn low_score_is_always_denied() {
+    let (_clock, mut guards) = guards(5);
+    let cases = [
+        ("low", Some(FailureClass::LowScore), true, Some(E_SCORE)),
+        (
+            "low-unscored",
+            Some(FailureClass::LowScore),
+            false,
+            Some(E_SCORE),
+        ),
+        (
+            "score-code",
+            Some(FailureClass::Other(E_SCORE.to_string())),
+            false,
+            Some(E_SCORE),
+        ),
+        (
+            "low-score-code",
+            Some(FailureClass::parse(E_LOW_SCORE)),
+            true,
+            Some(E_SCORE),
+        ),
+        (
+            "low-score-text",
+            Some(FailureClass::Other(E_LOW_SCORE.to_string())),
+            true,
+            Some(E_LOW_SCORE),
+        ),
+    ];
+    for (index, (id, failure, scored, ledger_code)) in cases.into_iter().enumerate() {
+        let verdict = guards.judge_repair(&run(id, failure, scored));
+        assert!(verdict.permit().is_none(), "{id}");
+        let denial = verdict.denial().expect(id);
+        assert_eq!(denial.reason_code(), JG_LOW_SCORE);
+        assert_eq!(denial.message(), "低分类一律拒绝修复");
+        assert_eq!(denial.ledger_seq(), u64::try_from(index).unwrap() + 1);
+        match &guards.ledger().entries()[index].event {
+            GuardEvent::RepairDeny {
+                failure_code,
+                scored: recorded,
+                reason_code,
+                ..
+            } => {
+                assert_eq!(failure_code.as_deref(), ledger_code);
+                assert_eq!(*recorded, scored);
+                assert_eq!(reason_code, JG_LOW_SCORE);
+            }
+            other => panic!("{id} 应拒绝 {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn non_crash_and_scored_crash_are_denied() {
+    let (clock, mut guards) = guards(9);
+    // 先记一条预筛，确认修复判定只追加、不改写已有行。
+    let screened = guards.screen_before_best_of_n("bo", &[candidate("c1", valid_program())]);
+    assert_eq!(screened.admitted()[0].ledger_seq(), 1);
+
+    struct Case {
+        id: &'static str,
+        failure: Option<FailureClass>,
+        scored: bool,
+        reason: &'static str,
+        message: &'static str,
+        failure_code: Option<&'static str>,
+    }
+    let cases = [
+        Case {
+            id: "ok",
+            failure: None,
+            scored: false,
+            reason: JG_NOT_A_CRASH,
+            message: "没有崩溃码，拒绝修复",
+            failure_code: None,
+        },
+        Case {
+            id: "scored-ok",
+            failure: None,
+            scored: true,
+            reason: JG_NOT_A_CRASH,
+            message: "没有崩溃码，拒绝修复",
+            failure_code: None,
+        },
+        Case {
+            id: "timeout",
+            failure: Some(FailureClass::Other("E_TIMEOUT".to_string())),
+            scored: false,
+            reason: JG_NOT_A_CRASH,
+            message: "失败码 E_TIMEOUT 不是崩溃类，拒绝修复",
+            failure_code: Some("E_TIMEOUT"),
+        },
+        Case {
+            id: "lower",
+            failure: Some(FailureClass::Other("e_infra".to_string())),
+            scored: true,
+            reason: JG_NOT_A_CRASH,
+            message: "失败码 e_infra 不是崩溃类，拒绝修复",
+            failure_code: Some("e_infra"),
+        },
+        Case {
+            id: "padded",
+            failure: Some(FailureClass::Other("E_INFRA ".to_string())),
+            scored: false,
+            reason: JG_NOT_A_CRASH,
+            message: "失败码 E_INFRA  不是崩溃类，拒绝修复",
+            failure_code: Some("E_INFRA "),
+        },
+        Case {
+            id: "infra-scored",
+            failure: Some(FailureClass::Infra),
+            scored: true,
+            reason: JG_SCORE_ON_CRASH,
+            message: "崩溃码 E_INFRA 附带了评测分数，拒绝修复",
+            failure_code: Some(E_INFRA),
+        },
+        Case {
+            id: "subject-scored",
+            failure: Some(FailureClass::Subject),
+            scored: true,
+            reason: JG_SCORE_ON_CRASH,
+            message: "崩溃码 E_SUBJECT 附带了评测分数，拒绝修复",
+            failure_code: Some(E_SUBJECT),
+        },
+        Case {
+            id: "subject-text-scored",
+            failure: Some(FailureClass::Other(E_SUBJECT.to_string())),
+            scored: true,
+            reason: JG_SCORE_ON_CRASH,
+            message: "崩溃码 E_SUBJECT 附带了评测分数，拒绝修复",
+            failure_code: Some(E_SUBJECT),
+        },
+        Case {
+            id: " ",
+            failure: Some(FailureClass::Infra),
+            scored: false,
+            reason: JG_BLANK_RUN,
+            message: "run_id 为空，拒绝修复",
+            failure_code: Some(E_INFRA),
+        },
+        Case {
+            id: "",
+            failure: Some(FailureClass::LowScore),
+            scored: true,
+            reason: JG_BLANK_RUN,
+            message: "run_id 为空，拒绝修复",
+            failure_code: Some(E_SCORE),
+        },
+        Case {
+            id: "blank-code",
+            failure: Some(FailureClass::Other(String::new())),
+            scored: false,
+            reason: JG_NOT_A_CRASH,
+            message: "失败码为空，不是崩溃类，拒绝修复",
+            failure_code: None,
+        },
+    ];
+
+    for case in &cases {
+        let verdict = guards.judge_repair(&run(case.id, case.failure.clone(), case.scored));
+        assert!(verdict.permit().is_none(), "{}", case.id);
+        let denial = verdict.denial().expect(case.id);
+        assert_eq!(denial.reason_code(), case.reason, "{}", case.id);
+        assert_eq!(denial.message(), case.message, "{}", case.id);
+    }
+
+    let entries = guards.ledger().entries();
+    assert_eq!(entries[0].at_ms, 9);
+    match &entries[0].event {
+        GuardEvent::ScreenAdmit { candidate_id, .. } => assert_eq!(candidate_id, "c1"),
+        other => panic!("预筛行被改写 {other:?}"),
+    }
+    for (offset, case) in cases.iter().enumerate() {
+        let entry = &entries[offset + 1];
+        assert_eq!(entry.at_ms, 9);
+        assert_eq!(entry.seq, u64::try_from(offset + 2).unwrap());
+        match &entry.event {
+            GuardEvent::RepairDeny {
+                run_id,
+                failure_code,
+                scored,
+                reason_code,
+                message,
+            } => {
+                assert_eq!(run_id, case.id);
+                assert_eq!(failure_code.as_deref(), case.failure_code);
+                assert_eq!(*scored, case.scored);
+                assert_eq!(reason_code, case.reason);
+                assert_eq!(message, case.message);
+            }
+            other => panic!("{} 应是拒绝 {other:?}", case.id),
+        }
+    }
+
+    clock.advance(4);
+    let allowed = guards.judge_repair(&run("after", Some(FailureClass::Subject), false));
+    assert_eq!(allowed.permit().expect("subject").ledger_seq(), 13);
+    assert_eq!(guards.ledger().entries()[0].at_ms, 9);
+    assert_eq!(guards.ledger().entries()[12].at_ms, 13);
+    let loaded = Ledger::from_json(&guards.ledger().to_json().expect("json")).expect("reload");
+    assert_eq!(loaded.entries(), guards.ledger().entries());
+}
+
+#[test]
+fn system_clock_reads_unix_milliseconds() {
+    let now = SystemClock::new().now_ms();
+    assert!(now > 1_700_000_000_000, "{now}");
 }

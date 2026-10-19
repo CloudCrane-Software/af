@@ -5,12 +5,18 @@
 //! 每一条候选的放行或拒绝都写进账本，原因是 DI 码或 JG 码。
 //!
 //! [`AdmittedCandidate`] 没有公开构造。评测方只能拿这次预筛交出来的副本。
+//!
+//! 修复判定只放行没有评测分数的 `E_INFRA` / `E_SUBJECT`。低分类一律拒绝。
+//! [`RepairPermit`] 没有公开构造。
 
 use std::collections::BTreeSet;
 
 use serde_json::Value;
 
-use crate::codes::{JG_BLANK_BATCH, JG_BLANK_CANDIDATE, JG_DUPLICATE_CANDIDATE};
+use crate::codes::{
+    E_INFRA, E_LOW_SCORE, E_SCORE, E_SUBJECT, JG_BLANK_BATCH, JG_BLANK_CANDIDATE, JG_BLANK_RUN,
+    JG_DUPLICATE_CANDIDATE, JG_LOW_SCORE, JG_NOT_A_CRASH, JG_SCORE_ON_CRASH,
+};
 use crate::error::IrFailure;
 use crate::ledger::{GuardEvent, GuardReason, Ledger};
 use crate::model::{blank, Program};
@@ -147,6 +153,64 @@ impl<C: Clock> Guardrails<C> {
             ledger_seq: seq,
             program_id,
             reasons,
+        }
+    }
+
+    /// 修复动作前的唯一判定挂接点。只修崩溃，不修低分。
+    ///
+    /// # Examples
+    /// ```
+    /// use af_dspy_ir::{FailureClass, Guardrails, ManualClock, RunResult, JG_LOW_SCORE};
+    ///
+    /// let mut guards = Guardrails::new(ManualClock::new(1));
+    /// let verdict = guards.judge_repair(&RunResult {
+    ///     run_id: "run-1".into(),
+    ///     failure: Some(FailureClass::LowScore),
+    ///     scored: true,
+    /// });
+    /// assert!(verdict.permit().is_none());
+    /// assert_eq!(verdict.denial().unwrap().reason_code(), JG_LOW_SCORE);
+    /// ```
+    pub fn judge_repair(&mut self, run: &RunResult) -> RepairVerdict {
+        let at_ms = self.clock.now_ms();
+        let failure_code = ledger_failure_code(run.failure.as_ref());
+        match decide(run) {
+            RepairChoice::Allow(code) => {
+                let seq = self.ledger.append(
+                    at_ms,
+                    GuardEvent::RepairAllow {
+                        run_id: run.run_id.clone(),
+                        code: code.as_str().to_string(),
+                        scored: false,
+                    },
+                );
+                RepairVerdict::Allow(RepairPermit {
+                    run_id: run.run_id.clone(),
+                    code,
+                    ledger_seq: seq,
+                })
+            }
+            RepairChoice::Deny {
+                reason_code,
+                message,
+            } => {
+                let seq = self.ledger.append(
+                    at_ms,
+                    GuardEvent::RepairDeny {
+                        run_id: run.run_id.clone(),
+                        failure_code,
+                        scored: run.scored,
+                        reason_code: reason_code.to_string(),
+                        message: message.clone(),
+                    },
+                );
+                RepairVerdict::Deny(RepairDenial {
+                    run_id: run.run_id.clone(),
+                    ledger_seq: seq,
+                    reason_code: reason_code.to_string(),
+                    message,
+                })
+            }
         }
     }
 }
@@ -300,5 +364,210 @@ fn reason(code: &str, message: impl Into<String>) -> GuardReason {
     GuardReason {
         code: code.to_string(),
         message: message.into(),
+    }
+}
+
+/// 上次运行的失败码分类。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FailureClass {
+    /// 基础设施崩溃，码 [`E_INFRA`]。
+    Infra,
+    /// 候选程序自身崩溃，码 [`E_SUBJECT`]。
+    Subject,
+    /// 低分。一律拒绝修复。
+    LowScore,
+    /// 其他失败码。文本原样保留。
+    Other(String),
+}
+
+impl FailureClass {
+    /// 按失败码字符串归类。只认精确的崩溃码和低分码。
+    pub fn parse(code: &str) -> Self {
+        match code {
+            E_INFRA => Self::Infra,
+            E_SUBJECT => Self::Subject,
+            E_SCORE | E_LOW_SCORE => Self::LowScore,
+            other => Self::Other(other.to_string()),
+        }
+    }
+
+    /// 账本上的原始码。低分枚举写成 [`E_SCORE`]。
+    pub fn as_code(&self) -> &str {
+        match self {
+            Self::Infra => E_INFRA,
+            Self::Subject => E_SUBJECT,
+            Self::LowScore => E_SCORE,
+            Self::Other(code) => code.as_str(),
+        }
+    }
+
+    fn normalized(self) -> Self {
+        match self {
+            Self::Other(code) => Self::parse(&code),
+            other => other,
+        }
+    }
+}
+
+/// 上次运行结果。`scored` 表示这次运行留下了评测分数。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RunResult {
+    pub run_id: String,
+    pub failure: Option<FailureClass>,
+    pub scored: bool,
+}
+
+/// 允许修复的崩溃类。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CrashCode {
+    Infra,
+    Subject,
+}
+
+impl CrashCode {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Infra => E_INFRA,
+            Self::Subject => E_SUBJECT,
+        }
+    }
+}
+
+impl std::fmt::Display for CrashCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+/// 修复判定。忽略它就会丢掉账本序号，所以必须使用。
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use]
+pub enum RepairVerdict {
+    Allow(RepairPermit),
+    Deny(RepairDenial),
+}
+
+impl RepairVerdict {
+    pub fn permit(&self) -> Option<&RepairPermit> {
+        match self {
+            Self::Allow(permit) => Some(permit),
+            Self::Deny(_) => None,
+        }
+    }
+
+    pub fn denial(&self) -> Option<&RepairDenial> {
+        match self {
+            Self::Deny(denial) => Some(denial),
+            Self::Allow(_) => None,
+        }
+    }
+}
+
+/// 允许进入修复的凭证。只有没有分数的崩溃类能拿到。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepairPermit {
+    run_id: String,
+    code: CrashCode,
+    ledger_seq: u64,
+}
+
+impl RepairPermit {
+    pub fn run_id(&self) -> &str {
+        &self.run_id
+    }
+
+    pub fn code(&self) -> CrashCode {
+        self.code
+    }
+
+    /// 对应账本里 `repair_allow` 那一行的序号。
+    pub fn ledger_seq(&self) -> u64 {
+        self.ledger_seq
+    }
+}
+
+/// 拒绝修复。低分、非崩溃、带分数的崩溃码、空运行 id 都在这里。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepairDenial {
+    run_id: String,
+    ledger_seq: u64,
+    reason_code: String,
+    message: String,
+}
+
+impl RepairDenial {
+    pub fn run_id(&self) -> &str {
+        &self.run_id
+    }
+
+    pub fn ledger_seq(&self) -> u64 {
+        self.ledger_seq
+    }
+
+    pub fn reason_code(&self) -> &str {
+        &self.reason_code
+    }
+
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+}
+
+enum RepairChoice {
+    Allow(CrashCode),
+    Deny {
+        reason_code: &'static str,
+        message: String,
+    },
+}
+
+fn decide(run: &RunResult) -> RepairChoice {
+    if blank(&run.run_id) {
+        return RepairChoice::Deny {
+            reason_code: JG_BLANK_RUN,
+            message: "run_id 为空，拒绝修复".to_string(),
+        };
+    }
+    let class = run.failure.clone().map(FailureClass::normalized);
+    if matches!(class, Some(FailureClass::LowScore)) {
+        return RepairChoice::Deny {
+            reason_code: JG_LOW_SCORE,
+            message: "低分类一律拒绝修复".to_string(),
+        };
+    }
+    let crash = match class {
+        Some(FailureClass::Infra) => Some(CrashCode::Infra),
+        Some(FailureClass::Subject) => Some(CrashCode::Subject),
+        _ => None,
+    };
+    if let Some(code) = crash {
+        if run.scored {
+            return RepairChoice::Deny {
+                reason_code: JG_SCORE_ON_CRASH,
+                message: format!("崩溃码 {code} 附带了评测分数，拒绝修复"),
+            };
+        }
+        return RepairChoice::Allow(code);
+    }
+    RepairChoice::Deny {
+        reason_code: JG_NOT_A_CRASH,
+        message: not_a_crash_message(run),
+    }
+}
+
+fn not_a_crash_message(run: &RunResult) -> String {
+    match run.failure.as_ref() {
+        None => "没有崩溃码，拒绝修复".to_string(),
+        Some(class) if blank(class.as_code()) => "失败码为空，不是崩溃类，拒绝修复".to_string(),
+        Some(class) => format!("失败码 {} 不是崩溃类，拒绝修复", class.as_code()),
+    }
+}
+
+fn ledger_failure_code(failure: Option<&FailureClass>) -> Option<String> {
+    let code = failure?.as_code();
+    if blank(code) {
+        None
+    } else {
+        Some(code.to_string())
     }
 }
