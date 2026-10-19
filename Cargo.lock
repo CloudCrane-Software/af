@@ -149,7 +149,18 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
+name = "anes"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
+
+[[package]]
+name = "anstyle"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
+
+[[package]]
 name = "antlr4rust"
 version = "0.3.0-rc2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -165,18 +176,6 @@ dependencies = [
  "typed-arena",
  "uuid",
 ]
-=======
-name = "anes"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b46cbb362ab8752921c97e041f5e366ee6297bd428a31275b9fcf1e380f7299"
-
-[[package]]
-name = "anstyle"
-version = "1.0.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
->>>>>>> af-trace: 添加 criterion 0.8.2 基准（常载入队、洪峰背压、缺口扫描）
 
 [[package]]
 name = "anyhow"
@@ -615,7 +614,6 @@ dependencies = [
 ]
 
 [[package]]
-<<<<<<< HEAD
 name = "cpufeatures"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -625,7 +623,6 @@ dependencies = [
 ]
 
 [[package]]
-=======
 name = "criterion"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -692,7 +689,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "460fbee9c2c2f33933d720630a6a0bac33ba7053db5344fac858d4b8952d77d5"
 
 [[package]]
->>>>>>> af-trace: 添加 criterion 0.8.2 基准（常载入队、洪峰背压、缺口扫描）
 name = "crypto-bigint"
 version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
