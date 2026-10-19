@@ -5,6 +5,10 @@
 //! 配方与 af-station 相同：WAL、`busy_timeout=5000ms`、`synchronous=NORMAL`、`foreign_keys=ON`。
 //!
 //! 首启 [`open`] 返回 [`OpenOutcome::Created`]：生成密钥、写 `root.key`、签发引导凭证并落库。
+//! 两件先写在目录里的 `.init`，就绪后先把库、再把密钥 rename 进活目录，活目录才同时看得到。
+//! 崩溃落在发布中途时，下一次 [`open`] 用同一把暂存密钥把发布做完，不另生成。
+//! 活目录里只剩一件、且 `.init` 续不上时返回 [`RootError::Incomplete`]。
+//! [`quarantine_incomplete`] 把那一件改名挪走，不删除字节；调用之后才能重新首启。
 //! 重入返回 [`OpenOutcome::AlreadyDeclared`]：读回同一把密钥，引导凭证按原文重放，不重新签名。
 //! 文件损坏、权限不是 `0600`、schema 或声明对不上，都直接失败，不生成新密钥。
 //!
@@ -33,6 +37,17 @@ const ROOT_KEY_NAME: &str = "root.key";
 const DB_NAME: &str = "credential.db";
 const PENDING_NAME: &str = "root.key.pending";
 const LOCK_NAME: &str = ".root.lock";
+/// 首启暂存目录。活目录的存在性检查不看它。
+const STAGE_DIR_NAME: &str = ".init";
+const READY_NAME: &str = "READY";
+const ABANDONED_KEY_NAME: &str = "root.key.abandoned";
+const ABANDONED_DB_NAME: &str = "credential.db.abandoned";
+/// 测试注入：密钥已在 `.init`，库还没有。
+const FAULT_AFTER_STAGE_KEY: u8 = 1;
+/// 测试注入：`.init` 里两件和 READY 都在，还没 rename 进活目录。
+const FAULT_AFTER_READY: u8 = 2;
+/// 测试注入：库已经进活目录，密钥还在 `.init`。
+const FAULT_AFTER_PUBLISH_DB: u8 = 3;
 
 /// `credential.db` 里 `schema_meta.schema_version` 的唯一接受值。
 pub const SCHEMA_VERSION: i64 = 1;
@@ -254,17 +269,89 @@ fn open_inner(
                     what: "orphan rotation journal".into(),
                 });
             }
+            if publish_can_resume(dir)? {
+                finish_publish(dir)?;
+                return reopen_store(dir, spec, clock);
+            }
             if !allow_create {
                 return Err(RootError::NotInitialized {
                     path: dir.to_path_buf(),
                 });
             }
+            discard_incomplete_stage(dir)?;
             create_store(dir, spec, clock)
         }
-        (true, true) => reopen_store(dir, spec, clock),
-        _ => Err(RootError::Incomplete {
-            what: "root.key and credential.db must both exist".into(),
+        (true, true) => {
+            if publish_can_resume(dir)? {
+                finish_publish(dir)?;
+            } else {
+                discard_stray_stage(dir)?;
+            }
+            reopen_store(dir, spec, clock)
+        }
+        _ => {
+            if publish_can_resume(dir)? {
+                finish_publish(dir)?;
+                reopen_store(dir, spec, clock)
+            } else {
+                Err(incomplete_pair(key_exists, db_exists))
+            }
+        }
+    }
+}
+
+/// 人工把残缺根挪到旁边。不删除字节，也不另生成密钥。
+///
+/// 只接受活目录里恰好一件、并且 `.init` 不能由 [`open`] 续完的目录。
+/// 两件都在、一件都没有、或暂存区还能续上时拒绝。
+/// 成功之后下一轮 [`open`] 才会走 [`OpenOutcome::Created`]。
+pub fn quarantine_incomplete(dir: impl AsRef<Path>) -> Result<(), RootError> {
+    let dir = dir.as_ref();
+    if dir
+        .symlink_metadata()
+        .is_ok_and(|meta| meta.file_type().is_symlink())
+    {
+        return Err(RootError::Inconsistent {
+            what: format!("{} is a symlink", dir.display()),
+        });
+    }
+    if !dir.is_dir() {
+        return Err(RootError::Inconsistent {
+            what: format!("{} is not a directory", dir.display()),
+        });
+    }
+    let _lock = DirLock::acquire(dir)?;
+    if publish_can_resume(dir)? {
+        return Err(RootError::Inconsistent {
+            what: "init stage can be finished by open; refusing to quarantine".into(),
+        });
+    }
+    let key_exists = root_key_path(dir).is_file();
+    let db_exists = db_path(dir).is_file();
+    match (key_exists, db_exists) {
+        (false, false) => Err(RootError::Inconsistent {
+            what: "nothing incomplete to quarantine".into(),
         }),
+        (true, true) => Err(RootError::Inconsistent {
+            what: "root store is complete; refusing to quarantine".into(),
+        }),
+        (true, false) => rename_aside(&root_key_path(dir), &dir.join(ABANDONED_KEY_NAME)),
+        (false, true) => {
+            rename_aside(&db_path(dir), &dir.join(ABANDONED_DB_NAME))?;
+            if wal_path(dir).exists() {
+                rename_aside(
+                    &wal_path(dir),
+                    &dir.join(format!("{ABANDONED_DB_NAME}-wal")),
+                )?;
+            }
+            if shm_path(dir).exists() {
+                rename_aside(
+                    &shm_path(dir),
+                    &dir.join(format!("{ABANDONED_DB_NAME}-shm")),
+                )?;
+            }
+            Ok(())
+        }
     }
 }
 
@@ -467,49 +554,46 @@ fn create_store(
     spec: &RootSpec,
     clock: Arc<dyn Clock>,
 ) -> Result<OpenedRoot, RootError> {
+    let result = create_store_inner(dir, spec, clock);
+    if let Err(err) = &result {
+        // 注入故障模拟进程停掉，不跑清理。真实失败且暂存区还不能续上时，删掉半截 `.init`。
+        if !fault_is_injected(err) && !publish_can_resume(dir).unwrap_or(false) {
+            let _ = fs::remove_dir_all(stage_dir(dir));
+        }
+    }
+    result
+}
+
+fn create_store_inner(
+    dir: &Path,
+    spec: &RootSpec,
+    clock: Arc<dyn Clock>,
+) -> Result<OpenedRoot, RootError> {
+    let stage = reject_stage_symlink(dir)?;
+    if stage.exists() {
+        return Err(RootError::Inconsistent {
+            what: "init stage already exists".into(),
+        });
+    }
+    fs::create_dir(&stage)?;
+    #[cfg(unix)]
+    {
+        fs::set_permissions(&stage, fs::Permissions::from_mode(0o700))?;
+    }
+
     let keypair = KeyPair::new();
     let generation = 1u32;
     let token = build_root_biscuit(spec, &keypair, Some(generation))?;
     let bytes = token.to_vec()?;
     let now = clock.now_ms();
-    let key_path = root_key_path(dir);
-    // 首启还没提交。写到一半的文件删掉，下一次 open 仍能走 Created。
-    write_key_file(&key_path, generation, &keypair).inspect_err(|_| discard_new_store(dir))?;
+    write_key_file(&stage.join(ROOT_KEY_NAME), generation, &keypair)?;
+    injected_create_fault(FAULT_AFTER_STAGE_KEY, "after_stage_key")?;
+    write_staged_db(&stage, spec, &keypair, &bytes, now)?;
+    write_ready(&stage)?;
+    injected_create_fault(FAULT_AFTER_READY, "after_ready")?;
+    finish_publish(dir)?;
 
-    let db = db_path(dir);
-    let built = (|| -> Result<Connection, RootError> {
-        let mut conn = prepare_conn(&db)?;
-        init_schema(&conn)?;
-        let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let tools = tools_json(&spec.tools)?;
-        tx.execute(
-            "INSERT INTO schema_meta (id, schema_version, namespace, tools_json, budget_cents)
-             VALUES (1, ?1, ?2, ?3, ?4)",
-            params![SCHEMA_VERSION, &spec.namespace, tools, spec.budget_cents],
-        )?;
-        tx.execute(
-            "INSERT INTO root_generation
-                (generation, public_key, created_at_ms, retired_at_ms, grace_until_ms, is_current)
-             VALUES (1, ?1, ?2, NULL, NULL, 1)",
-            params![keypair.public().to_bytes(), now],
-        )?;
-        tx.execute(
-            "INSERT INTO bootstrap_credential (id, generation, token, issued_at_ms)
-             VALUES (1, 1, ?1, ?2)",
-            params![bytes.as_slice(), now],
-        )?;
-        tx.commit()?;
-        Ok(conn)
-    })();
-
-    let conn = match built {
-        Ok(conn) => conn,
-        Err(err) => {
-            discard_new_store(dir);
-            return Err(err);
-        }
-    };
-
+    let conn = prepare_conn(&db_path(dir))?;
     Ok(OpenedRoot {
         dir: dir.to_path_buf(),
         conn,
@@ -519,6 +603,70 @@ fn create_store(
         bootstrap_generation: generation,
         bootstrap_issued_at_ms: now,
     })
+}
+
+fn write_staged_db(
+    stage: &Path,
+    spec: &RootSpec,
+    keypair: &KeyPair,
+    bytes: &[u8],
+    now: i64,
+) -> Result<(), RootError> {
+    let db = stage.join(DB_NAME);
+    let mut conn = prepare_conn(&db)?;
+    init_schema(&conn)?;
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let tools = tools_json(&spec.tools)?;
+    tx.execute(
+        "INSERT INTO schema_meta (id, schema_version, namespace, tools_json, budget_cents)
+         VALUES (1, ?1, ?2, ?3, ?4)",
+        params![SCHEMA_VERSION, &spec.namespace, tools, spec.budget_cents],
+    )?;
+    tx.execute(
+        "INSERT INTO root_generation
+            (generation, public_key, created_at_ms, retired_at_ms, grace_until_ms, is_current)
+         VALUES (1, ?1, ?2, NULL, NULL, 1)",
+        params![keypair.public().to_bytes(), now],
+    )?;
+    tx.execute(
+        "INSERT INTO bootstrap_credential (id, generation, token, issued_at_ms)
+         VALUES (1, 1, ?1, ?2)",
+        params![bytes, now],
+    )?;
+    tx.commit()?;
+    checkpoint_truncate(&conn)?;
+    drop(conn);
+    let _ = fs::remove_file(stage.join(format!("{DB_NAME}-wal")));
+    let _ = fs::remove_file(stage.join(format!("{DB_NAME}-shm")));
+    fsync_file(&db)?;
+    fsync_dir(stage)?;
+    Ok(())
+}
+
+fn checkpoint_truncate(conn: &Connection) -> Result<(), RootError> {
+    let (busy, _log, _checkpointed): (i64, i64, i64) =
+        conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?;
+    if busy != 0 {
+        return Err(RootError::Inconsistent {
+            what: "wal checkpoint did not finish".into(),
+        });
+    }
+    Ok(())
+}
+
+fn write_ready(stage: &Path) -> Result<(), RootError> {
+    let path = stage.join(READY_NAME);
+    let mut opts = OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    opts.mode(0o600);
+    let mut file = opts.open(&path)?;
+    file.write_all(b"ready")?;
+    file.sync_all()?;
+    fsync_dir(stage)?;
+    Ok(())
 }
 
 fn reopen_store(
@@ -633,19 +781,162 @@ fn shm_path(dir: &Path) -> PathBuf {
     dir.join(format!("{DB_NAME}-shm"))
 }
 
-fn remove_db_files(dir: &Path) {
-    let _ = fs::remove_file(db_path(dir));
-    let _ = fs::remove_file(wal_path(dir));
-    let _ = fs::remove_file(shm_path(dir));
+fn stage_dir(dir: &Path) -> PathBuf {
+    dir.join(STAGE_DIR_NAME)
 }
 
-fn discard_new_store(dir: &Path) {
-    let key = root_key_path(dir);
-    let _ = fs::remove_file(&key);
-    let mut tmp = key.as_os_str().to_os_string();
-    tmp.push(".tmp");
-    let _ = fs::remove_file(tmp);
-    remove_db_files(dir);
+fn reject_stage_symlink(dir: &Path) -> Result<PathBuf, RootError> {
+    let stage = stage_dir(dir);
+    if stage
+        .symlink_metadata()
+        .is_ok_and(|meta| meta.file_type().is_symlink())
+    {
+        return Err(RootError::Inconsistent {
+            what: ".init is a symlink".into(),
+        });
+    }
+    Ok(stage)
+}
+
+/// `.init/READY` 在，并且密钥和库各自只在暂存区或活目录里出现一次。
+fn publish_can_resume(dir: &Path) -> Result<bool, RootError> {
+    let stage = reject_stage_symlink(dir)?;
+    if !stage.join(READY_NAME).is_file() {
+        return Ok(false);
+    }
+    let key_live = root_key_path(dir).is_file();
+    let db_live = db_path(dir).is_file();
+    let key_staged = stage.join(ROOT_KEY_NAME).is_file();
+    let db_staged = stage.join(DB_NAME).is_file();
+    if (key_live && key_staged) || (db_live && db_staged) {
+        return Err(RootError::Inconsistent {
+            what: "init stage overlaps a live root file".into(),
+        });
+    }
+    Ok((key_live || key_staged) && (db_live || db_staged))
+}
+
+fn finish_publish(dir: &Path) -> Result<(), RootError> {
+    let stage = reject_stage_symlink(dir)?;
+    if !stage.join(READY_NAME).is_file() {
+        return Err(RootError::Inconsistent {
+            what: "init stage is not ready".into(),
+        });
+    }
+    move_staged(&stage.join(DB_NAME), &db_path(dir))?;
+    move_staged(&stage.join(format!("{DB_NAME}-wal")), &wal_path(dir))?;
+    move_staged(&stage.join(format!("{DB_NAME}-shm")), &shm_path(dir))?;
+    fsync_dir(dir)?;
+    injected_create_fault(FAULT_AFTER_PUBLISH_DB, "after_publish_db")?;
+    move_staged(&stage.join(ROOT_KEY_NAME), &root_key_path(dir))?;
+    ensure_mode_0600(&root_key_path(dir))?;
+    let _ = read_key_file(&root_key_path(dir))?;
+    if !db_path(dir).is_file() {
+        return Err(RootError::Incomplete {
+            what: "credential.db missing after publish".into(),
+        });
+    }
+    fsync_dir(dir)?;
+    let _ = fs::remove_file(stage.join(READY_NAME));
+    fs::remove_dir_all(&stage)?;
+    Ok(())
+}
+
+fn move_staged(from: &Path, to: &Path) -> Result<(), RootError> {
+    let from_exists = from.is_file();
+    let to_exists = to.is_file();
+    if from_exists && to_exists {
+        return Err(RootError::Inconsistent {
+            what: format!("both staged and live exist: {}", to.display()),
+        });
+    }
+    if from_exists {
+        fs::rename(from, to)?;
+    }
+    Ok(())
+}
+
+fn discard_incomplete_stage(dir: &Path) -> Result<(), RootError> {
+    if fs::symlink_metadata(stage_dir(dir)).is_err() {
+        return Ok(());
+    }
+    let stage = reject_stage_symlink(dir)?;
+    if stage.exists() {
+        fs::remove_dir_all(&stage)?;
+    }
+    Ok(())
+}
+
+fn discard_stray_stage(dir: &Path) -> Result<(), RootError> {
+    if fs::symlink_metadata(stage_dir(dir)).is_err() {
+        return Ok(());
+    }
+    let stage = reject_stage_symlink(dir)?;
+    if !stage.exists() {
+        return Ok(());
+    }
+    let stray = stage.join(ROOT_KEY_NAME).exists() || stage.join(DB_NAME).exists();
+    if stray {
+        return Err(RootError::Inconsistent {
+            what: "init stage holds a root file beside a complete store".into(),
+        });
+    }
+    fs::remove_dir_all(&stage)?;
+    Ok(())
+}
+
+fn incomplete_pair(key_exists: bool, db_exists: bool) -> RootError {
+    let (present, missing) = match (key_exists, db_exists) {
+        (true, false) => ("root.key", "credential.db"),
+        (false, true) => ("credential.db", "root.key"),
+        _ => ("root store", "its pair"),
+    };
+    RootError::Incomplete {
+        what: format!(
+            "{present} exists but {missing} does not; call quarantine_incomplete to move the leftover aside (open does not delete it or mint a replacement)"
+        ),
+    }
+}
+
+fn rename_aside(from: &Path, to: &Path) -> Result<(), RootError> {
+    if to.exists() {
+        return Err(RootError::Inconsistent {
+            what: format!("abandon target already exists: {}", to.display()),
+        });
+    }
+    fs::rename(from, to)?;
+    Ok(())
+}
+
+fn fault_is_injected(err: &RootError) -> bool {
+    matches!(err, RootError::Inconsistent { what } if what.starts_with("injected create fault"))
+}
+
+#[cfg(test)]
+std::thread_local! {
+    static CREATE_FAULT: std::cell::Cell<u8> = const { std::cell::Cell::new(0) };
+}
+
+fn injected_create_fault(code: u8, label: &str) -> Result<(), RootError> {
+    #[cfg(test)]
+    {
+        let armed = CREATE_FAULT.with(std::cell::Cell::get);
+        if armed != 0 && armed == code {
+            return Err(RootError::Inconsistent {
+                what: format!("injected create fault: {label}"),
+            });
+        }
+    }
+    #[cfg(not(test))]
+    {
+        let _ = (code, label);
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+fn set_create_fault(code: u8) {
+    CREATE_FAULT.with(|cell| cell.set(code));
 }
 
 fn seed_of(keypair: &KeyPair) -> Result<[u8; 32], RootError> {
@@ -1099,9 +1390,20 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), RootError> {
     fs::rename(&tmp, path)?;
     set_mode_0600(path)?;
     if let Some(parent) = path.parent() {
-        let dir = File::open(parent)?;
-        dir.sync_all()?;
+        fsync_dir(parent)?;
     }
+    Ok(())
+}
+
+fn fsync_file(path: &Path) -> Result<(), RootError> {
+    let file = File::open(path)?;
+    file.sync_all()?;
+    Ok(())
+}
+
+fn fsync_dir(path: &Path) -> Result<(), RootError> {
+    let dir = File::open(path)?;
+    dir.sync_all()?;
     Ok(())
 }
 
@@ -1192,8 +1494,9 @@ mod tests {
     use rusqlite::params;
 
     use super::{
-        commit_rotation, open_with_clock, pending_path, read_key_file, root_key_path, seed_of,
-        set_mode_0600, write_key_file, write_pending_file, OpenOutcome, PendingFile, RootError,
+        commit_rotation, db_path, open_with_clock, pending_path, quarantine_incomplete,
+        read_key_file, root_key_path, seed_of, set_create_fault, set_mode_0600, stage_dir,
+        write_key_file, write_pending_file, OpenOutcome, PendingFile, RootError,
     };
     use crate::{issue_root, serialize, RootSpec};
 
@@ -1224,6 +1527,115 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    /// 发现 A：密钥还在 `.init`、READY 没写时进程停掉。活目录两件都不在，下一次 open 重新首启。
+    #[test]
+    fn finding_a_crash_before_ready_does_not_publish_half_a_store() {
+        let dir = Temp::new();
+        set_create_fault(1);
+        let err = open_with_clock(&dir.0, &spec(), crate::ManualClock::new(50)).unwrap_err();
+        assert!(err.to_string().contains("injected create fault"), "{err}");
+        assert!(!root_key_path(&dir.0).is_file());
+        assert!(!db_path(&dir.0).is_file());
+        assert!(stage_dir(&dir.0).join("root.key").is_file());
+        let staged = fs::read(stage_dir(&dir.0).join("root.key")).unwrap();
+        set_create_fault(0);
+        let opened = open_with_clock(&dir.0, &spec(), crate::ManualClock::new(50)).unwrap();
+        assert_eq!(opened.outcome(), OpenOutcome::Created);
+        assert!(root_key_path(&dir.0).is_file() && db_path(&dir.0).is_file());
+        assert!(!stage_dir(&dir.0).exists());
+        assert_ne!(fs::read(root_key_path(&dir.0)).unwrap(), staged);
+        assert!(opened.verify(opened.bootstrap_bytes()).is_ok());
+    }
+
+    /// 发现 A：两件和 READY 都在暂存区、还没 rename。下一次 open 用同一把密钥发布。
+    #[test]
+    fn finding_a_crash_after_ready_resumes_the_same_key() {
+        let dir = Temp::new();
+        set_create_fault(2);
+        let err = open_with_clock(&dir.0, &spec(), crate::ManualClock::new(50)).unwrap_err();
+        assert!(err.to_string().contains("after_ready"), "{err}");
+        assert!(!root_key_path(&dir.0).is_file());
+        assert!(!db_path(&dir.0).is_file());
+        let staged = fs::read(stage_dir(&dir.0).join("root.key")).unwrap();
+        assert!(stage_dir(&dir.0).join("READY").is_file());
+        assert!(stage_dir(&dir.0).join("credential.db").is_file());
+        set_create_fault(0);
+        let opened = open_with_clock(&dir.0, &spec(), crate::ManualClock::new(50)).unwrap();
+        assert_eq!(opened.outcome(), OpenOutcome::AlreadyDeclared);
+        assert_eq!(fs::read(root_key_path(&dir.0)).unwrap(), staged);
+        assert!(!stage_dir(&dir.0).exists());
+        assert_eq!(opened.bootstrap_issued_at_ms(), 50);
+        assert!(opened.verify(opened.bootstrap_bytes()).is_ok());
+    }
+
+    /// 发现 A：库已进活目录、密钥还在 `.init`。下一次 open 把同一把密钥补上，不另生成。
+    #[test]
+    fn finding_a_crash_after_db_rename_resumes_the_same_key() {
+        let dir = Temp::new();
+        set_create_fault(3);
+        let err = open_with_clock(&dir.0, &spec(), crate::ManualClock::new(50)).unwrap_err();
+        assert!(err.to_string().contains("after_publish_db"), "{err}");
+        assert!(db_path(&dir.0).is_file());
+        assert!(!root_key_path(&dir.0).is_file());
+        let staged = fs::read(stage_dir(&dir.0).join("root.key")).unwrap();
+        set_create_fault(0);
+        let opened = open_with_clock(&dir.0, &spec(), crate::ManualClock::new(50)).unwrap();
+        assert_eq!(opened.outcome(), OpenOutcome::AlreadyDeclared);
+        assert_eq!(fs::read(root_key_path(&dir.0)).unwrap(), staged);
+        assert!(!stage_dir(&dir.0).exists());
+        assert!(opened.verify(opened.bootstrap_bytes()).is_ok());
+        assert_eq!(
+            fs::symlink_metadata(root_key_path(&dir.0))
+                .unwrap()
+                .permissions()
+                .mode()
+                & 0o777,
+            0o600
+        );
+    }
+
+    /// 发现 A：活目录只剩一件、没有可续的 `.init`。错误点名 quarantine_incomplete，调用后才能再首启。
+    #[test]
+    fn finding_a_half_store_names_quarantine_and_quarantine_unblocks() {
+        let dir = Temp::new();
+        let clock = crate::ManualClock::new(50);
+        let opened = open_with_clock(&dir.0, &spec(), clock.clone()).unwrap();
+        drop(opened);
+        let key = fs::read(root_key_path(&dir.0)).unwrap();
+        fs::remove_file(db_path(&dir.0)).unwrap();
+        let err = open_with_clock(&dir.0, &spec(), clock.clone()).unwrap_err();
+        match err {
+            RootError::Incomplete { what } => {
+                assert!(what.contains("quarantine_incomplete"), "{what}");
+            }
+            other => panic!("{other}"),
+        }
+        assert_eq!(fs::read(root_key_path(&dir.0)).unwrap(), key);
+        assert!(!db_path(&dir.0).exists());
+
+        let refused = quarantine_incomplete(dir.0.join("missing")).unwrap_err();
+        assert!(
+            matches!(refused, RootError::Inconsistent { .. }),
+            "{refused}"
+        );
+
+        quarantine_incomplete(&dir.0).unwrap();
+        assert!(!root_key_path(&dir.0).exists());
+        assert_eq!(
+            fs::read(dir.0.join("root.key.abandoned")).unwrap(),
+            key,
+            "隔离不删除密钥字节"
+        );
+        let again = quarantine_incomplete(&dir.0).unwrap_err();
+        assert!(matches!(again, RootError::Inconsistent { .. }), "{again}");
+
+        let created = open_with_clock(&dir.0, &spec(), clock).unwrap();
+        assert_eq!(created.outcome(), OpenOutcome::Created);
+        assert_ne!(fs::read(root_key_path(&dir.0)).unwrap(), key);
+        assert!(created.verify(created.bootstrap_bytes()).is_ok());
+        assert_eq!(fs::read(dir.0.join("root.key.abandoned")).unwrap(), key);
     }
 
     #[test]
