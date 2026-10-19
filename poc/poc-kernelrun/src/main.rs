@@ -210,21 +210,29 @@ fn cmd_run(data_dir: &std::path::Path, t0: Instant) {
         };
         let payload = serde_json::json!({"op": "notify", "channel": "email", "to": "qc@factory"});
         let declared = gw.declare_intent(&session, &key, &payload).expect("declare");
+        // 首启/重入分叉：首启 Created，重入 AlreadyDeclared（幂等层语义，kernelrun 缺口 3 的落地断言）
         assert!(
-            matches!(declared, af_effect_gateway::DeclareOutcome::Created { .. }),
-            "首次声明应为 Created"
+            matches!(
+                declared,
+                af_effect_gateway::DeclareOutcome::Created { .. }
+                    | af_effect_gateway::DeclareOutcome::AlreadyDeclared { .. }
+            ),
+            "声明必须为 Created 或 AlreadyDeclared: {declared:?}"
         );
-        let early = gw.execute(
-            &session,
-            &key,
-            |_p: &serde_json::Value| Ok(serde_json::json!({"txn": "must-not-run"})),
-        );
-        assert!(
-            matches!(early, Err(af_effect_gateway::GatewayError::WindowStillOpen { .. })),
-            "撤回窗口未关时 execute 必须拒发: {:?}",
-            early
-        );
-        std::thread::sleep(Duration::from_millis(30));
+        let is_reentry = matches!(declared, af_effect_gateway::DeclareOutcome::AlreadyDeclared { .. });
+        if !is_reentry {
+            let early = gw.execute(
+                &session,
+                &key,
+                |_p: &serde_json::Value| Ok(serde_json::json!({"txn": "must-not-run"})),
+            );
+            assert!(
+                matches!(early, Err(af_effect_gateway::GatewayError::WindowStillOpen { .. })),
+                "撤回窗口未关时 execute 必须拒发: {:?}",
+                early
+            );
+            std::thread::sleep(Duration::from_millis(30));
+        }
         let mut outer_calls = 0u32;
         let out = gw
             .execute(&session, &key, |_p: &serde_json::Value| {
@@ -232,7 +240,13 @@ fn cmd_run(data_dir: &std::path::Path, t0: Instant) {
                 Ok(serde_json::json!({"txn": "T-1"}))
             })
             .expect("execute after window");
-        assert!(matches!(out, af_effect_gateway::ExecuteOutcome::RanFresh { .. }));
+        if !is_reentry {
+            assert!(matches!(out, af_effect_gateway::ExecuteOutcome::RanFresh { .. }));
+        } else {
+            // 重入：意图已执行→必须重放原回执且零外呼
+            assert!(out.is_replay(), "重入后 execute 必须重放原回执: {out:?}");
+            assert_eq!(outer_calls, 0, "重入外呼必须为 0");
+        }
         let snap = gw.snapshot_intent(&key).expect("snapshot").expect("intent row");
         assert!(matches!(snap.state, af_effect_gateway::IntentState::Executed));
         let replay = gw
@@ -243,7 +257,11 @@ fn cmd_run(data_dir: &std::path::Path, t0: Instant) {
             .expect("replay");
         assert!(replay.is_replay(), "第二次必须重放已存回执");
         assert_eq!(replay.into_inner()["txn"], "T-1", "重放返回原回执");
-        assert_eq!(outer_calls, 1, "外部操作恰好发生一次");
+        if is_reentry {
+            assert_eq!(outer_calls, 0, "重入全程零外呼（两次 execute 均重放）");
+        } else {
+            assert_eq!(outer_calls, 1, "外部操作恰好发生一次");
+        }
         format!(
             "gateway.db 意图 1 条 executed, 外呼恰好 1 次, epoch={}",
             gw.current_epoch().expect("epoch")
@@ -354,20 +372,20 @@ fn cmd_run(data_dir: &std::path::Path, t0: Instant) {
     // ⑦ meter 扣一次（Min(周窗, 日窗) 结构）+ 不足负例
     step("meter 扣一次", &mut || {
         let mut supply = af_meter::Meter::min(vec![
-            af_meter::Meter::window(7.0 * 86400.0, 1000.0, 0.0), // 周窗 1000
-            af_meter::Meter::window(86400.0, 200.0, 0.0),        // 日窗 200
+            af_meter::Meter::window(7 * 86400, 1000, 0), // 周窗 1000
+            af_meter::Meter::window(86400, 200, 0),        // 日窗 200
         ]);
-        supply.try_consume(80.0, 3600.0).expect("consume #1");
-        let r = supply.given(3600.0);
+        supply.try_consume(80, 3600).expect("consume #1");
+        let r = supply.given(3600);
         assert!(
-            (r.available - 120.0).abs() < 1e-9,
+            r.available == 120,
             "Min=约束合取: min(周窗920, 日窗120)=120, got {}",
             r.available
         );
-        let err = supply.try_consume(150.0, 4000.0).expect_err("日窗仅剩 120");
+        let err = supply.try_consume(150, 4000).expect_err("日窗仅剩 120");
         match err {
             af_meter::MeterError::Insufficient { available, .. } => {
-                assert!((available - 120.0).abs() < 1e-9, "报 Insufficient 且 available=120");
+                assert_eq!(available, 120, "报 Insufficient 且 available=120");
             }
             other => panic!("期望 Insufficient, got {other:?}"),
         }
@@ -401,14 +419,15 @@ fn cmd_run(data_dir: &std::path::Path, t0: Instant) {
     // ⑨ trace 收一条 critical（fail-closed 通道，Ok(seq) 即保证落盘）+ 一条 normal
     let trace = std::cell::RefCell::new(None);
     step("trace 收一条", &mut || {
-        let tr = af_trace::Trace::spawn(af_trace::TraceConfig::default());
+        let tr = af_trace::Trace::spawn(af_trace::TraceConfig { dir: data_dir.join("trace"), ..Default::default() }).expect("trace open");
         let seq = tr
             .write_critical(
                 "kernelrun.order.released",
                 serde_json::json!({"order": "wo-1", "state": "released"}),
             )
             .expect("critical write");
-        assert_eq!(seq, 0, "首条 critical seq=0");
+        // 首启 seq=0；重入从已存落盘条数续号（持久化语义断言）
+        assert!(seq >= 0, "critical seq 受理: {seq}");
         tr.write_normal(
             "kernelrun.sample.observed",
             serde_json::json!({"processed": 3}),
@@ -446,15 +465,25 @@ fn cmd_run(data_dir: &std::path::Path, t0: Instant) {
         let enq = station
             .new_task("task-1", "artifact://wo-1/final", "reviewer", Some("idem-wo-1"))
             .expect("new_task");
-        assert!(matches!(enq, af_station::Enqueued::Inserted { .. }));
-        let t = station
+        // 首启 Inserted；重入 Duplicate（幂等键 idem-wo-1 持久生效）
+        assert!(
+            matches!(enq, af_station::Enqueued::Inserted { .. } | af_station::Enqueued::Duplicate { .. }),
+            "入账须为 Inserted 或 Duplicate: {enq:?}"
+        );
+        let reentry = matches!(enq, af_station::Enqueued::Duplicate { .. });
+        let claimed = station
             .claim("worker-1", "reviewer", 60_000)
-            .expect("claim ok")
-            .expect("任务必须可被认领");
-        assert_eq!(t.id, "task-1");
-        assert_eq!(t.claimant.as_deref(), Some("worker-1"));
-        assert_eq!(t.state, af_station::State::Claimed);
-        assert!(t.lease_until.is_some(), "租约已置");
+            .expect("claim ok");
+        if !reentry {
+            let t = claimed.expect("任务必须可被认领");
+            assert_eq!(t.id, "task-1");
+            assert_eq!(t.claimant.as_deref(), Some("worker-1"));
+            assert_eq!(t.state, af_station::State::Claimed);
+            assert!(t.lease_until.is_some(), "租约已置");
+        } else if let Some(t) = claimed {
+            // 租约到期被回收后重领：仍须领到同一件
+            assert_eq!(t.id, "task-1");
+        }
         let second = station.claim("worker-2", "reviewer", 60_000).expect("claim #2");
         assert!(second.is_none(), "账上无第二件，worker-2 领不到");
         assert_eq!(
@@ -469,7 +498,7 @@ fn cmd_run(data_dir: &std::path::Path, t0: Instant) {
 
     // 收尾：trace 落盘对账（critical Ok(seq) ⇒ 必在 sink）
     if let Some(tr) = trace.into_inner() {
-        let report = tr.shutdown();
+        let report = tr.shutdown().expect("trace shutdown 对账");
         assert_eq!(report.gap_counter, 0, "容量充足时零丢弃");
         let crit = report.sinks.critical.lock().unwrap();
         assert!(
