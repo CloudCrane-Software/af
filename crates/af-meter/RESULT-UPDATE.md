@@ -1,3 +1,86 @@
+# RESULT-UPDATE — W2A：af-meter 分库 + outbox 账本
+
+## ① 结论
+
+**通过**。`af-meter` 增加一份声明对应一个 SQLite 文件的计数账本。`events` 幂等键 UNIQUE，`windows` 起止按钟面日期解析，`outbox` 与扣减在同一个 `BEGIN IMMEDIATE` 事务里。`user_version = 1`，重入时版本或声明对不上就启动失败。`recover` 重发未标记的补偿记录，接收方用幂等键去重。
+
+`cargo test -p af-meter` **42 全绿**（原 25：15 单元 + 4 proptest + 5 路由 + 1 词表；新增 17 个账本集成测试；文档测试仍是 0）。`cargo clippy --all-targets -p af-meter -- -D warnings` 无本 crate 警告。内存 `Meter` / `BudgetLedger` 的已验证语义没有改。
+
+## ② 步骤
+
+1. 读完 `RESULT.md`、`budget.rs`、`tests/vocab.rs`、`lib.rs`。计数保持 `Count = u64`，金额保持 `Cents = i64`。`Meter` 仍是单消费者状态机，窗口仍按注入的整数秒滚动。这些结论没有改。持久化账本记的是计数，不是美分。
+2. `Cargo.toml` 增加 `rusqlite = { workspace = true }`（0.32.1，bundled）、`chrono = "=0.4.45"`、`chrono-tz = "=0.10.4"`。后两个已由 af-calendar / af-workorder 锁定。`Cargo.lock` 只在 af-meter 的依赖列表里多了这三行，没有新包。根 `Cargo.toml` 未改。
+3. `src/ledger/`：打开时设 WAL、`busy_timeout=5000ms`、`synchronous=NORMAL`、`foreign_keys=ON`。空库走 `Opened::Created`（建表、写入声明、`PRAGMA user_version = 1`）。`user_version == 1` 且声明一致走 `Opened::AlreadyDeclared`。版本不是 1、声明字段不一致、多了表、或 `user_version` 仍是 0 但表已经在，都返回错误，不改存量。
+4. 窗口起止：注入的 Unix 毫秒先映到时区里的日历日，再取当地 00:00 与下一个日历边界的当地 00:00。周窗从周一开始。不用「现在 + 86400000 毫秒」。
+5. `consume`：`BEGIN IMMEDIATE` 内幂等扣减。同键同数量不二次扣；同键不同数量拒绝且不改账。剩余不足则整笔回滚，不留空窗口。跨过钟面终点的下一次扣减才插入新窗口，旧窗口的已消耗留下。返回的 `Reading.recovers_at` 是窗口终点的 Unix 毫秒。
+6. 扣减、事件、outbox JSON 同一事务提交。`recover` 按序把 `sent_at_ms IS NULL` 的行交给回调，回调成功后才把 `sent_at_ms` 写成注入时刻。回调失败则停在该条。标记之前崩溃会再送同一幂等键。
+7. 测试不睡眠。并发用例用 `std::thread` 和 `Barrier`，每线程自己的连接。
+
+## ③ 证据
+
+命令均在 `source /data/af-factory/env.sh` 之后执行。
+
+`cargo check -p af-meter -j 4`：`Finished dev profile ... in 5.70s`（首次编译 chrono-tz）。
+
+`cargo clippy --all-targets -p af-meter -j 4 -- -D warnings`：`Finished dev profile ... in 0.89s`，退出码 0。cargo 另打印既有的 future-incompat：`proc-macro-error2 v2.0.1`，不是本 crate 的警告。
+
+`cargo test -p af-meter -j 4`：
+
+```
+running 15 tests
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+running 17 tests
+test bad_declaration_is_rejected_before_create ... ok
+test fall_back_day_ends_at_next_civil_midnight ... ok
+test ordinary_day_boundary_is_the_next_civil_midnight ... ok
+test same_instant_falls_on_different_civil_days ... ok
+test week_crossing_spring_forward_uses_civil_mondays ... ok
+test spring_forward_day_ends_at_next_civil_midnight ... ok
+test consume_is_idempotent_and_conflict_does_not_charge ... ok
+test lazy_reset_opens_the_next_civil_window ... ok
+test open_created_then_reopen_checks_recipe_and_declaration ... ok
+test extra_table_fails_closed ... ok
+test insufficient_rolls_back_and_restart_keeps_the_committed_charge ... ok
+test user_version_mismatch_and_torn_init_fail_closed ... ok
+test recover_redelivers_the_same_idempotency_key ... ok
+test recover_persists_the_sent_mark_across_reopen ... ok
+test declaration_mismatch_fails_closed_and_keeps_committed_rows ... ok
+test concurrent_same_key_is_charged_once ... ok
+test concurrent_consumers_conserve_the_window ... ok
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+running 4 tests
+test result: ok. 4 passed; 0 failed
+running 5 tests
+test result: ok. 5 passed; 0 failed
+running 1 test
+test result: ok. 1 passed; 0 failed
+Doc-tests af_meter
+test result: ok. 0 passed; 0 failed
+```
+
+`Cargo.lock` 的 diff 只有 af-meter 依赖列表中的 `chrono`、`chrono-tz`、`rusqlite`。
+
+提交：`f176cf3` af-meter: 落地分库账本、钟面窗口与 outbox。
+
+## ④ 反馈
+
+1. 账本读数复用 `Reading`，但 `recovers_at` 在这条路径上是窗口终点的 Unix 毫秒。内存 `Meter` 的 `Time` 仍是调用方注入的整数秒。两套数字不能混在同一次比较里。
+2. `synchronous`、`foreign_keys`、`busy_timeout` 只活在当前连接上，每次 `open` 都要重设。`journal_mode=WAL` 和 `user_version` 落在文件头。bundled SQLite 编译带了 `SQLITE_DEFAULT_FOREIGN_KEYS=1`，原始连接默认也是开的；账本仍然显式执行这条 pragma。
+3. 恰好一次是「至少送一次 + 幂等键」。回调成功和 `sent_at_ms` 落库之间如果进程停掉，下次 `recover` 会再送同一键。接收方必须用这个键去重。
+4. 春跳日（柏林 2026-03-29）的钟面窗口短于 86400000 毫秒，秋拨日（2026-10-25）长于 86400000 毫秒，终点都是次日当地 00:00。这是「不用绝对时间加法」的检查。
+5. 多消费者不共享一条 `Connection`。每个线程 `open` 同一个文件，写事务用 `BEGIN IMMEDIATE` 串行。4 线程 × 30 笔、容量 50，成功笔数等于 50，事件合计等于窗口已消耗。8 线程抢同一幂等键只入账一次。
+
+## ⑤ 遗留
+
+- 内存 `Meter` 的固定窗口仍从创建时刻按秒滚动。这是 `RESULT.md` 已验证的行为，本任务没有把它改成钟面窗口。两套窗口算法并存。
+- `BudgetLedger` 的美分累计仍在内存里。本账本只记 `Count`。
+- `RESULT.md` 里其余遗留仍在：固定窗口双倍突发、Max 的 `recovers_at` 是下界、`route` 不拆分任务。
+- outbox 回调是进程内函数，不是网络发送。没有单独压测「回调已返回、标记尚未提交」的进程崩溃，测试用的是把 `sent_at_ms` 清回 NULL 再扫描。
+- 两个连接同时第一次 `open` 空文件没有单独压测。初始化事务是 `BEGIN IMMEDIATE`，后到的一方会看到已经写好的 `user_version`。
+- SQLite 仍是单写者。`busy_timeout` 为 5000 毫秒。更高的写入并发会在这把锁上等待。
+
+---
+
 # RESULT-UPDATE — C4：af-meter criterion 基准（波次 1 ⑦/T9-6 后半）
 
 ## ① 结论
