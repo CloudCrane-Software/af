@@ -34,8 +34,8 @@ pub fn evaluate(token: &Biscuit, q: &AccessQuery) -> Result<Verdict> {
     let cedar = cedar_allows(&q.role, &q.tool, &q.namespace)?;
     let biscuit = authorize(token, &q.tool, &q.namespace, q.spend_cents)?;
     let caps: TokenCaps = inspect(token)?;
-    let token_carries_capability = caps.tools.contains(&q.tool)
-        && caps.namespace.as_deref() == Some(q.namespace.as_str());
+    let token_carries_capability =
+        caps.tools.contains(&q.tool) && caps.namespace.as_deref() == Some(q.namespace.as_str());
     let allow = cedar && biscuit;
     let reason = format!(
         "cedar={}, biscuit={}, token_carries({} @ {})={}, blocks={}",

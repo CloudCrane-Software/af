@@ -138,9 +138,10 @@ impl Calendar {
         let mut remaining = required;
         for _ in 0..=self.horizon_days {
             for shift in self.shifts_on(day).iter().rev() {
-                let (Some(ws), Some(we)) =
-                    (self.local_dt(day, shift.start), self.local_dt(day, shift.end))
-                else {
+                let (Some(ws), Some(we)) = (
+                    self.local_dt(day, shift.start),
+                    self.local_dt(day, shift.end),
+                ) else {
                     continue; // DST 间隙
                 };
                 let exit = match bound {

@@ -114,7 +114,9 @@ mod tests {
             "g-3",
             "g-4",
             DrainStrategy::DrainWithCap { max_inflight: 5 },
-            RelayStrategy::WarmHandover { overlap_budget: 120 },
+            RelayStrategy::WarmHandover {
+                overlap_budget: 120,
+            },
         );
         let json = serde_json::to_string(&c).unwrap();
         assert_eq!(serde_json::from_str::<ChangeOrder>(&json).unwrap(), c);
@@ -122,15 +124,25 @@ mod tests {
 
     #[test]
     fn from_equals_to_is_rejected() {
-        let err = change("g-3", "g-3", DrainStrategy::NoDrain, RelayStrategy::ColdHandover)
-            .validate()
-            .unwrap_err();
+        let err = change(
+            "g-3",
+            "g-3",
+            DrainStrategy::NoDrain,
+            RelayStrategy::ColdHandover,
+        )
+        .validate()
+        .unwrap_err();
         assert!(matches!(err, ChangeError::FromEqualsTo(_)));
     }
 
     #[test]
     fn empty_diff_summary_is_rejected() {
-        let mut c = change("g-3", "g-4", DrainStrategy::NoDrain, RelayStrategy::ColdHandover);
+        let mut c = change(
+            "g-3",
+            "g-4",
+            DrainStrategy::NoDrain,
+            RelayStrategy::ColdHandover,
+        );
         c.diff_summary = "   ".into();
         assert_eq!(c.validate().unwrap_err(), ChangeError::EmptyDiffSummary);
     }
@@ -167,7 +179,12 @@ mod tests {
 
     #[test]
     fn spawn_successor_binds_new_version_and_supersedes() {
-        let c = change("g-3", "g-4", DrainStrategy::NoDrain, RelayStrategy::ColdHandover);
+        let c = change(
+            "g-3",
+            "g-4",
+            DrainStrategy::NoDrain,
+            RelayStrategy::ColdHandover,
+        );
         let successor = c
             .spawn_successor("wo-1b", Sla::new(None, Priority::High))
             .unwrap();
@@ -178,7 +195,14 @@ mod tests {
 
     #[test]
     fn invalid_change_cannot_spawn_successor() {
-        let c = change("g-3", "g-3", DrainStrategy::NoDrain, RelayStrategy::ColdHandover);
-        assert!(c.spawn_successor("wo-1b", Sla::new(None, Priority::Low)).is_err());
+        let c = change(
+            "g-3",
+            "g-3",
+            DrainStrategy::NoDrain,
+            RelayStrategy::ColdHandover,
+        );
+        assert!(c
+            .spawn_successor("wo-1b", Sla::new(None, Priority::Low))
+            .is_err());
     }
 }

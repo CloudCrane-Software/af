@@ -267,7 +267,10 @@ mod tests {
             "af-station-{}-{}-{}",
             tag,
             std::process::id(),
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().subsec_nanos()
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .subsec_nanos()
         ));
         std::fs::create_dir_all(&dir).unwrap();
         dir.join("station.db")
@@ -276,7 +279,9 @@ mod tests {
     #[test]
     fn enqueue_and_get_roundtrip() {
         let s = Station::open_in_memory().unwrap();
-        let e = s.new_task("t1", "payload://a", "reviewer", Some("k1")).unwrap();
+        let e = s
+            .new_task("t1", "payload://a", "reviewer", Some("k1"))
+            .unwrap();
         assert_eq!(e, Enqueued::Inserted { id: "t1".into() });
         let t = s.get("t1").unwrap().unwrap();
         assert_eq!(t.state, State::Queued);
@@ -288,11 +293,20 @@ mod tests {
     #[test]
     fn idempotency_key_prevents_duplicate_enqueue() {
         let s = Station::open_in_memory().unwrap();
-        let e1 = s.new_task("t1", "payload://a", "reviewer", Some("k1")).unwrap();
+        let e1 = s
+            .new_task("t1", "payload://a", "reviewer", Some("k1"))
+            .unwrap();
         // 同一幂等键、不同任务 id 再入账：必须被拦下，返回已有任务 id
-        let e2 = s.new_task("t9", "payload://b", "coder", Some("k1")).unwrap();
+        let e2 = s
+            .new_task("t9", "payload://b", "coder", Some("k1"))
+            .unwrap();
         assert_eq!(e1, Enqueued::Inserted { id: "t1".into() });
-        assert_eq!(e2, Enqueued::Duplicate { existing_id: "t1".into() });
+        assert_eq!(
+            e2,
+            Enqueued::Duplicate {
+                existing_id: "t1".into()
+            }
+        );
         assert_eq!(s.count_by_state(State::Queued).unwrap(), 1);
         // 无幂等键的任务不去重，各自独立入账
         s.new_task("a", "p", "r", None).unwrap();
@@ -329,7 +343,10 @@ mod tests {
         // 现任心跳：续期到 now+1000，明显晚于原租约
         assert!(s.heartbeat("t1", "wA", 1_000).unwrap());
         let after = s.get("t1").unwrap().unwrap().lease_until.unwrap();
-        assert!(after > before, "heartbeat must push lease forward: {before} -> {after}");
+        assert!(
+            after > before,
+            "heartbeat must push lease forward: {before} -> {after}"
+        );
         assert!(s.complete("t1", "wA").unwrap());
         assert_eq!(s.get("t1").unwrap().unwrap().state, State::Done);
         // 非 claimant 不能完成别人的任务
@@ -345,7 +362,7 @@ mod tests {
         s.new_task("t1", "p", "reviewer", None).unwrap();
         s.claim("wA", "reviewer", 150).unwrap().unwrap();
         thread::sleep(Duration::from_millis(350)); // 租约过期
-        // 过期后原主人心跳失败（防僵尸复活）
+                                                   // 过期后原主人心跳失败（防僵尸复活）
         assert!(!s.heartbeat("t1", "wA", 60_000).unwrap());
         // 他人认领：惰性回收先回炉，wB 接管成功
         let t = s.claim("wB", "reviewer", 60_000).unwrap().unwrap();
@@ -381,7 +398,11 @@ mod tests {
                 })
             })
             .collect();
-        let winners: Vec<Task> = handles.into_iter().map(|h| h.join().unwrap()).flatten().collect();
+        let winners: Vec<Task> = handles
+            .into_iter()
+            .map(|h| h.join().unwrap())
+            .flatten()
+            .collect();
         assert_eq!(winners.len(), 1, "两线程抢同一任务必须恰好一个成功");
         // 账本终态与赢家一致
         let s = Station::open(&db).unwrap();
@@ -417,7 +438,10 @@ mod tests {
                 })
             })
             .collect();
-        let mut all: Vec<String> = handles.into_iter().flat_map(|h| h.join().unwrap()).collect();
+        let mut all: Vec<String> = handles
+            .into_iter()
+            .flat_map(|h| h.join().unwrap())
+            .collect();
         all.sort();
         let total = all.len();
         all.dedup();
@@ -434,13 +458,22 @@ mod tests {
     fn end_to_end_lifecycle() {
         let s = Station::open_in_memory().unwrap();
         assert_eq!(
-            s.new_task("w-1", "payload://order-1", "reviewer", Some("order-1:v1")).unwrap(),
+            s.new_task("w-1", "payload://order-1", "reviewer", Some("order-1:v1"))
+                .unwrap(),
             Enqueued::Inserted { id: "w-1".into() }
         );
         // 重复入账被幂等键拦下
         assert_eq!(
-            s.new_task("w-1-dup", "payload://order-1", "reviewer", Some("order-1:v1")).unwrap(),
-            Enqueued::Duplicate { existing_id: "w-1".into() }
+            s.new_task(
+                "w-1-dup",
+                "payload://order-1",
+                "reviewer",
+                Some("order-1:v1")
+            )
+            .unwrap(),
+            Enqueued::Duplicate {
+                existing_id: "w-1".into()
+            }
         );
         let t = s.claim("human-alice", "reviewer", 60_000).unwrap().unwrap();
         assert_eq!(t.id, "w-1");

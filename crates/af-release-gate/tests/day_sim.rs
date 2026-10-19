@@ -16,7 +16,14 @@ fn build_schedule() -> Vec<(MinuteOfDay, Item)> {
     let mut id = 1u64;
     let mut v: Vec<(MinuteOfDay, Item)> = Vec::new();
     let push = |v: &mut Vec<(MinuteOfDay, Item)>, m: MinuteOfDay, config: &str, id: &mut u64| {
-        v.push((m, Item { id: *id, config: config.into(), review_minutes: weight(*id) }));
+        v.push((
+            m,
+            Item {
+                id: *id,
+                config: config.into(),
+                review_minutes: weight(*id),
+            },
+        ));
         *id += 1;
     };
 
@@ -78,9 +85,13 @@ fn day_traffic_respects_caps_and_never_starves() {
     let schedule = build_schedule();
     let total_work: f64 = schedule.iter().map(|(_, i)| i.review_minutes).sum();
     // 昨日结转:15 件在制(≈337 分钟),连续运营不从空闸起跑。
-    let start_inventory: Vec<Item> =
-        (1..=15).map(|i| Item { id: 10_000 + i, config: "v1".into(), review_minutes: weight(i) })
-            .collect();
+    let start_inventory: Vec<Item> = (1..=15)
+        .map(|i| Item {
+            id: 10_000 + i,
+            config: "v1".into(),
+            review_minutes: weight(i),
+        })
+        .collect();
     let seed_count = start_inventory.len();
 
     let report = run_day(
@@ -89,7 +100,11 @@ fn day_traffic_respects_caps_and_never_starves() {
             gate: GateConfig {
                 wip_upper_minutes: 400.0,
                 wip_lower_minutes: 120.0,
-                night_window: Some(NightWindow { start: 1320, end: 360, ratio: 0.3 }),
+                night_window: Some(NightWindow {
+                    start: 1320,
+                    end: 360,
+                    ratio: 0.3,
+                }),
             },
             capacity_by_hour: capacity_by_hour(),
             start_inventory,
@@ -129,12 +144,21 @@ fn day_traffic_respects_caps_and_never_starves() {
     );
     println!("canary: {:?}", report.canary);
     println!("events: {:?}", report.events);
-    println!("end_backlog={} end_wip={:.1}", report.end_backlog, report.ticks[1439].wip);
+    println!(
+        "end_backlog={} end_wip={:.1}",
+        report.end_backlog, report.ticks[1439].wip
+    );
     for t in (0..1440).step_by(60) {
         let r = &report.ticks[t];
         println!(
             "{:02}:{:02} wip={:6.1} inproc={:3} backlog={:3} deferred={:3} parked={}",
-            t / 60, t % 60, r.wip, r.in_process, r.backlog, r.night_deferred, r.canary_parked
+            t / 60,
+            t % 60,
+            r.wip,
+            r.in_process,
+            r.backlog,
+            r.night_deferred,
+            r.canary_parked
         );
     }
     // 空窗期细看(证据)
@@ -148,7 +172,11 @@ fn day_traffic_respects_caps_and_never_starves() {
 
     // ---- 断言 ----
     // ① WIP 不超限:全天从未突破上限,且峰值日真的撞过上限(否则上限未被验证)。
-    assert!(report.max_wip <= 400.0 + 1e-6, "WIP exceeded upper: {}", report.max_wip);
+    assert!(
+        report.max_wip <= 400.0 + 1e-6,
+        "WIP exceeded upper: {}",
+        report.max_wip
+    );
     assert!(report.rejects.wip_cap > 0, "峰值日应当真的撞过上限");
     // ② 下限不断粮:全程不清零;有预警;无"有供给却断粮"。
     assert_eq!(report.zero_wip_ticks, 0, "审阅站清零 = 断粮");

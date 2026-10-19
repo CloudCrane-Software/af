@@ -8,9 +8,7 @@
 //! | deny  | 有能力 | 拒 |
 //! | deny  | deny  | 拒 |
 
-use af_credential::{
-    attenuate, evaluate, issue_root, serialize, AccessQuery, ChildSpec, RootSpec,
-};
+use af_credential::{attenuate, evaluate, issue_root, serialize, AccessQuery, ChildSpec, RootSpec};
 
 fn root_spec() -> RootSpec {
     RootSpec {
@@ -21,7 +19,10 @@ fn root_spec() -> RootSpec {
 }
 
 fn child_spec() -> ChildSpec {
-    ChildSpec { tools: vec!["test".into()], spend_cap_cents: 500 }
+    ChildSpec {
+        tools: vec!["test".into()],
+        spend_cap_cents: 500,
+    }
 }
 
 fn q(role: &str, tool: &str) -> AccessQuery {

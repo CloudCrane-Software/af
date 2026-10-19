@@ -132,11 +132,26 @@ pub type CanaryPredicate = Box<dyn Fn(&EvalReport) -> bool + Send>;
 /// 闸门事件(供模拟/上游消费)。
 #[derive(Debug, Clone, PartialEq)]
 pub enum GateEvent {
-    NeedRefill { at: MinuteOfDay, wip: f64, lower: f64 },
-    RefillSatisfied { at: MinuteOfDay, wip: f64 },
-    NightWindowEnter { at: MinuteOfDay },
-    NightWindowExit { at: MinuteOfDay },
-    CanaryPromoted { config: String, probes_released: usize, at: MinuteOfDay },
+    NeedRefill {
+        at: MinuteOfDay,
+        wip: f64,
+        lower: f64,
+    },
+    RefillSatisfied {
+        at: MinuteOfDay,
+        wip: f64,
+    },
+    NightWindowEnter {
+        at: MinuteOfDay,
+    },
+    NightWindowExit {
+        at: MinuteOfDay,
+    },
+    CanaryPromoted {
+        config: String,
+        probes_released: usize,
+        at: MinuteOfDay,
+    },
 }
 
 struct QueuedItem {
@@ -198,7 +213,11 @@ impl ReleaseGate {
             }
         }
         Ok(Self {
-            night: NightRuntime { credit: 1.0, requests: 0, admitted: 0 },
+            night: NightRuntime {
+                credit: 1.0,
+                requests: 0,
+                admitted: 0,
+            },
             cfg,
             queue: VecDeque::new(),
             wip: 0.0,
@@ -228,7 +247,10 @@ impl ReleaseGate {
 
     /// `now` 是否处于夜间窗口(纯查询,不改状态)。
     pub fn in_night_window(&self, now: MinuteOfDay) -> bool {
-        self.cfg.night_window.as_ref().is_some_and(|w| w.contains(now))
+        self.cfg
+            .night_window
+            .as_ref()
+            .is_some_and(|w| w.contains(now))
     }
 
     pub fn canary_status(&self) -> Option<CanaryStatus> {
@@ -292,7 +314,11 @@ impl ReleaseGate {
                 self.prev_in_window = Some(in_window);
                 // 进窗口:信用重置(初始信用 1.0,保证窗口内第一个请求不被误杀);
                 // 出窗口:计数清零,保证每个窗口的占比统计独立。
-                self.night = NightRuntime { credit: 1.0, requests: 0, admitted: 0 };
+                self.night = NightRuntime {
+                    credit: 1.0,
+                    requests: 0,
+                    admitted: 0,
+                };
                 let ev = if in_window {
                     GateEvent::NightWindowEnter { at: now }
                 } else {
@@ -351,7 +377,9 @@ impl ReleaseGate {
             weight: item.review_minutes,
             admitted_at: now,
         };
-        self.queue.push_back(QueuedItem { ticket: ticket.clone() });
+        self.queue.push_back(QueuedItem {
+            ticket: ticket.clone(),
+        });
         if let Some(c) = &mut self.canary {
             if !c.open && c.config == item.config {
                 c.released += 1;
@@ -374,7 +402,10 @@ impl ReleaseGate {
         };
         let q = self.queue.remove(idx).expect("idx validated above");
         self.wip -= q.ticket.weight;
-        let completed = CompletedItem { ticket: q.ticket, completed_at: now };
+        let completed = CompletedItem {
+            ticket: q.ticket,
+            completed_at: now,
+        };
 
         let mut promoted = None;
         if let Some(c) = &mut self.canary {
@@ -395,7 +426,11 @@ impl ReleaseGate {
         }
         if let Some(config) = promoted {
             let released = self.canary.as_ref().map_or(0, |c| c.released);
-            self.events.push(GateEvent::CanaryPromoted { config, probes_released: released, at: now });
+            self.events.push(GateEvent::CanaryPromoted {
+                config,
+                probes_released: released,
+                at: now,
+            });
         }
         self.check_refill_needed(now);
         Ok(completed)
@@ -417,7 +452,10 @@ impl ReleaseGate {
     fn check_refill_cleared(&mut self, now: MinuteOfDay) {
         if self.refill_active && self.wip >= self.cfg.wip_lower_minutes {
             self.refill_active = false;
-            self.events.push(GateEvent::RefillSatisfied { at: now, wip: self.wip });
+            self.events.push(GateEvent::RefillSatisfied {
+                at: now,
+                wip: self.wip,
+            });
         }
     }
 
@@ -436,12 +474,16 @@ pub struct SharedGate {
 
 impl SharedGate {
     pub fn new(gate: ReleaseGate) -> Self {
-        Self { inner: Arc::new((Mutex::new(gate), Condvar::new())) }
+        Self {
+            inner: Arc::new((Mutex::new(gate), Condvar::new())),
+        }
     }
 
     pub fn try_admit(&self, item: &Item, now: MinuteOfDay) -> Result<Ticket, AdmitError> {
         let (lock, _) = &*self.inner;
-        lock.lock().expect("gate mutex poisoned").try_admit(item, now)
+        lock.lock()
+            .expect("gate mutex poisoned")
+            .try_admit(item, now)
     }
 
     /// 阻塞式准入:WipCap 时等待,其他错误立即返回。
@@ -463,7 +505,9 @@ impl SharedGate {
             let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
                 return Err(AdmitError::TimedOut);
             };
-            let (g2, res) = cvar.wait_timeout(g, remaining).expect("gate mutex poisoned");
+            let (g2, res) = cvar
+                .wait_timeout(g, remaining)
+                .expect("gate mutex poisoned");
             g = g2;
             if res.timed_out() {
                 // 防御性最后再试一次(避免 notify 丢失的假超时);仍满则报超时。
@@ -483,7 +527,10 @@ impl SharedGate {
         defects: u64,
     ) -> Result<CompletedItem, GateError> {
         let (lock, cvar) = &*self.inner;
-        let r = lock.lock().expect("gate mutex poisoned").complete(item_id, now, defects);
+        let r = lock
+            .lock()
+            .expect("gate mutex poisoned")
+            .complete(item_id, now, defects);
         cvar.notify_all(); // 完成一件释放容量,唤醒阻塞的 admit
         r
     }

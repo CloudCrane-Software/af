@@ -210,7 +210,8 @@ mod tests {
 
     #[test]
     fn approver_can_approve_when_hash_and_signature_ok() {
-        let art = DecisionArtifact::seal("user-a", Role::Approver, Decision::Approve, PAYLOAD, "k2");
+        let art =
+            DecisionArtifact::seal("user-a", Role::Approver, Decision::Approve, PAYLOAD, "k2");
         assert_eq!(art.validate_against(PAYLOAD), Ok(()));
         assert!(art.payload_hash.len() == 16);
         assert_eq!(art.signature.algorithm, "ed25519-placeholder");
@@ -235,22 +236,33 @@ mod tests {
 
     #[test]
     fn arbiter_has_full_power() {
-        for d in [Decision::Approve, Decision::Reject, Decision::Revise, Decision::Arbitrate] {
+        for d in [
+            Decision::Approve,
+            Decision::Reject,
+            Decision::Revise,
+            Decision::Arbitrate,
+        ] {
             let art = DecisionArtifact::seal("user-z", Role::Arbiter, d, PAYLOAD, "k4");
-            assert_eq!(art.validate_against(PAYLOAD), Ok(()), "arbiter 应可作 {d:?}");
+            assert_eq!(
+                art.validate_against(PAYLOAD),
+                Ok(()),
+                "arbiter 应可作 {d:?}"
+            );
         }
     }
 
     #[test]
     fn hash_mismatch_is_caught() {
-        let art = DecisionArtifact::seal("user-a", Role::Approver, Decision::Approve, PAYLOAD, "k2");
+        let art =
+            DecisionArtifact::seal("user-a", Role::Approver, Decision::Approve, PAYLOAD, "k2");
         let err = art.validate_against("被掉包的 payload").unwrap_err();
         assert!(matches!(err, DecisionError::PayloadHashMismatch { .. }));
     }
 
     #[test]
     fn empty_signature_is_rejected() {
-        let mut art = DecisionArtifact::seal("user-a", Role::Approver, Decision::Approve, PAYLOAD, "k2");
+        let mut art =
+            DecisionArtifact::seal("user-a", Role::Approver, Decision::Approve, PAYLOAD, "k2");
         art.signature.bytes.clear();
         assert!(matches!(
             art.validate_against(PAYLOAD),
@@ -260,8 +272,12 @@ mod tests {
 
     #[test]
     fn decision_artifact_serde_roundtrip() {
-        let art = DecisionArtifact::seal("user-a", Role::Approver, Decision::Approve, PAYLOAD, "k2");
+        let art =
+            DecisionArtifact::seal("user-a", Role::Approver, Decision::Approve, PAYLOAD, "k2");
         let json = serde_json::to_string(&art).unwrap();
-        assert_eq!(serde_json::from_str::<DecisionArtifact>(&json).unwrap(), art);
+        assert_eq!(
+            serde_json::from_str::<DecisionArtifact>(&json).unwrap(),
+            art
+        );
     }
 }

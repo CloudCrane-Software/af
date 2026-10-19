@@ -99,7 +99,10 @@ mod tests {
             OrderState::InProgress.allowed_transitions(),
             &[Transition::Complete, Transition::Cancel]
         );
-        assert_eq!(OrderState::Completed.allowed_transitions(), &[Transition::Close]);
+        assert_eq!(
+            OrderState::Completed.allowed_transitions(),
+            &[Transition::Close]
+        );
         assert!(OrderState::Closed.allowed_transitions().is_empty());
         assert!(OrderState::Cancelled.allowed_transitions().is_empty());
     }

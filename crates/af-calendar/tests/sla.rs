@@ -96,7 +96,10 @@ fn utc_consumer_gets_same_instant_in_utc() {
     let order_utc = Utc.with_ymd_and_hms(2026, 10, 23, 8, 0, 0).unwrap();
     let deadline_utc = cal.sla_deadline(order_utc, Duration::hours(4)).unwrap();
     // 与上海时区下单结果必须是同一时刻,且返回类型保持 UTC
-    assert_eq!(deadline_utc, Utc.with_ymd_and_hms(2026, 10, 26, 3, 0, 0).unwrap());
+    assert_eq!(
+        deadline_utc,
+        Utc.with_ymd_and_hms(2026, 10, 26, 3, 0, 0).unwrap()
+    );
     let deadline_sh = cal
         .sla_deadline(order_utc.with_timezone(&Shanghai), Duration::hours(4))
         .unwrap();
@@ -172,7 +175,10 @@ fn negative_duration_rejected() {
 fn horizon_exceeded_when_never_enough_working_time() {
     let cal = Calendar::weekday_8x5_shanghai().with_horizon(14);
     let r = cal.sla_deadline(sh(2026, 10, 23, 16, 0), Duration::hours(10_000));
-    assert!(matches!(r, Err(CalendarError::HorizonExceeded { searched_days: 14 })));
+    assert!(matches!(
+        r,
+        Err(CalendarError::HorizonExceeded { searched_days: 14 })
+    ));
     // 空日历同样触发视界错误而不是死循环
     let empty = Calendar::new_empty(Shanghai).with_horizon(30);
     assert!(empty
@@ -196,7 +202,10 @@ fn latest_order_roundtrip_forward_equals_due() {
     for (due, req) in exact_cases {
         let latest = cal.latest_order_at(due, req).unwrap();
         let back = cal.next_working_instant(latest, req).unwrap();
-        assert_eq!(back, due, "正反互逆失败:due={due} req={req} latest={latest}");
+        assert_eq!(
+            back, due,
+            "正反互逆失败:due={due} req={req} latest={latest}"
+        );
     }
     // 题设场景正向结果的逆过程:周一 11:00 - 4 工时 = 周五 16:00
     assert_eq!(
@@ -234,8 +243,14 @@ fn latest_order_is_maximal_even_when_due_off_shift() {
     // "下一个可**开工**时刻"(周二 08:00)——两个谓词不同,back ≤ due 不适用;
     // 最晚性仍然成立(再晚任一时刻,0 工时的"完工"按完工资历也在 due 之前仍可行,
     // 但日历上已无更晚的工时时刻)。
-    let zero_latest = cal.latest_order_at(sh(2026, 10, 27, 6, 0), Duration::zero()).unwrap();
-    assert_eq!(zero_latest, sh(2026, 10, 26, 17, 0), "≤ due 的最后完工时刻 = 周一 17:00");
+    let zero_latest = cal
+        .latest_order_at(sh(2026, 10, 27, 6, 0), Duration::zero())
+        .unwrap();
+    assert_eq!(
+        zero_latest,
+        sh(2026, 10, 26, 17, 0),
+        "≤ due 的最后完工时刻 = 周一 17:00"
+    );
     // 具体值:周二 20:00 交付、2 工时 → 最晚下单 = 周二 15:00(15:00+2h=17:00 ≤ 20:00)
     assert_eq!(
         cal.latest_order_at(sh(2026, 10, 27, 20, 0), Duration::hours(2))
@@ -273,7 +288,10 @@ fn multi_shift_calendar_skips_lunch() {
     // 09:00-12:00 + 13:00-18:00(午休拆两班)
     let mut weekly: [Vec<Shift>; 7] = Default::default();
     for d in 0..5 {
-        weekly[d] = vec![Shift::hm(9, 0, 12, 0).unwrap(), Shift::hm(13, 0, 18, 0).unwrap()];
+        weekly[d] = vec![
+            Shift::hm(9, 0, 12, 0).unwrap(),
+            Shift::hm(13, 0, 18, 0).unwrap(),
+        ];
     }
     let cal = Calendar::from_weekly(Shanghai, weekly);
     cal.validate().unwrap();
@@ -301,19 +319,24 @@ fn multi_shift_calendar_skips_lunch() {
 #[test]
 fn overlapping_shifts_fail_validation() {
     let mut weekly: [Vec<Shift>; 7] = Default::default();
-    weekly[0] = vec![Shift::hm(8, 0, 13, 0).unwrap(), Shift::hm(12, 0, 17, 0).unwrap()];
+    weekly[0] = vec![
+        Shift::hm(8, 0, 13, 0).unwrap(),
+        Shift::hm(12, 0, 17, 0).unwrap(),
+    ];
     let cal = Calendar::from_weekly(Shanghai, weekly);
     assert!(matches!(
         cal.validate(),
         Err(CalendarError::OverlappingWindows { .. })
     ));
-    assert!(Shift::new(
-        chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap(),
-        chrono::NaiveTime::from_hms_opt(2, 0, 0).unwrap()
-    ) == Err(CalendarError::WindowInverted {
-        start: chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap(),
-        end: chrono::NaiveTime::from_hms_opt(2, 0, 0).unwrap(),
-    }));
+    assert!(
+        Shift::new(
+            chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap(),
+            chrono::NaiveTime::from_hms_opt(2, 0, 0).unwrap()
+        ) == Err(CalendarError::WindowInverted {
+            start: chrono::NaiveTime::from_hms_opt(18, 0, 0).unwrap(),
+            end: chrono::NaiveTime::from_hms_opt(2, 0, 0).unwrap(),
+        })
+    );
 }
 
 #[test]
@@ -343,7 +366,10 @@ fn exact_window_end_means_hours_exhausted_there() {
     );
     // 多 1 秒即滚到次日开工点后 1 秒:周四 08:00:01
     let d = cal
-        .next_working_instant(sh(2026, 10, 21, 13, 0), Duration::hours(4) + Duration::seconds(1))
+        .next_working_instant(
+            sh(2026, 10, 21, 13, 0),
+            Duration::hours(4) + Duration::seconds(1),
+        )
         .unwrap();
     assert_eq!(d, sh(2026, 10, 22, 8, 0) + Duration::seconds(1));
 }

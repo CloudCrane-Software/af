@@ -14,7 +14,10 @@ fn root_spec() -> RootSpec {
 }
 
 fn child_spec() -> ChildSpec {
-    ChildSpec { tools: vec!["test".into()], spend_cap_cents: 500 }
+    ChildSpec {
+        tools: vec!["test".into()],
+        spend_cap_cents: 500,
+    }
 }
 
 /// 1a. 签发：反序列化 + 验签，断言凭证事实（工具白名单 / 命名空间 / 预算）。
@@ -34,7 +37,10 @@ fn issue_and_verify_root_token_facts() {
 
     // 反序列化后逐块断言 Datalog 源：authority 块确实带着 tool("git") 等事实
     let src0 = &caps.block_sources[0];
-    assert!(src0.contains(&format!("{F_TOOL}(\"git\")")), "block0={src0}");
+    assert!(
+        src0.contains(&format!("{F_TOOL}(\"git\")")),
+        "block0={src0}"
+    );
     assert!(src0.contains("namespace(\"line-a\")"), "block0={src0}");
     assert!(src0.contains("budget_cents(1000)"), "block0={src0}");
 
@@ -71,14 +77,26 @@ fn attenuation_keeps_facts_but_revokes_git() {
         "attenuation block holds the whitelist check: {}",
         caps.block_sources[1]
     );
-    assert!(caps.tools.contains("git"), "facts unchanged (git still listed)");
+    assert!(
+        caps.tools.contains("git"),
+        "facts unchanged (git still listed)"
+    );
 
     // 但行为上：git 已不可用（check 封死），test 仍可用 → 旧权限拿不回来
-    assert!(!authorize(&token, "git", "line-a", 100).unwrap(), "git must be revoked by attenuation");
-    assert!(authorize(&token, "test", "line-a", 100).unwrap(), "test must survive attenuation");
+    assert!(
+        !authorize(&token, "git", "line-a", 100).unwrap(),
+        "git must be revoked by attenuation"
+    );
+    assert!(
+        authorize(&token, "test", "line-a", 100).unwrap(),
+        "test must survive attenuation"
+    );
 
     // 其他命名空间也拿不到：凭证绑定 line-a
-    assert!(!authorize(&token, "test", "line-b", 100).unwrap(), "cross-namespace must fail");
+    assert!(
+        !authorize(&token, "test", "line-b", 100).unwrap(),
+        "cross-namespace must fail"
+    );
 }
 
 /// 1c. 预算衰减：根 1000 美分（usd 10.0）→ 子 500 美分（usd 5.0）。
@@ -89,7 +107,10 @@ fn budget_attenuation_caps_spend() {
 
     // 根凭证：受根块 check 约束（spend <= 1000）
     assert!(authorize(&root.token, "test", "line-a", 800).unwrap());
-    assert!(!authorize(&root.token, "test", "line-a", 1200).unwrap(), "over root budget");
+    assert!(
+        !authorize(&root.token, "test", "line-a", 1200).unwrap(),
+        "over root budget"
+    );
 
     // 衰减后：两条 check 同时生效，取交集 → 上限 500
     assert!(authorize(&child, "test", "line-a", 300).unwrap());

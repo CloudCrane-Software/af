@@ -116,7 +116,11 @@ impl Trace {
     ///
     /// 有界缓冲满时立即返回 `Err(TraceError::CriticalFull)`，事件原样退还，
     /// 调用方必须处理（重试或中止）；返回 `Ok(seq)` 则保证该事件最终落盘。
-    pub fn write_critical(&self, kind: &str, payload: serde_json::Value) -> Result<u64, TraceError> {
+    pub fn write_critical(
+        &self,
+        kind: &str,
+        payload: serde_json::Value,
+    ) -> Result<u64, TraceError> {
         let ev = self.build(Level::Critical, kind, payload, None);
         let seq = ev.seq;
         let guard = self.critical_tx.lock().unwrap();
@@ -308,7 +312,11 @@ mod tests {
     use std::collections::HashSet;
 
     fn drain_lines(sink: &Mutex<Vec<String>>) -> Vec<TraceEvent> {
-        sink.lock().unwrap().iter().map(|l| parse_sink_line(l)).collect()
+        sink.lock()
+            .unwrap()
+            .iter()
+            .map(|l| parse_sink_line(l))
+            .collect()
     }
 
     /// critical 缓冲满 → Err(fail-closed)，事件原样退还；腾出空间后重试成功且零丢失。
@@ -334,7 +342,11 @@ mod tests {
             let ev = e.event();
             assert_eq!(ev.level, Level::Critical);
             assert_eq!(ev.kind, "audit");
-            assert_eq!(ev.payload, json!({ "i": 4 + idx }), "Err 必须原样退还原事件");
+            assert_eq!(
+                ev.payload,
+                json!({ "i": 4 + idx }),
+                "Err 必须原样退还原事件"
+            );
         }
         let rejected = errs[0].event().clone();
         // fail-closed 重试模式：不依赖精确 sleep，循环重试直到腾出空间（5s 超时兜底）
@@ -343,7 +355,10 @@ mod tests {
             match t.write_critical("audit", rejected.payload.clone()) {
                 Ok(seq) => break seq,
                 Err(_) => {
-                    assert!(std::time::Instant::now() < deadline, "重试超时：缓冲未被消费");
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "重试超时：缓冲未被消费"
+                    );
                     std::thread::sleep(Duration::from_millis(50));
                 }
             }
@@ -353,7 +368,10 @@ mod tests {
         let seqs: HashSet<u64> = lines.iter().map(|e| e.seq).collect();
         assert_eq!(lines.len(), 5);
         assert!(seqs.contains(&seq), "重试成功的事件必须落盘");
-        assert!(!seqs.contains(&rejected.seq), "被拒事件在重试成功前不应出现");
+        assert!(
+            !seqs.contains(&rejected.seq),
+            "被拒事件在重试成功前不应出现"
+        );
     }
 
     /// normal 队列满 → 丢弃并计数；gap_counter == 发送数 - 实际落盘数。
@@ -374,9 +392,16 @@ mod tests {
         assert_eq!(report.normal_persisted, 8);
         assert_eq!(report.gap_reported, 12, "所有缺口最终都应被报告");
         let crit = drain_lines(&report.sinks.critical);
-        let gap_sum: u64 = crit.iter().filter_map(|e| e.gap.as_ref()).map(|g| g.count).sum();
+        let gap_sum: u64 = crit
+            .iter()
+            .filter_map(|e| e.gap.as_ref())
+            .map(|g| g.count)
+            .sum();
         assert_eq!(gap_sum, 12, "Σ(gap span.count) == gap_counter");
-        assert!(crit.iter().any(|e| e.kind == "gap"), "丢弃必须产生 critical gap span");
+        assert!(
+            crit.iter().any(|e| e.kind == "gap"),
+            "丢弃必须产生 critical gap span"
+        );
     }
 
     /// critical 也满时 gap span 合并（count>1），但计数不丢；shutdown 强制补发尾差。
@@ -394,7 +419,10 @@ mod tests {
         assert_eq!(t.gap_counter(), 22);
         let report = t.shutdown();
         assert_eq!(report.gap_counter, 22);
-        assert_eq!(report.gap_reported, 22, "shutdown 补发后 reported == counter");
+        assert_eq!(
+            report.gap_reported, 22,
+            "shutdown 补发后 reported == counter"
+        );
         assert_eq!(report.normal_persisted, 8);
         let crit = drain_lines(&report.sinks.critical);
         let gap_spans: Vec<&GapInfo> = crit.iter().filter_map(|e| e.gap.as_ref()).collect();
@@ -429,7 +457,10 @@ mod tests {
         let crit = drain_lines(&report.sinks.critical);
         let seqs: HashSet<u64> = crit.iter().map(|e| e.seq).collect();
         assert_eq!(crit.len(), 50);
-        assert!(crit_seqs.iter().all(|s| seqs.contains(s)), "critical 零丢失");
+        assert!(
+            crit_seqs.iter().all(|s| seqs.contains(s)),
+            "critical 零丢失"
+        );
         assert!(crit.iter().all(|e| e.level == Level::Critical));
 
         let err = t.write_critical("after", json!(null)).unwrap_err();

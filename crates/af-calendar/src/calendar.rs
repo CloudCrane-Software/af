@@ -165,8 +165,6 @@ impl Calendar {
     /// 在本地日期 date 构造日历时区时刻;DST 歧义取较早,间隙(不存在该本地时刻)返回 None。
     /// Asia/Shanghai 无夏令时,恒为 Some。
     pub(crate) fn local_dt(&self, date: NaiveDate, time: NaiveTime) -> Option<DateTime<Tz>> {
-        self.tz
-            .from_local_datetime(&date.and_time(time))
-            .earliest()
+        self.tz.from_local_datetime(&date.and_time(time)).earliest()
     }
 }

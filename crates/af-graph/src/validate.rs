@@ -155,7 +155,11 @@ fn check_scope(s: &ScopeView, out: &mut Vec<Violation>) {
     let mut adj: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
     for e in s.edges {
         if !ids.contains(e.from.as_str()) || !ids.contains(e.to.as_str()) {
-            let bad = if ids.contains(e.from.as_str()) { &e.to } else { &e.from };
+            let bad = if ids.contains(e.from.as_str()) {
+                &e.to
+            } else {
+                &e.from
+            };
             out.push(Violation {
                 rule: Rule::UndeclaredReference,
                 scope: s.path.clone(),
@@ -260,7 +264,10 @@ fn check_loops(t: &GraphTemplate, out: &mut Vec<Violation>) {
                     scope: scope.clone(),
                     message: format!(
                         "安全点 {} 类型不符：要求 {:?}，但体中该节点 kind=`{}` 且 human 标记={}",
-                        sp.node, sp.kind, bn.kind, bn.human.is_some()
+                        sp.node,
+                        sp.kind,
+                        bn.kind,
+                        bn.human.is_some()
                     ),
                 });
             }
@@ -326,7 +333,8 @@ fn find_cycle(ids: &BTreeSet<&str>, adj: &BTreeMap<&str, Vec<&str>>) -> Option<V
                 Color::Gray => {
                     // 找到环：从栈中 v 的位置截到栈顶，再回到 v。
                     let start = stack.iter().position(|&x| x == v).unwrap_or(0);
-                    let mut cyc: Vec<String> = stack[start..].iter().map(|s| s.to_string()).collect();
+                    let mut cyc: Vec<String> =
+                        stack[start..].iter().map(|s| s.to_string()).collect();
                     cyc.push(v.to_string());
                     return Some(cyc);
                 }

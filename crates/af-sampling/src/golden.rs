@@ -163,7 +163,10 @@ impl GoldenLedger {
     }
     /// 看过的金标件总数。
     pub fn golden_seen(&self) -> u64 {
-        self.defective_intercepted + self.defective_released + self.false_rejects + self.clean_passed
+        self.defective_intercepted
+            + self.defective_released
+            + self.false_rejects
+            + self.clean_passed
     }
     /// 金标分类一致率：(缺陷被拦 + 干净放行) / 金标总数。
     pub fn consistency(&self) -> f64 {
@@ -180,8 +183,20 @@ mod tests {
     use crate::csp1::{Csp1, Csp1Config};
 
     /// 跑一条产线：注入器 → 队列 → CSP-1 → 台账，返回 (注入器统计, 台账)。
-    fn run_line(csp_cfg: Csp1Config, p: f64, n_real: usize, seed: u64) -> (InjectorStats, GoldenLedger) {
-        let mut inj = GoldenInjector::new(InjectorConfig { p, defect_share: 0.7 }, seed).unwrap();
+    fn run_line(
+        csp_cfg: Csp1Config,
+        p: f64,
+        n_real: usize,
+        seed: u64,
+    ) -> (InjectorStats, GoldenLedger) {
+        let mut inj = GoldenInjector::new(
+            InjectorConfig {
+                p,
+                defect_share: 0.7,
+            },
+            seed,
+        )
+        .unwrap();
         let mut m = Csp1::new(csp_cfg).unwrap();
         let mut r = Rng::new(seed.wrapping_add(1));
         let mut def = Rng::new(seed.wrapping_add(2));
@@ -204,9 +219,30 @@ mod tests {
 
     #[test]
     fn rejects_bad_injector_config() {
-        assert!(GoldenInjector::new(InjectorConfig { p: 1.5, defect_share: 0.7 }, 1).is_err());
-        assert!(GoldenInjector::new(InjectorConfig { p: 0.1, defect_share: 2.0 }, 1).is_err());
-        assert!(GoldenInjector::new(InjectorConfig { p: 0.1, defect_share: 0.7 }, 1).is_ok());
+        assert!(GoldenInjector::new(
+            InjectorConfig {
+                p: 1.5,
+                defect_share: 0.7
+            },
+            1
+        )
+        .is_err());
+        assert!(GoldenInjector::new(
+            InjectorConfig {
+                p: 0.1,
+                defect_share: 2.0
+            },
+            1
+        )
+        .is_err());
+        assert!(GoldenInjector::new(
+            InjectorConfig {
+                p: 0.1,
+                defect_share: 0.7
+            },
+            1
+        )
+        .is_ok());
     }
 
     /// ★ 注入率与 70/30 构成。
@@ -214,7 +250,12 @@ mod tests {
     fn injects_at_rate_p_with_70_30_mix() {
         let n = 10_000;
         let (stats, _) = run_line(
-            Csp1Config { enabled: true, i: 10, f: 0.5, f_min: 0.05 },
+            Csp1Config {
+                enabled: true,
+                i: 10,
+                f: 0.5,
+                f_min: 0.05,
+            },
             0.1,
             n,
             7,
@@ -240,7 +281,12 @@ mod tests {
     #[test]
     fn alarm_fires_when_golden_defect_released() {
         let (_, ledger) = run_line(
-            Csp1Config { enabled: true, i: 20, f: 0.1, f_min: 0.02 },
+            Csp1Config {
+                enabled: true,
+                i: 20,
+                f: 0.1,
+                f_min: 0.02,
+            },
             0.1,
             1000,
             42,
@@ -253,7 +299,11 @@ mod tests {
             "告警数必须恒等于放行的缺陷金标数"
         );
         // 一致性：金标缺陷一半以上被拦（全检相位拦截 + 抽检拦截）
-        assert!(ledger.consistency() > 0.5, "consistency={}", ledger.consistency());
+        assert!(
+            ledger.consistency() > 0.5,
+            "consistency={}",
+            ledger.consistency()
+        );
         println!(
             "contract(f=0.1): alarms={} intercepted={} released={} false_rejects={} consistency={:.3}",
             ledger.alarms(),
@@ -268,7 +318,12 @@ mod tests {
     #[test]
     fn no_alarm_under_full_screening() {
         let (_, ledger) = run_line(
-            Csp1Config { enabled: true, i: u32::MAX, f: 1.0, f_min: 0.05 },
+            Csp1Config {
+                enabled: true,
+                i: u32::MAX,
+                f: 1.0,
+                f_min: 0.05,
+            },
             0.1,
             1000,
             42,
@@ -285,7 +340,12 @@ mod tests {
     #[test]
     fn zero_p_injects_nothing() {
         let (stats, ledger) = run_line(
-            Csp1Config { enabled: true, i: 5, f: 0.2, f_min: 0.05 },
+            Csp1Config {
+                enabled: true,
+                i: 5,
+                f: 0.2,
+                f_min: 0.05,
+            },
             0.0,
             500,
             9,

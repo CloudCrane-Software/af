@@ -90,10 +90,14 @@ pub fn deserialize_verify(bytes: &[u8], root_pk: &PublicKey) -> Result<Biscuit> 
 ///   budget_cents(1000) 是不可变的，1000 <= 500 恒假，check 会拒绝一切请求。
 pub fn attenuate(token: &Biscuit, child: &ChildSpec) -> Result<Biscuit> {
     let whitelist: Vec<String> = child.tools.iter().map(|t| format!("\"{t}\"")).collect();
-    let wl_check =
-        format!("check if {F_REQUEST_TOOL}($t), [{}].contains($t)", whitelist.join(", "));
-    let cap_check =
-        format!("check if {F_SPEND_CENTS}($s), $s <= {}", child.spend_cap_cents);
+    let wl_check = format!(
+        "check if {F_REQUEST_TOOL}($t), [{}].contains($t)",
+        whitelist.join(", ")
+    );
+    let cap_check = format!(
+        "check if {F_SPEND_CENTS}($s), $s <= {}",
+        child.spend_cap_cents
+    );
     let b = BlockBuilder::new()
         .check(wl_check.as_str())?
         .check(cap_check.as_str())?;
@@ -126,15 +130,24 @@ pub fn inspect(token: &Biscuit) -> Result<TokenCaps> {
         format!("nb($ns, $v) <- {F_NAMESPACE}($ns), {F_BUDGET_CENTS}($v)").as_str(),
         verify_limits(),
     )?;
-    let (namespace, budget_cents) =
-        nb.into_iter().next().map(|(a, v)| (Some(a), Some(v))).unwrap_or((None, None));
+    let (namespace, budget_cents) = nb
+        .into_iter()
+        .next()
+        .map(|(a, v)| (Some(a), Some(v)))
+        .unwrap_or((None, None));
 
     let block_count = token.block_count();
     let mut block_sources = Vec::with_capacity(block_count);
     for i in 0..block_count {
         block_sources.push(token.print_block_source(i)?);
     }
-    Ok(TokenCaps { tools, namespace, budget_cents, block_count, block_sources })
+    Ok(TokenCaps {
+        tools,
+        namespace,
+        budget_cents,
+        block_count,
+        block_sources,
+    })
 }
 
 /// 单凭证判定：验证方声明 request_tool / request_ns / spend_cents，

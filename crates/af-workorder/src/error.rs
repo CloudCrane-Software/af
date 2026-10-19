@@ -89,6 +89,8 @@ pub enum ChangeError {
     FromEqualsTo(crate::order::GraphVersion),
     #[error("diff_summary 为空:变更单必须写清差异描述")]
     EmptyDiffSummary,
-    #[error("策略组合矛盾:DrainAllInflight(排空全部在制才切)与 HotTakeover(在制立即由新版接管)互斥")]
+    #[error(
+        "策略组合矛盾:DrainAllInflight(排空全部在制才切)与 HotTakeover(在制立即由新版接管)互斥"
+    )]
     ConflictingDrainRelay,
 }

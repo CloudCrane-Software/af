@@ -69,7 +69,8 @@ fn always_on_calendar(tz: Tz) -> Calendar {
 }
 
 fn ber_single(y: i32, m: u32, d: u32, h: u32, mi: u32) -> DateTime<Tz> {
-    Berlin.with_ymd_and_hms(y, m, d, h, mi, 0)
+    Berlin
+        .with_ymd_and_hms(y, m, d, h, mi, 0)
         .single()
         .expect("唯一存在的柏林本地时刻(非歧义、非间隙)")
 }
@@ -103,11 +104,18 @@ fn night_shift_semantics_identical_without_dst() {
     // 上海无 DST:同一两窗口夜班给出同一钟面结果 → 上面的 +1ns 与 DST 无关,
     // 是"拆两天两窗口"模型本身的接缝损耗。
     let cal = night_calendar(Shanghai);
-    let fri = Shanghai.with_ymd_and_hms(2026, 6, 5, 22, 0, 0).single().unwrap();
+    let fri = Shanghai
+        .with_ymd_and_hms(2026, 6, 5, 22, 0, 0)
+        .single()
+        .unwrap();
     let done = cal.next_working_instant(fri, Duration::hours(4)).unwrap();
     assert_eq!(
         done,
-        Shanghai.with_ymd_and_hms(2026, 6, 6, 2, 0, 0).single().unwrap() + NS
+        Shanghai
+            .with_ymd_and_hms(2026, 6, 6, 2, 0, 0)
+            .single()
+            .unwrap()
+            + NS
     );
 }
 
@@ -117,7 +125,11 @@ fn night_shift_saturday_2330_plus_1h_crosses_to_sunday() {
     let sat = ber_single(2026, 6, 6, 23, 30);
     let done = cal.next_working_instant(sat, Duration::hours(1)).unwrap();
     // 23:30 → 23:59:59.999999999 报 29m59.999999999s,余 30m+1ns → 周日 00:30:00.000000001
-    assert_eq!(done, ber_single(2026, 6, 7, 0, 30) + NS, "周六 23:30 + 1 工时跨到周日 00:30");
+    assert_eq!(
+        done,
+        ber_single(2026, 6, 7, 0, 30) + NS,
+        "周六 23:30 + 1 工时跨到周日 00:30"
+    );
     // 跨越点两侧钟面连续可工:23:59:59 仍在晚窗,00:00 是凌晨窗左端
     assert!(cal.is_working_instant(ber_single(2026, 6, 6, 23, 59)));
     assert!(cal.is_working_instant(ber_single(2026, 6, 7, 0, 0)));
@@ -130,12 +142,17 @@ fn night_shift_saturday_2330_plus_1h_crosses_to_sunday() {
 fn two_consecutive_nights_forward_reverse_roundtrip() {
     let cal = night_calendar(Berlin);
     let start = ber_single(2026, 6, 5, 22, 0); // 周五 22:00
-    // 连续两晚正向:4 工时 → 周六 02:00(+1ns);12 工时跨两晚 → 周日 02:00(+2ns,每跨一夜损 1ns)
+                                               // 连续两晚正向:4 工时 → 周六 02:00(+1ns);12 工时跨两晚 → 周日 02:00(+2ns,每跨一夜损 1ns)
     let due4 = cal.next_working_instant(start, Duration::hours(4)).unwrap();
     assert_eq!(due4, ber_single(2026, 6, 6, 2, 0) + NS);
-    let due12 = cal.next_working_instant(start, Duration::hours(12)).unwrap();
-    assert_eq!(due12, ber_single(2026, 6, 7, 2, 0) + Duration::nanoseconds(2),
-        "两晚各损 1ns,累计 +2ns");
+    let due12 = cal
+        .next_working_instant(start, Duration::hours(12))
+        .unwrap();
+    assert_eq!(
+        due12,
+        ber_single(2026, 6, 7, 2, 0) + Duration::nanoseconds(2),
+        "两晚各损 1ns,累计 +2ns"
+    );
 
     // 逆向(截单)派生与正向互逆:4 工时与 12 工时的截单点都恰回到原始起点周五 22:00
     assert_eq!(
@@ -151,7 +168,10 @@ fn two_consecutive_nights_forward_reverse_roundtrip() {
     for (due, req) in [(due4, Duration::hours(4)), (due12, Duration::hours(12))] {
         let latest = cal.latest_order_at(due, req).unwrap();
         let back = cal.next_working_instant(latest, req).unwrap();
-        assert_eq!(back, due, "连续两晚正反互逆失败: due={due:?} latest={latest:?}");
+        assert_eq!(
+            back, due,
+            "连续两晚正反互逆失败: due={due:?} latest={latest:?}"
+        );
     }
 }
 
@@ -161,17 +181,22 @@ fn two_consecutive_nights_forward_reverse_roundtrip() {
 fn spring_forward_gap_hour_not_counted_as_working_time() {
     let cal = night_calendar(Berlin);
     // 护栏:2026-03-29 02:30 本地时刻不存在(间隙)
-    assert!(Berlin.with_ymd_and_hms(2026, 3, 29, 2, 30, 0).single().is_none());
+    assert!(Berlin
+        .with_ymd_and_hms(2026, 3, 29, 2, 30, 0)
+        .single()
+        .is_none());
 
     // 裁决:凌晨窗 [00:00,06:00) 钟面跨度 6h,流逝容量只有 5h —— 跳失的小时不计工时
     let midnight = ber_single(2026, 3, 29, 0, 0); // 00:00 CET = 前日 23:00Z
     assert_eq!(
-        cal.next_working_instant(midnight, Duration::hours(5)).unwrap(),
+        cal.next_working_instant(midnight, Duration::hours(5))
+            .unwrap(),
         ber_single(2026, 3, 29, 6, 0),
         "5 工时恰好填满跨间隙窗口(流逝语义)"
     );
     assert_eq!(
-        cal.next_working_instant(midnight, Duration::hours(6)).unwrap(),
+        cal.next_working_instant(midnight, Duration::hours(6))
+            .unwrap(),
         ber_single(2026, 3, 29, 23, 0),
         "6 工时装不下 → 溢出到当晚 22:00 窗口,23:00 完成"
     );
@@ -179,7 +204,8 @@ fn spring_forward_gap_hour_not_counted_as_working_time() {
     // 整晚(周六 22:00 起)名义 8h、实际 7h−1ns:7h−1ns 恰在周日 06:00(窗口末)完工
     let sat = ber_single(2026, 3, 28, 22, 0);
     assert_eq!(
-        cal.next_working_instant(sat, Duration::hours(7) - NS).unwrap(),
+        cal.next_working_instant(sat, Duration::hours(7) - NS)
+            .unwrap(),
         ber_single(2026, 3, 29, 6, 0)
     );
     assert_eq!(
@@ -197,13 +223,20 @@ fn spring_forward_addition_into_missing_hour_lands_after_gap() {
 
     // 未触界的加法按普通钟面推进
     assert_eq!(
-        cal.next_working_instant(ber_single(2026, 3, 29, 1, 20), Duration::minutes(30)).unwrap(),
+        cal.next_working_instant(ber_single(2026, 3, 29, 1, 20), Duration::minutes(30))
+            .unwrap(),
         ber_single(2026, 3, 29, 1, 50)
     );
     // 跨缺失段:01:00 + 1 工时 → 本地 03:00 CEST。钟面 +2h、流逝恰好 1h:
     // 02:00–02:59 的钟面不存在,加法按流逝时间直接落到间隙之后第一个可达时刻。
-    let done = cal.next_working_instant(one_am, Duration::hours(1)).unwrap();
-    assert_eq!(done, ber_single(2026, 3, 29, 3, 0), "跨缺失段的加法落在 03:00");
+    let done = cal
+        .next_working_instant(one_am, Duration::hours(1))
+        .unwrap();
+    assert_eq!(
+        done,
+        ber_single(2026, 3, 29, 3, 0),
+        "跨缺失段的加法落在 03:00"
+    );
     assert_eq!(
         done.with_timezone(&Utc) - one_am.with_timezone(&Utc),
         Duration::hours(1),
@@ -211,7 +244,8 @@ fn spring_forward_addition_into_missing_hour_lands_after_gap() {
     );
     // 01:30 + 30min 同样触界 → 03:00(钟面 +1h30m,流逝 30min)
     assert_eq!(
-        cal.next_working_instant(ber_single(2026, 3, 29, 1, 30), Duration::minutes(30)).unwrap(),
+        cal.next_working_instant(ber_single(2026, 3, 29, 1, 30), Duration::minutes(30))
+            .unwrap(),
         ber_single(2026, 3, 29, 3, 0)
     );
 }
@@ -221,21 +255,38 @@ fn spring_forward_addition_into_missing_hour_lands_after_gap() {
 #[test]
 fn fall_back_repeated_hour_counts_once_as_elapsed_time() {
     let cal = night_calendar(Berlin);
-    let first = Berlin.with_ymd_and_hms(2026, 10, 25, 2, 30, 0).earliest().unwrap();
-    let second = Berlin.with_ymd_and_hms(2026, 10, 25, 2, 30, 0).latest().unwrap();
+    let first = Berlin
+        .with_ymd_and_hms(2026, 10, 25, 2, 30, 0)
+        .earliest()
+        .unwrap();
+    let second = Berlin
+        .with_ymd_and_hms(2026, 10, 25, 2, 30, 0)
+        .latest()
+        .unwrap();
     // 歧义时刻的两次出现:第一次 CEST(00:30Z),第二次 CET(01:30Z)
-    assert_eq!(first.with_timezone(&Utc), Utc.with_ymd_and_hms(2026, 10, 25, 0, 30, 0).unwrap());
-    assert_eq!(second.with_timezone(&Utc), Utc.with_ymd_and_hms(2026, 10, 25, 1, 30, 0).unwrap());
+    assert_eq!(
+        first.with_timezone(&Utc),
+        Utc.with_ymd_and_hms(2026, 10, 25, 0, 30, 0).unwrap()
+    );
+    assert_eq!(
+        second.with_timezone(&Utc),
+        Utc.with_ymd_and_hms(2026, 10, 25, 1, 30, 0).unwrap()
+    );
 
     // 裁决:凌晨窗 [00:00,06:00) 钟面 6h、流逝 7h —— 重复的一小时是真实时间,容量计入一次
-    let midnight = Berlin.with_ymd_and_hms(2026, 10, 25, 0, 0, 0).earliest().unwrap(); // 00:00 CEST = 前日 22:00Z
+    let midnight = Berlin
+        .with_ymd_and_hms(2026, 10, 25, 0, 0, 0)
+        .earliest()
+        .unwrap(); // 00:00 CEST = 前日 22:00Z
     assert_eq!(
-        cal.next_working_instant(midnight, Duration::hours(7)).unwrap(),
+        cal.next_working_instant(midnight, Duration::hours(7))
+            .unwrap(),
         ber_single(2026, 10, 25, 6, 0),
         "7 工时恰好填满秋拨夜的凌晨窗口"
     );
     assert_eq!(
-        cal.next_working_instant(midnight, Duration::hours(7) + NS).unwrap(),
+        cal.next_working_instant(midnight, Duration::hours(7) + NS)
+            .unwrap(),
         ber_single(2026, 10, 25, 22, 0) + NS,
         "再多 1ns 即溢出到下一个夜班开头"
     );
@@ -261,37 +312,56 @@ fn fall_back_repeated_hour_counts_once_as_elapsed_time() {
 fn fall_back_ambiguous_instant_resolution() {
     // (a) is_working_instant 是纯钟面判定,不消歧:两次出现同答"班次内"
     let cal = night_calendar(Berlin);
-    let first = Berlin.with_ymd_and_hms(2026, 10, 25, 2, 30, 0).earliest().unwrap();
-    let second = Berlin.with_ymd_and_hms(2026, 10, 25, 2, 30, 0).latest().unwrap();
+    let first = Berlin
+        .with_ymd_and_hms(2026, 10, 25, 2, 30, 0)
+        .earliest()
+        .unwrap();
+    let second = Berlin
+        .with_ymd_and_hms(2026, 10, 25, 2, 30, 0)
+        .latest()
+        .unwrap();
     assert!(cal.is_working_instant(first) && cal.is_working_instant(second));
 
     // (b) 工时算术按流逝时间:第一次 02:30 + 1 工时 → 第二次出现的 02:30(CET)
-    assert_eq!(cal.next_working_instant(first, Duration::hours(1)).unwrap(), second,
-        "跨重复段的加法落到第二次出现的同一钟面");
     assert_eq!(
-        cal.next_working_instant(second, Duration::hours(1)).unwrap(),
+        cal.next_working_instant(first, Duration::hours(1)).unwrap(),
+        second,
+        "跨重复段的加法落到第二次出现的同一钟面"
+    );
+    assert_eq!(
+        cal.next_working_instant(second, Duration::hours(1))
+            .unwrap(),
         ber_single(2026, 10, 25, 3, 30),
         "第二次 02:30 + 1 工时 → 03:30(CET,单次出现)"
     );
 
     // (c) duration=0:两个出现都被判为"班次内可开工" → 原地不动
-    assert_eq!(cal.next_working_instant(first, Duration::zero()).unwrap(), first);
-    assert_eq!(cal.next_working_instant(second, Duration::zero()).unwrap(), second);
+    assert_eq!(
+        cal.next_working_instant(first, Duration::zero()).unwrap(),
+        first
+    );
+    assert_eq!(
+        cal.next_working_instant(second, Duration::zero()).unwrap(),
+        second
+    );
 
     // (d) 班次边界落在歧义时刻:crate 用 .earliest() 消歧(取较早偏移)。
     // 覆盖 10-25 当天只有 [00:00,02:30) 窗口 → 窗口末按第一次 02:30(CEST,00:30Z)计,容量 2.5h
     let sun = NaiveDate::from_ymd_opt(2026, 10, 25).unwrap();
     let cal2 = Calendar::new_empty(Berlin)
-        .with_day_override(sun, vec![Shift::new(
-            NaiveTime::MIN,
-            NaiveTime::from_hms_opt(2, 30, 0).unwrap(),
+        .with_day_override(
+            sun,
+            vec![Shift::new(NaiveTime::MIN, NaiveTime::from_hms_opt(2, 30, 0).unwrap()).unwrap()],
         )
-        .unwrap()])
         .with_horizon(5);
     cal2.validate().unwrap();
-    let midnight = Berlin.with_ymd_and_hms(2026, 10, 25, 0, 0, 0).earliest().unwrap();
+    let midnight = Berlin
+        .with_ymd_and_hms(2026, 10, 25, 0, 0, 0)
+        .earliest()
+        .unwrap();
     assert_eq!(
-        cal2.next_working_instant(midnight, Duration::hours(2) + Duration::minutes(30)).unwrap(),
+        cal2.next_working_instant(midnight, Duration::hours(2) + Duration::minutes(30))
+            .unwrap(),
         first,
         "2.5 工时恰达窗口末 = 第一次出现的 02:30"
     );
@@ -312,22 +382,32 @@ fn night_shift_with_holiday_and_makeup_override() {
     // (1) 周末停工:周五 22:00 + 4 工时,周六凌晨窗缺失 → 跳到周一凌晨
     let weekday_cal = weekday_night_calendar(Berlin);
     assert_eq!(
-        weekday_cal.next_working_instant(fri, Duration::hours(4)).unwrap(),
+        weekday_cal
+            .next_working_instant(fri, Duration::hours(4))
+            .unwrap(),
         ber_single(2026, 6, 8, 2, 0) + NS,
         "周五尾窗 2h−1ns + 周一凌晨 2h+1ns → 周一 02:00:00.000000001"
     );
 
     // (2) 调休(非空覆盖=上班):周六只给凌晨窗,周五夜班在周六凌晨收尾
-    let makeup_morning = weekday_cal.clone().with_day_override(sat_date, vec![morning()]);
+    let makeup_morning = weekday_cal
+        .clone()
+        .with_day_override(sat_date, vec![morning()]);
     assert_eq!(
-        makeup_morning.next_working_instant(fri, Duration::hours(4)).unwrap(),
+        makeup_morning
+            .next_working_instant(fri, Duration::hours(4))
+            .unwrap(),
         ber_single(2026, 6, 6, 2, 0) + NS
     );
     // 调休给整晚(凌晨+晚间):周五+周六两晚 12 工时。注意 weekday 日历周日全天空窗,
     // 周六夜班的尾巴落不到周日凌晨 → 直落周一凌晨 02:00:00.000000002(每跨一夜损 1ns)
-    let makeup_full = weekday_cal.clone().with_day_override(sat_date, night_shifts());
+    let makeup_full = weekday_cal
+        .clone()
+        .with_day_override(sat_date, night_shifts());
     assert_eq!(
-        makeup_full.next_working_instant(fri, Duration::hours(12)).unwrap(),
+        makeup_full
+            .next_working_instant(fri, Duration::hours(12))
+            .unwrap(),
         ber_single(2026, 6, 8, 2, 0) + Duration::nanoseconds(2)
     );
     // 再调休周日凌晨窗(尾窗):周五夜班 + 调休周六夜班 = 真正连续两晚,12 工时 → 周日 02:00:00.000000002
@@ -337,15 +417,22 @@ fn night_shift_with_holiday_and_makeup_override() {
         .with_day_override(sat_date, night_shifts())
         .with_day_override(sun_date, vec![morning()]);
     assert_eq!(
-        makeup_weekend.next_working_instant(fri, Duration::hours(12)).unwrap(),
+        makeup_weekend
+            .next_working_instant(fri, Duration::hours(12))
+            .unwrap(),
         ber_single(2026, 6, 7, 2, 0) + Duration::nanoseconds(2)
     );
 
     // (3) 假日表(空语义=该日全部窗口取消):周六整日放假
     let holiday = weekday_cal.with_holidays([sat_date]);
-    assert!(!holiday.is_working_instant(ber_single(2026, 6, 6, 3, 0)), "假日凌晨不施工");
+    assert!(
+        !holiday.is_working_instant(ber_single(2026, 6, 6, 3, 0)),
+        "假日凌晨不施工"
+    );
     assert_eq!(
-        holiday.next_working_instant(fri, Duration::hours(3)).unwrap(),
+        holiday
+            .next_working_instant(fri, Duration::hours(3))
+            .unwrap(),
         ber_single(2026, 6, 8, 1, 0) + NS,
         "周五 22:00 + 3 工时:尾窗 2h−1ns,周六假日跳过,周一凌晨报 1h+1ns → 周一 01:00:00.000000001"
     );
@@ -353,7 +440,12 @@ fn night_shift_with_holiday_and_makeup_override() {
     let due = ber_single(2026, 6, 8, 1, 0) + NS;
     let latest = holiday.latest_order_at(due, Duration::hours(3)).unwrap();
     assert_eq!(latest, fri, "逆推:周六假日无窗口,工时全部落回周五夜班");
-    assert_eq!(holiday.next_working_instant(latest, Duration::hours(3)).unwrap(), due);
+    assert_eq!(
+        holiday
+            .next_working_instant(latest, Duration::hours(3))
+            .unwrap(),
+        due
+    );
 }
 
 // ---------- 5. 多年扫描稳定性(互逆性量化) ----------
@@ -377,16 +469,21 @@ fn roundtrip_class<Tz: TimeZone + Clone>(
     req: Duration,
     label: &str,
 ) -> Mismatch {
-    let latest = cal
-        .latest_order_at(p.clone(), req)
-        .unwrap_or_else(|e| panic!("{label}: 逆向派生失败 p_utc={:?}: {e}", p.with_timezone(&Utc)));
-    let back = cal.next_working_instant(latest.clone(), req).unwrap_or_else(|e| {
+    let latest = cal.latest_order_at(p.clone(), req).unwrap_or_else(|e| {
         panic!(
-            "{label}: 正向回算失败 p_utc={:?} latest_utc={:?}: {e}",
-            p.with_timezone(&Utc),
-            latest.with_timezone(&Utc)
+            "{label}: 逆向派生失败 p_utc={:?}: {e}",
+            p.with_timezone(&Utc)
         )
     });
+    let back = cal
+        .next_working_instant(latest.clone(), req)
+        .unwrap_or_else(|e| {
+            panic!(
+                "{label}: 正向回算失败 p_utc={:?} latest_utc={:?}: {e}",
+                p.with_timezone(&Utc),
+                latest.with_timezone(&Utc)
+            )
+        });
     if back == p {
         return Mismatch::Exact;
     }
@@ -447,7 +544,12 @@ fn three_year_scan_6h_grid_berlin_and_new_york() {
     for (tz, name) in [(Berlin, "Europe/Berlin"), (New_York, "America/New_York")] {
         // 夜班日历:不互逆只允许落在已知坑(班次外)与新记录的边界坑(开工点)
         let night = night_calendar(tz);
-        let (n, c) = scan_roundtrips(&night, tz, &format!("{name} 夜班 6h 网格"), Duration::hours(6));
+        let (n, c) = scan_roundtrips(
+            &night,
+            tz,
+            &format!("{name} 夜班 6h 网格"),
+            Duration::hours(6),
+        );
         assert_eq!(n, 4384, "扫描点数(1096 天 × 4)");
         assert_eq!(c[2], 0, "6h UTC 网格不应落到本地开工点");
         assert!(c[1] > 0, "夜班日历必然存在班次外交付点样本(已知坑④-3)");
@@ -455,10 +557,18 @@ fn three_year_scan_6h_grid_berlin_and_new_york() {
 
         // 24×7 日历:任何交付点都在班次内 → 除开工点外必须逐点严格互逆(最强校验)
         let alwayson = always_on_calendar(tz);
-        let (n2, c2) =
-            scan_roundtrips(&alwayson, tz, &format!("{name} 24×7 6h 网格"), Duration::hours(6));
+        let (n2, c2) = scan_roundtrips(
+            &alwayson,
+            tz,
+            &format!("{name} 24×7 6h 网格"),
+            Duration::hours(6),
+        );
         assert_eq!(n2, 4384);
-        assert_eq!(c2[1] + c2[2], 0, "24×7 日历 6h UTC 网格上必须全部严格互逆(含全部 DST 边界日)");
+        assert_eq!(
+            c2[1] + c2[2],
+            0,
+            "24×7 日历 6h UTC 网格上必须全部严格互逆(含全部 DST 边界日)"
+        );
     }
 }
 
@@ -471,15 +581,28 @@ fn three_year_scan_6h_grid_berlin_and_new_york() {
 fn dense_hourly_scan_3y_berlin_and_new_york() {
     for (tz, name) in [(Berlin, "Europe/Berlin"), (New_York, "America/New_York")] {
         let night = night_calendar(tz);
-        let (n, c) = scan_roundtrips(&night, tz, &format!("{name} 夜班 1h 网格"), Duration::hours(1));
+        let (n, c) = scan_roundtrips(
+            &night,
+            tz,
+            &format!("{name} 夜班 1h 网格"),
+            Duration::hours(1),
+        );
         assert_eq!(n, 26304);
         assert!(c[2] > 0, "1h 网格应命中本地开工点(00:00/22:00)样本");
         assert!(c[1] > 0);
-        assert_eq!(c[0] + c[1] + c[2], n, "除已知坑/开工点边界坑外不允许任何不互逆点");
+        assert_eq!(
+            c[0] + c[1] + c[2],
+            n,
+            "除已知坑/开工点边界坑外不允许任何不互逆点"
+        );
 
         let alwayson = always_on_calendar(tz);
-        let (n2, c2) =
-            scan_roundtrips(&alwayson, tz, &format!("{name} 24×7 1h 网格"), Duration::hours(1));
+        let (n2, c2) = scan_roundtrips(
+            &alwayson,
+            tz,
+            &format!("{name} 24×7 1h 网格"),
+            Duration::hours(1),
+        );
         assert_eq!(n2, 26304);
         assert!(c2[2] > 0, "1h 网格应命中每日开工点样本");
         assert_eq!(c2[1], 0);
@@ -497,13 +620,21 @@ fn due_at_window_start_is_not_completion_reachable() {
     // 与 sla.rs 中"due 恰在开工点"的 slack 情形一致,但 lib.rs 文档
     // "due 在班次内恒互逆"的措辞在开工点不成立,建议修文档或修语义(此处只记录)。
     let cal = night_calendar(Shanghai); // 无 DST,隔离变量
-    let mon = Shanghai.with_ymd_and_hms(2026, 6, 8, 0, 0, 0).single().unwrap();
+    let mon = Shanghai
+        .with_ymd_and_hms(2026, 6, 8, 0, 0, 0)
+        .single()
+        .unwrap();
     assert_eq!(mon.weekday().to_string(), "Mon", "夹具护栏");
     assert!(cal.is_working_instant(mon), "开工点是班次内时刻");
 
     let latest = cal.latest_order_at(mon, Duration::hours(8)).unwrap();
-    let back = cal.next_working_instant(latest, Duration::hours(8)).unwrap();
-    assert!(back < mon, "开工点不可作为完工时刻:回算 {back:?} < due {mon:?}");
+    let back = cal
+        .next_working_instant(latest, Duration::hours(8))
+        .unwrap();
+    assert!(
+        back < mon,
+        "开工点不可作为完工时刻:回算 {back:?} < due {mon:?}"
+    );
 
     // 最晚性:下单点再晚 1ns,完工必然错过交付承诺
     let late = cal

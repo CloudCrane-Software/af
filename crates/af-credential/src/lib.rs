@@ -18,7 +18,7 @@ mod judge;
 mod policy;
 
 pub use credential::{
-    authorize, attenuate, deserialize_verify, inspect, issue_root, serialize, ChildSpec, RootSpec,
+    attenuate, authorize, deserialize_verify, inspect, issue_root, serialize, ChildSpec, RootSpec,
     TokenCaps, F_BUDGET_CENTS, F_NAMESPACE, F_REQUEST_NS, F_REQUEST_TOOL, F_SPEND_CENTS, F_TOOL,
 };
 pub use judge::{evaluate, AccessQuery, Verdict};

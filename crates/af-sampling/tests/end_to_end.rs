@@ -28,10 +28,22 @@ fn end_to_end_inject_sample_promote() {
     let mut engine = Engine::from_recipe_json(recipe_json).unwrap();
 
     // CSP-1：i=15，f=0.5，f_min=0.05
-    let mut csp = Csp1::new(Csp1Config { enabled: true, i: 15, f: 0.5, f_min: 0.05 }).unwrap();
+    let mut csp = Csp1::new(Csp1Config {
+        enabled: true,
+        i: 15,
+        f: 0.5,
+        f_min: 0.05,
+    })
+    .unwrap();
     // 注入器：p=0.04，缺陷金标占 70%
-    let mut injector =
-        GoldenInjector::new(InjectorConfig { p: 0.04, defect_share: 0.7 }, 777).unwrap();
+    let mut injector = GoldenInjector::new(
+        InjectorConfig {
+            p: 0.04,
+            defect_share: 0.7,
+        },
+        777,
+    )
+    .unwrap();
 
     let mut item_rng = Rng::new(2026); // 缺陷位
     let mut csp_rng = Rng::new(888); // 抽检决策
@@ -72,7 +84,11 @@ fn end_to_end_inject_sample_promote() {
             snap_seen = ledger.golden_seen();
             snap_intercepted = ledger.defective_intercepted();
             snap_clean_passed = ledger.clean_passed();
-            let batch_consistency = if seen == 0 { 1.0 } else { correct as f64 / seen as f64 };
+            let batch_consistency = if seen == 0 {
+                1.0
+            } else {
+                correct as f64 / seen as f64
+            };
             let outcome = RunOutcome {
                 success: batch_alarms == 0,
                 violations: batch_alarms as u32,
@@ -89,7 +105,11 @@ fn end_to_end_inject_sample_promote() {
     }
 
     // ── 契约与守恒断言
-    assert_eq!(ledger.alarms(), ledger.defective_released(), "告警==放行缺陷金标");
+    assert_eq!(
+        ledger.alarms(),
+        ledger.defective_released(),
+        "告警==放行缺陷金标"
+    );
     assert_eq!(alarms_total, ledger.alarms(), "分批告警加总==台账总告警");
     assert_eq!(
         ledger.defective_intercepted() + ledger.defective_released(),
@@ -98,8 +118,14 @@ fn end_to_end_inject_sample_promote() {
     );
     assert_eq!(ledger.false_rejects(), 0, "干净金标不应被误拦");
     assert!(ledger.alarms() > 0, "f=0.5 抽检 + 缺陷流必有金标缺陷放行");
-    assert!(csp.stats().to_screening_switches >= 1, "事故段必须把机器打回全检");
-    assert!(engine.attained() >= engine.current(), "current 永不超过 attained");
+    assert!(
+        csp.stats().to_screening_switches >= 1,
+        "事故段必须把机器打回全检"
+    );
+    assert!(
+        engine.attained() >= engine.current(),
+        "current 永不超过 attained"
+    );
 
     println!("── ledger ──");
     println!(

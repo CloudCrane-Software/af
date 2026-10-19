@@ -153,7 +153,9 @@ pub enum WithdrawOutcome {
 /// 表示回执已存在，直接返回已存结果、**未**调用外部操作。
 #[derive(Debug)]
 pub enum ExecuteOutcome<T> {
-    RanFresh { result: T },
+    RanFresh {
+        result: T,
+    },
     Replayed {
         result: T,
         original_executed_at_ms: i64,
@@ -249,11 +251,11 @@ impl Gateway {
 
     /// 当前持久化纪元（每次读取，不缓存，多实例打开同一库也不会拿到旧值）。
     pub fn current_epoch(&self) -> Result<i64> {
-        let v: String = self
-            .conn
-            .query_row("SELECT value FROM gateway_meta WHERE key='epoch'", [], |r| {
-                r.get(0)
-            })?;
+        let v: String = self.conn.query_row(
+            "SELECT value FROM gateway_meta WHERE key='epoch'",
+            [],
+            |r| r.get(0),
+        )?;
         Ok(v.parse().unwrap_or(0))
     }
 
@@ -337,7 +339,9 @@ impl Gateway {
                 |r| r.get(0),
             )
             .optional()?
-            .ok_or_else(|| GatewayError::NotDeclared { key: key.to_string() })?; // 理论不可达
+            .ok_or_else(|| GatewayError::NotDeclared {
+                key: key.to_string(),
+            })?; // 理论不可达
         if stored != fp {
             return Err(GatewayError::PayloadConflict {
                 key: key.to_string(),
@@ -373,7 +377,9 @@ impl Gateway {
         }
         let snap = self
             .snapshot_intent(key)?
-            .ok_or_else(|| GatewayError::NotDeclared { key: key.to_string() })?;
+            .ok_or_else(|| GatewayError::NotDeclared {
+                key: key.to_string(),
+            })?;
         if snap.state == IntentState::Withdrawn {
             Ok(WithdrawOutcome::AlreadyWithdrawn)
         } else {
@@ -393,7 +399,12 @@ impl Gateway {
     ///
     /// `effect` 收到声明时的载荷（JSON）；返回 Err 时意图保持 declared，
     /// 窗口关闭后可重试。
-    pub fn execute<T, F>(&self, session: &Session, key: &IntentKey, effect: F) -> Result<ExecuteOutcome<T>>
+    pub fn execute<T, F>(
+        &self,
+        session: &Session,
+        key: &IntentKey,
+        effect: F,
+    ) -> Result<ExecuteOutcome<T>>
     where
         F: FnOnce(&Value) -> Result<T>,
         T: Serialize + DeserializeOwned,
@@ -408,10 +419,14 @@ impl Gateway {
                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
             )
             .optional()?
-            .ok_or_else(|| GatewayError::NotDeclared { key: key.to_string() })?;
+            .ok_or_else(|| GatewayError::NotDeclared {
+                key: key.to_string(),
+            })?;
 
         match IntentState::from_db(&state) {
-            IntentState::Withdrawn => Err(GatewayError::Withdrawn { key: key.to_string() }),
+            IntentState::Withdrawn => Err(GatewayError::Withdrawn {
+                key: key.to_string(),
+            }),
             IntentState::Executed => {
                 let (receipt_json, at, ep): (String, i64, i64) = self.conn.query_row(
                     "SELECT receipt_json, executed_at_ms, executed_epoch FROM effect_intent
@@ -456,7 +471,11 @@ impl Gateway {
         self.fence(session)?;
         let now = now_ms();
         let stored = self.store_receipt(key, receipt, now, session.epoch)?;
-        Ok(if stored { RecordOutcome::Recorded } else { RecordOutcome::AlreadyRecorded })
+        Ok(if stored {
+            RecordOutcome::Recorded
+        } else {
+            RecordOutcome::AlreadyRecorded
+        })
     }
 
     /// 返回 true=本次写入，false=此前已有回执（幂等保留）。
@@ -487,10 +506,14 @@ impl Gateway {
         // 没写入：要么不存在，要么已 executed / withdrawn
         let snap = self
             .snapshot_intent(key)?
-            .ok_or_else(|| GatewayError::NotDeclared { key: key.to_string() })?;
+            .ok_or_else(|| GatewayError::NotDeclared {
+                key: key.to_string(),
+            })?;
         match snap.state {
             IntentState::Executed => Ok(false), // 幂等：保留原回执
-            IntentState::Withdrawn => Err(GatewayError::Withdrawn { key: key.to_string() }),
+            IntentState::Withdrawn => Err(GatewayError::Withdrawn {
+                key: key.to_string(),
+            }),
             IntentState::Declared => unreachable!("declared 行的 UPDATE 必然生效"),
         }
     }

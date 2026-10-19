@@ -2,7 +2,7 @@
 //!
 //! 核心验证：**日窗耗尽但周窗有余 → 日窗恢复前任务转 API，日窗重置后切回订阅。**
 
-use af_meter::demo::{self, SCHEDULE, DAY, WEEK};
+use af_meter::demo::{self, DAY, SCHEDULE, WEEK};
 use af_meter::{route, Decision, Meter};
 
 #[test]
@@ -48,10 +48,7 @@ fn daily_exhausted_but_weekly_surplus_switches_to_api_until_daily_resets() {
     );
 
     // 日窗恢复前 → 转 API
-    assert_eq!(
-        demo::used(&route(&mut supplies, 5.0, 7_200.0)),
-        Some("api")
-    );
+    assert_eq!(demo::used(&route(&mut supplies, 5.0, 7_200.0)), Some("api"));
     assert_eq!(
         demo::used(&route(&mut supplies, 7.0, 80_000.0)),
         Some("api")

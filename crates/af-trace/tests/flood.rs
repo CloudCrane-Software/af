@@ -29,7 +29,7 @@ fn parse_sink(sink: &Mutex<Vec<String>>) -> Vec<af_trace::TraceEvent> {
 fn flood_100k_normal_events() {
     let trace = Trace::spawn(TraceConfig {
         critical_capacity: 8192,
-        normal_capacity: 512,      // 小队列 → 洪峰必然溢出
+        normal_capacity: 512,         // 小队列 → 洪峰必然溢出
         critical_consume_delay_us: 0, // critical 落盘不拖后腿
         normal_consume_delay_us: 200, // normal 慢消费者：200µs/条
     });
@@ -104,7 +104,10 @@ fn flood_100k_normal_events() {
     let ok_seqs = ok_critical.lock().unwrap().clone();
     assert_eq!(ok_seqs.len(), CHECKPOINTS, "100 条检查点经重试后全部成功");
     for seq in &ok_seqs {
-        assert!(crit_seqs.contains(seq), "Ok(seq={seq}) 的 critical 事件必须落盘");
+        assert!(
+            crit_seqs.contains(seq),
+            "Ok(seq={seq}) 的 critical 事件必须落盘"
+        );
     }
     assert!(
         crit.iter().all(|e| e.level == Level::Critical),
@@ -118,8 +121,14 @@ fn flood_100k_normal_events() {
         report.gap_counter, dropped,
         "gap_counter 必须 == 发送数 - 实际落盘数"
     );
-    assert_eq!(gap_at_quiesce, report.gap_counter, "生产者结束后不应再新增丢弃");
-    assert!(dropped >= 1_000, "洪峰必须真实压垮 512 容量的队列（丢弃 {dropped}）");
+    assert_eq!(
+        gap_at_quiesce, report.gap_counter,
+        "生产者结束后不应再新增丢弃"
+    );
+    assert!(
+        dropped >= 1_000,
+        "洪峰必须真实压垮 512 容量的队列（丢弃 {dropped}）"
+    );
     assert!(delivered >= 1, "慢消费者仍应消费掉一部分事件");
 
     // ============ 验证 3：每个缺口都成为落盘的 critical 事实 ============
@@ -127,8 +136,15 @@ fn flood_100k_normal_events() {
         report.gap_reported, report.gap_counter,
         "shutdown 补发后 reported == counter"
     );
-    let gap_sum: u64 = crit.iter().filter_map(|e| e.gap.as_ref()).map(|g| g.count).sum();
-    assert_eq!(gap_sum, report.gap_counter, "Σ(gap span.count) == 实际丢弃数");
+    let gap_sum: u64 = crit
+        .iter()
+        .filter_map(|e| e.gap.as_ref())
+        .map(|g| g.count)
+        .sum();
+    assert_eq!(
+        gap_sum, report.gap_counter,
+        "Σ(gap span.count) == 实际丢弃数"
+    );
     let gap_spans = crit.iter().filter(|e| e.kind == "gap").count();
     assert!(gap_spans >= 1, "至少一条 gap span");
 
@@ -141,9 +157,16 @@ fn flood_100k_normal_events() {
 
     let rejected = rejected_critical.lock().unwrap().clone();
     println!("==== 洪峰结果 ====");
-    println!("normal 发送: {NORMAL_TOTAL}, 落盘: {delivered}, 丢弃: {dropped} ({:.2}%)",
-        dropped as f64 / NORMAL_TOTAL as f64 * 100.0);
+    println!(
+        "normal 发送: {NORMAL_TOTAL}, 落盘: {delivered}, 丢弃: {dropped} ({:.2}%)",
+        dropped as f64 / NORMAL_TOTAL as f64 * 100.0
+    );
     println!("gap_counter == gap_reported == {gap_sum}（gap span 条数: {gap_spans}）");
-    println!("critical 落盘: {} 行（检查点 {} + gap span {gap_spans}），重试次数: {}（被拒 seq 数: {}）",
-        report.critical_persisted, CHECKPOINTS, retries.load(Ordering::Relaxed), rejected.len());
+    println!(
+        "critical 落盘: {} 行（检查点 {} + gap span {gap_spans}），重试次数: {}（被拒 seq 数: {}）",
+        report.critical_persisted,
+        CHECKPOINTS,
+        retries.load(Ordering::Relaxed),
+        rejected.len()
+    );
 }

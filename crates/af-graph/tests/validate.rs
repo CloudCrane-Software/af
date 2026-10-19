@@ -98,18 +98,17 @@ fn loop_body_cycle_exempt_but_map_body_cycle_rejected() {
 
     // 但 map 体（每次只跑一遍）内出现环 = 无界循环，必须拒绝（规则①）。
     let mut t = load("legal-3-full");
-    t.subgraphs
-        .get_mut("map_body")
-        .unwrap()
-        .edges
-        .push(Edge {
-            from: "self_check".into(),
-            output: "redo".into(),
-            to: "summarize".into(),
-            input: "candidate".into(),
-        });
+    t.subgraphs.get_mut("map_body").unwrap().edges.push(Edge {
+        from: "self_check".into(),
+        output: "redo".into(),
+        to: "summarize".into(),
+        input: "candidate".into(),
+    });
     let r = validate(&t);
-    assert!(r.only_rule(Rule::Cycle), "map 体内的环应触发规则①，实际:\n{r}");
+    assert!(
+        r.only_rule(Rule::Cycle),
+        "map 体内的环应触发规则①，实际:\n{r}"
+    );
     assert_eq!(r.violations[0].scope, "subgraph:map_body");
 }
 
@@ -133,7 +132,10 @@ fn loop_zero_iterations_rejected() {
     let mut t = load("legal-2-loop");
     t.nodes[1].loop_spec.as_mut().unwrap().max_iterations = 0;
     let r = validate(&t);
-    assert!(r.only_rule(Rule::LoopNotControlled), "max_iterations=0 应触发规则④，实际:\n{r}");
+    assert!(
+        r.only_rule(Rule::LoopNotControlled),
+        "max_iterations=0 应触发规则④，实际:\n{r}"
+    );
 }
 
 #[test]
@@ -183,10 +185,27 @@ fn unknown_node_kind_is_open_extension() {
         name: "ext-kind".into(),
         entry: "a".into(),
         nodes: vec![
-            Node { id: "a".into(), kind: "rerank_v2".into(), human: None, loop_spec: None, map_spec: None },
-            Node { id: "b".into(), kind: "rerank_v3".into(), human: None, loop_spec: None, map_spec: None },
+            Node {
+                id: "a".into(),
+                kind: "rerank_v2".into(),
+                human: None,
+                loop_spec: None,
+                map_spec: None,
+            },
+            Node {
+                id: "b".into(),
+                kind: "rerank_v3".into(),
+                human: None,
+                loop_spec: None,
+                map_spec: None,
+            },
         ],
-        edges: vec![Edge { from: "a".into(), output: "o".into(), to: "b".into(), input: "i".into() }],
+        edges: vec![Edge {
+            from: "a".into(),
+            output: "o".into(),
+            to: "b".into(),
+            input: "i".into(),
+        }],
         subgraphs: Default::default(),
     };
     assert!(validate(&t).is_ok(), "未知 kind 不应被拒绝");

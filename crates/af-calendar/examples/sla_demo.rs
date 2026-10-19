@@ -38,7 +38,10 @@ fn main() {
     // 1. 加载运营者配置并校验
     let cal: Calendar = serde_json::from_str(FACTORY_CONFIG).expect("日历配置解析失败");
     cal.validate().expect("日历配置不合法");
-    println!("== 日历配置加载并校验通过:{} 白班 8×5,国庆周(夹具数据)停工,09-26 调休上班 ==", cal.tz);
+    println!(
+        "== 日历配置加载并校验通过:{} 白班 8×5,国庆周(夹具数据)停工,09-26 调休上班 ==",
+        cal.tz
+    );
 
     // 2. SLA 正向:周五 16:00 下单,承诺 4 工时 → 下周一截止
     let order = sh(2026, 10, 23, 16, 0);
@@ -59,14 +62,27 @@ fn main() {
     // 4. 截单派生(反向):交付承诺周一 11:00、需 4 工时 → 最晚周五 16:00 下单
     let due = sh(2026, 10, 26, 11, 0);
     let latest = cal.latest_order_at(due, Duration::hours(4)).unwrap();
-    println!("\n[截单派生] 交付承诺 {} 需 4 工时", due.format("%m-%d %H:%M %a"));
-    println!("  最晚下单: {}  ← 正反互逆(与 SLA 正向同一对时刻)", latest.format("%m-%d %H:%M %a"));
+    println!(
+        "\n[截单派生] 交付承诺 {} 需 4 工时",
+        due.format("%m-%d %H:%M %a")
+    );
+    println!(
+        "  最晚下单: {}  ← 正反互逆(与 SLA 正向同一对时刻)",
+        latest.format("%m-%d %H:%M %a")
+    );
 
     // 5. 跨时区:同一日历,UTC 消费者拿 UTC(2026-10-23T08:00:00Z == 上海周五 16:00)
     let order_utc = Utc.with_ymd_and_hms(2026, 10, 23, 8, 0, 0).unwrap();
     let deadline_utc = cal.sla_deadline(order_utc, Duration::hours(4)).unwrap();
-    println!("\n[跨时区] UTC 消费者下单 {}(=上海周五 16:00)", order_utc.to_rfc3339());
-    println!("  截止  : {}(返回保持 UTC;上海读回 = {})", deadline_utc.to_rfc3339(), deadline_utc.with_timezone(&Shanghai));
+    println!(
+        "\n[跨时区] UTC 消费者下单 {}(=上海周五 16:00)",
+        order_utc.to_rfc3339()
+    );
+    println!(
+        "  截止  : {}(返回保持 UTC;上海读回 = {})",
+        deadline_utc.to_rfc3339(),
+        deadline_utc.with_timezone(&Shanghai)
+    );
     assert_eq!(deadline_utc, deadline.with_timezone(&Utc));
 
     println!("\n全部演示断言通过。");

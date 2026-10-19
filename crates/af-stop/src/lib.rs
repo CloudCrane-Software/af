@@ -33,7 +33,10 @@ pub struct Fingerprint {
 
 impl Fingerprint {
     pub fn new(tool: impl Into<String>, error_code: impl Into<String>) -> Self {
-        Fingerprint { tool: tool.into(), error_code: error_code.into() }
+        Fingerprint {
+            tool: tool.into(),
+            error_code: error_code.into(),
+        }
     }
 }
 
@@ -92,7 +95,10 @@ pub struct FingerprintEntry {
 
 impl Default for FingerprintEntry {
     fn default() -> Self {
-        FingerprintEntry { streak_limit: None, action: FingerprintAction::StopNoInfluence }
+        FingerprintEntry {
+            streak_limit: None,
+            action: FingerprintAction::StopNoInfluence,
+        }
     }
 }
 
@@ -171,7 +177,10 @@ impl StopEngine {
     pub fn new(policy: StopPolicy) -> Self {
         StopEngine {
             policy,
-            state: EngineState { streak: None, normal_errors: 0 },
+            state: EngineState {
+                streak: None,
+                normal_errors: 0,
+            },
         }
     }
 
@@ -184,7 +193,9 @@ impl StopEngine {
             // 规则②：确定性节点（check 型）首败即停，优先级最高。
             Event::CheckFailed { .. } => {
                 self.state.streak = None;
-                Decision::Stop { reason: StopReason::CheckFirstFail }
+                Decision::Stop {
+                    reason: StopReason::CheckFirstFail,
+                }
             }
             Event::ToolError { tool, error_code } => {
                 let fp = Fingerprint { tool, error_code };
@@ -208,16 +219,20 @@ impl StopEngine {
                     .unwrap_or(self.policy.fingerprint_streak_limit);
                 if limit > 0 && streak_len >= limit {
                     return match entry.map(|e| e.action.clone()) {
-                        Some(FingerprintAction::Escalate) => {
-                            Decision::Escalate { reason: EscalateReason::FingerprintPolicy }
-                        }
-                        _ => Decision::Stop { reason: StopReason::NoInfluence },
+                        Some(FingerprintAction::Escalate) => Decision::Escalate {
+                            reason: EscalateReason::FingerprintPolicy,
+                        },
+                        _ => Decision::Stop {
+                            reason: StopReason::NoInfluence,
+                        },
                     };
                 }
 
                 // 规则③：普通错误累计阈值（与规则①同事件都命中时，①优先）。
                 if self.state.normal_errors >= self.policy.normal_error_threshold {
-                    return Decision::Escalate { reason: EscalateReason::NormalErrorThreshold };
+                    return Decision::Escalate {
+                        reason: EscalateReason::NormalErrorThreshold,
+                    };
                 }
                 Decision::Continue
             }
@@ -230,7 +245,9 @@ impl StopEngine {
                 self.state.streak = None;
                 self.state.normal_errors += 1;
                 if self.state.normal_errors >= self.policy.normal_error_threshold {
-                    return Decision::Escalate { reason: EscalateReason::NormalErrorThreshold };
+                    return Decision::Escalate {
+                        reason: EscalateReason::NormalErrorThreshold,
+                    };
                 }
                 Decision::Continue
             }
@@ -253,7 +270,10 @@ mod tests {
     use super::*;
 
     fn tool_err(tool: &str, code: &str) -> Event {
-        Event::ToolError { tool: tool.into(), error_code: code.into() }
+        Event::ToolError {
+            tool: tool.into(),
+            error_code: code.into(),
+        }
     }
 
     // ---- 规则①：连续 N 次相同指纹 → Stop(NoInfluence) ----
@@ -261,43 +281,85 @@ mod tests {
     #[test]
     fn rule1_fingerprint_streak_stops_at_nth() {
         let mut eng = StopEngine::new(StopPolicy::default()); // N=3
-        assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
-        assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
         assert_eq!(
             eng.feed(tool_err("search", "E_TIMEOUT")),
-            Decision::Stop { reason: StopReason::NoInfluence }
+            Decision::Continue
         );
-        assert_eq!(eng.current_streak(), Some((&Fingerprint::new("search", "E_TIMEOUT"), 3)));
+        assert_eq!(
+            eng.feed(tool_err("search", "E_TIMEOUT")),
+            Decision::Continue
+        );
+        assert_eq!(
+            eng.feed(tool_err("search", "E_TIMEOUT")),
+            Decision::Stop {
+                reason: StopReason::NoInfluence
+            }
+        );
+        assert_eq!(
+            eng.current_streak(),
+            Some((&Fingerprint::new("search", "E_TIMEOUT"), 3))
+        );
     }
 
     #[test]
     fn rule1_different_error_code_is_different_fingerprint() {
         // 调高 M，隔离规则③，只看指纹连击
-        let mut eng = StopEngine::new(StopPolicy { normal_error_threshold: 100, ..Default::default() });
+        let mut eng = StopEngine::new(StopPolicy {
+            normal_error_threshold: 100,
+            ..Default::default()
+        });
         // 3 组"2 连 + 换指纹打断"：E_TIMEOUT 最长连击只有 2 < 3，永不 Stop
         for _ in 0..3 {
-            assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
-            assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
+            assert_eq!(
+                eng.feed(tool_err("search", "E_TIMEOUT")),
+                Decision::Continue
+            );
+            assert_eq!(
+                eng.feed(tool_err("search", "E_TIMEOUT")),
+                Decision::Continue
+            );
             // 同工具不同错误码：指纹不同，打断连击
-            assert_eq!(eng.feed(tool_err("search", "E_RATE_LIMIT")), Decision::Continue);
+            assert_eq!(
+                eng.feed(tool_err("search", "E_RATE_LIMIT")),
+                Decision::Continue
+            );
         }
     }
 
     #[test]
     fn rule1_success_breaks_the_streak() {
-        let mut eng = StopEngine::new(StopPolicy { normal_error_threshold: 100, ..Default::default() });
-        assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
-        assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
+        let mut eng = StopEngine::new(StopPolicy {
+            normal_error_threshold: 100,
+            ..Default::default()
+        });
         assert_eq!(
-            eng.feed(Event::ToolOk { tool: "search".into() }),
+            eng.feed(tool_err("search", "E_TIMEOUT")),
+            Decision::Continue
+        );
+        assert_eq!(
+            eng.feed(tool_err("search", "E_TIMEOUT")),
+            Decision::Continue
+        );
+        assert_eq!(
+            eng.feed(Event::ToolOk {
+                tool: "search".into()
+            }),
             Decision::Continue
         );
         // 成功之后从头重新数：2 次仍 Continue，第 3 次（连续）才 Stop
-        assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
-        assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
         assert_eq!(
             eng.feed(tool_err("search", "E_TIMEOUT")),
-            Decision::Stop { reason: StopReason::NoInfluence }
+            Decision::Continue
+        );
+        assert_eq!(
+            eng.feed(tool_err("search", "E_TIMEOUT")),
+            Decision::Continue
+        );
+        assert_eq!(
+            eng.feed(tool_err("search", "E_TIMEOUT")),
+            Decision::Stop {
+                reason: StopReason::NoInfluence
+            }
         );
     }
 
@@ -310,7 +372,11 @@ mod tests {
         });
         for i in 0..20 {
             let tool = if i % 2 == 0 { "search" } else { "browser" };
-            assert_eq!(eng.feed(tool_err(tool, "E_TIMEOUT")), Decision::Continue, "i={i}");
+            assert_eq!(
+                eng.feed(tool_err(tool, "E_TIMEOUT")),
+                Decision::Continue,
+                "i={i}"
+            );
         }
     }
 
@@ -320,8 +386,12 @@ mod tests {
     fn rule2_check_first_failure_stops_immediately() {
         let mut eng = StopEngine::new(StopPolicy::default());
         assert_eq!(
-            eng.feed(Event::CheckFailed { node: "schema_check".into() }),
-            Decision::Stop { reason: StopReason::CheckFirstFail }
+            eng.feed(Event::CheckFailed {
+                node: "schema_check".into()
+            }),
+            Decision::Stop {
+                reason: StopReason::CheckFirstFail
+            }
         );
     }
 
@@ -329,37 +399,61 @@ mod tests {
 
     #[test]
     fn rule3_generic_errors_escalate_at_threshold() {
-        let mut eng = StopEngine::new(StopPolicy { normal_error_threshold: 3, ..Default::default() });
+        let mut eng = StopEngine::new(StopPolicy {
+            normal_error_threshold: 3,
+            ..Default::default()
+        });
         assert_eq!(
-            eng.feed(Event::GenericError { source: "llm".into(), error_code: "E_5XX".into() }),
+            eng.feed(Event::GenericError {
+                source: "llm".into(),
+                error_code: "E_5XX".into()
+            }),
             Decision::Continue
         );
         assert_eq!(
-            eng.feed(Event::GenericError { source: "llm".into(), error_code: "E_TIMEOUT".into() }),
+            eng.feed(Event::GenericError {
+                source: "llm".into(),
+                error_code: "E_TIMEOUT".into()
+            }),
             Decision::Continue
         );
         // 不同 source/code 互不打断彼此（规则③只数总量），第 3 个到达阈值
         assert_eq!(
-            eng.feed(Event::GenericError { source: "llm".into(), error_code: "E_5XX".into() }),
-            Decision::Escalate { reason: EscalateReason::NormalErrorThreshold }
+            eng.feed(Event::GenericError {
+                source: "llm".into(),
+                error_code: "E_5XX".into()
+            }),
+            Decision::Escalate {
+                reason: EscalateReason::NormalErrorThreshold
+            }
         );
         // 之后继续错误继续升级
         assert_eq!(
-            eng.feed(Event::GenericError { source: "llm".into(), error_code: "E_5XX".into() }),
-            Decision::Escalate { reason: EscalateReason::NormalErrorThreshold }
+            eng.feed(Event::GenericError {
+                source: "llm".into(),
+                error_code: "E_5XX".into()
+            }),
+            Decision::Escalate {
+                reason: EscalateReason::NormalErrorThreshold
+            }
         );
     }
 
     #[test]
     fn rule3_tool_errors_also_count_toward_threshold() {
-        let mut eng = StopEngine::new(StopPolicy { normal_error_threshold: 3, ..Default::default() });
+        let mut eng = StopEngine::new(StopPolicy {
+            normal_error_threshold: 3,
+            ..Default::default()
+        });
         assert_eq!(eng.feed(tool_err("a", "X")), Decision::Continue); // 计数 1
         assert_eq!(eng.feed(tool_err("b", "Y")), Decision::Continue); // 计数 2（指纹不同，不触发①）
         assert_eq!(eng.normal_error_count(), 2);
         // 第 3 个错误到达阈值 → Escalate（工具错误同样计入规则③）
         assert_eq!(
             eng.feed(tool_err("a", "X")),
-            Decision::Escalate { reason: EscalateReason::NormalErrorThreshold }
+            Decision::Escalate {
+                reason: EscalateReason::NormalErrorThreshold
+            }
         );
     }
 
@@ -368,12 +462,17 @@ mod tests {
     #[test]
     fn fingerprint_stop_wins_over_threshold_escalate() {
         // N=3、M=3：第 3 个相同指纹错误同时满足①③，应返回 Stop 而非 Escalate
-        let mut eng = StopEngine::new(StopPolicy { normal_error_threshold: 3, ..Default::default() });
+        let mut eng = StopEngine::new(StopPolicy {
+            normal_error_threshold: 3,
+            ..Default::default()
+        });
         assert_eq!(eng.feed(tool_err("db", "E_LOCK")), Decision::Continue);
         assert_eq!(eng.feed(tool_err("db", "E_LOCK")), Decision::Continue);
         assert_eq!(
             eng.feed(tool_err("db", "E_LOCK")),
-            Decision::Stop { reason: StopReason::NoInfluence }
+            Decision::Stop {
+                reason: StopReason::NoInfluence
+            }
         );
     }
 
@@ -382,10 +481,16 @@ mod tests {
     #[test]
     fn store_override_whitelisted_fingerprint_never_stops() {
         // 调高 M，隔离规则③
-        let mut policy = StopPolicy { normal_error_threshold: 100, ..Default::default() };
+        let mut policy = StopPolicy {
+            normal_error_threshold: 100,
+            ..Default::default()
+        };
         policy.store.register(
             Fingerprint::new("deploy", "E_LOCKED"),
-            FingerprintEntry { streak_limit: Some(0), ..Default::default() },
+            FingerprintEntry {
+                streak_limit: Some(0),
+                ..Default::default()
+            },
         );
         let mut eng = StopEngine::new(policy);
         for _ in 0..10 {
@@ -407,14 +512,18 @@ mod tests {
         // 首个该指纹错误即触发（覆盖 N=1），且动作为升级
         assert_eq!(
             eng.feed(tool_err("deploy", "E_LOCKED")),
-            Decision::Escalate { reason: EscalateReason::FingerprintPolicy }
+            Decision::Escalate {
+                reason: EscalateReason::FingerprintPolicy
+            }
         );
         // 其他指纹不受影响，仍走全局 N=3
         assert_eq!(eng.feed(tool_err("other", "E_X")), Decision::Continue);
         assert_eq!(eng.feed(tool_err("other", "E_X")), Decision::Continue);
         assert_eq!(
             eng.feed(tool_err("other", "E_X")),
-            Decision::Stop { reason: StopReason::NoInfluence }
+            Decision::Stop {
+                reason: StopReason::NoInfluence
+            }
         );
     }
 
@@ -423,18 +532,33 @@ mod tests {
     #[test]
     fn mixed_stream_end_to_end() {
         // 交替错误(不触发①) → 累计到 M-1 → check 首败直接 Stop(②优先级最高)
-        let mut eng = StopEngine::new(StopPolicy { normal_error_threshold: 4, ..Default::default() });
-        assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
-        assert_eq!(eng.feed(tool_err("browser", "E_NAV")), Decision::Continue);
+        let mut eng = StopEngine::new(StopPolicy {
+            normal_error_threshold: 4,
+            ..Default::default()
+        });
         assert_eq!(
-            eng.feed(Event::ToolOk { tool: "search".into() }),
+            eng.feed(tool_err("search", "E_TIMEOUT")),
             Decision::Continue
         );
-        assert_eq!(eng.feed(tool_err("search", "E_TIMEOUT")), Decision::Continue);
+        assert_eq!(eng.feed(tool_err("browser", "E_NAV")), Decision::Continue);
+        assert_eq!(
+            eng.feed(Event::ToolOk {
+                tool: "search".into()
+            }),
+            Decision::Continue
+        );
+        assert_eq!(
+            eng.feed(tool_err("search", "E_TIMEOUT")),
+            Decision::Continue
+        );
         // 已累计 3 个错误 < M=4，此时 check 首败 → Stop（而不是等下一次错误 Escalate）
         assert_eq!(
-            eng.feed(Event::CheckFailed { node: "format_check".into() }),
-            Decision::Stop { reason: StopReason::CheckFirstFail }
+            eng.feed(Event::CheckFailed {
+                node: "format_check".into()
+            }),
+            Decision::Stop {
+                reason: StopReason::CheckFirstFail
+            }
         );
     }
 }

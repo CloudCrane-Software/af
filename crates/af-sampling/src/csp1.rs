@@ -331,9 +331,8 @@ mod tests {
         let mut def = Rng::new(99); // 缺陷位发生器，与抽检决策解耦
 
         // 埋缺陷位：约 6% 随机缺陷 + 第 500~529 件一段 30 连续缺陷“质量事故”。
-        let is_defective = |k: usize, def: &mut Rng| -> bool {
-            (500..=529).contains(&k) || def.chance(0.06)
-        };
+        let is_defective =
+            |k: usize, def: &mut Rng| -> bool { (500..=529).contains(&k) || def.chance(0.06) };
 
         // 复放用的“已检验连续合格”计数器，用于核验切换条件。
         let mut my_streak: u32 = 0;
@@ -385,7 +384,11 @@ mod tests {
             s.defects_leaked
         );
         // 存在实际的相位往返（机器真的在两种相位间工作过）。
-        assert!(s.to_sampling_switches >= 2, "switches={}", s.to_sampling_switches);
+        assert!(
+            s.to_sampling_switches >= 2,
+            "switches={}",
+            s.to_sampling_switches
+        );
         assert!(s.to_screening_switches >= 1);
         // f 不低于 f_min：名义不变式 + 经验抽检率也在 f_min 之上（F=0.2 对 0.05 余量极大）。
         assert!(F >= F_MIN);

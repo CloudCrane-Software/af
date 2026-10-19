@@ -7,7 +7,11 @@ pub struct Rng(u64);
 impl Rng {
     /// 种子为 0 时用固定常数避开启始态 0（xorshift 全零态会卡死）。
     pub fn new(seed: u64) -> Self {
-        Rng(if seed == 0 { 0x9E37_79B9_7F4A_7C15 } else { seed })
+        Rng(if seed == 0 {
+            0x9E37_79B9_7F4A_7C15
+        } else {
+            seed
+        })
     }
 
     pub fn next_u64(&mut self) -> u64 {

@@ -54,9 +54,7 @@ pub enum MeterError {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Meter {
     /// 一次性额度池：用多少扣多少，用完不会自动恢复（按量付费余额）。
-    Stock {
-        remaining: Amount,
-    },
+    Stock { remaining: Amount },
     /// 固定窗口配额：每 `window` 秒把 `remaining` 重置回 `capacity`；
     /// `reset_at` 为下次重置时刻（错过多个窗口不累积额度）。
     Window {
@@ -144,7 +142,9 @@ impl Meter {
                     *reset_at += *window;
                 }
             }
-            Meter::Concurrency { in_use, releases, .. } => {
+            Meter::Concurrency {
+                in_use, releases, ..
+            } => {
                 let due = releases.iter().filter(|&&r| r <= now + EPS).count();
                 if due > 0 {
                     releases.retain(|&r| r > now + EPS);
@@ -197,12 +197,9 @@ impl Meter {
             } => Reading {
                 available: (*limit - *in_use) as Amount,
                 recovers_at: if *in_use >= *limit {
-                    releases
-                        .iter()
-                        .copied()
-                        .fold(None, |acc: Option<Time>, t| {
-                            Some(acc.map_or(t, |e| e.min(t)))
-                        })
+                    releases.iter().copied().fold(None, |acc: Option<Time>, t| {
+                        Some(acc.map_or(t, |e| e.min(t)))
+                    })
                 } else {
                     None
                 },
@@ -379,9 +376,7 @@ pub enum Decision {
         remaining_after: Amount,
     },
     /// 没有供给能覆盖预计消耗；`recovers_at` 为各供给中最早的恢复时刻。
-    Defer {
-        recovers_at: Option<Time>,
-    },
+    Defer { recovers_at: Option<Time> },
 }
 
 /// 路由：按任务预计消耗选供给。按优先级序找第一个 available >= need 的供给并扣减；
@@ -473,9 +468,15 @@ mod tests {
             Meter::window(DAY, 200.0, 0.0),
         ]);
         m.try_consume(150.0, 0.0).unwrap();
-        let Meter::Min(kids) = &m else { panic!("应是 Min") };
-        let Meter::Window { remaining: wk, .. } = &kids[0] else { panic!("应是周窗") };
-        let Meter::Window { remaining: dy, .. } = &kids[1] else { panic!("应是日窗") };
+        let Meter::Min(kids) = &m else {
+            panic!("应是 Min")
+        };
+        let Meter::Window { remaining: wk, .. } = &kids[0] else {
+            panic!("应是周窗")
+        };
+        let Meter::Window { remaining: dy, .. } = &kids[1] else {
+            panic!("应是日窗")
+        };
         approx(*wk, 850.0); // 周窗同扣一份
         approx(*dy, 50.0);
         let r = m.given(1.0);
@@ -540,9 +541,15 @@ mod tests {
         let r = m.given(0.0);
         approx(r.available, 100.0); // 择优
         m.try_consume(60.0, 0.0).unwrap();
-        let Meter::Max(kids) = &m else { panic!("应是 Max") };
-        let Meter::Stock { remaining: a } = &kids[0] else { panic!() };
-        let Meter::Stock { remaining: b } = &kids[1] else { panic!() };
+        let Meter::Max(kids) = &m else {
+            panic!("应是 Max")
+        };
+        let Meter::Stock { remaining: a } = &kids[0] else {
+            panic!()
+        };
+        let Meter::Stock { remaining: b } = &kids[1] else {
+            panic!()
+        };
         approx(*a, 5.0); // 只扣选中的
         approx(*b, 40.0);
         // 再把大池子扣光：剩 max(5, 0)=5
@@ -565,7 +572,10 @@ mod tests {
         let mut m = m;
         approx(m.given(0.0).available, back.given(0.0).available);
         approx(m.given(1.0).available, back.given(1.0).available);
-        approx(m.given(DAY + 1.0).available, back.given(DAY + 1.0).available);
+        approx(
+            m.given(DAY + 1.0).available,
+            back.given(DAY + 1.0).available,
+        );
     }
 
     #[test]

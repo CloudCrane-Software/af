@@ -228,10 +228,16 @@ impl WorkOrder {
             _ => Vec::new(),
         };
         if !missing.is_empty() {
-            return Err(GateError::PreconditionsNotMet { transition: t, missing });
+            return Err(GateError::PreconditionsNotMet {
+                transition: t,
+                missing,
+            });
         }
         self.state = t.to_state();
-        self.history.push(HistoryRecord { from, to: self.state });
+        self.history.push(HistoryRecord {
+            from,
+            to: self.state,
+        });
         Ok(self.state)
     }
 
@@ -303,7 +309,10 @@ mod tests {
         assert_eq!(wo.history().len(), 4);
         assert_eq!(
             wo.history()[0],
-            HistoryRecord { from: OrderState::Created, to: OrderState::Released }
+            HistoryRecord {
+                from: OrderState::Created,
+                to: OrderState::Released
+            }
         );
     }
 
@@ -313,7 +322,10 @@ mod tests {
         let err = wo.release().unwrap_err();
         assert_eq!(
             err.missing().unwrap(),
-            &[Missing::LineVersionNotBound, Missing::BudgetVoucherNotIssued]
+            &[
+                Missing::LineVersionNotBound,
+                Missing::BudgetVoucherNotIssued
+            ]
         );
         // 状态没被改动
         assert_eq!(wo.state(), OrderState::Created);
@@ -343,7 +355,9 @@ mod tests {
         let err = wo.release().unwrap_err();
         assert_eq!(
             err.missing().unwrap(),
-            &[Missing::BudgetVoucherNotSigned { voucher_id: "bv-1".into() }]
+            &[Missing::BudgetVoucherNotSigned {
+                voucher_id: "bv-1".into()
+            }]
         );
         // 错误文本可读,给出缺什么
         let text = format!("{err}");
@@ -359,15 +373,15 @@ mod tests {
         wo.start().unwrap();
 
         // 执行中不能直接 close:InProgress → Closed 不是状态机边(先于门控被拒)
-        assert!(matches!(wo.close(), Err(GateError::IllegalTransition { .. })));
+        assert!(matches!(
+            wo.close(),
+            Err(GateError::IllegalTransition { .. })
+        ));
 
         // ① Completed 但无任何工件 → close 门控报缺合格终态工件
         wo.complete().unwrap();
         let err = wo.close().unwrap_err();
-        assert_eq!(
-            err.missing().unwrap(),
-            &[Missing::NoQualifiedFinalArtifact]
-        );
+        assert_eq!(err.missing().unwrap(), &[Missing::NoQualifiedFinalArtifact]);
 
         // ② 终态但不合格,不行
         wo.attach_artifact(artifact("fa-x", true, false)).unwrap();
@@ -376,7 +390,10 @@ mod tests {
 
         // ③ 合格但非终态,仍不行
         wo.attach_artifact(artifact("ia-1", false, true)).unwrap();
-        assert_eq!(wo.close().unwrap_err().missing().unwrap(), &[Missing::NoQualifiedFinalArtifact]);
+        assert_eq!(
+            wo.close().unwrap_err().missing().unwrap(),
+            &[Missing::NoQualifiedFinalArtifact]
+        );
 
         // ④ 补上合格终态工件,放行
         wo.attach_artifact(artifact("fa-1", true, true)).unwrap();
@@ -405,7 +422,10 @@ mod tests {
         wo.start().unwrap();
         wo.attach_artifact(artifact("fa-1", true, true)).unwrap();
         wo.complete().unwrap();
-        assert!(matches!(wo.cancel(), Err(GateError::IllegalTransition { .. })));
+        assert!(matches!(
+            wo.cancel(),
+            Err(GateError::IllegalTransition { .. })
+        ));
     }
 
     #[test]
@@ -415,7 +435,10 @@ mod tests {
         assert_eq!(wo.state(), OrderState::Cancelled);
         // 终态后任何迁移都拒绝
         for t in [Transition::Release, Transition::Start, Transition::Cancel] {
-            assert!(matches!(wo.transition(t), Err(GateError::IllegalTransition { .. })));
+            assert!(matches!(
+                wo.transition(t),
+                Err(GateError::IllegalTransition { .. })
+            ));
         }
         // 终态后也不许再挂工件
         assert!(matches!(
@@ -433,11 +456,17 @@ mod tests {
         // released 后想换绑定/换凭证:拒绝,防止绕过门控
         assert!(matches!(
             wo.bind_line(line()),
-            Err(GateError::MutationForbidden { op: "bind_line", .. })
+            Err(GateError::MutationForbidden {
+                op: "bind_line",
+                ..
+            })
         ));
         assert!(matches!(
             wo.attach_budget_voucher(voucher(true)),
-            Err(GateError::MutationForbidden { op: "attach_budget_voucher", .. })
+            Err(GateError::MutationForbidden {
+                op: "attach_budget_voucher",
+                ..
+            })
         ));
     }
 

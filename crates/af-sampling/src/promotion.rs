@@ -248,26 +248,41 @@ mod tests {
     }"#;
 
     fn clean() -> RunOutcome {
-        RunOutcome { success: true, violations: 0, consistency: 1.0 }
+        RunOutcome {
+            success: true,
+            violations: 0,
+            consistency: 1.0,
+        }
     }
     fn fail() -> RunOutcome {
-        RunOutcome { success: false, violations: 0, consistency: 0.0 }
+        RunOutcome {
+            success: false,
+            violations: 0,
+            consistency: 0.0,
+        }
     }
     fn soft(v: u32, c: f64) -> RunOutcome {
-        RunOutcome { success: true, violations: v, consistency: c }
+        RunOutcome {
+            success: true,
+            violations: v,
+            consistency: c,
+        }
     }
 
     /// ★ 配方注入：JSON 进、判据生效；坏 JSON / 非法参数被拒。
     #[test]
     fn recipe_is_injected_from_json_and_validated() {
         let e = Engine::from_recipe_json(RECIPE_JSON).unwrap();
-        assert_eq!(e.recipe(), &Recipe {
-            window: 5,
-            min_successes: 5,
-            max_violations: 0,
-            min_consistency: 0.98,
-            clean_to_recover: 3,
-        });
+        assert_eq!(
+            e.recipe(),
+            &Recipe {
+                window: 5,
+                min_successes: 5,
+                max_violations: 0,
+                min_consistency: 0.98,
+                clean_to_recover: 3,
+            }
+        );
         assert_eq!(e.current(), Lineage::Agent);
         assert!(Engine::from_recipe_json("{ not json").is_err());
         assert!(Engine::from_recipe_json(r#"{"window":0,"min_successes":1,"max_violations":0,"min_consistency":0.9,"clean_to_recover":2}"#).is_err());
@@ -319,7 +334,8 @@ mod tests {
         assert_eq!(e.current(), Lineage::Hybrid);
         // current == attained：继续连净不再触发回升；窗口已积 tick7/8/9 三条，续积
         assert_eq!(e.record(clean()), Action::Hold); // 窗口 4/5
-        assert_eq!(e.record(clean()), Action::Promoted(Lineage::Deterministic)); // 窗口 5/5 判据达成
+        assert_eq!(e.record(clean()), Action::Promoted(Lineage::Deterministic));
+        // 窗口 5/5 判据达成
     }
 
     /// ★ 判据会拒绝：违规超限 / 一致性率不足 → 窗口满也不晋升。
@@ -367,7 +383,11 @@ mod tests {
         }
         // 宽配方：5 干净 → hybrid；fail → agent；1 干净 → recovered hybrid
         assert_eq!(loose.current(), Lineage::Hybrid);
-        assert_eq!(strict.current(), Lineage::Agent, "严配方连净 1 次远不够 5 次");
+        assert_eq!(
+            strict.current(),
+            Lineage::Agent,
+            "严配方连净 1 次远不够 5 次"
+        );
     }
 
     /// ★ 事件审计：record 序列可复放。

@@ -89,7 +89,12 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
         schedule.windows(2).all(|w| w[0].0 <= w[1].0),
         "schedule must be sorted by minute"
     );
-    let SimConfig { gate: gate_cfg, capacity_by_hour, start_inventory, canary } = cfg;
+    let SimConfig {
+        gate: gate_cfg,
+        capacity_by_hour,
+        start_inventory,
+        canary,
+    } = cfg;
     let mut canary_setup = canary;
     let mut gate = ReleaseGate::new(gate_cfg).expect("valid gate config");
     // 换日结转:直接注入在制(调用方保证不超上限),并纳入模拟的处理列表。
@@ -124,7 +129,10 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
     let lower = gate.config().wip_lower_minutes;
     let upper = gate.config().wip_upper_minutes;
 
-    let mut report = SimReport { max_wip: 0.0, ..Default::default() };
+    let mut report = SimReport {
+        max_wip: 0.0,
+        ..Default::default()
+    };
 
     for tick in 0..1440u32 {
         let now = tick;
@@ -133,10 +141,9 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
         let mut stopped_by_night = false;
 
         // canary 开启(按值取走谓词)。
-        if let Some((_, name, max_probes, predicate)) =
-            canary_setup.take_if(|(s, ..)| *s == now)
-        {
-            gate.begin_canary(&name, max_probes, predicate).expect("begin canary");
+        if let Some((_, name, max_probes, predicate)) = canary_setup.take_if(|(s, ..)| *s == now) {
+            gate.begin_canary(&name, max_probes, predicate)
+                .expect("begin canary");
         }
 
         // 1) 处理:FIFO 倾注产能,完成者出闸(释放容量/驱动渐放)。
@@ -156,7 +163,8 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
         in_process.retain(|it| it.remaining > 1e-9);
         for (id, weight) in done {
             // 手工构造的干净流量:完成件零缺陷。
-            gate.complete(id, now, 0).expect("completed item known to gate");
+            gate.complete(id, now, 0)
+                .expect("completed item known to gate");
             completed_now += 1;
             report.completions += 1;
             report.work_completed_minutes += weight;
@@ -164,7 +172,12 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
 
         // 捕获事件(渐放晋升等);晋升时泊位件放回 backlog 队首。
         for ev in gate.drain_events() {
-            if let GateEvent::CanaryPromoted { config, probes_released, at } = &ev {
+            if let GateEvent::CanaryPromoted {
+                config,
+                probes_released,
+                at,
+            } = &ev
+            {
                 canary_promoted = true;
                 if let Some(cs) = &mut canary_summary {
                     if *config == cs.config {
@@ -196,8 +209,8 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
             report.night_window_arrivals += by_minute[now as usize].len() as u64;
         }
         for item in by_minute[now as usize].drain(..) {
-            let to_parked = !canary_promoted
-                && canary_name.as_deref() == Some(item.config.as_str());
+            let to_parked =
+                !canary_promoted && canary_name.as_deref() == Some(item.config.as_str());
             if to_parked {
                 canary_parked.push_back(item);
             } else {
@@ -208,7 +221,9 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
         // 4) 供给循环:先试渐放泊位(gated 的新配置件),再按 FIFO 供给 backlog。
         //    泊位优先是有意的:探针应尽快进入评估,不被积压淹没(PoC 简化,见 RESULT)。
         loop {
-            let Some(front) = canary_parked.front().copied() else { break };
+            let Some(front) = canary_parked.front().copied() else {
+                break;
+            };
             let probe = front.clone();
             match gate.try_admit(&probe, now) {
                 Ok(_t) => {
@@ -240,7 +255,9 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
             }
         }
         loop {
-            let Some(front) = backlog.front().copied() else { break };
+            let Some(front) = backlog.front().copied() else {
+                break;
+            };
             let probe = front.clone();
             match gate.try_admit(&probe, now) {
                 Ok(_t) => {

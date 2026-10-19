@@ -60,13 +60,13 @@ fn t1_crash_recovery_same_key_same_payload_replays_stored_result() {
         let gw = Gateway::open(&db, Duration::from_millis(50)).unwrap();
         assert_eq!(gw.current_epoch().unwrap(), 0, "新库纪元从 0 开始");
         let s = gw.attach().unwrap();
-        let out = gw
-            .declare_intent(&s, &k, &payload)
-            .unwrap();
+        let out = gw.declare_intent(&s, &k, &payload).unwrap();
         assert!(matches!(out, DeclareOutcome::Created { .. }));
 
         sleep(Duration::from_millis(80)); // 等窗口关闭
-        let exec = gw.execute(&s, &k, counting_effect(counter.clone())).unwrap();
+        let exec = gw
+            .execute(&s, &k, counting_effect(counter.clone()))
+            .unwrap();
         assert!(!exec.is_replay(), "首次执行应是真实外呼");
         let r = exec.into_inner();
         assert_eq!(r["txn_id"], "T-1");
@@ -89,7 +89,9 @@ fn t1_crash_recovery_same_key_same_payload_replays_stored_result() {
         assert!(matches!(re, DeclareOutcome::AlreadyDeclared { .. }));
 
         // 重放 execute：外部调用计数不变，返回已存回执
-        let exec = gw.execute(&s2, &k, counting_effect(counter.clone())).unwrap();
+        let exec = gw
+            .execute(&s2, &k, counting_effect(counter.clone()))
+            .unwrap();
         assert!(exec.is_replay(), "有已存回执时必须重放而不是重发");
         match exec {
             ExecuteOutcome::Replayed {
@@ -136,7 +138,11 @@ fn t2_same_key_different_payload_rejected_requires_escalation() {
         other => panic!("期望 PayloadConflict，实际 {:?}", other),
     }
     // 错误信息必须点名“升级”，网关不替调用方二选一
-    assert!(err.to_string().contains("升级"), "错误信息要写明需人工升级: {}", err);
+    assert!(
+        err.to_string().contains("升级"),
+        "错误信息要写明需人工升级: {}",
+        err
+    );
 
     // 原意图不受影响：状态仍是 declared，指纹仍是 p1 的
     let snap = gw.snapshot_intent(&k).unwrap().unwrap();
@@ -164,15 +170,30 @@ fn t3_withdraw_within_window_means_never_sent() {
     let payload = json!({ "phone": "138xxxx", "text": "验证码" });
 
     let out = gw.declare_intent(&s, &k, &payload).unwrap();
-    assert!(matches!(out, DeclareOutcome::Created { withdraw_deadline_ms } if withdraw_deadline_ms > 0));
+    assert!(
+        matches!(out, DeclareOutcome::Created { withdraw_deadline_ms } if withdraw_deadline_ms > 0)
+    );
 
     // 窗口内撤回
-    assert_eq!(gw.withdraw_intent(&s, &k).unwrap(), WithdrawOutcome::Withdrawn);
-    assert_eq!(gw.withdraw_intent(&s, &k).unwrap(), WithdrawOutcome::AlreadyWithdrawn, "重复撤回幂等");
+    assert_eq!(
+        gw.withdraw_intent(&s, &k).unwrap(),
+        WithdrawOutcome::Withdrawn
+    );
+    assert_eq!(
+        gw.withdraw_intent(&s, &k).unwrap(),
+        WithdrawOutcome::AlreadyWithdrawn,
+        "重复撤回幂等"
+    );
 
     // execute 被拒，外部调用一次都没发生
-    let err = gw.execute(&s, &k, counting_effect(counter.clone())).unwrap_err();
-    assert!(matches!(err, GatewayError::Withdrawn { .. }), "实际 {:?}", err);
+    let err = gw
+        .execute(&s, &k, counting_effect(counter.clone()))
+        .unwrap_err();
+    assert!(
+        matches!(err, GatewayError::Withdrawn { .. }),
+        "实际 {:?}",
+        err
+    );
     assert_eq!(call_count(&counter), 0, "撤回后绝不发送");
 
     // 对照组：另一个意图窗口已关才去撤回 → 撤回失败（窗口保护有效）
@@ -198,7 +219,8 @@ fn t4_stale_epoch_requests_rejected() {
     let s_old = gw.attach().unwrap(); // epoch 0
     assert_eq!(s_old.epoch, 0);
     let k = key("WO-4004", "dispatch_truck", 1);
-    gw.declare_intent(&s_old, &k, &json!({"truck": "B-01"})).unwrap();
+    gw.declare_intent(&s_old, &k, &json!({"truck": "B-01"}))
+        .unwrap();
 
     // 崩溃恢复：resume → 纪元 1
     let s_new = gw.resume().unwrap();
@@ -240,14 +262,20 @@ fn t4_stale_epoch_requests_rejected() {
     // 再次 resume：纪元继续 +1，上一个纪元的 session 也变旧
     let s_newer = gw.resume().unwrap();
     assert_eq!(s_newer.epoch, 2);
-    let err = gw
-        .withdraw_intent(&s_new, &k)
-        .unwrap_err();
-    assert!(matches!(err, GatewayError::StaleEpoch { request_epoch: 1, current_epoch: 2 }));
+    let err = gw.withdraw_intent(&s_new, &k).unwrap_err();
+    assert!(matches!(
+        err,
+        GatewayError::StaleEpoch {
+            request_epoch: 1,
+            current_epoch: 2
+        }
+    ));
 
     // 新纪元 session 可继续操作旧纪元声明的意图（崩溃恢复重放的路必须通）
     sleep(Duration::from_millis(50)); // 越过 30ms 窗口
-    let exec = gw.execute(&s_newer, &k, counting_effect(counter.clone())).unwrap();
+    let exec = gw
+        .execute(&s_newer, &k, counting_effect(counter.clone()))
+        .unwrap();
     assert!(!exec.is_replay());
     assert_eq!(call_count(&counter), 1);
 
@@ -278,7 +306,9 @@ fn t5_execute_before_window_close_is_refused_then_allowed() {
     assert_eq!(call_count(&counter), 0, "窗口未关不发送");
 
     sleep(Duration::from_millis(150)); // 越过窗口
-    let exec = gw.execute(&s, &k, counting_effect(counter.clone())).unwrap();
+    let exec = gw
+        .execute(&s, &k, counting_effect(counter.clone()))
+        .unwrap();
     assert!(!exec.is_replay());
     assert_eq!(call_count(&counter), 1, "窗口关闭后正常发送一次");
 }
@@ -317,10 +347,15 @@ fn t6_external_failure_keeps_declared_and_retry_succeeds() {
     let exec = gw.execute(&s, &k, ok_call).unwrap();
     assert!(!exec.is_replay());
     assert_eq!(exec.into_inner()["txn_id"], "T-2");
-    assert_eq!(gw.snapshot_intent(&k).unwrap().unwrap().state, IntentState::Executed);
+    assert_eq!(
+        gw.snapshot_intent(&k).unwrap().unwrap().state,
+        IntentState::Executed
+    );
 
     // 再 execute：重放，不重发
-    let again = gw.execute(&s, &k, counting_effect(counter.clone())).unwrap();
+    let again = gw
+        .execute(&s, &k, counting_effect(counter.clone()))
+        .unwrap();
     assert!(again.is_replay());
     assert_eq!(counter.load(Ordering::SeqCst), 2);
 }

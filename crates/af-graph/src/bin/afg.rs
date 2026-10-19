@@ -49,5 +49,9 @@ fn main() -> ExitCode {
             }
         }
     }
-    if all_ok { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    if all_ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }

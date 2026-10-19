@@ -35,7 +35,10 @@ fn full_lifecycle_with_gates_end_to_end() {
     let err = wo.release().unwrap_err();
     assert_eq!(
         err.missing().unwrap(),
-        &[Missing::LineVersionNotBound, Missing::BudgetVoucherNotIssued]
+        &[
+            Missing::LineVersionNotBound,
+            Missing::BudgetVoucherNotIssued
+        ]
     );
 
     // 补齐 release 前置(产线版本绑定 + 已签发预算凭证)
@@ -92,7 +95,9 @@ fn change_order_spawns_successor_without_touching_original() {
         diff_summary: "N12 阈值 0.8→0.9;新增 N15 校验节点".into(),
         diff_paths: vec!["graph/N12".into(), "graph/N15".into()],
         drain: DrainStrategy::DrainWithCap { max_inflight: 3 },
-        relay: RelayStrategy::WarmHandover { overlap_budget: 300 },
+        relay: RelayStrategy::WarmHandover {
+            overlap_budget: 300,
+        },
     };
     change.validate().unwrap();
     assert!(change.applies_to(&wo));
@@ -111,7 +116,10 @@ fn change_order_spawns_successor_without_touching_original() {
     let err = successor.release().unwrap_err();
     assert_eq!(
         err.missing().unwrap(),
-        &[Missing::LineVersionNotBound, Missing::BudgetVoucherNotIssued]
+        &[
+            Missing::LineVersionNotBound,
+            Missing::BudgetVoucherNotIssued
+        ]
     );
 
     // 陈旧变更单(基于旧 from 版本)对后继单不适用
@@ -123,18 +131,36 @@ fn multi_actor_decisions_collect_then_gate_release() {
     // 场景:release 前需要一张"审批通过"的决策工件, reader 先被拒, approver 通过后才放行。
     let payload = "wo-multi:release-request:g-3:v2";
 
-    let reader_vote = DecisionArtifact::seal("user-reader", Role::Reader, Decision::Approve, payload, "k-reader");
+    let reader_vote = DecisionArtifact::seal(
+        "user-reader",
+        Role::Reader,
+        Decision::Approve,
+        payload,
+        "k-reader",
+    );
     assert!(matches!(
         reader_vote.validate_against(payload),
         Err(af_workorder::DecisionError::PermissionDenied { .. })
     ));
 
-    let approver_vote = DecisionArtifact::seal("user-approver", Role::Approver, Decision::Approve, payload, "k-approver");
+    let approver_vote = DecisionArtifact::seal(
+        "user-approver",
+        Role::Approver,
+        Decision::Approve,
+        payload,
+        "k-approver",
+    );
     approver_vote.validate_against(payload).unwrap();
     assert_eq!(approver_vote.actor_id, "user-approver");
 
     // payload 被掉包 → hash 对不上,决策作废
-    let tampered = DecisionArtifact::seal("user-approver", Role::Approver, Decision::Approve, "wo-multi:release-request:g-3:v3", "k-approver");
+    let tampered = DecisionArtifact::seal(
+        "user-approver",
+        Role::Approver,
+        Decision::Approve,
+        "wo-multi:release-request:g-3:v3",
+        "k-approver",
+    );
     assert!(matches!(
         tampered.validate_against(payload),
         Err(af_workorder::DecisionError::PayloadHashMismatch { .. })
