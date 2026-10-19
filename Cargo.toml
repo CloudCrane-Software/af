@@ -4,3 +4,14 @@ members = ["crates/*"]
 
 [workspace.package]
 edition = "2021"
+
+# 公共依赖。版本取 Cargo.lock 当前解析结果，不升级、不降级。
+# serde 的 derive、rusqlite 的 bundled 是全部直接使用方都开启的 feature，合并在根上。
+# thiserror 只收编 2.0.21。直接依赖里还有 1.0.69（af-effect-gateway、af-meter、af-station）。
+# workspace 键名就是 Rust 包名，不能在 `thiserror` 下同时继承两个主版本；
+# 合并主版本会升级或降级，故 1.0.69 留在那三个 crate。
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+rusqlite = { version = "0.32.1", features = ["bundled"] }
+thiserror = "2.0.21"
