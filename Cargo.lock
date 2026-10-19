@@ -51,8 +51,11 @@ name = "af-meter"
 version = "0.1.0"
 dependencies = [
  "af-credential",
+ "chrono",
+ "chrono-tz",
  "criterion",
  "proptest",
+ "rusqlite",
  "serde",
  "serde_json",
  "thiserror 1.0.69",

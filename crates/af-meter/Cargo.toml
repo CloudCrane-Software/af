@@ -9,6 +9,12 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 # 1.0.69。与根上的 thiserror 2.0.21 主版本不同，继承 `thiserror` 会升到 2。
 thiserror = "1"
+# 单文件账本。bundled 已在 workspace.dependencies 上声明。
+rusqlite = { workspace = true }
+# 钟面日期。版本钉死在锁文件已有的 chrono 0.4.45 / chrono-tz 0.10.4
+# （af-calendar、af-workorder 已在用），不新增包。
+chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
+chrono-tz = "=0.10.4"
 
 [dev-dependencies]
 af-credential = { path = "../af-credential" }

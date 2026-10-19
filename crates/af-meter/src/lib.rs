@@ -20,11 +20,19 @@
 //! - 单消费者假设：评估期间没有其他主体消耗同一计量树（并发占用除外，见 `acquire`）。
 //! - 令牌桶按整数秒回填：推进 `elapsed` 秒增加 `elapsed * per_second` 个整令牌，封顶 `burst`。
 //!   `recovers_at` 是令牌数实际回到 `burst` 的那个整数秒。
+//!
+//! 持久化账本在 [`ledger`]：一个计量一份 SQLite 文件。窗口起止按钟面日期解析，
+//! 扣减和 outbox 补偿写在同一个事务里。这里不改内存 [`Meter`] 的语义。
 
 mod budget;
 pub mod demo;
+pub mod ledger;
 
 pub use budget::{BudgetError, BudgetLedger};
+pub use ledger::{
+    window_bounds, ConsumeResult, Declaration, EventRecord, Ledger, LedgerError, Opened,
+    OutboxRecord, Recipe, Totals, WindowKind, WindowSnapshot, SCHEMA_VERSION,
+};
 
 use serde::{Deserialize, Serialize};
 
