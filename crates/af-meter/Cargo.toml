@@ -13,6 +13,8 @@ thiserror = "1"
 af-credential = { path = "../af-credential" }
 # 属性测试（窗口守恒/预算不透支/多消费者合并可交换），=1.12.0 与其他 crate 对齐。
 proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
+# 基准(每事件记账/窗口滚转),与 af-trace/af-sampling 对齐。
+criterion = "0.8.2"
 
 [lints]
 workspace = true

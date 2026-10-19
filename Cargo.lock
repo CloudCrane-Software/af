@@ -51,6 +51,7 @@ name = "af-meter"
 version = "0.1.0"
 dependencies = [
  "af-credential",
+ "criterion",
  "proptest",
  "serde",
  "serde_json",
@@ -71,6 +72,7 @@ dependencies = [
 name = "af-sampling"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "proptest",
  "serde",
  "serde_json",

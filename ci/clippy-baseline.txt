@@ -1,17 +1,2 @@
 # clippy 警告基线 — 由 `python3 ci/clippy_gate.py <jsonl> --update` 生成
 # 策略: 只拦新增警告；修好现有警告后请用 --update 收紧基线
-1	clippy::assertions_on_constants	crates/af-sampling/src/csp1.rs
-1	clippy::assign_op_pattern	crates/af-calendar/tests/dst_night_shift.rs
-2	clippy::doc_lazy_continuation	crates/af-station/src/lib.rs
-4	clippy::drain_collect	crates/af-release-gate/src/sim.rs
-1	clippy::manual_is_multiple_of	crates/af-release-gate/tests/day_sim.rs
-1	clippy::map_flatten	crates/af-station/src/lib.rs
-2	clippy::needless_question_mark	crates/af-station/src/lib.rs
-2	clippy::needless_range_loop	crates/af-calendar/src/calendar.rs
-3	clippy::needless_range_loop	crates/af-calendar/tests/dst_night_shift.rs
-1	clippy::needless_range_loop	crates/af-calendar/tests/sla.rs
-2	clippy::neg_cmp_op_on_partial_ord	crates/af-release-gate/src/gate.rs
-1	clippy::print_literal	crates/af-meter/examples/routing.rs
-2	clippy::result_large_err	crates/af-trace/src/trace.rs
-2	clippy::useless_format	crates/af-graph/src/validate.rs
-4	clippy::while_let_loop	crates/af-release-gate/src/sim.rs

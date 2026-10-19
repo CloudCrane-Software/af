@@ -1,8 +1,535 @@
-error: failed to parse lock file at: /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock
+   Compiling af-sampling v0.1.0 (/home/pan-ding/workspace/agent黑灯工厂/af/crates/af-sampling)
+   Compiling af-meter v0.1.0 (/home/pan-ding/workspace/agent黑灯工厂/af/crates/af-meter)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.75s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (target/debug/deps/af_calendar-dc6052a34a4f33af)
 
-Caused by:
-  TOML parse error at line 55, column 2
-     |
-  55 |  "criterion",
-     |  ^
-  missing comma between array elements, expected `,`
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/dst_night_shift.rs (target/debug/deps/dst_night_shift-351161243c049969)
+
+running 12 tests
+test dense_hourly_scan_3y_berlin_and_new_york ... ignored, 慢速全表扫描:约 10.5 万点,毫秒-秒级,验证用
+test due_at_window_start_is_not_completion_reachable ... ok
+test night_shift_friday_22h_plus_4h_lands_saturday_02h ... ok
+test fall_back_repeated_hour_counts_once_as_elapsed_time ... ok
+test night_shift_saturday_2330_plus_1h_crosses_to_sunday ... ok
+test fall_back_ambiguous_instant_resolution ... ok
+test night_shift_with_holiday_and_makeup_override ... ok
+test night_shift_semantics_identical_without_dst ... ok
+test spring_forward_gap_hour_not_counted_as_working_time ... ok
+test two_consecutive_nights_forward_reverse_roundtrip ... ok
+test spring_forward_addition_into_missing_hour_lands_after_gap ... ok
+test three_year_scan_6h_grid_berlin_and_new_york ... ok
+
+test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running tests/sla.rs (target/debug/deps/sla-cc94f0d26f02ef1f)
+
+running 18 tests
+test fixed_offset_input_also_accepted ... ok
+test exact_window_end_means_hours_exhausted_there ... ok
+test friday_16h_order_4h_deadline_is_next_monday ... ok
+test golden_week_crossing_holiday_table ... ok
+test horizon_exceeded_when_never_enough_working_time ... ok
+test is_working_instant_respects_holiday_and_override ... ok
+test latest_order_across_golden_week_and_offset_epoch ... ok
+test off_hours_and_weekend_roll_to_next_open ... ok
+test overlapping_shifts_fail_validation ... ok
+test utc_due_gives_utc_latest_order ... ok
+test zero_duration_returns_next_startable_instant ... ok
+test utc_consumer_gets_same_instant_in_utc ... ok
+test latest_order_is_maximal_even_when_due_off_shift ... ok
+test multi_shift_calendar_skips_lunch ... ok
+test makeup_workday_saturday_counts_as_working ... ok
+test json_config_roundtrip_reproduces_deadline ... ok
+test negative_duration_rejected ... ok
+test latest_order_roundtrip_forward_equals_due ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/af_credential-2f766fc4404ad546)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/attenuation.rs (target/debug/deps/attenuation-b61554f690136be7)
+
+running 4 tests
+test budget_attenuation_caps_spend ... ok
+test attenuation_keeps_facts_but_revokes_git ... ok
+test tampered_token_fails_verification ... ok
+test issue_and_verify_root_token_facts ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/intersection.rs (target/debug/deps/intersection-143ef8eeb3537a1f)
+
+running 4 tests
+test case4_neither_allows_deny ... ok
+test case1_both_allow_pass ... ok
+test case3_token_has_but_cedar_denies ... ok
+test case2_cedar_allows_but_token_lacks_deny ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/yaml_snapshots.rs (target/debug/deps/yaml_snapshots-c4dadcd175706607)
+
+running 3 tests
+test cents_issuance_payload ... ok
+test rejection_error_structure ... ok
+test two_policy_intersection_minimum ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src/lib.rs (target/debug/deps/af_effect_gateway-8776f831c4206c7d)
+
+running 2 tests
+test clock::tests::system_clock_monotonic_does_not_go_backwards ... ok
+test clock::tests::wall_rewind_does_not_move_monotonic_counter ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gateway_tests.rs (target/debug/deps/gateway_tests-44d8eed742dae299)
+
+running 7 tests
+test t5_execute_before_window_close_is_refused_then_allowed ... ok
+test t6_external_failure_keeps_declared_and_retry_succeeds ... ok
+test t3_withdraw_within_window_means_never_sent ... ok
+test t2_same_key_different_payload_rejected_requires_escalation ... ok
+test t4_stale_epoch_requests_rejected ... ok
+test t7_wall_clock_rollback_does_not_affect_idempotency_window ... ok
+test t1_crash_recovery_same_key_same_payload_replays_stored_result ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running unittests src/lib.rs (target/debug/deps/af_graph-70e573e9a7c3db37)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/afg.rs (target/debug/deps/afg-a3b7f25a781be2f0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/predicate.rs (target/debug/deps/predicate-a0a26bd9443723c3)
+
+running 8 tests
+test eval_error_undeclared_variable_is_passed_through ... ok
+test non_boolean_result_is_rejected ... ok
+test evaluates_false ... ok
+test eval_with_reuses_native_context ... ok
+test compiles_and_evaluates_true ... ok
+test compile_panic_is_caught_and_passed_through ... ok
+test gate_like_predicate_over_event_data ... ok
+test compile_error_native_is_passed_through ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/validate.rs (target/debug/deps/validate-50504e675a0657a1)
+
+running 21 tests
+test duplicate_node_id_is_e2003_not_e2001 ... ok
+test dangling_edge_ref_is_e2001 ... ok
+test illegal_2_trips_only_reachability ... ok
+test illegal_1_trips_only_cycle ... ok
+test illegal_3_trips_only_undeclared_reference ... ok
+test illegal_4_trips_only_loop_not_controlled ... ok
+test illegal_5_trips_only_map_unversioned ... ok
+test legal_templates_have_no_e2001 ... ok
+test loop_unbounded_carried_state_rejected ... ok
+test missing_required_field_rejected_by_serde_layer ... ok
+test loop_zero_iterations_rejected ... ok
+test loop_body_cycle_exempt_but_map_body_cycle_rejected ... ok
+test map_over_dangling_node_is_e2001 ... ok
+test unknown_node_kind_is_open_extension ... ok
+test map_over_malformed_is_e2001 ... ok
+test loop_body_must_be_declared_subgraph ... ok
+test safety_point_outside_body_is_undeclared_reference ... ok
+test legal_templates_pass ... ok
+test undeclared_entry_is_reference_error ... ok
+test serde_roundtrip_preserves_validity ... ok
+test safety_point_kind_mismatch_rejected ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/validate_snapshots.rs (target/debug/deps/validate_snapshots-e4a31da1c37e89e8)
+
+running 4 tests
+test unknown_kind_open_extension_zero_violations ... ok
+test e2001_dangling_reference ... ok
+test unknown_kind_type_mismatch_e2002 ... ok
+test clean_pipeline_zero_violations ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (target/debug/deps/af_meter-8df5b55115ef460a)
+
+running 15 tests
+test budget::tests::negative_spend_does_not_mutate ... ok
+test budget::tests::over_budget_does_not_mutate ... ok
+test budget::tests::spends_exact_cap_and_exact_remaining ... ok
+test budget::tests::over_cap_does_not_mutate ... ok
+test tests::defer_when_no_supply_covers ... ok
+test tests::concurrency_acquire_and_release ... ok
+test tests::max_deducts_only_chosen_child ... ok
+test tests::min_blocked_by_dead_stock_never_recovers ... ok
+test tests::min_deducts_all_children ... ok
+test tests::nested_weekly_window_binds_and_recovers_at_weekly_reset ... ok
+test tests::rate_full_time_ceils_to_the_whole_second_it_actually_fills ... ok
+test tests::rate_token_bucket_refills_continuously ... ok
+test tests::stock_exhaust_reports_no_recovery ... ok
+test tests::window_resets_and_does_not_accumulate ... ok
+test tests::serde_roundtrip_nested_meter ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/properties.rs (target/debug/deps/properties-b29c4de3f70fb37c)
+
+running 4 tests
+test min_windows_conserve_and_grant_the_same_amount ... ok
+test window_quota_conserved_over_any_event_sequence ... ok
+test budget_spend_never_overdrafts ... ok
+test consumer_ledger_merge_is_commutative ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/routing.rs (target/debug/deps/routing-afc57ffafc3aaabb)
+
+running 5 tests
+test defer_when_nothing_covers ... ok
+test estimate_above_daily_capacity_routes_to_api ... ok
+test daily_exhausted_but_weekly_surplus_switches_to_api_until_daily_resets ... ok
+test golden_timeline_over_schedule ... ok
+test weekly_binding_recovers_at_weekly_reset ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/vocab.rs (target/debug/deps/vocab-c714dd9bae75bd83)
+
+running 1 test
+test credential_limit_consumed_without_unit_conversion ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/af_release_gate-4d41996037be93de)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/day_sim.rs (target/debug/deps/day_sim-df3b84de05e6d1e8)
+
+running 1 test
+test day_traffic_respects_caps_and_never_starves ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/gate_unit.rs (target/debug/deps/gate_unit-d3baf3156fd8f9b4)
+
+running 14 tests
+test canary_caps_probes_until_predicate_passes ... ok
+test config_validation_rejects_lower_ge_upper ... ok
+test canary_defect_keeps_gate_gated ... ok
+test gate_config_roundtrips_through_json ... ok
+test item_heavier_than_cap_never_admits ... ok
+test night_ratio_is_deterministic_credit_scheme ... ok
+test night_ratio_one_admits_everything ... ok
+test night_window_contains_handles_wrap ... ok
+test night_window_exit_resets_credit ... ok
+test refill_signal_fires_below_lower_and_clears_above ... ok
+test wip_cap_blocks_admit_and_complete_releases_capacity ... ok
+test wip_never_exceeds_cap_even_on_exact_fit ... ok
+test blocking_admit_times_out_when_no_capacity_freed ... ok
+test blocking_admit_wakes_on_completion ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+     Running tests/properties.rs (target/debug/deps/properties-3c56ac0b9626886a)
+
+running 3 tests
+test rejection_does_not_partially_commit ... ok
+test canary_batch_is_monotonic_and_never_reverts ... ok
+test conwip_capacity_never_over_releases ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running unittests src/lib.rs (target/debug/deps/af_sampling-47a43cb55c75ee89)
+
+running 22 tests
+test csp1::tests::defect_caught_in_sampling_returns_to_screening ... ok
+test csp1::tests::disabled_bypasses_everything ... ok
+test csp1::tests::rejects_f_below_f_min_at_construction ... ok
+test csp1::tests::set_rate_is_clamped_to_f_min ... ok
+test csp1::tests::streak_resets_on_defect_during_screening ... ok
+test csp1::tests::sim_1000_items_planted_defects ... ok
+test csp1::tests::switches_to_sampling_after_i_consecutive_conforming ... ok
+test csp1::tests::long_run_sampling_rate_hovers_at_f_min_when_clamped ... ok
+test golden::tests::alarm_fires_when_golden_defect_released ... ok
+test golden::tests::rejects_bad_injector_config ... ok
+test golden::tests::no_alarm_under_full_screening ... ok
+test promotion::tests::criteria_refuse_violations_and_low_consistency ... ok
+test golden::tests::zero_p_injects_nothing ... ok
+test promotion::tests::different_recipes_different_paths_same_stream ... ok
+test promotion::tests::events_are_auditable ... ok
+test promotion::tests::fuse_demotes_and_clean_streak_recovers_to_attained_only ... ok
+test promotion::tests::promotes_by_criteria_level_by_level ... ok
+test promotion::tests::recipe_is_injected_from_json_and_validated ... ok
+test rng::tests::deterministic_same_seed_same_stream ... ok
+test rng::tests::zero_seed_does_not_stick ... ok
+test rng::tests::chance_bounds_and_spread ... ok
+test golden::tests::injects_at_rate_p_with_70_30_mix ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/end_to_end.rs (target/debug/deps/end_to_end-6f79ef3fe377aea5)
+
+running 1 test
+test end_to_end_inject_sample_promote ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/properties.rs (target/debug/deps/properties-c801c8d22691ea28)
+
+running 3 tests
+test three_invariants_hold_for_any_injection_sequence ... ok
+test dual_watermark_moves_only_on_threshold_crossing ... ok
+test golden_injection_does_not_change_lineage_counts ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (target/debug/deps/af_station-4e23a3801f95b157)
+
+running 11 tests
+test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
+test clock::tests::system_clock_reads_unix_millis ... ok
+test tests::enqueue_and_get_roundtrip ... ok
+test tests::primary_key_conflict_is_not_reported_as_duplicate ... ok
+test tests::expired_lease_is_reclaimed_and_takeover_works ... ok
+test tests::end_to_end_lifecycle ... ok
+test tests::role_routes_claim_to_matching_worker_only ... ok
+test tests::idempotency_key_prevents_duplicate_enqueue ... ok
+test tests::heartbeat_renews_lease_and_only_claimant_can_use_it ... ok
+test tests::two_threads_race_on_same_task_exactly_one_wins ... ok
+test tests::stress_four_threads_drain_forty_tasks_without_double_claim ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running tests/concurrency.rs (target/debug/deps/concurrency-6d06e22689af3cb8)
+
+running 8 tests
+test foreign_complete_storm_leaves_every_claimed_row ... ok
+test expired_interrupt_reenters_queued_resume_point ... ok
+test expired_complete_before_reclaim_and_reclaim_before_complete ... ok
+test resume_while_lease_holds_is_reentrant ... ok
+test expired_owner_complete_races_takeover_keeps_one_row ... ok
+test eight_threads_claim_and_complete_one_task_exactly_once ... ok
+test interleaved_claim_and_complete_partition_without_losing_rows ... ok
+test concurrent_complete_does_not_drop_ledger_rows ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+     Running tests/properties.rs (target/debug/deps/properties-4fe55024919a0659)
+
+running 3 tests
+test concurrent_complete_keeps_every_row ... ok
+test concurrent_claim_complete_is_a_partition ... ok
+test op_sequence_matches_model_across_reopen ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.92s
+
+     Running unittests src/lib.rs (target/debug/deps/af_stop-537da570e51a98de)
+
+running 11 tests
+test tests::fingerprint_stop_wins_over_threshold_escalate ... ok
+test tests::mixed_stream_end_to_end ... ok
+test tests::rule1_different_error_code_is_different_fingerprint ... ok
+test tests::rule1_alternating_tools_never_triggers ... ok
+test tests::rule1_fingerprint_streak_stops_at_nth ... ok
+test tests::rule1_success_breaks_the_streak ... ok
+test tests::rule2_check_first_failure_stops_immediately ... ok
+test tests::rule3_generic_errors_escalate_at_threshold ... ok
+test tests::rule3_tool_errors_also_count_toward_threshold ... ok
+test tests::store_override_lower_limit_and_escalate_action ... ok
+test tests::store_override_whitelisted_fingerprint_never_stops ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/properties.rs (target/debug/deps/properties-703d529614847628)
+
+running 6 tests
+test same_fingerprint_disposition_is_deterministic_and_consistent ... ok
+test equivalent_fingerprints_share_the_same_disposition ... ok
+test rule_priority_invariant_under_store_injection_order ... ok
+test fingerprint_priority_invariant_under_event_injection_order ... ok
+test check_priority_invariant_under_event_injection_order ... ok
+test stop_counter_never_regresses ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+     Running unittests src/lib.rs (target/debug/deps/af_trace-e0c7db63ae31450d)
+
+running 4 tests
+test trace::tests::zero_loss_when_under_capacity_and_closed_channel_errors ... ok
+test trace::tests::normal_overflow_drops_and_counts_gap ... ok
+test trace::tests::gap_spans_coalesce_when_critical_is_also_full ... ok
+test trace::tests::critical_full_returns_err_and_event_is_preserved ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.00s
+
+     Running tests/flood.rs (target/debug/deps/flood-20d8a8f82124b07a)
+
+running 1 test
+test flood_100k_normal_events ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.36s
+
+     Running unittests src/lib.rs (target/debug/deps/af_workorder-983925d332c5ff50)
+
+running 42 tests
+test change::tests::drain_all_plus_hot_takeover_conflicts ... ok
+test change::tests::empty_diff_summary_is_rejected ... ok
+test change::tests::from_equals_to_is_rejected ... ok
+test change::tests::serde_roundtrip_keeps_all_fields ... ok
+test change::tests::invalid_change_cannot_spawn_successor ... ok
+test decision::tests::arbiter_has_full_power ... ok
+test change::tests::invalid_change_order_is_not_signed ... ok
+test decision::tests::hash_mismatch_is_caught ... ok
+test decision::tests::reader_with_forged_approve_permission_is_still_rejected_by_role_cap ... ok
+test decision::tests::reader_issuing_approve_is_rejected ... ok
+test decision::tests::reviser_cannot_approve_but_can_revise ... ok
+test change::tests::spawn_successor_binds_new_version_and_supersedes ... ok
+test decision::tests::approver_can_approve_when_hash_and_signature_ok ... ok
+test decision::tests::empty_signature_is_rejected ... ok
+test decision::tests::approver_can_reject_too ... ok
+test hash::tests::nist_sha256_known_vectors ... ok
+test order::tests::cancel_works_from_active_states_and_freezes_order ... ok
+test order::tests::close_requires_final_and_qualified_artifact ... ok
+test decision::tests::decision_artifact_serde_roundtrip ... ok
+test order::tests::full_happy_path_reaches_closed ... ok
+test order::tests::graph_version_never_changes_through_any_operation ... ok
+test order::tests::illegal_transitions_are_rejected_as_illegal_not_missing ... ok
+test hash::tests::distinct_inputs_have_distinct_hashes ... ok
+test order::tests::order_overdue_uses_stored_absolute_deadline ... ok
+test order::tests::precondition_materials_can_only_be_registered_in_created ... ok
+test order::tests::release_with_line_but_no_voucher_reports_only_voucher ... ok
+test order::tests::release_with_unsigned_voucher_names_the_voucher ... ok
+test order::tests::release_with_voucher_only_reports_only_line ... ok
+test order::tests::release_without_anything_lists_both_missing_in_fixed_order ... ok
+test sla::tests::from_calendar_rejects_negative_duration ... ok
+test sla::tests::no_deadline_never_overdue ... ok
+test sla::tests::overdue_compares_absolute_instants ... ok
+test sla::tests::priority_orders_low_to_critical ... ok
+test state::tests::cancel_allowed_only_before_completion ... ok
+test state::tests::terminal_states ... ok
+test state::tests::transition_table_is_exactly_the_asked_lifecycle ... ok
+test sla::tests::sla_serde_roundtrip_accepts_legacy_rfc3339 ... ok
+test change::tests::verified_signature_spawns_successor ... ok
+test sign::tests::sign_verify_roundtrip_is_deterministic_and_debug_hides_seed ... ok
+test change::tests::signed_change_order_roundtrip_verifies ... ok
+test change::tests::tampered_order_or_signature_fails_verify_and_spawn ... ok
+test sign::tests::rejects_tamper_wrong_key_bad_algorithm_and_invalid_public_key ... ok
+
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/calendar_sla.rs (target/debug/deps/calendar_sla-445acc5438c8222b)
+
+running 3 tests
+test calendar_deadline_enters_lifecycle_and_judges_by_absolute_instant ... ok
+test fall_back_order_deadline_is_post_fold_utc_instant ... ok
+test spring_forward_order_deadline_is_post_gap_utc_instant ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/json_snapshots.rs (target/debug/deps/json_snapshots-ab69ca757d482284)
+
+running 3 tests
+test signed_change_order_roundtrip ... ok
+test reject_decision_names_missing_qualified_final_artifact ... ok
+test qualified_final_artifact_release_decision ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/lifecycle.rs (target/debug/deps/lifecycle-af043e22ed5fb71d)
+
+running 3 tests
+test change_order_spawns_successor_without_touching_original ... ok
+test full_lifecycle_with_gates_end_to_end ... ok
+test multi_actor_decisions_collect_then_gate_release ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_calendar
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_credential
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_effect_gateway
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_graph
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_meter
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_release_gate
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_sampling
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_station
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_stop
+
+running 1 test
+test crates/af-stop/src/lib.rs - (line 15) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+   Doc-tests af_trace
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_workorder
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
