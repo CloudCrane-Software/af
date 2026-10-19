@@ -21,4 +21,4 @@ mod trace;
 
 pub use error::TraceError;
 pub use event::{GapInfo, Level, TraceEvent};
-pub use trace::{ShutdownReport, Trace, TraceConfig};
+pub use trace::{ConsumerHold, ShutdownReport, Trace, TraceConfig};

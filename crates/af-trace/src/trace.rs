@@ -3,7 +3,7 @@ use crate::event::{now_ms, GapInfo, Level, TraceEvent};
 use serde_json::json;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -51,6 +51,16 @@ pub struct ShutdownReport {
     /// normal sink 落盘行数
     pub normal_persisted: usize,
     pub sinks: TraceSinks,
+}
+
+/// [`Trace::hold_consumers`] 的守卫。drop 之后落盘线程继续排空队列。
+///
+/// 调用 [`Trace::shutdown`] 之前必须先 drop，否则落盘线程拿不到 sink 锁，
+/// shutdown 补发缺口时会一直看到 critical 缓冲为满。
+#[must_use = "drop 之后落盘线程才会继续排空队列"]
+pub struct ConsumerHold<'a> {
+    _critical: MutexGuard<'a, Vec<String>>,
+    _normal: MutexGuard<'a, Vec<String>>,
 }
 
 pub struct Trace {
@@ -105,6 +115,19 @@ impl Trace {
 
     pub fn config(&self) -> &TraceConfig {
         &self.cfg
+    }
+
+    /// 挡住两个落盘线程，直到 guard drop。
+    ///
+    /// 消费者把事件写入 sink 之前要拿对应的锁。持有期间有界队列不会被排空，
+    /// 基准可以据此把 normal 队列稳定打满，从而测到丢弃/背压路径。
+    /// 不改变 [`Trace::write_critical`] / [`Trace::write_normal`] 的语义。
+    /// 锁顺序固定为 critical → normal。
+    pub fn hold_consumers(&self) -> ConsumerHold<'_> {
+        ConsumerHold {
+            _critical: self.sinks.critical.lock().unwrap(),
+            _normal: self.sinks.normal.lock().unwrap(),
+        }
     }
 
     /// 当前丢弃计数（运行值，可随时读）。

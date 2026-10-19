@@ -7,3 +7,12 @@ edition.workspace = true
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
+
+# 基准只在 `cargo bench` 下编译运行；`harness = false` 且不设 test=true，
+# `cargo test` 默认不会执行本 target。
+[dev-dependencies]
+criterion = "0.8.2"
+
+[[bench]]
+name = "trace_paths"
+harness = false
