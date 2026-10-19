@@ -11,3 +11,6 @@ thiserror = { workspace = true }
 [dev-dependencies]
 # 属性测试(三不变式/双水位升迁/金标谱系),只作 dev-dependency。
 proptest = "=1.12.0"
+
+[lints]
+workspace = true

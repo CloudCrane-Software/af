@@ -11,3 +11,6 @@ thiserror = "1"
 
 [dev-dependencies]
 af-credential = { path = "../af-credential" }
+
+[lints]
+workspace = true

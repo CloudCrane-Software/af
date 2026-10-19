@@ -7,3 +7,6 @@ edition.workspace = true
 anyhow = "1"
 biscuit-auth = "6"
 cedar-policy = "4"
+
+[lints]
+workspace = true

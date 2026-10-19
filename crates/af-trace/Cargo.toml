@@ -16,3 +16,6 @@ criterion = "0.8.2"
 [[bench]]
 name = "trace_paths"
 harness = false
+
+[lints]
+workspace = true

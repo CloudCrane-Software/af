@@ -7,3 +7,6 @@ edition.workspace = true
 rusqlite = { workspace = true }
 # 1.0.69。与根上的 thiserror 2.0.21 主版本不同，继承 `thiserror` 会升到 2。
 thiserror = "1.0"
+
+[lints]
+workspace = true

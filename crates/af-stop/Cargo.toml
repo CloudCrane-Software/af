@@ -8,3 +8,6 @@ edition.workspace = true
 [dev-dependencies]
 # 只用 std。默认特性含 fork/timeout/bit-set，bit-set 会把 borsh derive 特性统一进工作区。
 proptest = { version = "1.12.0", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true
