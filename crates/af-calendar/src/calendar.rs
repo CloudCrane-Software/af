@@ -111,8 +111,8 @@ impl Calendar {
     /// 校验:周模板与全部覆盖日内,班次必须升序且互不重叠。
     /// 反序列化绕过构造器,加载配置后必须调用(见 examples/sla_demo.rs)。
     pub fn validate(&self) -> Result<(), CalendarError> {
-        for day in 0..7 {
-            self.check_sorted(&self.weekly[day], format!("周{}", WEEKDAY_NAMES[day]))?;
+        for (day, name) in WEEKDAY_NAMES.iter().enumerate() {
+            self.check_sorted(&self.weekly[day], format!("周{name}"))?;
         }
         for (date, shifts) in &self.day_overrides {
             self.check_sorted(shifts, date.to_string())?;

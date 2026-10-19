@@ -38,8 +38,8 @@ fn night_shifts() -> Vec<Shift> {
 /// 全周夜班日历(每晚 22:00–06:00)。
 fn night_calendar(tz: Tz) -> Calendar {
     let mut weekly: [Vec<Shift>; 7] = Default::default();
-    for d in 0..7 {
-        weekly[d] = night_shifts();
+    for slot in &mut weekly {
+        *slot = night_shifts();
     }
     let cal = Calendar::from_weekly(tz, weekly);
     cal.validate().unwrap();
@@ -49,8 +49,8 @@ fn night_calendar(tz: Tz) -> Calendar {
 /// 周一~周五夜班,周六日停工(供假日/调休交互)。
 fn weekday_night_calendar(tz: Tz) -> Calendar {
     let mut weekly: [Vec<Shift>; 7] = Default::default();
-    for d in 0..5 {
-        weekly[d] = night_shifts();
+    for slot in weekly.iter_mut().take(5) {
+        *slot = night_shifts();
     }
     let cal = Calendar::from_weekly(tz, weekly);
     cal.validate().unwrap();
@@ -60,8 +60,8 @@ fn weekday_night_calendar(tz: Tz) -> Calendar {
 /// 24×7 全开工日历(每天 [00:00, 24:00)):扫描用最强校验——任何时刻都在班次内。
 fn always_on_calendar(tz: Tz) -> Calendar {
     let mut weekly: [Vec<Shift>; 7] = Default::default();
-    for d in 0..7 {
-        weekly[d] = vec![Shift::new(NaiveTime::MIN, end_of_day()).unwrap()];
+    for slot in &mut weekly {
+        *slot = vec![Shift::new(NaiveTime::MIN, end_of_day()).unwrap()];
     }
     let cal = Calendar::from_weekly(tz, weekly);
     cal.validate().unwrap();
@@ -533,7 +533,7 @@ fn scan_roundtrips<Tz: TimeZone + Clone>(
         let class = roundtrip_class(cal, p, req, label);
         counts[class as usize] += 1;
         n += 1;
-        t = t + step; // UTC 无 DST,步进无歧义
+        t += step; // UTC 无 DST,步进无歧义
     }
     (n, counts)
 }

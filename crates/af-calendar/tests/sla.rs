@@ -287,8 +287,8 @@ fn utc_due_gives_utc_latest_order() {
 fn multi_shift_calendar_skips_lunch() {
     // 09:00-12:00 + 13:00-18:00(午休拆两班)
     let mut weekly: [Vec<Shift>; 7] = Default::default();
-    for d in 0..5 {
-        weekly[d] = vec![
+    for slot in weekly.iter_mut().take(5) {
+        *slot = vec![
             Shift::hm(9, 0, 12, 0).unwrap(),
             Shift::hm(13, 0, 18, 0).unwrap(),
         ];
