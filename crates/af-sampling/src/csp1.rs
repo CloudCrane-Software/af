@@ -391,7 +391,9 @@ mod tests {
         );
         assert!(s.to_screening_switches >= 1);
         // f 不低于 f_min：名义不变式 + 经验抽检率也在 f_min 之上（F=0.2 对 0.05 余量极大）。
-        assert!(F >= F_MIN);
+        const {
+            assert!(F >= F_MIN);
+        }
         let emp = s.empirical_sampling_rate();
         assert!(emp >= F_MIN, "经验抽检率 {emp} 低于 f_min={F_MIN}");
         // “质量事故”段（500~529 连续缺陷）必须把机器打回全检：事故段内至少一次回切。

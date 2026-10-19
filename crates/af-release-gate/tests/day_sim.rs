@@ -62,7 +62,7 @@ fn build_schedule() -> Vec<(MinuteOfDay, Item)> {
     let mut k = 0usize;
     while m < 1320 {
         push(&mut v, m, "v1", &mut id);
-        m += if k % 2 == 0 { 4 } else { 5 };
+        m += if k.is_multiple_of(2) { 4 } else { 5 };
         k += 1;
     }
     // 夜二 [1320,1440) 每 4 分钟 1 件(30 件)——夜间限流,余量留给次日清晨。

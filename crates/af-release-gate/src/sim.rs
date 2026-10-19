@@ -186,8 +186,8 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
                         cs.probes_released_while_gated = *probes_released;
                     }
                 }
-                let mut merged: VecDeque<&Item> = canary_parked.drain(..).collect();
-                merged.extend(backlog.drain(..));
+                let mut merged = std::mem::take(&mut canary_parked);
+                merged.append(&mut backlog);
                 backlog = merged;
             }
             report.events.push(ev);
@@ -196,8 +196,8 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
         // 2) 夜间窗口刚结束 → 暂存件放回队首(保持原到达顺序)。
         let in_window = gate.in_night_window(now);
         if was_in_window && !in_window {
-            let mut merged: VecDeque<&Item> = night_deferred.drain(..).collect();
-            merged.extend(backlog.drain(..));
+            let mut merged = std::mem::take(&mut night_deferred);
+            merged.append(&mut backlog);
             backlog = merged;
         }
         was_in_window = in_window;
@@ -220,10 +220,7 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
 
         // 4) 供给循环:先试渐放泊位(gated 的新配置件),再按 FIFO 供给 backlog。
         //    泊位优先是有意的:探针应尽快进入评估,不被积压淹没(PoC 简化,见 RESULT)。
-        loop {
-            let Some(front) = canary_parked.front().copied() else {
-                break;
-            };
+        while let Some(front) = canary_parked.front().copied() {
             let probe = front.clone();
             match gate.try_admit(&probe, now) {
                 Ok(_t) => {
@@ -254,10 +251,7 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
                 Err(AdmitError::TimedOut) => unreachable!(),
             }
         }
-        loop {
-            let Some(front) = backlog.front().copied() else {
-                break;
-            };
+        while let Some(front) = backlog.front().copied() {
             let probe = front.clone();
             match gate.try_admit(&probe, now) {
                 Ok(_t) => {

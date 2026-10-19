@@ -139,6 +139,8 @@ impl Trace {
     ///
     /// 有界缓冲满时立即返回 `Err(TraceError::CriticalFull)`，事件原样退还，
     /// 调用方必须处理（重试或中止）；返回 `Ok(seq)` 则保证该事件最终落盘。
+    // 错误里按值带回 TraceEvent 是 fail-closed 契约。装箱会改变公开错误类型。
+    #[allow(clippy::result_large_err)]
     pub fn write_critical(
         &self,
         kind: &str,

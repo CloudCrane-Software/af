@@ -120,7 +120,7 @@ impl Station {
     /// 入账一条新任务（初始 queued）。
     ///
     /// 幂等键语义：`idempotency_key` 上有 UNIQUE 约束，`ON CONFLICT DO NOTHING`
-    /// + 受影响行数判定 —— 撞键时不产生第二行，返回已存在任务的 id。
+    /// 加上受影响行数判定 —— 撞键时不产生第二行，返回已存在任务的 id。
     /// `idempotency_key=None` 不参与去重（SQLite UNIQUE 允许多个 NULL）。
     pub fn new_task(
         &self,
@@ -190,7 +190,7 @@ impl Station {
                 params![worker_id, lease_until, tid],
             )?;
             if n == 1 {
-                return Ok(self.get(&tid)?);
+                return self.get(&tid);
             }
         }
         Ok(None)
@@ -400,8 +400,7 @@ mod tests {
             .collect();
         let winners: Vec<Task> = handles
             .into_iter()
-            .map(|h| h.join().unwrap())
-            .flatten()
+            .filter_map(|h| h.join().unwrap())
             .collect();
         assert_eq!(winners.len(), 1, "两线程抢同一任务必须恰好一个成功");
         // 账本终态与赢家一致

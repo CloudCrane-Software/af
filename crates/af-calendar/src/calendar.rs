@@ -71,8 +71,8 @@ impl Calendar {
     /// 周一至周五同一班次的日历。
     pub fn weekday_single_shift(tz: Tz, shift: Shift) -> Self {
         let mut cal = Calendar::new_empty(tz);
-        for day in 0..5 {
-            cal.weekly[day] = vec![shift];
+        for slot in cal.weekly.iter_mut().take(5) {
+            *slot = vec![shift];
         }
         cal
     }

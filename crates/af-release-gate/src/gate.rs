@@ -14,6 +14,7 @@
 //!
 //! 策略评估顺序(固定):canary → 夜间窗口 → WIP 上限。
 
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -196,7 +197,8 @@ pub struct ReleaseGate {
 
 impl ReleaseGate {
     pub fn new(cfg: GateConfig) -> Result<Self, ConfigError> {
-        if !(cfg.wip_lower_minutes < cfg.wip_upper_minutes) {
+        // NaN 与 lower >= upper 都拒绝。`!(a < b)` 对 NaN 为真，partial_cmp 保持同一判定。
+        if cfg.wip_lower_minutes.partial_cmp(&cfg.wip_upper_minutes) != Some(Ordering::Less) {
             return Err(ConfigError::LowerNotBelowUpper {
                 lower: cfg.wip_lower_minutes,
                 upper: cfg.wip_upper_minutes,
