@@ -516,6 +516,8 @@ const SWEV_INSTANCE_PROTOCOL: &str = r#"# How to work
 
 # Hard boundaries
 - NEVER modify test files or test configuration (any path containing "test", plus conftest.py, tox.ini, pytest.ini, setup.cfg). The grading harness owns the tests; a patch touching them is rejected.
+- Do NOT edit changelogs or release notes (CHANGES.rst, docs/changes*, docs/releases*) — grading ignores documentation; editing it only burns your turn budget.
+- The container has NO usable internet access: pip install/download, curl, wget and git remotes fail. Never retry a failed download — implement the fix with what is already in the container.
 - A run that ends with no code changes is an automatic failure.
 - Every bash command runs in a fresh non-interactive shell starting in /testbed; shell state (cd, exported variables) does NOT persist between commands. Never open editors or interactive prompts; use non-interactive flags (e.g. -y, DEBIAN_FRONTEND=noninteractive). Commands may be killed by a timeout.
 
@@ -524,6 +526,17 @@ When your fix is verified:
 1. Self-check: run `git diff --stat` and inspect `git diff` restricted to the files you changed; confirm only non-test source files changed and the change is minimal and focused on the issue.
 2. Submit: run a bash command that PRINTS the token TASK_COMPLETE as its FIRST output line, e.g. `echo TASK_COMPLETE`.
 Mentioning TASK_COMPLETE in plain text does NOT finish the run — only the printed output of an executed command does. After the token prints, the run ends immediately and you cannot continue working."#;
+
+/// fix2 反考古护栏的触发模式（失败轨迹分析 §1.3 D-考古：51/145 run、单例烧 10-20 轮）。
+/// 取证据里最明确的全库考古/全盘搜索形态，避免误伤正常源码搜索。
+const ARCHAEOLOGY_PATTERNS: &[&str] = &[
+    "cat-file --batch-all-objects",
+    "git fsck",
+    "--lost-found",
+    "git log --all --grep",
+    "find / -name",
+    "find / -type",
+];
 
 fn status_label(status: &RunStatus) -> String {
     match status {
@@ -551,6 +564,16 @@ fn run() -> Result<(), String> {
 
 fn run_swev(args: &Args) -> Result<(), String> {
     let prof = profile(&args.profile)?;
+    // fix2 采样参数对齐（设计/harness-对齐审计.md §6.A，mini-swe-agent 榜单口径，
+    // 只作用于 swe-v 线；TB/竞赛套件不动）：
+    //   temperature 0.0 / top_p 1.0（审计 D6：显式写入请求体，可复现性）；
+    //   max_tokens 显式大值 32000（审计 D3：不再吃 Anthropic 8192 协议默认；
+    //   Vals 口径"highest possible"，GLM-5.2 官方卡片用 64000，取保守一档；
+    //   若某供应商拒绝该值会以 run_failed 显形，按供应商回调查并声明在结果行）。
+    let mut endpoint = prof.endpoint.clone();
+    endpoint.temperature_milli = Some(0);
+    endpoint.top_p_milli = Some(1_000);
+    endpoint.max_tokens = Some(32_000);
     if args.tasks.is_empty() {
         return Err("swe-v 需要 --tasks <instance_id 逗号表>".into());
     }
@@ -600,16 +623,17 @@ fn run_swev(args: &Args) -> Result<(), String> {
         .map_err(|err| format!("issue root: {err}"))?;
         let order = bench_order(&task.instance_id)?;
         let task_started = Instant::now();
-        // v2 完成度纪律（S0 MAST 缺陷对策）：严格提示 + 重复命令警告 +
-        // 零补丁/改测试门禁，触发则带 harness 反馈重试一次（attempt<=2）。
-        let mut attempt: u32 = 1;
+        // fix2：attempt 恒 1（审计 D5：关闭 gate 反馈重试，榜单口径单次采样）；
+        // gate 只记账（no_patch/test_edit 落行）。单次迭代的 for 保留 attempt 命名与
+        // run 目录 -a1 后缀（历史结果行字段兼容）。
         let mut gate = "ok".to_string();
-        let mut gate_feedback = String::new();
-        // HTTP 层退避重试计数（429/5xx 供给面瞬断），跨 attempt 累计进结果行。
+        // HTTP 层退避重试计数（429/5xx 供给面瞬断），累计进结果行。
         let mut http_retries: u64 = 0;
         let report;
         let run_dir;
-        loop {
+        // fix2：单次执行块（attempt 恒 1，审计 D5 关闭 gate 反馈重试）。
+        'run: {
+            let attempt: u32 = 1;
             let env_for_tool = env_cell.clone();
             let recent = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
             let recent_for_tool = recent.clone();
@@ -620,7 +644,18 @@ fn run_swev(args: &Args) -> Result<(), String> {
                     .and_then(Value::as_str)
                     .unwrap_or("")
                     .to_string();
-                let out = env_for_tool.exec(&command);
+                let mut out = env_for_tool.exec(&command);
+                // fix2 反考古护栏（失败轨迹分析 建议5）：git 考古/翻 object 库找上游修复在
+                // 51/145 个 run 出现、单例烧 10-20 轮且从不收敛——命中即在输出前注入护栏。
+                if ARCHAEOLOGY_PATTERNS
+                    .iter()
+                    .any(|p| command.contains(p))
+                {
+                    out = format!(
+                        "[harness] Searching for an upstream fix (git archaeology / full-disk search) is unavailable in this environment — the upstream fix is not in this repository, this line of work never pays off. Implement the fix yourself with the code in /testbed.\n{}",
+                        out
+                    );
+                }
                 let mut hist = recent_for_tool.lock().unwrap_or_else(|e| e.into_inner());
                 let repeats = hist.iter().filter(|c| c.as_str() == command).count();
                 hist.push(command);
@@ -636,7 +671,7 @@ fn run_swev(args: &Args) -> Result<(), String> {
                 Ok(Value::String(out))
             });
             let spec = AgentSpec {
-                endpoint: prof.endpoint.clone(),
+                endpoint: endpoint.clone(),
                 context_template: ContextTemplate {
                     system: SWEV_SYSTEM_PROMPT.into(),
                     slots: Vec::new(),
@@ -646,7 +681,8 @@ fn run_swev(args: &Args) -> Result<(), String> {
                 ))
                 .map_err(|err| format!("bash 工具声明: {err}"))?],
                 policy: Policy {
-                    max_turns: 60,
+                    // fix2 对齐（审计 §6.A.1）：60 → 250 步（1 turn = 1 模型调用，与 mini step 同义）。
+                    max_turns: 250,
                     stop: StopCondition {
                         completion_signals: vec!["TASK_COMPLETE".into()],
                         tool_free_turn_limit: 3,
@@ -672,17 +708,8 @@ fn run_swev(args: &Args) -> Result<(), String> {
             let key_refresh: Option<af_harness::KeyRefresher> =
                 Some(std::sync::Arc::new(move || resolve_key(key_cmd)));
             let opened = Opened::open(&attempt_dir).map_err(|err| format!("open run: {err}"))?;
-            // fix2：纪律随任务重发（instance 模板），门禁反馈贴任务、协议收尾（最后读到的最牢）。
-            let user_message = if attempt == 1 {
-                format!("{}\n\n{}", task.prompt(), SWEV_INSTANCE_PROTOCOL)
-            } else {
-                format!(
-                    "{}\n\n{}\n\n{}",
-                    task.prompt(),
-                    gate_feedback,
-                    SWEV_INSTANCE_PROTOCOL
-                )
-            };
+            // fix2：纪律随任务重发（instance 模板），attempt 恒 1（无 gate 重试）。
+            let user_message = format!("{}\n\n{}", task.prompt(), SWEV_INSTANCE_PROTOCOL);
             match opened.run(Launch {
                 spec,
                 run_id: format!("{}-a{}", task.instance_id, attempt),
@@ -693,12 +720,13 @@ fn run_swev(args: &Args) -> Result<(), String> {
                 parent: &root.token,
                 public_key: &root.keypair.public(),
                 namespace: "bench".into(),
-                spend_cap_cents: 100,
+                // fix2 对齐（审计 §6.A.2）：单题成本上限 $1 → $3。
+                spend_cap_cents: 300,
                 tool_spend_cents: 1,
                 budget: BudgetBinding::Cents {
                     dimension: "llm.cents".into(),
-                    ledger: BudgetLedger::new(100),
-                    spend_cap_cents: 100,
+                    ledger: BudgetLedger::new(300),
+                    spend_cap_cents: 300,
                 },
                 order: &order,
                 tools: registry,
@@ -709,27 +737,20 @@ fn run_swev(args: &Args) -> Result<(), String> {
                     http_retries += opened.http_retries();
                     let diff =
                         swev::capture_diff(&args.host, &env_cell, &attempt_dir).unwrap_or_default();
-                    if attempt < 2 {
-                        if diff.trim().is_empty() {
-                            gate = "no_patch".into();
-                            gate_feedback = "[Harness feedback] Your previous attempt ended without changing any file. You MUST edit repository files to fix the issue — a run with no code changes is an automatic failure.".into();
-                            attempt += 1;
-                            continue;
-                        }
+                    // fix2 对齐（审计 D5/§6.A.6）：关闭 gate 反馈重试（attempt 恒 1，榜单口径
+                    // 单次采样）。gate 只记账不入重试——no_patch/test_edit 如实落行，
+                    // diff_touches_tests 保留为记账门禁（判分链语义未动）。
+                    if diff.trim().is_empty() {
+                        gate = "no_patch".into();
+                    } else {
                         let hits = swev::diff_touches_tests(&diff);
                         if !hits.is_empty() {
                             gate = "test_edit".into();
-                            gate_feedback = format!(
-                                "[Harness feedback] Your previous attempt modified test files ({}), which is forbidden: the grading harness owns the tests and rejects any patch that touches them. Re-do the fix changing only non-test source files.",
-                                hits.join(", ")
-                            );
-                            attempt += 1;
-                            continue;
                         }
                     }
                     report = r;
                     run_dir = attempt_dir;
-                    break;
+                    break 'run;
                 }
                 Err(err) => {
                     http_retries += opened.http_retries();
@@ -742,7 +763,7 @@ fn run_swev(args: &Args) -> Result<(), String> {
                         "trial": args.trial,
                         "reward": Value::Null,
                         "status": "run_failed",
-                        "scaffold": "v2",
+                        "scaffold": "v3",
                         "http_retries": http_retries,
                         "verifier_note": err.to_string().chars().take(300).collect::<String>(),
                     });
@@ -776,9 +797,14 @@ fn run_swev(args: &Args) -> Result<(), String> {
             "trial": args.trial,
             "reward": resolved,
             "status": status_label(&report.status),
-            "scaffold": "v2",
+            // fix2（结果代号 fix2，审计 §6.A 对齐）：scaffold v3 = 提交式完成协议 +
+            // instance 纪律 + 250 步/$3/温度0/top_p1/max_tokens 32000 + 无 gate 重试。
+            // reasoning 档位按审计 §6.A.7 显式声明（保持 Off = mini 默认不发 thinking）。
+            "scaffold": "v3",
+            "reasoning_tier": "off",
             "gate": gate,
-            "attempts": attempt,
+            // fix2：attempt 恒 1（审计 D5 关闭 gate 重试），字段保留供历史行兼容。
+            "attempts": 1,
             "http_retries": http_retries,
             "turns": report.turns,
             "model_calls": report.model_calls,

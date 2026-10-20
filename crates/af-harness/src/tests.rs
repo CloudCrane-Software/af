@@ -526,6 +526,71 @@ fn length_truncated_turn_gets_length_feedback() {
 }
 
 #[test]
+fn truncated_empty_turns_do_not_count_toward_tool_free_limit() {
+    let fix = Fixture::new();
+    let stub = StubServer::spawn().unwrap();
+    let mut spec = spec_at(&stub.url());
+    spec.policy.max_turns = 4;
+    spec.policy.stop.completion_signals.clear();
+    spec.policy.stop.tool_free_turn_limit = 2;
+    let truncated = json!({
+        "choices": [{
+            "message": {"role": "assistant", "content": ""},
+            "finish_reason": "length"
+        }]
+    })
+    .to_string();
+    // 3 个截断空轮 + 1 个真无工具轮：若空轮被计入 streak，第 3 轮就该 ToolFreeLimit。
+    for _ in 0..3 {
+        stub.push(StubResponse::json(200, truncated.clone()));
+    }
+    stub.push(StubResponse::json(200, assistant_text("分析完继续")));
+    let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
+    let report = opened.run(fix.launch(spec, ToolRegistry::new())).unwrap();
+    // fix2（失败轨迹分析 建议2）：截断空轮不计 tool_free 计数，跑满 max_turns 而非被误杀。
+    assert!(
+        matches!(report.status, RunStatus::MaxTurns),
+        "{:?}",
+        report.status
+    );
+    assert_eq!(report.model_calls, 4);
+}
+
+#[test]
+fn turn_budget_reminder_fires_once_per_threshold() {
+    let fix = Fixture::new();
+    let stub = StubServer::spawn().unwrap();
+    let mut spec = spec_at(&stub.url());
+    spec.policy.max_turns = 8;
+    spec.policy.stop.completion_signals.clear();
+    spec.policy.stop.tool_free_turn_limit = 8;
+    for _ in 0..8 {
+        stub.push(StubResponse::json(200, assistant_text("继续")));
+    }
+    let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
+    let report = opened.run(fix.launch(spec, ToolRegistry::new())).unwrap();
+    // 无工具轮在第 8 轮达 tool_free 上限收束（与 max_turns 相同轮数）。
+    assert_eq!(report.model_calls, 8);
+    // max_turns=8：gentle 阈值剩 5 轮（index 3）、strong 阈值剩 2 轮（index 6），各恰好一次。
+    let gentle = report
+        .transcript
+        .iter()
+        .filter(
+            |item| matches!(item, TranscriptItem::User { text } if text.contains("5 turns remain")),
+        )
+        .count();
+    let strong = report
+        .transcript
+        .iter()
+        .filter(|item| {
+            matches!(item, TranscriptItem::User { text } if text.contains("only 2 turns remain"))
+        })
+        .count();
+    assert_eq!(gentle, 1, "gentle 提醒应恰好一次");
+    assert_eq!(strong, 1, "strong 警告应恰好一次");
+}
+
+#[test]
 fn max_turns_stops_before_another_model_call() {
     let fix = Fixture::new();
     let stub = StubServer::spawn().unwrap();

@@ -437,6 +437,28 @@ impl Opened {
 
     fn one_turn(&self, launch: &Launch<'_>, live: &mut Live) -> Result<TurnOutcome> {
         let per_turn = launch.spec.policy.budget_ref.per_turn;
+        // fix2 收尾机制（失败轨迹分析 建议1）：轮次预算可见性。S1 实证 60 例 max_turns
+        // 中 19 例补丁已过判分仍在"再验一组"——模型按无限预算规划验证。
+        // 剩 ~10% 轮注入 gentle 提醒、剩 ~4% 轮注入 strong 警告，各恰好一次
+        // （以 remaining 精确等于阈值触发，turn_index 单调故不会重发）。
+        let max_turns = launch.spec.policy.max_turns;
+        let gentle_left = turn_reminder_threshold(max_turns, 10, 5);
+        let strong_left = turn_reminder_threshold(max_turns, 25, 2);
+        let remaining = max_turns.saturating_sub(live.row.turn_index);
+        if remaining == gentle_left {
+            live.transcript.push(TranscriptItem::User {
+                text: format!(
+                    "[Harness feedback] Turn budget: {gentle_left} turns remain before this run is force-stopped. If your fix is already verified, submit now (print the completion token via a command). Do not start documentation, changelogs or broad re-verification."
+                ),
+            });
+        }
+        if remaining == strong_left {
+            live.transcript.push(TranscriptItem::User {
+                text: format!(
+                    "[Harness feedback] FINAL warning: only {strong_left} turns remain. Submit your best current fix NOW."
+                ),
+            });
+        }
         let system = render(&launch.spec.context_template, &launch.vars)?;
         let mut request = Vec::with_capacity(live.transcript.len() + 1);
         request.push(TranscriptItem::System { text: system });
@@ -477,22 +499,25 @@ impl Opened {
             usage: message.usage,
         });
         let any_tool = !message.tool_calls.is_empty();
+        let truncated = finish == "length" || finish == "max_tokens";
         let pass = self.run_tools(launch, live, &message.tool_calls)?;
         if any_tool {
             live.row.tool_free_streak = 0;
+        } else if truncated {
+            // fix2（失败轨迹分析 建议2）：截断产生的空轮**不计** tool_free 计数——
+            // max_tokens 截断是供给面 bug，不得假冒"模型自愿停"的停止信号
+            // （S1 实证 m31f-14096 被空轮触发的 tool_free_limit 误杀）。注入续写反馈。
+            live.transcript.push(TranscriptItem::User {
+                text: LENGTH_FEEDBACK.to_string(),
+            });
         } else {
             live.row.tool_free_streak = live.row.tool_free_streak.saturating_add(1);
-            // fix2：无工具轮不再静默倒计时——还不会因此停轮就立刻注入教学反馈
-            // （截断轮用专项文案）。若本轮已到 tool_free 上限，下一轮判定直接停，不再注入。
+            // fix2：无工具轮不再静默倒计时——还不会因此停轮就立刻注入教学反馈。
+            // 若本轮已到 tool_free 上限，下一轮判定直接停，不再注入。
             let limit = launch.spec.policy.stop.tool_free_turn_limit;
             if limit > 0 && live.row.tool_free_streak < limit {
-                let teaching = if finish == "length" || finish == "max_tokens" {
-                    LENGTH_FEEDBACK
-                } else {
-                    TOOL_FREE_FEEDBACK
-                };
                 live.transcript.push(TranscriptItem::User {
-                    text: teaching.to_string(),
+                    text: TOOL_FREE_FEEDBACK.to_string(),
                 });
             }
         }
@@ -905,6 +930,11 @@ fn visible_tools(spec: &AgentSpec, whitelist: &[String]) -> Vec<ToolDecl> {
         .filter(|tool| whitelist.iter().any(|name| name == &tool.name))
         .cloned()
         .collect()
+}
+
+/// fix2 收尾机制阈值：剩 total/factor 轮（下限 floor）触发提醒。
+fn turn_reminder_threshold(total: u32, factor: u32, floor: u32) -> u32 {
+    (total / factor).max(floor).min(total)
 }
 
 /// fix2 完成信号匹配：任一工具输出文本的**首行**（trim 后）完整等于某信号词才算。

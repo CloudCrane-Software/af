@@ -16,22 +16,21 @@ pub struct SwevTask {
     pub problem_statement: String,
     pub image: String,
     pub eval_script: String,
+    /// fix2 对齐后不再注入提示（审计 D4），字段保留只为数据包反序列化完整。
     #[serde(default)]
+    #[allow(dead_code)]
     pub hints_text: String,
 }
 
 impl SwevTask {
+    /// fix2 对齐（设计/harness-对齐审计.md D4/§6.A.5）：不再注入 hints_text——
+    /// 三个标准 harness 都只给 problem_statement，官方 hints 是面向解题者的补丁提示，
+    /// 注入属"反向虚高"（与榜单不可比）。字段保留（判分器全字段来源不动）。
     pub fn prompt(&self) -> String {
-        let mut text = format!(
+        format!(
             "Repository: {}\n\nIssue description:\n{}",
             self.repo, self.problem_statement
-        );
-        let hints = self.hints_text.trim();
-        if !hints.is_empty() {
-            text.push_str("\n\nHints:\n");
-            text.push_str(hints);
-        }
-        text
+        )
     }
 }
 
@@ -150,10 +149,11 @@ pub fn verify(
     }
     // eval 脚本经 stdin 喂给容器 bash，避免 docker cp 往返。
     // stderr 必须并入日志：set -x 轨迹与 START/END 标记走 stderr，官方判分需要。
-    // host == "local" 时免 ssh 一跳，其余语义一致（timeout 1200 不变）。
+    // host == "local" 时免 ssh 一跳，其余语义一致。
+    // fix2 对齐（审计 D9/§6.A.8）：eval 超时 1200 → 1800s（官方 run_evaluation --timeout 默认）。
     let run_cmd = format!("docker exec -i {} bash -s 2>&1", env.container);
     let log_path = work_dir.join("eval.log");
-    let bridge = format!("timeout 1200 {run_cmd}");
+    let bridge = format!("timeout 1800 {run_cmd}");
     let mut bridge_cmd = if host == "local" {
         let mut cmd = Command::new("bash");
         cmd.arg("-c").arg(&bridge);
