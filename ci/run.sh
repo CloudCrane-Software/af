@@ -8,9 +8,10 @@
 #   3 test    cargo test -j4 --workspace                 硬门：非零即红
 #   4 cue     poc-cue recipe vet + export + 结构断言      硬门：正例过/反例拒/断言全中
 #   5 scrub   ci/parse_scrub.py 对 7 份真实日志判定       硬门：期望判定逐一核对
-#   6 cosign  sudo unshare -n verify-blob --trusted-root  硬门：正例过/篡改例拒
+#   6 cosign  断网 netns verify-blob --trusted-root    硬门：正例过/篡改例拒
+#             （sudo unshare -n 优先；no_new_privs 沙箱回退 unshare -Urn，隔离语义等价）
 #
-# 外部依赖: cargo+rustup(rustfmt/clippy 组件)、python3、sudo+unshare、
+# 外部依赖: cargo+rustup(rustfmt/clippy 组件)、python3、unshare（sudo 可选）、
 #           AF/bin/cosign、AF/poc/poc-cue/bin/cue、AF/poc/poc-cas 真实测试资产。
 # 可重复性: 全部路径相对本脚本所在仓库根；产物写 ci/out/（可整目录删除重跑）。
 # 退出码: 0=全绿；1=有硬门失败（所有步骤仍会跑完，一次拿全量诊断）。
@@ -149,17 +150,29 @@ cosign_step() {
   local COSIGN="$AF_ROOT/bin/cosign"
   local T="$AF_ROOT/poc/poc-cas/verify-tr"
   cd "$T" || return 2
+  # 断网手段择一即可：sudo unshare -n（真 root netns）优先；sudo 不可用（如
+  # no_new_privs 沙箱）时回退 unshare -Urn——非特权 user+netns，loopback down、
+  # 无外联，断网隔离语义等价，门禁强度不变（6b 篡改例仍必须被拒）。
+  local NETNS=()
+  if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+    NETNS=(sudo unshare -n)
+  elif unshare -Urn true 2>/dev/null; then
+    NETNS=(unshare -Urn)
+  else
+    echo "无可用断网手段：sudo(unshare -n) 与 unshare -Urn 均失败" >&2
+    return 2
+  fi
   # 6a. 正例：无网络命名空间内，bundle+trusted-root 离线验签必须过
-  sudo unshare -n "$COSIGN" verify-blob \
+  "${NETNS[@]}" "$COSIGN" verify-blob \
     --key tr-key.pub --bundle tr-bundle.json --trusted-root trusted-root.json \
     artifact-tr.txt > "$OUT/step6-verify.log" 2>&1 || { return 1; }
   # 6b. 负例：篡改 1 字节的工件必须被拒（证明门真的在验）
-  if sudo unshare -n "$COSIGN" verify-blob \
+  if "${NETNS[@]}" "$COSIGN" verify-blob \
       --key tr-key.pub --bundle tr-bundle.json --trusted-root trusted-root.json \
       artifact-tampered.txt >> "$OUT/step6-verify.log" 2>&1; then
     echo "篡改工件未被拒绝" >&2; return 1
   fi
-  echo "正例: $(head -1 "$OUT/step6-verify.log")；篡改例: 已拒绝（exit 1）"
+  echo "正例: $(head -1 "$OUT/step6-verify.log")；篡改例: 已拒绝（exit 1）；netns: ${NETNS[*]}"
 }
 step 6 "cosign 断网 verify-blob" -- bash -c "$(declare -f cosign_step); cosign_step"
 
