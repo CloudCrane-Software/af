@@ -64,9 +64,13 @@ pub fn setup(host: &str, task: &SwevTask, profile: &str) -> Result<tb::TbEnv, St
          -e HTTP_PROXY=http://172.17.0.1:8123 \
          -e NO_PROXY=localhost,127.0.0.1,100.64.0.0/10"
     };
+    // fix2 环境卫生（mini-swe-agent env 块同源）：分页器挂死与进度条/着色噪音
+    // 是 SWE 容器高频暗坑，容器级环境变量一次性根治。测量语义变更，计入 fix2。
     let script = format!(
         "docker run -d --name {container} \
          {proxy_env} \
+         -e PAGER=cat -e MANPAGER=cat -e LESS=-R \
+         -e PIP_PROGRESS_BAR=off -e TQDM_DISABLE=1 -e NO_COLOR=1 \
          {} sleep infinity",
         task.image
     );

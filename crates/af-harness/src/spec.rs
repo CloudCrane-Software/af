@@ -118,9 +118,12 @@ pub struct ToolDecl {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StopCondition {
-    /// 助手文本包含其中任一词即完成。空串拒绝。
+    /// 完成信号词。fix2 语义：本轮任一**工具输出文本的首行**（trim 后）完整等于
+    /// 其中任一词即完成——完成必须由真实执行的工具调用产出，助手叙述文本不触发。
+    /// 空串拒绝。
     pub completion_signals: Vec<String>,
     /// 连续无工具调用的轮数上限。达到即停。0 表示出现一轮无工具就停。
+    /// fix2：未达上限的无工具轮会立刻收到一条教学反馈（user 消息注入），不再静默倒计时。
     pub tool_free_turn_limit: u32,
 }
 

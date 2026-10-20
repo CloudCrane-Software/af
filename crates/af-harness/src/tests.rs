@@ -183,12 +183,18 @@ fn pure_tool_stays_local_and_external_once_goes_through_gateway() {
     let git_hits = Arc::new(AtomicUsize::new(0));
     let pay_hits = Arc::new(AtomicUsize::new(0));
     let mut tools = ToolRegistry::new();
-    counting("git", &git_hits, &mut tools);
-    counting("pay", &pay_hits, &mut tools);
+    // fix2：完成只认工具输出首行——两个工具都回 "DONE"，助手叙述文本不再触发完成。
+    for (name, hits) in [("git", &git_hits), ("pay", &pay_hits)] {
+        let hits = Arc::clone(hits);
+        tools.register(name, move |_args| {
+            hits.fetch_add(1, Ordering::SeqCst);
+            Ok(json!("DONE"))
+        });
+    }
     stub.push(StubResponse::json(
         200,
         assistant_calls(
-            "DONE",
+            "all done, DONE",
             &[
                 ("git", json!({"args": "status"})),
                 ("pay", json!({"cents": 1})),
@@ -234,12 +240,16 @@ fn interrupted_side_effect_replays_on_resume() {
         200,
         assistant_calls("", &[("pay", json!({"cents": 1}))]),
     ));
-    stub.push(StubResponse::json(200, assistant_text("任务 DONE")));
+    // fix2：完成只认工具输出首行——终轮改用纯本地工具 git 输出 "DONE" 完成跑。
+    stub.push(StubResponse::json(
+        200,
+        assistant_calls("", &[("git", json!({"args": "status"}))]),
+    ));
     let err = {
         let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
         let mut tools = ToolRegistry::new();
         counting("pay", &hits, &mut tools);
-        counting("git", &Arc::new(AtomicUsize::new(0)), &mut tools);
+        tools.register("git", |_args| Ok(json!("DONE")));
         let mut launch = fix.launch(spec.clone(), tools);
         launch.breakpoint = Breakpoint::BeforeTurnCommit;
         opened.run(launch).unwrap_err()
@@ -251,7 +261,7 @@ fn interrupted_side_effect_replays_on_resume() {
     assert_eq!(opened.status(), OpenStatus::AlreadyDeclared);
     let mut tools = ToolRegistry::new();
     counting("pay", &hits, &mut tools);
-    counting("git", &Arc::new(AtomicUsize::new(0)), &mut tools);
+    tools.register("git", |_args| Ok(json!("DONE")));
     let report = opened.run(fix.launch(spec, tools)).unwrap();
     assert!(matches!(report.status, RunStatus::Completed { ref signal } if signal == "DONE"));
     assert_eq!(report.effect_fresh, 0);
@@ -413,13 +423,46 @@ fn completion_signal_ends_the_run() {
     let fix = Fixture::new();
     let stub = StubServer::spawn().unwrap();
     let spec = spec_at(&stub.url());
-    stub.push(StubResponse::json(200, assistant_text("可以发货 DONE")));
+    // fix2：完成信号由工具输出首行触发（echo TASK_COMPLETE 同构）。
+    stub.push(StubResponse::json(
+        200,
+        assistant_calls("", &[("git", json!({"args": "commit"}))]),
+    ));
     stub.push(StubResponse::json(200, assistant_text("不应再调")));
     let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
-    let report = opened.run(fix.launch(spec, ToolRegistry::new())).unwrap();
+    let mut tools = ToolRegistry::new();
+    tools.register("git", |_args| Ok(json!("DONE\n")));
+    let report = opened.run(fix.launch(spec, tools)).unwrap();
     assert!(matches!(report.status, RunStatus::Completed { ref signal } if signal == "DONE"));
     assert_eq!(report.model_calls, 1);
     assert_eq!(stub.requests().len(), 1);
+}
+
+#[test]
+fn signal_mentioned_in_assistant_text_no_longer_completes() {
+    let fix = Fixture::new();
+    let stub = StubServer::spawn().unwrap();
+    let mut spec = spec_at(&stub.url());
+    spec.policy.max_turns = 4;
+    spec.policy.stop.tool_free_turn_limit = 8;
+    // fix2 回归锚（S0 D1/D3 误触发路径）：叙述里出现信号词不再判完成，
+    // 首行恰好等于信号词的工具输出才算。
+    stub.push(StubResponse::json(
+        200,
+        assistant_text("先别发 DONE，还有收尾工作。"),
+    ));
+    stub.push(StubResponse::json(200, assistant_text("done DONE done")));
+    stub.push(StubResponse::json(
+        200,
+        assistant_calls("", &[("git", json!({"args": "commit"}))]),
+    ));
+    let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
+    let mut tools = ToolRegistry::new();
+    tools.register("git", |_args| Ok(json!("DONE")));
+    let report = opened.run(fix.launch(spec, tools)).unwrap();
+    assert!(matches!(report.status, RunStatus::Completed { ref signal } if signal == "DONE"));
+    assert_eq!(report.model_calls, 3);
+    assert_eq!(stub.requests().len(), 3);
 }
 
 #[test]
@@ -437,6 +480,49 @@ fn tool_free_turn_limit_ends_the_run() {
     assert!(matches!(report.status, RunStatus::ToolFreeLimit));
     assert_eq!(report.model_calls, 2);
     assert_eq!(stub.requests().len(), 2);
+    // fix2：第一轮无工具就注入教学反馈；达到上限的轮不再注入（共 1 条）。
+    let teachings = report
+        .transcript
+        .iter()
+        .filter(|item| {
+            matches!(item, TranscriptItem::User { text } if text.starts_with("[Harness feedback]"))
+        })
+        .count();
+    assert_eq!(teachings, 1);
+}
+
+#[test]
+fn length_truncated_turn_gets_length_feedback() {
+    let fix = Fixture::new();
+    let stub = StubServer::spawn().unwrap();
+    let mut spec = spec_at(&stub.url());
+    spec.policy.max_turns = 2;
+    spec.policy.stop.completion_signals.clear();
+    spec.policy.stop.tool_free_turn_limit = 8;
+    let truncated = json!({
+        "choices": [{
+            "message": {"role": "assistant", "content": "我先分析一下这个问题的根因，让我看看"},
+            "finish_reason": "length"
+        }]
+    })
+    .to_string();
+    stub.push(StubResponse::json(200, truncated));
+    stub.push(StubResponse::json(
+        200,
+        assistant_calls("", &[("git", json!({"args": "status"}))]),
+    ));
+    let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
+    let mut tools = ToolRegistry::new();
+    tools.register("git", |_args| Ok(json!({"ok": true})));
+    let report = opened.run(fix.launch(spec, tools)).unwrap();
+    assert_eq!(report.model_calls, 2);
+    // 截断轮收到 length 专项反馈，而非通用无工具反馈。
+    assert!(report.transcript.iter().any(|item| {
+        matches!(item, TranscriptItem::User { text } if text.contains("finish reason: length"))
+    }));
+    assert!(!report.transcript.iter().any(|item| {
+        matches!(item, TranscriptItem::User { text } if text.contains("no tool call"))
+    }));
 }
 
 #[test]
@@ -520,9 +606,15 @@ fn endpoint_401_refreshes_key_and_retries_the_same_request_once() {
     spec.policy.max_turns = 4;
     spec.policy.stop.tool_free_turn_limit = 8;
     stub.push(StubResponse::json(401, "invalid token: expired"));
-    stub.push(StubResponse::json(200, assistant_text("任务 DONE")));
+    // fix2：完成改走工具输出首行，重试成功后的完成轮用 git 输出 "DONE"。
+    stub.push(StubResponse::json(
+        200,
+        assistant_calls("", &[("git", json!({"args": "status"}))]),
+    ));
     let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
-    let mut launch = fix.launch(spec, ToolRegistry::new());
+    let mut tools = ToolRegistry::new();
+    tools.register("git", |_args| Ok(json!("DONE")));
+    let mut launch = fix.launch(spec, tools);
     launch.key_refresh = Some(Arc::new(|| Ok("sk-rotated-fresh-key".into())));
     let report = opened.run(launch).unwrap();
     assert!(matches!(report.status, RunStatus::Completed { ref signal } if signal == "DONE"));

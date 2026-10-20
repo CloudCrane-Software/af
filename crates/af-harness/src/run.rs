@@ -287,7 +287,25 @@ enum TurnOutcome {
 struct ToolPass {
     denied: Option<RunStatus>,
     latched: Option<Decision>,
+    /// 本轮每个已执行工具调用的输出文本（按调用顺序，含失败调用的错误文本）。
+    /// fix2 完成判定语义：完成信号只认这里的首行，不再认助手叙述文本。
+    outputs: Vec<String>,
 }
+
+/// 工具输出统一取文本：字符串原样，其余 JSON 序列化。
+fn output_text(value: &Value) -> String {
+    match value {
+        Value::String(text) => text.clone(),
+        other => other.to_string(),
+    }
+}
+
+/// fix2 无工具轮教学反馈：第一轮就纠偏，不再静默数满 tool_free 倒计时
+/// （mini-swe-agent FormatError 教学反馈的同源思路，消息级续跑而非整轮重跑）。
+const TOOL_FREE_FEEDBACK: &str = "[Harness feedback] Your previous message contained no tool call. Progress requires acting through tool calls — issue your next tool call now. Repeated replies without tool calls will terminate this run.";
+
+/// fix2 finish_reason=length 专项反馈：被截断且无工具调用是死态，转成可恢复态。
+const LENGTH_FEEDBACK: &str = "[Harness feedback] Your previous response was truncated before it produced a tool call (finish reason: length). Be more concise and issue a tool call in this turn.";
 
 enum Dispatch {
     Done(Done),
@@ -452,7 +470,7 @@ impl Opened {
                 })),
             }),
         );
-        let assistant_text = message.text.clone();
+        let finish = message.finish.clone();
         live.transcript.push(TranscriptItem::Assistant {
             text: message.text,
             tool_calls: message.tool_calls.clone(),
@@ -464,9 +482,22 @@ impl Opened {
             live.row.tool_free_streak = 0;
         } else {
             live.row.tool_free_streak = live.row.tool_free_streak.saturating_add(1);
+            // fix2：无工具轮不再静默倒计时——还不会因此停轮就立刻注入教学反馈
+            // （截断轮用专项文案）。若本轮已到 tool_free 上限，下一轮判定直接停，不再注入。
+            let limit = launch.spec.policy.stop.tool_free_turn_limit;
+            if limit > 0 && live.row.tool_free_streak < limit {
+                let teaching = if finish == "length" || finish == "max_tokens" {
+                    LENGTH_FEEDBACK
+                } else {
+                    TOOL_FREE_FEEDBACK
+                };
+                live.transcript.push(TranscriptItem::User {
+                    text: teaching.to_string(),
+                });
+            }
         }
         live.row.turn_index = live.row.turn_index.saturating_add(1);
-        self.settle_turn(launch, live, per_turn, any_tool, &assistant_text, pass)
+        self.settle_turn(launch, live, per_turn, any_tool, pass)
     }
 
     /// 401（invalid token：mcode 令牌 1h 寿命撞 >1h 长题、OAuth 对被并发轮换）时的
@@ -523,7 +554,6 @@ impl Opened {
         live: &mut Live,
         per_turn: u64,
         any_tool: bool,
-        assistant_text: &str,
         pass: ToolPass,
     ) -> Result<TurnOutcome> {
         if let Err(fault) = live.budget.charge(per_turn, self.clock.wall_ms()) {
@@ -539,8 +569,11 @@ impl Opened {
             self.trace_stop(&live.row, &decision)?;
             return Ok(TurnOutcome::Terminal(RunStatus::Stopped { decision }));
         }
+        // fix2 完成判定（mini-swe-agent has_finished 同源）：完成信号必须由一个
+        // 真实执行过的工具调用产出——其输出文本的首行（trim 后）等于信号词。
+        // 助手叙述文本里出现信号词（哪怕是"先别发 TASK_COMPLETE"）不再触发完成。
         if let Some(signal) =
-            matched_signal(assistant_text, &launch.spec.policy.stop.completion_signals)
+            matched_signal(&pass.outputs, &launch.spec.policy.stop.completion_signals)
         {
             return Ok(TurnOutcome::Terminal(RunStatus::Completed { signal }));
         }
@@ -562,6 +595,7 @@ impl Opened {
     ) -> Result<ToolPass> {
         let mut latched = None;
         let mut denied = None;
+        let mut outputs = Vec::new();
         for (index, call) in calls.iter().enumerate() {
             if denied.is_some() {
                 break;
@@ -569,11 +603,16 @@ impl Opened {
             match self.dispatch(launch, live, index, call)? {
                 Dispatch::Denied(status) => denied = Some(status),
                 Dispatch::Done(done) => {
+                    outputs.push(output_text(&done.output));
                     self.record_tool(live, done, &mut latched);
                 }
             }
         }
-        Ok(ToolPass { denied, latched })
+        Ok(ToolPass {
+            denied,
+            latched,
+            outputs,
+        })
     }
 
     fn record_tool(&self, live: &mut Live, done: Done, latched: &mut Option<Decision>) {
@@ -868,10 +907,19 @@ fn visible_tools(spec: &AgentSpec, whitelist: &[String]) -> Vec<ToolDecl> {
         .collect()
 }
 
-fn matched_signal(text: &str, signals: &[String]) -> Option<String> {
+/// fix2 完成信号匹配：任一工具输出文本的**首行**（trim 后）完整等于某信号词才算。
+/// 因果、可复核（完成必付出一个真实执行的动作），叙述性提及不触发。
+fn matched_signal(outputs: &[String], signals: &[String]) -> Option<String> {
     signals
         .iter()
-        .find(|signal| text.contains(signal.as_str()))
+        .find(|signal| {
+            outputs.iter().any(|out| {
+                out.lines()
+                    .next()
+                    .map(|line| line.trim() == signal.as_str())
+                    == Some(true)
+            })
+        })
         .cloned()
 }
 

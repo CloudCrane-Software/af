@@ -498,7 +498,32 @@ fn bench_order(run_id: &str) -> Result<WorkOrder, String> {
     Ok(order)
 }
 
-const SWEV_SYSTEM_PROMPT: &str = "You are an autonomous software engineer working inside a Linux container. The repository checkout is at /testbed. Fix the issue described by the user.\n\nRules:\n1. Investigate with the bash tool, then edit files to implement the fix. A run that ends with no code changes is an automatic failure.\n2. Never modify test files or test configuration (any path containing 'test', plus conftest.py, tox.ini, pytest.ini, setup.cfg). The grading harness owns the tests and rejects any patch that touches them.\n3. Before finishing, run the relevant tests to verify your fix.\n4. Keep the change minimal and focused on the issue.\n5. When the fix is complete and verified, reply with a short summary that ends with the token TASK_COMPLETE and do not call any more tools.";
+/// fix2（结果代号 bump：提示与完成协议均为测量语义变更）。
+/// system 只留一行角色（mini-swe-agent 实证一行 system 足以拿 74%+，字数不是变量，
+/// 纪律随任务重申才是）；全部纪律/工作流/提交协议放 instance 模板随每题重发——
+/// 一次性 system 在长对话里抗遗忘差，是 S0 D2（越权改测试）/D6（交付物缺失）的直接机制。
+const SWEV_SYSTEM_PROMPT: &str = "You are an autonomous software engineer that fixes issues in a real repository by issuing bash commands inside a Linux container. The repository checkout is at /testbed.";
+
+/// fix2 instance 模板：随任务 user 消息每题重发。来源：mini-swe-agent instance_template
+/// （工作流四步 + 提交三步 + 边界）+ mcode Core Judgment 两句（不悄悄扩缩任务/歧义先做
+/// 不依赖答案的部分）。测试先行引导对应 S0 D3（浅尝辄止）。
+const SWEV_INSTANCE_PROTOCOL: &str = r#"# How to work
+1. Locate the relevant code first (grep/read files) and understand the issue before changing anything.
+2. Reproduce before fixing when feasible: write or run a small reproduction and confirm it fails for the stated reason.
+3. Implement the minimal fix in repository source files only.
+4. Verify before submitting: run the repository's own tests for the affected area, or your reproduction; iterate until they pass.
+5. Do exactly what the task asks — do not silently expand, shrink or reshape it. If information is ambiguous, first complete everything that does not depend on the answer.
+
+# Hard boundaries
+- NEVER modify test files or test configuration (any path containing "test", plus conftest.py, tox.ini, pytest.ini, setup.cfg). The grading harness owns the tests; a patch touching them is rejected.
+- A run that ends with no code changes is an automatic failure.
+- Every bash command runs in a fresh non-interactive shell starting in /testbed; shell state (cd, exported variables) does NOT persist between commands. Never open editors or interactive prompts; use non-interactive flags (e.g. -y, DEBIAN_FRONTEND=noninteractive). Commands may be killed by a timeout.
+
+# How to finish (the ONLY way)
+When your fix is verified:
+1. Self-check: run `git diff --stat` and inspect `git diff` restricted to the files you changed; confirm only non-test source files changed and the change is minimal and focused on the issue.
+2. Submit: run a bash command that PRINTS the token TASK_COMPLETE as its FIRST output line, e.g. `echo TASK_COMPLETE`.
+Mentioning TASK_COMPLETE in plain text does NOT finish the run — only the printed output of an executed command does. After the token prints, the run ends immediately and you cannot continue working."#;
 
 fn status_label(status: &RunStatus) -> String {
     match status {
@@ -647,10 +672,16 @@ fn run_swev(args: &Args) -> Result<(), String> {
             let key_refresh: Option<af_harness::KeyRefresher> =
                 Some(std::sync::Arc::new(move || resolve_key(key_cmd)));
             let opened = Opened::open(&attempt_dir).map_err(|err| format!("open run: {err}"))?;
+            // fix2：纪律随任务重发（instance 模板），门禁反馈贴任务、协议收尾（最后读到的最牢）。
             let user_message = if attempt == 1 {
-                task.prompt()
+                format!("{}\n\n{}", task.prompt(), SWEV_INSTANCE_PROTOCOL)
             } else {
-                format!("{}\n\n{}", task.prompt(), gate_feedback)
+                format!(
+                    "{}\n\n{}\n\n{}",
+                    task.prompt(),
+                    gate_feedback,
+                    SWEV_INSTANCE_PROTOCOL
+                )
             };
             match opened.run(Launch {
                 spec,
@@ -842,7 +873,8 @@ fn run_tb(args: &Args) -> Result<(), String> {
         let spec = AgentSpec {
             endpoint: prof.endpoint.clone(),
             context_template: ContextTemplate {
-                system: "You are an autonomous engineering agent working inside a Linux container. Complete the task using the bash tool. The working directory /app contains the task materials. When the task is fully done (your changes are in place and verified), reply with a short summary and do not call any more tools.".into(),
+                // fix2：完成协议随 harness 语义变更为"提交命令输出首行"——TB 提示同步。
+                system: "You are an autonomous engineering agent working inside a Linux container. Complete the task using the bash tool. The working directory /app contains the task materials. When the task is fully done and verified, finish by running a bash command that prints TASK_COMPLETE as its FIRST output line (e.g. `echo TASK_COMPLETE`). Mentioning TASK_COMPLETE in plain text does not finish the run; after the token prints you cannot continue working.".into(),
                 slots: Vec::new(),
             },
             toolset: vec![serde_json::from_value::<ToolDecl>(tb::bash_tool_decl(env_cell.workdir()))

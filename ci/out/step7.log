@@ -1,3 +1,9 @@
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
+   │
+25 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
 warning[duplicate]: found 2 duplicate entries for crate 'base64'
    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:34:1
    │  
@@ -93,12 +99,6 @@ warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
              ├── ecdsa v0.16.9 (*)
              └── ed25519 v2.2.3
                  └── ed25519-dalek v2.2.0 (*)
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
-   │
-25 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
    ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:78:1

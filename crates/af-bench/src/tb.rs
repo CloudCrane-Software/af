@@ -67,6 +67,30 @@ fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', "'\\''"))
 }
 
+/// 从命令输出末尾剥离 `__AF_RC=<n>` 标记行，返回 (正文, 退出码)。
+/// 标记行缺失 = 外层 timeout 杀掉了整个桥接（含 echo），调用方按超时处理。
+/// 只删标记行本身，其后内容（stderr 合并流）原样保留。
+fn split_rc(text: &str) -> (String, Option<i32>) {
+    if let Some(pos) = text.rfind("__AF_RC=") {
+        let line_start = text[..pos].rfind('\n').map(|p| p + 1).unwrap_or(0);
+        let line_end = text[pos..]
+            .find('\n')
+            .map(|p| pos + p)
+            .unwrap_or(text.len());
+        let line = text[line_start..line_end].trim();
+        if let Some(rc) = line
+            .strip_prefix("__AF_RC=")
+            .and_then(|v| v.trim().parse::<i32>().ok())
+        {
+            let mut out = String::with_capacity(text.len());
+            out.push_str(&text[..line_start]);
+            out.push_str(&text[line_end..]);
+            return (out, Some(rc));
+        }
+    }
+    (text.to_string(), None)
+}
+
 pub struct TbEnv {
     pub container: String,
     pub task: String,
@@ -98,6 +122,8 @@ impl TbEnv {
             return Err(format!("build {image} 失败: {}", tail(&log, 800)));
         }
         let _ = ssh(host, &format!("docker rm -f {container}"), 30);
+        // fix2 环境卫生（mini-swe-agent env 块同源）：分页器挂死与进度条/着色噪音
+        // 是 SWE 容器高频暗坑，容器级环境变量一次性根治。测量语义变更，计入 fix2。
         let (ok, log) = ssh(
             host,
             &format!(
@@ -105,6 +131,8 @@ impl TbEnv {
                  -e HTTPS_PROXY=http://172.17.0.1:8123 \
                  -e HTTP_PROXY=http://172.17.0.1:8123 \
                  -e NO_PROXY=localhost,127.0.0.1,100.64.0.0/10 \
+                 -e PAGER=cat -e MANPAGER=cat -e LESS=-R \
+                 -e PIP_PROGRESS_BAR=off -e TQDM_DISABLE=1 -e NO_COLOR=1 \
                  {image} sleep infinity"
             ),
             60,
@@ -125,29 +153,50 @@ impl TbEnv {
         &self.workdir
     }
 
-    /// bash 工具体：容器内执行，截断返回。
+    /// bash 工具体：容器内执行，fix2 带内恢复语义（不改判分链）：
+    ///   · exit=N 从输出首行移到**末行**——首行留给命令自身输出，完成判定
+    ///     「工具输出首行=信号词」才有因果可讲；分隔改真实换行（原字面 `\n` 疵点一并修）；
+    ///   · 超时（外层 timeout 杀桥接，无 __AF_RC 标记）→ mini-swe-agent timeout_template
+    ///     同源教学反馈，运行继续而非死文案；
+    ///   · 桥接失败 → 声明"基建瞬断、可重试"，同样不死；
+    ///   · 普通非零退出不教学（失败是常态信号，逐条指点只会加噪）；
+    ///   · 截断附「换窄命令」指引（mini observation_template 同源）。
     pub fn exec(&self, command: &str) -> String {
         let script = format!(
-            "docker exec {} bash -lc {}",
+            "docker exec {} bash -lc {}; echo __AF_RC=$?",
             self.container,
             shell_quote(&format!("cd {} && {}", self.workdir, command))
         );
-        match ssh(&self.host, &script, 180) {
-            Ok((ok, mut text)) => {
-                const CAP: usize = 12_000;
-                if text.len() > CAP {
-                    let keep = CAP / 2;
-                    text = format!(
-                        "{}\\n...[截断 {} 字节]...\\n{}",
-                        &text[..keep],
-                        text.len() - keep * 2,
-                        &text[text.len() - keep..]
-                    );
-                }
-                format!("exit={}\\n{text}", if ok { 0 } else { 1 })
+        let (mut text, rc) = match ssh(&self.host, &script, 180) {
+            Ok((_, raw)) => split_rc(&raw),
+            Err(err) => {
+                return format!(
+                    "[harness] The execution bridge failed before the command could produce output (transient infrastructure error: {}). This is not a task failure — retry the command.\nexit=127",
+                    err
+                );
             }
-            Err(err) => format!("exit=127\\nexec 桥接失败: {err}"),
+        };
+        if rc.is_none() {
+            text.push_str(
+                "\n[harness] The command was killed after exceeding the 180s timeout (no exit code was reported). Partial output (if any) is above. Re-run with a different approach: pipe input or use non-interactive flags (-y / -n / DEBIAN_FRONTEND=noninteractive), wrap long work in an explicit `timeout <secs> ...`, and avoid commands that never exit on their own (servers, watch loops, pagers).",
+            );
         }
+        const CAP: usize = 12_000;
+        if text.len() > CAP {
+            let keep = CAP / 2;
+            text = format!(
+                "{}\n...[output truncated: {} bytes elided. Re-run with a narrower command: pipe through head/tail/sed -n, grep for specific patterns, or redirect output to a file and read it in parts.]\n{}",
+                &text[..keep],
+                text.len() - keep * 2,
+                &text[text.len() - keep..]
+            );
+        }
+        text.push_str(&format!(
+            "\nexit={}",
+            rc.map(|n| n.to_string())
+                .unwrap_or_else(|| "124".to_string())
+        ));
+        text
     }
 
     /// 判分：/app 提取 → 验证器镜像 → 挂载跑 test.sh → reward.txt。
@@ -235,10 +284,12 @@ fn tail(text: &str, cap: usize) -> String {
 
 /// bash 工具声明（ToolDecl JSON）。`workdir` 写进描述，与 exec 的 cd 前缀一致，
 /// 避免"工具描述说 /app、实际在 /testbed"的目录矛盾（S0 零补丁缺陷嫌疑之一）。
+/// fix2：描述补防错条款（mcode 式"把失败模式写进描述"）——新 shell 语义、
+/// 非交互要求、超时行为、exit 行在末尾（首行留给命令输出，配合提交式完成判定）。
 pub fn bash_tool_decl(workdir: &str) -> Value {
     json!({
         "name": "bash",
-        "description": format!("Execute a bash command in the task environment (a Linux container). Every command runs with the working directory set to {workdir} (equivalent to a leading `cd {workdir}`). Returns exit code, stdout and stderr. Use it to inspect, modify, build and test."),
+        "description": format!("Execute a bash command in the task environment (a Linux container). Every command runs in a fresh non-interactive shell with the working directory set to {workdir}; shell state (cd, exported variables) does not persist between commands. Interactive commands (editors, prompts) and commands that never exit are killed by a timeout — use non-interactive flags. The tool returns the command's output followed by a final `exit=<code>` line. Use it to inspect, modify, build and test."),
         "parameters": {
             "type": "object",
             "properties": {
