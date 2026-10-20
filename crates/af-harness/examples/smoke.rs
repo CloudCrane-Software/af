@@ -70,6 +70,9 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
             reasoning_tier: ReasoningTier::Off,
             stream: false,
             auth,
+            max_tokens: None,
+            temperature_milli: None,
+            top_p_milli: None,
         },
         context_template: ContextTemplate {
             system: "你是冒烟探针。只回答一个词。".into(),

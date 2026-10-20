@@ -13,7 +13,7 @@ use std::fmt;
 /// Anthropic 要求的版本头。
 pub const ANTHROPIC_VERSION: &str = "2023-06-01";
 
-const ANTHROPIC_MAX_TOKENS_PLAIN: u32 = 1024;
+const ANTHROPIC_MAX_TOKENS_PLAIN: u32 = 8192;
 const THINKING_LOW: u32 = 1024;
 const THINKING_MEDIUM: u32 = 2048;
 const THINKING_HIGH: u32 = 4096;
@@ -197,6 +197,12 @@ fn openai_body(
     if let Some(effort) = reasoning_effort(endpoint.reasoning_tier) {
         body["reasoning_effort"] = json!(effort);
     }
+    if let Some(t) = endpoint.temperature_milli {
+        body["temperature"] = json!(t as f32 / 1000.0);
+    }
+    if let Some(p) = endpoint.top_p_milli {
+        body["top_p"] = json!(p as f32 / 1000.0);
+    }
     body
 }
 
@@ -261,13 +267,19 @@ fn anthropic_body(
         _ => None,
     });
     let messages = anthropic_messages(transcript);
-    let max_tokens = anthropic_max_tokens(endpoint.reasoning_tier);
+    let max_tokens = anthropic_max_tokens(endpoint);
     let mut body = json!({
         "model": endpoint.model,
         "max_tokens": max_tokens,
         "messages": messages,
         "stream": endpoint.stream,
     });
+    if let Some(t) = endpoint.temperature_milli {
+        body["temperature"] = json!(t as f32 / 1000.0);
+    }
+    if let Some(p) = endpoint.top_p_milli {
+        body["top_p"] = json!(p as f32 / 1000.0);
+    }
     if let Some(system) = system {
         body["system"] = json!(system);
     }
@@ -361,10 +373,11 @@ fn thinking_budget(tier: ReasoningTier) -> Option<u32> {
     }
 }
 
-fn anthropic_max_tokens(tier: ReasoningTier) -> u32 {
-    match thinking_budget(tier) {
-        Some(budget) => budget.saturating_add(ANTHROPIC_MAX_TOKENS_PLAIN),
-        None => ANTHROPIC_MAX_TOKENS_PLAIN,
+fn anthropic_max_tokens(endpoint: &EndpointSpec) -> u32 {
+    let base = endpoint.max_tokens.unwrap_or(ANTHROPIC_MAX_TOKENS_PLAIN);
+    match thinking_budget(endpoint.reasoning_tier) {
+        Some(budget) => base.saturating_add(budget),
+        None => base,
     }
 }
 
@@ -609,7 +622,10 @@ fn parse_anthropic_sse(body: &str) -> Result<ModelMessage> {
             if let Some(reason) = value.pointer("/delta/stop_reason").and_then(Value::as_str) {
                 finish = reason.to_string();
             }
-            if let Some(out) = value.pointer("/usage/output_tokens").and_then(Value::as_u64) {
+            if let Some(out) = value
+                .pointer("/usage/output_tokens")
+                .and_then(Value::as_u64)
+            {
                 let entry = usage.get_or_insert(ModelUsage {
                     input_tokens: 0,
                     output_tokens: 0,
@@ -906,8 +922,7 @@ mod tests {
             r#"{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":120,"completion_tokens":34,"prompt_tokens_details":{"cached_tokens":96}}}"#,
         ));
         let transcript = vec![TranscriptItem::User { text: "go".into() }];
-        let message =
-            complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap();
+        let message = complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap();
         let usage = message.usage.expect("openai usage 应被捕获");
         assert_eq!(usage.input_tokens, 120);
         assert_eq!(usage.output_tokens, 34);
@@ -926,8 +941,7 @@ mod tests {
             r#"{"stop_reason":"end_turn","content":[{"type":"thinking","thinking":"..."},{"type":"text","text":"好"}],"usage":{"input_tokens":51,"output_tokens":300,"cache_read_input_tokens":40}}"#,
         ));
         let transcript = vec![TranscriptItem::User { text: "go".into() }];
-        let message =
-            complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap();
+        let message = complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap();
         assert_eq!(message.text, "好");
         let usage = message.usage.expect("anthropic usage 应被捕获");
         assert_eq!(usage.input_tokens, 51);

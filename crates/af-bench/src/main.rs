@@ -132,6 +132,9 @@ fn profile(name: &str) -> Result<Profile, String> {
                 reasoning_tier: ReasoningTier::Off,
                 stream: false,
                 auth: Some(AuthStyle::Bearer),
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
             },
             key_cmd: "ssh anolis 'python3 ~/.local/bin/mcode-token.py get'",
         }),
@@ -144,6 +147,9 @@ fn profile(name: &str) -> Result<Profile, String> {
                 reasoning_tier: ReasoningTier::Off,
                 stream: false,
                 auth: Some(AuthStyle::Bearer),
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
             },
             key_cmd: "ssh anolis 'python3 ~/.local/bin/mcode-token.py get'",
         }),
@@ -156,6 +162,9 @@ fn profile(name: &str) -> Result<Profile, String> {
                 reasoning_tier: ReasoningTier::Off,
                 stream: false,
                 auth: Some(AuthStyle::Bearer),
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
             },
             key_cmd: "RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key",
         }),
@@ -168,6 +177,9 @@ fn profile(name: &str) -> Result<Profile, String> {
                 reasoning_tier: ReasoningTier::Off,
                 stream: false,
                 auth: Some(AuthStyle::Bearer),
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
             },
             key_cmd: "RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key",
         }),
@@ -180,6 +192,9 @@ fn profile(name: &str) -> Result<Profile, String> {
                 reasoning_tier: ReasoningTier::Off,
                 stream: false,
                 auth: None,
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
             },
             key_cmd: "jq -r '.config.providerConfigRules.providerRules[] | select(.providerId==\"new-provider\") | .config.access.apiKey' ~/.zcode/v2/provider_config.json",
         }),
@@ -192,11 +207,76 @@ fn profile(name: &str) -> Result<Profile, String> {
                 reasoning_tier: ReasoningTier::Off,
                 stream: false,
                 auth: None,
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
             },
             key_cmd: "jq -r '.config.providerConfigRules.providerRules[] | select(.providerId==\"moonshot-kimi\") | .config.access.apiKey' ~/.zcode/v2/provider_config.json",
         }),
+        "qwen30b-local" => Ok(Profile {
+            endpoint: EndpointSpec {
+                protocol: Protocol::OpenaiChatCompletions,
+                // anolis ollama（2×V100S-32G）经 ssh 隧道暴露在本机 11435。
+                base_url: "http://127.0.0.1:11435/v1".into(),
+                model: "qwen3-coder-30b".into(),
+                key_ref: "ollama-local".into(),
+                reasoning_tier: ReasoningTier::Off,
+                stream: false,
+                auth: None,
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
+            },
+            key_cmd: "printf '%s' ollama-local-noop-key",
+        }),
+        "qwen3-4b-local" => Ok(Profile {
+            endpoint: EndpointSpec {
+                protocol: Protocol::OpenaiChatCompletions,
+                base_url: "http://127.0.0.1:11434/v1".into(),
+                model: "qwen3:4b".into(),
+                key_ref: "ollama-local".into(),
+                reasoning_tier: ReasoningTier::Off,
+                stream: false,
+                auth: None,
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
+            },
+            key_cmd: "printf '%s' ollama-local-noop-key",
+        }),
+        "qwen3-8b-local" => Ok(Profile {
+            endpoint: EndpointSpec {
+                protocol: Protocol::OpenaiChatCompletions,
+                base_url: "http://127.0.0.1:11434/v1".into(),
+                model: "qwen3:8b".into(),
+                key_ref: "ollama-local".into(),
+                reasoning_tier: ReasoningTier::Off,
+                stream: false,
+                auth: None,
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
+            },
+            key_cmd: "printf '%s' ollama-local-noop-key",
+        }),
+        "qwen3-8b-anolis" => Ok(Profile {
+            endpoint: EndpointSpec {
+                protocol: Protocol::OpenaiChatCompletions,
+                // anolis ollama（GPU1）经 ssh 隧道暴露在本机 11435；本机 3070 跑 8b 太慢已弃用。
+                base_url: "http://127.0.0.1:11435/v1".into(),
+                model: "qwen3:8b".into(),
+                key_ref: "ollama-local".into(),
+                reasoning_tier: ReasoningTier::Off,
+                stream: false,
+                auth: None,
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
+            },
+            key_cmd: "printf '%s' ollama-local-noop-key",
+        }),
         other => Err(format!(
-            "未知档案 {other}（可选 mavis-m31f / mavis-m3 / glm-cp / glm-cp-max / step-5 / kimi-k3）"
+            "未知档案 {other}（可选 mavis-m31f / mavis-m3 / glm-cp / glm-cp-max / step-5 / kimi-k3 / qwen30b-local / qwen3-4b-local / qwen3-8b-local）"
         )),
     }
 }
@@ -411,6 +491,8 @@ fn bench_order(run_id: &str) -> Result<WorkOrder, String> {
     Ok(order)
 }
 
+const SWEV_SYSTEM_PROMPT: &str = "You are an autonomous software engineer working inside a Linux container. The repository checkout is at /testbed. Fix the issue described by the user.\n\nRules:\n1. Investigate with the bash tool, then edit files to implement the fix. A run that ends with no code changes is an automatic failure.\n2. Never modify test files or test configuration (any path containing 'test', plus conftest.py, tox.ini, pytest.ini, setup.cfg). The grading harness owns the tests and rejects any patch that touches them.\n3. Before finishing, run the relevant tests to verify your fix.\n4. Keep the change minimal and focused on the issue.\n5. When the fix is complete and verified, reply with a short summary that ends with the token TASK_COMPLETE and do not call any more tools.";
+
 fn status_label(status: &RunStatus) -> String {
     match status {
         RunStatus::Completed { .. } => "completed".into(),
@@ -451,41 +533,33 @@ fn run_swev(args: &Args) -> Result<(), String> {
         .map_err(|err| format!("开 results.jsonl 失败: {err}"))?;
     let mut pass = 0usize;
     let mut infra = 0usize;
-    for (index, task) in tasks.iter().enumerate() {
-        let key = resolve_key(prof.key_cmd)?;
-        let env = swev::setup(&args.host, task, &args.profile)?;
-        let mut registry = ToolRegistry::new();
-        let env_cell = std::sync::Arc::new(env);
-        let env_for_tool = env_cell.clone();
-        registry.register("bash", move |call| {
-            let command = call
-                .get("command")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            Ok(Value::String(env_for_tool.exec(&command)))
-        });
-        let spec = AgentSpec {
-            endpoint: prof.endpoint.clone(),
-            context_template: ContextTemplate {
-                system: "You are an autonomous software engineer working inside a Linux container. The repository checkout is at /testbed. Read the issue, investigate the codebase with the bash tool, and fix it by editing files directly. When you are confident the fix is complete and minimal, reply with a short summary and do not call any more tools.".into(),
-                slots: Vec::new(),
-            },
-            toolset: vec![serde_json::from_value::<ToolDecl>(tb::bash_tool_decl())
-                .map_err(|err| format!("bash 工具声明: {err}"))?],
-            policy: Policy {
-                max_turns: 60,
-                stop: StopCondition {
-                    completion_signals: Vec::new(),
-                    tool_free_turn_limit: 1,
-                },
-                budget_ref: BudgetRef {
-                    dimension: "llm.cents".into(),
-                    per_turn: 1,
-                    unit: BudgetUnit::Cents,
-                },
-            },
+    'task: for (index, task) in tasks.iter().enumerate() {
+        let env = match swev::setup(&args.host, task, &args.profile) {
+            Ok(env) => env,
+            Err(err) => {
+                infra += 1;
+                let row = json!({
+                    "suite": "swe-v",
+                    "task_id": task.instance_id,
+                    "profile": args.profile,
+                    "trial": args.trial,
+                    "reward": Value::Null,
+                    "status": "setup_failed",
+                    "verifier_note": err.chars().take(300).collect::<String>(),
+                });
+                use std::io::Write as _;
+                writeln!(results, "{row}").map_err(|e| format!("写 results 失败: {e}"))?;
+                results.flush().map_err(|e| format!("flush 失败: {e}"))?;
+                eprintln!(
+                    "[{}/{}] {} SETUP_FAILED",
+                    index + 1,
+                    tasks.len(),
+                    task.instance_id
+                );
+                continue;
+            }
         };
+        let env_cell = std::sync::Arc::new(env);
         let root = issue_root(&RootSpec {
             tools: vec!["bash".to_string()],
             namespace: "bench".into(),
@@ -493,17 +567,83 @@ fn run_swev(args: &Args) -> Result<(), String> {
         })
         .map_err(|err| format!("issue root: {err}"))?;
         let order = bench_order(&task.instance_id)?;
-        let run_dir = runs_root.join(format!("swev-{}-{}", task.instance_id, args.profile));
-        let _ = std::fs::remove_dir_all(&run_dir);
-        std::fs::create_dir_all(&run_dir).map_err(|err| format!("建 run 目录失败: {err}"))?;
-        let opened = Opened::open(&run_dir).map_err(|err| format!("open run: {err}"))?;
-        let started = Instant::now();
-        let report = opened
-            .run(Launch {
+        let task_started = Instant::now();
+        // v2 完成度纪律（S0 MAST 缺陷对策）：严格提示 + 重复命令警告 +
+        // 零补丁/改测试门禁，触发则带 harness 反馈重试一次（attempt<=2）。
+        let mut attempt: u32 = 1;
+        let mut gate = "ok".to_string();
+        let mut gate_feedback = String::new();
+        let report;
+        let run_dir;
+        loop {
+            let env_for_tool = env_cell.clone();
+            let recent = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+            let recent_for_tool = recent.clone();
+            let mut registry = ToolRegistry::new();
+            registry.register("bash", move |call| {
+                let command = call
+                    .get("command")
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .to_string();
+                let out = env_for_tool.exec(&command);
+                let mut hist = recent_for_tool.lock().unwrap_or_else(|e| e.into_inner());
+                let repeats = hist.iter().filter(|c| c.as_str() == command).count();
+                hist.push(command);
+                if hist.len() > 6 {
+                    hist.remove(0);
+                }
+                if repeats >= 2 {
+                    return Ok(Value::String(format!(
+                        "[harness] You have issued this exact command {} times. Repeating it will not make progress — try a different approach, or finish with your best current fix.\n{}",
+                        repeats + 1, out
+                    )));
+                }
+                Ok(Value::String(out))
+            });
+            let spec = AgentSpec {
+                endpoint: prof.endpoint.clone(),
+                context_template: ContextTemplate {
+                    system: SWEV_SYSTEM_PROMPT.into(),
+                    slots: Vec::new(),
+                },
+                toolset: vec![serde_json::from_value::<ToolDecl>(tb::bash_tool_decl(
+                    env_cell.workdir(),
+                ))
+                .map_err(|err| format!("bash 工具声明: {err}"))?],
+                policy: Policy {
+                    max_turns: 60,
+                    stop: StopCondition {
+                        completion_signals: vec!["TASK_COMPLETE".into()],
+                        tool_free_turn_limit: 3,
+                    },
+                    budget_ref: BudgetRef {
+                        dimension: "llm.cents".into(),
+                        per_turn: 1,
+                        unit: BudgetUnit::Cents,
+                    },
+                },
+            };
+            let attempt_dir = runs_root.join(format!(
+                "swev-{}-{}-a{}",
+                task.instance_id, args.profile, attempt
+            ));
+            let _ = std::fs::remove_dir_all(&attempt_dir);
+            std::fs::create_dir_all(&attempt_dir)
+                .map_err(|err| format!("建 run 目录失败: {err}"))?;
+            // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻 run 现取（401 竞态实证）。
+            let key = resolve_key(prof.key_cmd)?;
+            let opened = Opened::open(&attempt_dir).map_err(|err| format!("open run: {err}"))?;
+            let user_message = if attempt == 1 {
+                task.prompt()
+            } else {
+                format!("{}\n\n{}", task.prompt(), gate_feedback)
+            };
+            match opened.run(Launch {
                 spec,
-                run_id: task.instance_id.clone(),
+                run_id: format!("{}-a{}", task.instance_id, attempt),
                 vars: BTreeMap::new(),
-                user_message: task.prompt(),
+                user_message,
                 key: EndpointKey::new(key),
                 parent: &root.token,
                 public_key: &root.keypair.public(),
@@ -519,9 +659,59 @@ fn run_swev(args: &Args) -> Result<(), String> {
                 tools: registry,
                 stop_policy: StopPolicy::default(),
                 breakpoint: af_harness::Breakpoint::None,
-            })
-            .map_err(|err| format!("run {} 失败: {err}", task.instance_id))?;
-        let agent_wall_ms = started.elapsed().as_millis() as u64;
+            }) {
+                Ok(r) => {
+                    let diff =
+                        swev::capture_diff(&args.host, &env_cell, &attempt_dir).unwrap_or_default();
+                    if attempt < 2 {
+                        if diff.trim().is_empty() {
+                            gate = "no_patch".into();
+                            gate_feedback = "[Harness feedback] Your previous attempt ended without changing any file. You MUST edit repository files to fix the issue — a run with no code changes is an automatic failure.".into();
+                            attempt += 1;
+                            continue;
+                        }
+                        let hits = swev::diff_touches_tests(&diff);
+                        if !hits.is_empty() {
+                            gate = "test_edit".into();
+                            gate_feedback = format!(
+                                "[Harness feedback] Your previous attempt modified test files ({}), which is forbidden: the grading harness owns the tests and rejects any patch that touches them. Re-do the fix changing only non-test source files.",
+                                hits.join(", ")
+                            );
+                            attempt += 1;
+                            continue;
+                        }
+                    }
+                    report = r;
+                    run_dir = attempt_dir;
+                    break;
+                }
+                Err(err) => {
+                    env_cell.cleanup();
+                    infra += 1;
+                    let row = json!({
+                        "suite": "swe-v",
+                        "task_id": task.instance_id,
+                        "profile": args.profile,
+                        "trial": args.trial,
+                        "reward": Value::Null,
+                        "status": "run_failed",
+                        "scaffold": "v2",
+                        "verifier_note": err.to_string().chars().take(300).collect::<String>(),
+                    });
+                    use std::io::Write as _;
+                    writeln!(results, "{row}").map_err(|e| format!("写 results 失败: {e}"))?;
+                    results.flush().map_err(|e| format!("flush 失败: {e}"))?;
+                    eprintln!(
+                        "[{}/{}] {} RUN_FAILED",
+                        index + 1,
+                        tasks.len(),
+                        task.instance_id
+                    );
+                    continue 'task;
+                }
+            }
+        }
+        let agent_wall_ms = task_started.elapsed().as_millis() as u64;
         let task_json = args.data_root.join(format!("{}.json", task.instance_id));
         let (resolved, note) = swev::verify(&args.host, &env_cell, task, &run_dir, &task_json);
         env_cell.cleanup();
@@ -538,6 +728,9 @@ fn run_swev(args: &Args) -> Result<(), String> {
             "trial": args.trial,
             "reward": resolved,
             "status": status_label(&report.status),
+            "scaffold": "v2",
+            "gate": gate,
+            "attempts": attempt,
             "turns": report.turns,
             "model_calls": report.model_calls,
             "tokens": {
@@ -590,8 +783,33 @@ fn run_tb(args: &Args) -> Result<(), String> {
     let mut pass = 0usize;
     let mut infra = 0usize;
     for (index, task) in tasks.iter().enumerate() {
-        let key = resolve_key(prof.key_cmd)?;
-        let env = tb::TbEnv::setup(&args.host, task, &args.profile)?;
+        let env = match tb::TbEnv::setup(&args.host, task, &args.profile) {
+            Ok(env) => env,
+            Err(err) => {
+                // 单题供给失败记 infra 行并继续，不中断战役（50-方案口径：infra 不占分母）。
+                infra += 1;
+                let row = json!({
+                    "suite": "terminal-bench",
+                    "task_id": task.task_id,
+                    "profile": args.profile,
+                    "trial": args.trial,
+                    "reward": Value::Null,
+                    "status": "setup_failed",
+                    "verifier_note": err.chars().take(300).collect::<String>(),
+                });
+                use std::io::Write as _;
+                writeln!(results, "{row}").map_err(|e| format!("写 results 失败: {e}"))?;
+                results.flush().map_err(|e| format!("flush 失败: {e}"))?;
+                eprintln!(
+                    "[{}/{}] {} SETUP_FAILED {}",
+                    index + 1,
+                    tasks.len(),
+                    task.task_id,
+                    row["verifier_note"].as_str().unwrap_or("")
+                );
+                continue;
+            }
+        };
         let mut registry = ToolRegistry::new();
         let env_cell = std::sync::Arc::new(env);
         let env_for_tool = env_cell.clone();
@@ -609,13 +827,13 @@ fn run_tb(args: &Args) -> Result<(), String> {
                 system: "You are an autonomous engineering agent working inside a Linux container. Complete the task using the bash tool. The working directory /app contains the task materials. When the task is fully done (your changes are in place and verified), reply with a short summary and do not call any more tools.".into(),
                 slots: Vec::new(),
             },
-            toolset: vec![serde_json::from_value::<ToolDecl>(tb::bash_tool_decl())
+            toolset: vec![serde_json::from_value::<ToolDecl>(tb::bash_tool_decl(env_cell.workdir()))
                 .map_err(|err| format!("bash 工具声明: {err}"))?],
             policy: Policy {
                 max_turns: 40,
                 stop: StopCondition {
-                    completion_signals: Vec::new(),
-                    tool_free_turn_limit: 1,
+                    completion_signals: vec!["TASK_COMPLETE".into()],
+                    tool_free_turn_limit: 3,
                 },
                 budget_ref: BudgetRef {
                     dimension: "llm.cents".into(),
@@ -634,31 +852,56 @@ fn run_tb(args: &Args) -> Result<(), String> {
         let run_dir = runs_root.join(format!("tb-{}-{}", task.task_id, args.profile));
         let _ = std::fs::remove_dir_all(&run_dir);
         std::fs::create_dir_all(&run_dir).map_err(|err| format!("建 run 目录失败: {err}"))?;
+        // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻 run 现取（401 竞态实证）。
+        let key = resolve_key(prof.key_cmd)?;
         let opened = Opened::open(&run_dir).map_err(|err| format!("open run: {err}"))?;
         let started = Instant::now();
-        let report = opened
-            .run(Launch {
-                spec,
-                run_id: task.task_id.clone(),
-                vars: BTreeMap::new(),
-                user_message: task.prompt.clone(),
-                key: EndpointKey::new(key),
-                parent: &root.token,
-                public_key: &root.keypair.public(),
-                namespace: "bench".into(),
+        let report = match opened.run(Launch {
+            spec,
+            run_id: task.task_id.clone(),
+            vars: BTreeMap::new(),
+            user_message: task.prompt.clone(),
+            key: EndpointKey::new(key),
+            parent: &root.token,
+            public_key: &root.keypair.public(),
+            namespace: "bench".into(),
+            spend_cap_cents: 100,
+            tool_spend_cents: 1,
+            budget: BudgetBinding::Cents {
+                dimension: "llm.cents".into(),
+                ledger: BudgetLedger::new(100),
                 spend_cap_cents: 100,
-                tool_spend_cents: 1,
-                budget: BudgetBinding::Cents {
-                    dimension: "llm.cents".into(),
-                    ledger: BudgetLedger::new(100),
-                    spend_cap_cents: 100,
-                },
-                order: &order,
-                tools: registry,
-                stop_policy: StopPolicy::default(),
-                breakpoint: af_harness::Breakpoint::None,
-            })
-            .map_err(|err| format!("run {} 失败: {err}", task.task_id))?;
+            },
+            order: &order,
+            tools: registry,
+            stop_policy: StopPolicy::default(),
+            breakpoint: af_harness::Breakpoint::None,
+        }) {
+            Ok(report) => report,
+            Err(err) => {
+                env_cell.cleanup();
+                infra += 1;
+                let row = json!({
+                    "suite": "terminal-bench",
+                    "task_id": task.task_id,
+                    "profile": args.profile,
+                    "trial": args.trial,
+                    "reward": Value::Null,
+                    "status": "run_failed",
+                    "verifier_note": err.to_string().chars().take(300).collect::<String>(),
+                });
+                use std::io::Write as _;
+                writeln!(results, "{row}").map_err(|e| format!("写 results 失败: {e}"))?;
+                results.flush().map_err(|e| format!("flush 失败: {e}"))?;
+                eprintln!(
+                    "[{}/{}] {} RUN_FAILED",
+                    index + 1,
+                    tasks.len(),
+                    task.task_id
+                );
+                continue;
+            }
+        };
         let agent_wall_ms = started.elapsed().as_millis() as u64;
         let (reward, verifier_note) = env_cell.verify();
         env_cell.cleanup();
@@ -734,7 +977,6 @@ fn run_injec(args: &Args) -> Result<(), String> {
     let mut done = 0usize;
     let mut injected = 0usize;
     for task in &picked {
-        let key = resolve_key(prof.key_cmd)?;
         let mut registry = ToolRegistry::new();
         for (name, canned) in &task.stubs {
             let canned = canned.clone();
@@ -749,7 +991,7 @@ fn run_injec(args: &Args) -> Result<(), String> {
             },
             toolset: task.tools.clone(),
             policy: Policy {
-                max_turns: 8,
+                max_turns: 16,
                 stop: StopCondition {
                     completion_signals: Vec::new(),
                     tool_free_turn_limit: 1,
@@ -771,6 +1013,8 @@ fn run_injec(args: &Args) -> Result<(), String> {
         let run_dir = runs_root.join(format!("{}-{}", task.case_id, args.profile));
         let _ = std::fs::remove_dir_all(&run_dir);
         std::fs::create_dir_all(&run_dir).map_err(|err| format!("建 run 目录失败: {err}"))?;
+        // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻 run 现取（401 竞态实证）。
+        let key = resolve_key(prof.key_cmd)?;
         let opened = Opened::open(&run_dir).map_err(|err| format!("open run: {err}"))?;
         let started = Instant::now();
         let report = opened

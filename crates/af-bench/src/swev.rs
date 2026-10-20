@@ -68,6 +68,7 @@ pub fn setup(host: &str, task: &SwevTask, profile: &str) -> Result<tb::TbEnv, St
             container,
             task: task.instance_id.clone(),
             host: host.into(),
+            workdir: "/testbed".into(),
         }),
         Ok((false, log)) => Err(format!(
             "起容器失败: {}",
@@ -75,6 +76,46 @@ pub fn setup(host: &str, task: &SwevTask, profile: &str) -> Result<tb::TbEnv, St
         )),
         Err(err) => Err(err),
     }
+}
+
+/// 取证 agent diff（完成度门禁与判分共用）：写 work_dir/agent.diff 并返回文本。
+pub fn capture_diff(host: &str, env: &tb::TbEnv, work_dir: &Path) -> Result<String, String> {
+    let diff_cmd = format!(
+        "docker exec {} bash -lc 'cd /testbed && git -c core.fileMode=false diff' ",
+        env.container
+    );
+    let agent_diff = match tb_ssh(host, &diff_cmd, 60) {
+        Ok((_, text)) => text,
+        Err(err) => return Err(format!("取 diff 失败: {err}")),
+    };
+    let _ = std::fs::create_dir_all(work_dir);
+    let diff_path = work_dir.join("agent.diff");
+    if std::fs::write(&diff_path, &agent_diff).is_err() {
+        return Err("写 agent.diff 失败".into());
+    }
+    Ok(agent_diff)
+}
+
+/// diff 是否碰了测试文件（评分 harness 拥有测试，模型改测试=越权，S0 实证缺陷）。
+/// 返回被碰的文件列表（空=干净）。
+pub fn diff_touches_tests(diff: &str) -> Vec<String> {
+    let mut hits = Vec::new();
+    for line in diff.lines() {
+        if let Some(rest) = line.strip_prefix("diff --git ") {
+            if let Some(path) = rest.split_whitespace().nth(1) {
+                let p = path.trim_start_matches("b/").to_lowercase();
+                let is_test = p.contains("test")
+                    || p.ends_with("conftest.py")
+                    || p.ends_with("tox.ini")
+                    || p.ends_with("pytest.ini")
+                    || p.ends_with("setup.cfg");
+                if is_test {
+                    hits.push(path.trim_start_matches("b/").to_string());
+                }
+            }
+        }
+    }
+    hits
 }
 
 /// 判分：取证 diff → 写入 eval 脚本 → 容器内执行 → 本地官方判分。
@@ -87,25 +128,18 @@ pub fn verify(
     work_dir: &Path,
     task_json_path: &Path,
 ) -> (Option<bool>, String) {
-    let diff_cmd = format!(
-        "docker exec {} bash -lc 'cd /testbed && git -c core.fileMode=false diff' ",
-        env.container
-    );
-    let agent_diff = match tb_ssh(host, &diff_cmd, 60) {
-        Ok((_, text)) => text,
-        Err(err) => return (None, format!("取 diff 失败: {err}")),
+    let _agent_diff = match capture_diff(host, env, work_dir) {
+        Ok(d) => d,
+        Err(err) => return (None, err),
     };
-    let _ = std::fs::create_dir_all(work_dir);
     let diff_path = work_dir.join("agent.diff");
-    if std::fs::write(&diff_path, &agent_diff).is_err() {
-        return (None, "写 agent.diff 失败".into());
-    }
     let eval_path = work_dir.join("eval.sh");
     if std::fs::write(&eval_path, &task.eval_script).is_err() {
         return (None, "写 eval.sh 失败".into());
     }
     // eval 脚本经 stdin 喂给容器 bash，避免 docker cp 往返。
-    let run_cmd = format!("docker exec -i {} bash -s", env.container);
+    // stderr 必须并入日志：set -x 轨迹与 START/END 标记走 stderr，官方判分需要。
+    let run_cmd = format!("docker exec -i {} bash -s 2>&1", env.container);
     let log_path = work_dir.join("eval.log");
     let status = Command::new("ssh")
         .arg("-o")

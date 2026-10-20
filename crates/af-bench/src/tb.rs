@@ -65,6 +65,7 @@ pub struct TbEnv {
     pub container: String,
     pub task: String,
     pub host: String,
+    pub workdir: String,
 }
 
 impl TbEnv {
@@ -109,7 +110,13 @@ impl TbEnv {
             container,
             task: task.clone(),
             host: host.into(),
+            workdir: "/app".into(),
         })
+    }
+
+    /// 任务工作目录（TB=/app，SWE-V=/testbed）——bash 工具每条命令都先 cd 到这里。
+    pub fn workdir(&self) -> &str {
+        &self.workdir
     }
 
     /// bash 工具体：容器内执行，截断返回。
@@ -117,7 +124,7 @@ impl TbEnv {
         let script = format!(
             "docker exec {} bash -lc {}",
             self.container,
-            shell_quote(command)
+            shell_quote(&format!("cd {} && {}", self.workdir, command))
         );
         match ssh(&self.host, &script, 180) {
             Ok((ok, mut text)) => {
@@ -141,10 +148,18 @@ impl TbEnv {
     /// 返回 (reward, verifier_log_tail)。reward: Some(true)=pass Some(false)=fail None=infra。
     pub fn verify(&self) -> (Option<bool>, String) {
         let vol = format!("/data/bench/vol/{}-{}", self.task, self.container);
+        // 旧卷里有 root 所有的验证器产物，pan-ding 删不动——用容器内的 root 清。
+        let _ = ssh(
+            &self.host,
+            &format!(
+                "docker run --rm -v {vol}:/vol --entrypoint sh python:3.12-slim -c 'rm -rf /vol/* /vol/.[!.]*; chmod 777 /vol' 2>/dev/null || rm -rf {vol}"
+            ),
+            120,
+        );
         match ssh(
             &self.host,
             &format!(
-                "rm -rf {vol} && mkdir -p {vol}/app {vol}/logs && docker cp {}:/app/. {vol}/app/",
+                "mkdir -p {vol}/app {vol}/logs && docker cp {}:/app/. {vol}/app/",
                 self.container
             ),
             300,
@@ -212,11 +227,12 @@ fn tail(text: &str, cap: usize) -> String {
     }
 }
 
-/// bash 工具声明（ToolDecl JSON）。
-pub fn bash_tool_decl() -> Value {
+/// bash 工具声明（ToolDecl JSON）。`workdir` 写进描述，与 exec 的 cd 前缀一致，
+/// 避免"工具描述说 /app、实际在 /testbed"的目录矛盾（S0 零补丁缺陷嫌疑之一）。
+pub fn bash_tool_decl(workdir: &str) -> Value {
     json!({
         "name": "bash",
-        "description": "Execute a bash command in the task environment (a Linux container with the task's working directory /app). Returns exit code, stdout and stderr. Use it to inspect, modify, build and test.",
+        "description": format!("Execute a bash command in the task environment (a Linux container). Every command runs with the working directory set to {workdir} (equivalent to a leading `cd {workdir}`). Returns exit code, stdout and stderr. Use it to inspect, modify, build and test."),
         "parameters": {
             "type": "object",
             "properties": {

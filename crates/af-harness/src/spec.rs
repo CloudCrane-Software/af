@@ -82,6 +82,16 @@ pub struct EndpointSpec {
     /// 认证形态覆盖。缺省按协议推导。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub auth: Option<AuthStyle>,
+    /// 单次响应 max_tokens 上限。None=协议默认（Anthropic 8192； thinking 预算另叠加）。
+    /// 2026-10-20 事故修复前硬编码 1024，导致 52.7% 运行被截断杀死（详见变更日志）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub max_tokens: Option<u32>,
+    /// 采样温度（毫度，700=0.7）。None=厂商默认。测评可复现性地基：显式写入请求体。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temperature_milli: Option<u32>,
+    /// top_p（毫度，950=0.95）。None=厂商默认。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_p_milli: Option<u32>,
 }
 
 /// 系统提示模板。`slots` 是允许出现的变量名。
