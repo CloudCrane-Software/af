@@ -405,12 +405,6 @@ warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
           └── rusty-fork v0.3.1
               └── proptest v1.12.0 (*)
 
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
-   │
-25 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
-
 warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
     ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:133:1
     │  
@@ -885,6 +879,12 @@ warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
       ├── rand v0.10.3 (*)
       └── rand_xorshift v0.5.0
           └── proptest v1.12.0 (*)
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
+   │
+25 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 2 duplicate entries for crate 'sha2'
     ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:276:1
