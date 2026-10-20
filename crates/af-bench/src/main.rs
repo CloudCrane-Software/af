@@ -4,6 +4,8 @@
 //!   af-bench --suite injecagent --data-root <InjecAgent 目录> \
 //!     --profile mavis-m31f|glm-cp [--case-file test_cases_dh_base.json] \
 //!     [--limit N] [--offset N] [--out <dir>] [--trial]
+//!   swe-v / terminal-bench 另有 --tasks 与 --host anolis|local（缺省 anolis；
+//!   local=本机 docker 直执行面，2026-10-20 新增，测量语义不变）。
 //!
 //! 密钥纪律：明文只从解析器命令出来进请求头，不打印、不落文档。
 //! 记录纪律：--trial 的行标记 trial=true，只校准管道，不进决策（50-方案 §3）。

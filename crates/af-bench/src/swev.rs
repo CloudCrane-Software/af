@@ -55,11 +55,18 @@ pub fn setup(host: &str, task: &SwevTask, profile: &str) -> Result<tb::TbEnv, St
         task.instance_id.replace("__", "-")
     );
     let _ = tb_ssh(host, &format!("docker rm -f {container}"), 30);
+    // 出网代理按宿主区分：anolis 容器经宿主 squid（172.17.0.1:8123）；
+    // 本机（local）容器走 docker NAT 直连（本机无 8123 监听），语义同为"容器可出网"。
+    let proxy_env = if host == "local" {
+        ""
+    } else {
+        "-e HTTPS_PROXY=http://172.17.0.1:8123 \
+         -e HTTP_PROXY=http://172.17.0.1:8123 \
+         -e NO_PROXY=localhost,127.0.0.1,100.64.0.0/10"
+    };
     let script = format!(
         "docker run -d --name {container} \
-         -e HTTPS_PROXY=http://172.17.0.1:8123 \
-         -e HTTP_PROXY=http://172.17.0.1:8123 \
-         -e NO_PROXY=localhost,127.0.0.1,100.64.0.0/10 \
+         {proxy_env} \
          {} sleep infinity",
         task.image
     );
@@ -139,13 +146,20 @@ pub fn verify(
     }
     // eval 脚本经 stdin 喂给容器 bash，避免 docker cp 往返。
     // stderr 必须并入日志：set -x 轨迹与 START/END 标记走 stderr，官方判分需要。
+    // host == "local" 时免 ssh 一跳，其余语义一致（timeout 1200 不变）。
     let run_cmd = format!("docker exec -i {} bash -s 2>&1", env.container);
     let log_path = work_dir.join("eval.log");
-    let status = Command::new("ssh")
-        .arg("-o")
-        .arg("BatchMode=yes")
-        .arg(host)
-        .arg(format!("timeout 1200 {run_cmd}"))
+    let bridge = format!("timeout 1200 {run_cmd}");
+    let mut bridge_cmd = if host == "local" {
+        let mut cmd = Command::new("bash");
+        cmd.arg("-c").arg(&bridge);
+        cmd
+    } else {
+        let mut cmd = Command::new("ssh");
+        cmd.arg("-o").arg("BatchMode=yes").arg(host).arg(&bridge);
+        cmd
+    };
+    let status = bridge_cmd
         .stdin(std::process::Stdio::from(
             std::fs::File::open(&eval_path).expect("eval.sh 刚写过"),
         ))
@@ -196,16 +210,21 @@ pub fn verify(
 }
 
 fn tb_ssh(host: &str, script: &str, timeout_sec: u32) -> Result<(bool, String), String> {
-    let output = Command::new("ssh")
-        .arg("-o")
-        .arg("BatchMode=yes")
-        .arg(host)
-        .arg(format!(
-            "timeout {timeout_sec} bash -c '{}'",
-            script.replace('\'', "'\\''")
-        ))
-        .output()
-        .map_err(|err| format!("ssh 启动失败: {err}"))?;
+    let quoted = format!(
+        "timeout {timeout_sec} bash -c '{}'",
+        script.replace('\'', "'\\''")
+    );
+    let output = if host == "local" {
+        Command::new("bash").arg("-c").arg(&quoted).output()
+    } else {
+        Command::new("ssh")
+            .arg("-o")
+            .arg("BatchMode=yes")
+            .arg(host)
+            .arg(&quoted)
+            .output()
+    }
+    .map_err(|err| format!("命令桥接启动失败: {err}"))?;
     let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !stderr.is_empty() {

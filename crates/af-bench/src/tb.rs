@@ -1,4 +1,5 @@
-//! Terminal-Bench 4.0 适配：任务容器在 anolis 上跑，bash 工具经 ssh+docker exec 桥接。
+//! Terminal-Bench 4.0 适配：任务容器在 --host 指定的 docker 宿主上跑
+//! （anolis=经 ssh 桥接，local=本机直执行），bash 工具统一经 docker exec 桥接。
 //!
 //! 生命周期：rsync 任务目录 → build 环境镜像 → 起容器 → harness Run（bash 工具）→
 //! 提取 /app → build 验证器镜像 → 挂载跑 test.sh → 读 reward.txt → 清容器。
@@ -34,18 +35,23 @@ pub fn load_tb_tasks(root: &Path, names: &[String]) -> Result<Vec<TbTask>, Strin
     Ok(out)
 }
 
-/// 远程执行一条命令，返回 (status, stdout+stderr 合并文本)。
+/// 执行一条宿主命令，返回 (status, stdout+stderr 合并文本)。
+/// host == "local" 时本机直接执行（本机 docker 直执行面，免 ssh 一跳，
+/// 2026-10-20 新增，测量语义不变：只是换了 docker 宿主）；其余经 ssh <host>。
+/// 两种路径都用 timeout 包裹，超时语义一致。
 fn ssh(host: &str, script: &str, timeout_sec: u32) -> Result<(bool, String), String> {
-    let output = Command::new("ssh")
-        .arg("-o")
-        .arg("BatchMode=yes")
-        .arg(host)
-        .arg(format!(
-            "timeout {timeout_sec} bash -c {}",
-            shell_quote(script)
-        ))
-        .output()
-        .map_err(|err| format!("ssh 启动失败: {err}"))?;
+    let quoted = format!("timeout {timeout_sec} bash -c {}", shell_quote(script));
+    let output = if host == "local" {
+        Command::new("bash").arg("-c").arg(&quoted).output()
+    } else {
+        Command::new("ssh")
+            .arg("-o")
+            .arg("BatchMode=yes")
+            .arg(host)
+            .arg(&quoted)
+            .output()
+    }
+    .map_err(|err| format!("命令桥接启动失败: {err}"))?;
     let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr);
     if !stderr.is_empty() {
