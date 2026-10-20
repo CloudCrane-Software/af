@@ -1,5 +1,6 @@
+   Compiling af-harness v0.1.0 (/home/pan-ding/workspace/agent黑灯工厂/af/crates/af-harness)
    Compiling af-bench v0.1.0 (/home/pan-ding/workspace/agent黑灯工厂/af/crates/af-bench)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.10s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.52s
 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
 note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
      Running unittests src/main.rs (target/debug/deps/af_bench-1c99fac38e3ddbf1)
@@ -18,63 +19,63 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 12 tests
 test dense_hourly_scan_3y_berlin_and_new_york ... ignored, 慢速全表扫描:约 10.5 万点,毫秒-秒级,验证用
-test night_shift_saturday_2330_plus_1h_crosses_to_sunday ... ok
-test night_shift_friday_22h_plus_4h_lands_saturday_02h ... ok
-test spring_forward_addition_into_missing_hour_lands_after_gap ... ok
-test night_shift_semantics_identical_without_dst ... ok
-test spring_forward_gap_hour_not_counted_as_working_time ... ok
-test fall_back_repeated_hour_counts_once_as_elapsed_time ... ok
 test due_at_window_start_is_not_completion_reachable ... ok
+test fall_back_repeated_hour_counts_once_as_elapsed_time ... ok
+test night_shift_friday_22h_plus_4h_lands_saturday_02h ... ok
 test fall_back_ambiguous_instant_resolution ... ok
+test night_shift_saturday_2330_plus_1h_crosses_to_sunday ... ok
+test night_shift_semantics_identical_without_dst ... ok
+test spring_forward_addition_into_missing_hour_lands_after_gap ... ok
+test spring_forward_gap_hour_not_counted_as_working_time ... ok
 test night_shift_with_holiday_and_makeup_override ... ok
 test two_consecutive_nights_forward_reverse_roundtrip ... ok
 test three_year_scan_6h_grid_berlin_and_new_york ... ok
 
-test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.16s
+test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.10s
 
      Running tests/sla.rs (target/debug/deps/sla-1e310340ae1c2194)
 
 running 18 tests
-test overlapping_shifts_fail_validation ... ok
-test negative_duration_rejected ... ok
-test is_working_instant_respects_holiday_and_override ... ok
-test latest_order_across_golden_week_and_offset_epoch ... ok
 test exact_window_end_means_hours_exhausted_there ... ok
-test golden_week_crossing_holiday_table ... ok
-test multi_shift_calendar_skips_lunch ... ok
-test makeup_workday_saturday_counts_as_working ... ok
 test fixed_offset_input_also_accepted ... ok
-test latest_order_is_maximal_even_when_due_off_shift ... ok
-test latest_order_roundtrip_forward_equals_due ... ok
-test off_hours_and_weekend_roll_to_next_open ... ok
-test utc_consumer_gets_same_instant_in_utc ... ok
-test horizon_exceeded_when_never_enough_working_time ... ok
 test friday_16h_order_4h_deadline_is_next_monday ... ok
-test utc_due_gives_utc_latest_order ... ok
-test zero_duration_returns_next_startable_instant ... ok
+test golden_week_crossing_holiday_table ... ok
+test is_working_instant_respects_holiday_and_override ... ok
+test horizon_exceeded_when_never_enough_working_time ... ok
+test latest_order_is_maximal_even_when_due_off_shift ... ok
+test latest_order_across_golden_week_and_offset_epoch ... ok
+test latest_order_roundtrip_forward_equals_due ... ok
+test makeup_workday_saturday_counts_as_working ... ok
+test multi_shift_calendar_skips_lunch ... ok
+test negative_duration_rejected ... ok
+test off_hours_and_weekend_roll_to_next_open ... ok
+test overlapping_shifts_fail_validation ... ok
 test json_config_roundtrip_reproduces_deadline ... ok
+test utc_due_gives_utc_latest_order ... ok
+test utc_consumer_gets_same_instant_in_utc ... ok
+test zero_duration_returns_next_startable_instant ... ok
 
 test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running unittests src/lib.rs (target/debug/deps/af_credential-34a3dafe6f3f2b62)
 
 running 16 tests
-test clock::tests::system_clock_reads_unix_millis ... ok
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
+test clock::tests::system_clock_reads_unix_millis ... ok
+test root::tests::journal_bad_permissions_fail_closed ... ok
 test root::tests::sqlite_pragmas_and_foreign_key ... ok
+test root::tests::generation_gap_fail_closed ... ok
+test root::tests::corrupt_journal_fail_closed ... ok
 test root::tests::schema_mismatch_fail_closed ... ok
 test root::tests::forged_key_file_is_not_replaced ... ok
-test root::tests::generation_gap_fail_closed ... ok
-test root::tests::journal_bad_permissions_fail_closed ... ok
 test root::tests::tampered_bootstrap_fail_closed ... ok
-test root::tests::corrupt_journal_fail_closed ... ok
 test root::tests::finding_a_crash_before_ready_does_not_publish_half_a_store ... ok
-test root::tests::wrong_signature_and_unknown_generation ... ok
 test root::tests::uncommitted_journal_is_rolled_back ... ok
-test root::tests::committed_journal_reexports_the_same_key ... ok
+test root::tests::wrong_signature_and_unknown_generation ... ok
 test root::tests::finding_a_half_store_names_quarantine_and_quarantine_unblocks ... ok
-test root::tests::finding_a_crash_after_ready_resumes_the_same_key ... ok
+test root::tests::committed_journal_reexports_the_same_key ... ok
 test root::tests::finding_a_crash_after_db_rename_resumes_the_same_key ... ok
+test root::tests::finding_a_crash_after_ready_resumes_the_same_key ... ok
 
 test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
@@ -91,12 +92,12 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/intersection.rs (target/debug/deps/intersection-9f81715159a09f7f)
 
 running 4 tests
-test case4_neither_allows_deny ... ok
-test case1_both_allow_pass ... ok
 test case3_token_has_but_cedar_denies ... ok
+test case1_both_allow_pass ... ok
+test case4_neither_allows_deny ... ok
 test case2_cedar_allows_but_token_lacks_deny ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running tests/root_persist.rs (target/debug/deps/root_persist-f03ee67d8ded428f)
 
@@ -104,10 +105,10 @@ running 13 tests
 test orphan_journal_does_not_create_a_key ... ok
 test rotate_missing_store_does_not_create_a_key ... ok
 test symlink_root_key_fail_closed ... ok
-test token_without_root_key_id_is_rejected ... ok
 test corrupt_key_fail_closed_does_not_regenerate ... ok
 test declaration_mismatch_fail_closed ... ok
 test partial_store_fail_closed ... ok
+test token_without_root_key_id_is_rejected ... ok
 test bad_permissions_fail_closed_does_not_regenerate ... ok
 test zero_grace_rejects_old_immediately ... ok
 test created_reopen_replays_same_key_and_bootstrap ... ok
@@ -115,7 +116,7 @@ test concurrent_first_open_one_root ... ok
 test successive_rotations_keep_independent_grace ... ok
 test rotation_verify_matrix ... ok
 
-test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
 
      Running tests/yaml_snapshots.rs (target/debug/deps/yaml_snapshots-b42a19390336bca2)
 
@@ -124,15 +125,15 @@ test cents_issuance_payload ... ok
 test rejection_error_structure ... ok
 test two_policy_intersection_minimum ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
      Running unittests src/lib.rs (target/debug/deps/af_dspy_ir-ddb711fc095d5c27)
 
 running 6 tests
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
-test ledger::tests::envelope_rejects_bad_version_and_unknown_keys ... ok
 test ledger::tests::restore_then_append_continues_seq ... ok
 test ledger::tests::broken_shape_is_rejected ... ok
+test ledger::tests::envelope_rejects_bad_version_and_unknown_keys ... ok
 test ledger::tests::forged_repair_allow_is_rejected ... ok
 test ledger::tests::injected_time_and_seq_roundtrip_through_json ... ok
 
@@ -141,15 +142,15 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/guardrails.rs (target/debug/deps/guardrails-bf342e4f0249d0d7)
 
 running 12 tests
-test system_clock_reads_unix_milliseconds ... ok
 test failure_codes_parse_only_on_exact_match ... ok
-test low_score_is_always_denied ... ok
 test demo_values_are_not_rechecked_against_type_name ... ok
-test mixed_batch_keeps_admit_order_and_ledger_joins_one_to_one ... ok
+test low_score_is_always_denied ... ok
 test blank_batch_blank_id_and_duplicates_are_rejected ... ok
-test repair_allows_only_unscored_infra_and_subject ... ok
+test mixed_batch_keeps_admit_order_and_ledger_joins_one_to_one ... ok
+test system_clock_reads_unix_milliseconds ... ok
 test restored_ledger_does_not_mint_admissions ... ok
 test admitted_program_is_a_snapshot ... ok
+test repair_allows_only_unscored_infra_and_subject ... ok
 test valid_program_and_json_are_admitted_with_injected_time ... ok
 test non_crash_and_scored_crash_are_denied ... ok
 test schema_failures_never_enter_evaluation ... ok
@@ -160,21 +161,21 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 17 tests
 test error_codes_are_contiguous_from_di1001 ... ok
-test missing_or_unknown_version_is_rejected ... ok
 test constructed_program_with_unknown_version_cannot_be_written ... ok
 test demo_bound_to_another_signature_is_rejected ... ok
 test canonical_document_matches_every_v1_field ... ok
 test archive_without_field_names_fills_them_and_ignores_dspy_extras ... ok
-test ir_json_roundtrip_keeps_every_field ... ok
-test bad_signature_and_demo_references_are_rejected ... ok
-test delete_missing_field_is_explicit_and_does_not_change_the_program ... ok
+test missing_or_unknown_version_is_rejected ... ok
 test dspy_archive_roundtrip_restores_field_names_from_the_signature_table ... ok
-test optional_nulls_and_each_optimization_status_parse ... ok
-test blank_field_name_is_di1001 ... ok
+test bad_signature_and_demo_references_are_rejected ... ok
+test ir_json_roundtrip_keeps_every_field ... ok
 test archive_rejects_bad_field_names_counts_and_references ... ok
+test delete_missing_field_is_explicit_and_does_not_change_the_program ... ok
+test blank_field_name_is_di1001 ... ok
+test optional_nulls_and_each_optimization_status_parse ... ok
 test shared_signature_and_demo_conflicts_in_the_archive_are_rejected ... ok
-test duplicate_unknown_and_incomplete_fields_are_rejected ... ok
 test non_object_and_unknown_key_are_schema_errors ... ok
+test duplicate_unknown_and_incomplete_fields_are_rejected ... ok
 test each_v1_field_has_a_rejecting_counterexample ... ok
 
 test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -186,32 +187,32 @@ test clock::tests::system_clock_monotonic_does_not_go_backwards ... ok
 test clock::tests::wall_rewind_does_not_move_monotonic_counter ... ok
 test schema_tests::w3b_table_migrates_and_declared_row_can_be_claimed ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests/gateway_tests.rs (target/debug/deps/gateway_tests-06602cfbc098074c)
 
 running 11 tests
 test t5_execute_before_window_close_is_refused_then_allowed ... ok
-test t6_external_failure_keeps_declared_and_retry_succeeds ... ok
 test t3_withdraw_within_window_means_never_sent ... ok
-test t4_stale_epoch_requests_rejected ... ok
 test t2_same_key_different_payload_rejected_requires_escalation ... ok
 test t11_epoch_bumped_during_call_does_not_store_or_resend ... ok
 test t1_crash_recovery_same_key_same_payload_replays_stored_result ... ok
+test t6_external_failure_keeps_declared_and_retry_succeeds ... ok
+test t4_stale_epoch_requests_rejected ... ok
 test t7_wall_clock_rollback_does_not_affect_idempotency_window ... ok
 test t8_order_state_transitions_drive_intent_lifecycle ... ok
 test t10_executing_without_receipt_is_not_resent ... ok
 test t9_same_epoch_concurrent_execute_calls_out_once ... ok
 
-test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running unittests src/lib.rs (target/debug/deps/af_engine-032f07395af9ff6f)
 
 running 4 tests
 test version::tests::build_metadata_does_not_change_precedence ... ok
 test version::tests::equal_version_satisfies_min ... ok
-test version::tests::semver_precedence_is_strict_along_the_spec_chain ... ok
 test version::tests::unparseable_versions_fail_closed ... ok
+test version::tests::semver_precedence_is_strict_along_the_spec_chain ... ok
 
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -226,25 +227,25 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 27 tests
 test approve_decision_rejects_reader ... ok
 test engine_version_ignores_runtime_env ... ok
-test approve_decision_rejects_hash_mismatch ... ok
 test approve_decision_accepts_approver_and_returns_same_order ... ok
-test close_from_in_progress_is_illegal_even_with_final_artifact ... ok
 test complete_accepts_in_progress_and_rejects_released ... ok
+test approve_decision_rejects_hash_mismatch ... ok
 test close_accepts_qualified_final_and_rejects_without_it ... ok
-test bind_line_accepts_created_and_rejects_after_release ... ok
 test cancel_accepts_created_and_rejects_completed ... ok
-test attach_artifact_accepts_in_progress_and_rejects_created ... ok
 test attach_voucher_accepts_created_and_rejects_after_release ... ok
+test close_from_in_progress_is_illegal_even_with_final_artifact ... ok
+test bind_line_accepts_created_and_rejects_after_release ... ok
 test one_line_only_and_eof_without_newline ... ok
-test start_accepts_released_and_rejects_created ... ok
 test release_accepts_prepared_order_and_lists_both_gaps ... ok
+test attach_artifact_accepts_in_progress_and_rejects_created ... ok
 test approve_decision_rejects_matching_artifact_on_the_wrong_order ... ok
-test unsigned_voucher_attaches_and_release_names_it ... ok
 test unknown_op_and_wrong_case_are_bad_request ... ok
-test engine_version_min_accepts_current_lower_and_prerelease ... ok
-test field_type_and_snapshot_errors_are_bad_request ... ok
-test engine_version_field_is_always_present ... ok
+test unsigned_voucher_attaches_and_release_names_it ... ok
 test rejection_envelope_keeps_field_and_detail ... ok
+test field_type_and_snapshot_errors_are_bad_request ... ok
+test start_accepts_released_and_rejects_created ... ok
+test engine_version_field_is_always_present ... ok
+test engine_version_min_accepts_current_lower_and_prerelease ... ok
 test bad_json_empty_and_non_object_are_bad_request ... ok
 test missing_op_order_and_params_are_bad_request ... ok
 test lifecycle_is_stateless_across_processes ... ok
@@ -258,15 +259,15 @@ test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 12 tests
 test clock::tests::system_clock_reads_unix_millis ... ok
-test route::tests::priority_does_not_collapse_codes ... ok
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
-test snapshot::tests::list_roundtrip_keeps_newlines_and_unicode ... ok
-test route::tests::clock_regression_and_bad_budget_do_not_invent_a_verdict ... ok
-test route::tests::each_signal_maps_to_its_own_code ... ok
-test snapshot::tests::hash_ignores_insertion_order_and_tracks_version_and_payload ... ok
-test hash::tests::nist_sha256_known_vectors ... ok
-test snapshot::tests::overlap_is_exact_membership_not_substring ... ok
 test hash::tests::distinct_inputs_have_distinct_hashes ... ok
+test route::tests::clock_regression_and_bad_budget_do_not_invent_a_verdict ... ok
+test hash::tests::nist_sha256_known_vectors ... ok
+test route::tests::each_signal_maps_to_its_own_code ... ok
+test route::tests::priority_does_not_collapse_codes ... ok
+test snapshot::tests::list_roundtrip_keeps_newlines_and_unicode ... ok
+test snapshot::tests::hash_ignores_insertion_order_and_tracks_version_and_payload ... ok
+test snapshot::tests::overlap_is_exact_membership_not_substring ... ok
 test ledger::tests::memory_durability_and_every_trigger_rejects_mutation ... ok
 test ledger::tests::file_open_is_wal_and_rejects_torn_or_foreign_declaration ... ok
 
@@ -275,15 +276,15 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/pipeline.rs (target/debug/deps/pipeline-427a2f8dc0bbd5f5)
 
 running 7 tests
+test contamination_hit_halts_and_miss_can_finish ... ok
 test append_only_ledger_rejects_update_and_delete ... ok
+test draft_freezes_then_retires ... ok
 test blind_run_reads_frozen_snapshot_not_current_recipe ... ok
 test reopen_replays_hash_subject_version_and_halt ... ok
-test draft_freezes_then_retires ... ok
-test contamination_hit_halts_and_miss_can_finish ... ok
 test frozen_content_rejects_edits_and_forks_a_new_version ... ok
 test failure_codes_stay_distinct_and_persist ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
      Running unittests src/lib.rs (target/debug/deps/af_graph-b3f1b79232003d7d)
 
@@ -301,40 +302,40 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 8 tests
 test non_boolean_result_is_rejected ... ok
-test eval_error_undeclared_variable_is_passed_through ... ok
-test compile_error_native_is_passed_through ... ok
-test compile_panic_is_caught_and_passed_through ... ok
-test compiles_and_evaluates_true ... ok
 test eval_with_reuses_native_context ... ok
 test evaluates_false ... ok
+test compiles_and_evaluates_true ... ok
+test eval_error_undeclared_variable_is_passed_through ... ok
 test gate_like_predicate_over_event_data ... ok
+test compile_panic_is_caught_and_passed_through ... ok
+test compile_error_native_is_passed_through ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
      Running tests/validate.rs (target/debug/deps/validate-1f04cd1d2b283e27)
 
 running 21 tests
-test missing_required_field_rejected_by_serde_layer ... ok
-test dangling_edge_ref_is_e2001 ... ok
-test illegal_2_trips_only_reachability ... ok
 test duplicate_node_id_is_e2003_not_e2001 ... ok
 test illegal_3_trips_only_undeclared_reference ... ok
-test safety_point_kind_mismatch_rejected ... ok
-test loop_unbounded_carried_state_rejected ... ok
+test illegal_1_trips_only_cycle ... ok
+test dangling_edge_ref_is_e2001 ... ok
+test illegal_2_trips_only_reachability ... ok
 test illegal_4_trips_only_loop_not_controlled ... ok
 test illegal_5_trips_only_map_unversioned ... ok
 test loop_body_must_be_declared_subgraph ... ok
+test loop_unbounded_carried_state_rejected ... ok
+test missing_required_field_rejected_by_serde_layer ... ok
+test loop_zero_iterations_rejected ... ok
+test legal_templates_have_no_e2001 ... ok
+test map_over_malformed_is_e2001 ... ok
+test safety_point_kind_mismatch_rejected ... ok
+test legal_templates_pass ... ok
+test safety_point_outside_body_is_undeclared_reference ... ok
+test unknown_node_kind_is_open_extension ... ok
+test undeclared_entry_is_reference_error ... ok
 test map_over_dangling_node_is_e2001 ... ok
 test loop_body_cycle_exempt_but_map_body_cycle_rejected ... ok
-test loop_zero_iterations_rejected ... ok
-test illegal_1_trips_only_cycle ... ok
-test map_over_malformed_is_e2001 ... ok
-test unknown_node_kind_is_open_extension ... ok
-test safety_point_outside_body_is_undeclared_reference ... ok
-test undeclared_entry_is_reference_error ... ok
-test legal_templates_have_no_e2001 ... ok
 test serde_roundtrip_preserves_validity ... ok
-test legal_templates_pass ... ok
 
 test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -343,72 +344,75 @@ test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 4 tests
 test clean_pipeline_zero_violations ... ok
 test unknown_kind_open_extension_zero_violations ... ok
-test unknown_kind_type_mismatch_e2002 ... ok
 test e2001_dangling_reference ... ok
+test unknown_kind_type_mismatch_e2002 ... ok
 
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
      Running unittests src/lib.rs (target/debug/deps/af_harness-1cf094baa381009e)
 
-running 41 tests
-test http::tests::backoff_delay_grows_and_stays_capped ... ok
-test endpoint::tests::key_debug_and_display_hide_the_secret ... ok
+running 44 tests
 test endpoint::tests::anthropic_json_and_sse_parse_tool_use ... ok
+test endpoint::tests::stub_sees_openai_and_anthropic_shapes_without_logging_the_key ... ok
 test budget::tests::count_probe_stops_when_stock_is_short_and_declared_budget_must_match ... ok
 test endpoint::tests::openai_json_and_sse_parse_tool_calls ... ok
-test http::tests::does_not_retry_client_errors ... ok
-test http::tests::respects_retry_after_header ... ok
-test endpoint::tests::stub_anthropic_bearer_override_skips_x_api_key ... ok
+test http::tests::backoff_delay_grows_and_stays_capped ... ok
+test endpoint::tests::openai_json_captures_usage ... ok
 test render::tests::missing_slot_value_is_rejected ... ok
+test http::tests::respects_retry_after_header ... ok
+test endpoint::tests::complete_once_weathers_a_429_storm_via_backoff ... ok
+test render::tests::replaces_slots_literally_and_does_not_reexpand ... ok
+test endpoint::tests::key_debug_and_display_hide_the_secret ... ok
 test render::tests::unknown_placeholder_is_rejected_at_spec_validation ... ok
 test endpoint::tests::endpoint_error_redacts_the_secret_if_the_body_echoes_it ... ok
+test http::tests::does_not_retry_client_errors ... ok
 test endpoint::tests::anthropic_json_captures_usage ... ok
-test render::tests::replaces_slots_literally_and_does_not_reexpand ... ok
-test endpoint::tests::openai_json_captures_usage ... ok
-test endpoint::tests::stub_anthropic_request_carries_version_and_thinking ... ok
+test endpoint::tests::stub_anthropic_bearer_override_skips_x_api_key ... ok
 test spec::tests::rejects_version_field_and_unknown_keys_before_body ... ok
 test stub::tests::parses_content_length_and_lowercases_headers ... ok
-test endpoint::tests::stub_sees_openai_and_anthropic_shapes_without_logging_the_key ... ok
-test spec::tests::example_envelope_roundtrip ... ok
-test http::tests::retries_429_then_succeeds_and_counts ... ok
 test spec::tests::rejects_secret_shaped_key_ref_and_url_userinfo ... ok
+test http::tests::retries_429_then_succeeds_and_counts ... ok
 test http::tests::retries_503_then_succeeds ... ok
-test endpoint::tests::complete_once_weathers_a_429_storm_via_backoff ... ok
+test spec::tests::example_envelope_roundtrip ... ok
+test endpoint::tests::stub_anthropic_request_carries_version_and_thinking ... ok
 test store::tests::file_open_is_created_then_already_declared_with_wal_recipe ... ok
 test endpoint::tests::exhausted_retries_are_named_in_the_endpoint_error ... ok
 test http::tests::gives_up_after_max_retries_and_surfaces_status ... ok
-test store::tests::tampered_fingerprint_and_extra_table_fail_closed ... ok
 test authz::tests::empty_intersection_does_not_fall_back_to_parent_facts ... ok
 test authz::tests::intersection_drops_tools_the_parent_does_not_carry ... ok
-test tests::spend_over_credential_cap_is_refused ... ok
-test tests::missing_required_argument_does_not_call_the_handler ... ok
-test tests::completion_signal_ends_the_run ... ok
 test authz::tests::spend_over_cap_is_credential_denied_while_the_fact_remains ... ok
-test tests::budget_exhaustion_stops_before_the_next_model_call ... ok
+test store::tests::tampered_fingerprint_and_extra_table_fail_closed ... ok
+test tests::completion_signal_ends_the_run ... ok
 test tests::max_turns_stops_before_another_model_call ... ok
+test tests::endpoint_401_without_refresher_fails_unchanged ... ok
+test tests::endpoint_401_refreshes_key_and_retries_the_same_request_once ... ok
+test tests::missing_required_argument_does_not_call_the_handler ... ok
+test tests::budget_exhaustion_stops_before_the_next_model_call ... ok
+test tests::endpoint_401_with_unchanged_key_fails_without_retry ... ok
 test tests::tool_free_turn_limit_ends_the_run ... ok
-test tests::pure_tool_stays_local_and_external_once_goes_through_gateway ... ok
 test tests::tool_outside_intersection_is_refused ... ok
+test tests::spend_over_credential_cap_is_refused ... ok
 test tests::tool_event_is_in_the_normal_trace ... ok
 test tests::fingerprint_streak_stops_the_run ... ok
 test tests::interrupted_side_effect_replays_on_resume ... ok
+test tests::pure_tool_stays_local_and_external_once_goes_through_gateway ... ok
 
-test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
 
      Running unittests src/lib.rs (target/debug/deps/af_mes-a1732a1378982677)
 
 running 12 tests
 test clock::tests::system_clock_reads_unix_millis ... ok
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
-test schema::tests::event_table_is_merge_tree_partitioned_by_month ... ok
+test final_query::tests::wraps_table_with_final_and_optional_where ... ok
+test final_query::tests::rejects_optimize_final_and_rand64 ... ok
+test rowbin::tests::decodes_one_rowbinary_event ... ok
 test rowbin::tests::literal_only_frame_round_trips ... ok
 test schema::tests::default_batch_row_threshold_is_fifty_thousand ... ok
 test outbox::tests::partial_file_is_dropped_on_open ... ok
-test final_query::tests::rejects_optimize_final_and_rand64 ... ok
+test schema::tests::event_table_is_merge_tree_partitioned_by_month ... ok
 test schema::tests::materialized_view_aggregates_by_line_and_hour ... ok
-test final_query::tests::wraps_table_with_final_and_optional_where ... ok
 test schema::tests::schema_does_not_use_rand64_or_optimize_final ... ok
-test rowbin::tests::decodes_one_rowbinary_event ... ok
 test outbox::tests::parked_batch_survives_reopen ... ok
 
 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -417,50 +421,50 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 10 tests
 test delay_flushes_before_row_threshold_on_injected_clock ... ok
-test row_threshold_sends_one_rowbinary_batch ... ok
-test due_batch_is_sent_before_the_new_row_is_appended ... ok
 test outbox_write_failure_keeps_the_batch_in_memory ... ok
 test outbox_saturation_returns_backpressure_and_keeps_the_row ... ok
+test row_threshold_sends_one_rowbinary_batch ... ok
+test due_batch_is_sent_before_the_new_row_is_appended ... ok
+test failed_insert_is_parked_and_retried_without_loss ... ok
 test apply_schema_sends_ddl_constants ... ok
 test reader_sends_select_final_and_decodes_rowbinary ... ok
-test failed_insert_is_parked_and_retried_without_loss ... ok
 test newer_batch_waits_behind_an_unsent_outbox_file ... ok
 test fifty_thousand_rows_flush_as_one_batch ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
 
      Running unittests src/lib.rs (target/debug/deps/af_meter-e2ee6161498ad074)
 
 running 31 tests
-test bifrost::tests::negative_remaining_is_refused_before_any_fragment ... ok
 test bifrost::tests::all_zero_weights_are_refused ... ok
-test bifrost::tests::primary_zero_with_positive_backup_is_kept ... ok
-test bifrost::tests::half_up_is_not_renormalized_to_one_hundred ... ok
-test bifrost::tests::one_positive_backup_keeps_a_zero_primary ... ok
 test bifrost::tests::budget_ratio_uses_remaining_cents ... ok
-test bifrost::tests::exact_exhaustion_is_zero_weight_not_a_negative ... ok
 test bifrost::tests::budget_records_the_injected_instant_without_changing_the_ratio ... ok
+test bifrost::tests::half_up_is_not_renormalized_to_one_hundred ... ok
+test bifrost::tests::exact_exhaustion_is_zero_weight_not_a_negative ... ok
+test bifrost::tests::injected_now_refreshes_a_clone_and_leaves_the_supply ... ok
+test bifrost::tests::one_positive_backup_keeps_a_zero_primary ... ok
+test bifrost::tests::quantize_percent_rounds_half_up ... ok
+test bifrost::tests::header_pin_weight_is_not_the_key_percent ... ok
+test bifrost::tests::primary_zero_with_positive_backup_is_kept ... ok
+test bifrost::tests::negative_remaining_is_refused_before_any_fragment ... ok
 test bifrost::tests::role_is_not_list_position ... ok
+test bifrost::tests::shape_errors_precede_balance_checks ... ok
 test bifrost::tests::spent_above_budget_is_negative_remaining_and_refused ... ok
 test budget::tests::negative_spend_does_not_mutate ... ok
-test bifrost::tests::shape_errors_precede_balance_checks ... ok
 test budget::tests::over_budget_does_not_mutate ... ok
 test budget::tests::over_cap_does_not_mutate ... ok
 test budget::tests::spends_exact_cap_and_exact_remaining ... ok
 test tests::concurrency_acquire_and_release ... ok
-test bifrost::tests::injected_now_refreshes_a_clone_and_leaves_the_supply ... ok
 test tests::defer_when_no_supply_covers ... ok
 test tests::max_deducts_only_chosen_child ... ok
-test bifrost::tests::quantize_percent_rounds_half_up ... ok
-test tests::min_deducts_all_children ... ok
-test bifrost::tests::header_pin_weight_is_not_the_key_percent ... ok
 test tests::min_blocked_by_dead_stock_never_recovers ... ok
+test tests::min_deducts_all_children ... ok
 test tests::nested_weekly_window_binds_and_recovers_at_weekly_reset ... ok
 test tests::rate_full_time_ceils_to_the_whole_second_it_actually_fills ... ok
 test tests::rate_token_bucket_refills_continuously ... ok
 test tests::stock_exhaust_reports_no_recovery ... ok
-test tests::serde_roundtrip_nested_meter ... ok
 test tests::ticks_and_unix_millis_are_different_types ... ok
+test tests::serde_roundtrip_nested_meter ... ok
 test tests::window_resets_and_does_not_accumulate ... ok
 test bifrost::tests::rounding_collapse_to_all_zero_is_refused ... ok
 
@@ -469,41 +473,41 @@ test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/bifrost.rs (target/debug/deps/bifrost-0ec2d93c3c5533a1)
 
 running 3 tests
-test supply_exhausted_primary_weight_zero ... ok
-test supply_recovers_on_injected_day_boundary ... ok
 test budget_balances_80_20 ... ok
+test supply_recovers_on_injected_day_boundary ... ok
+test supply_exhausted_primary_weight_zero ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
      Running tests/ledger.rs (target/debug/deps/ledger-356f271684b68d43)
 
 running 18 tests
+test bad_declaration_is_rejected_before_create ... ok
 test fall_back_day_ends_at_next_civil_midnight ... ok
 test spring_forward_day_ends_at_next_civil_midnight ... ok
-test ordinary_day_boundary_is_the_next_civil_midnight ... ok
 test same_instant_falls_on_different_civil_days ... ok
-test bad_declaration_is_rejected_before_create ... ok
+test ordinary_day_boundary_is_the_next_civil_midnight ... ok
 test week_crossing_spring_forward_uses_civil_mondays ... ok
-test consume_is_idempotent_and_conflict_does_not_charge ... ok
 test lazy_reset_opens_the_next_civil_window ... ok
-test insufficient_rolls_back_and_restart_keeps_the_committed_charge ... ok
-test extra_table_fails_closed ... ok
-test recover_redelivers_the_same_idempotency_key ... ok
-test user_version_mismatch_and_torn_init_fail_closed ... ok
+test consume_is_idempotent_and_conflict_does_not_charge ... ok
 test open_created_then_reopen_checks_recipe_and_declaration ... ok
+test insufficient_rolls_back_and_restart_keeps_the_committed_charge ... ok
+test recover_redelivers_the_same_idempotency_key ... ok
+test extra_table_fails_closed ... ok
+test user_version_mismatch_and_torn_init_fail_closed ... ok
 test recover_persists_the_sent_mark_across_reopen ... ok
 test declaration_mismatch_fails_closed_and_keeps_committed_rows ... ok
 test concurrent_same_key_is_charged_once ... ok
 test concurrent_consumers_conserve_the_window ... ok
 test concurrent_first_open_one_creator ... ok
 
-test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
 
      Running tests/properties.rs (target/debug/deps/properties-9af8f19f31f77b30)
 
 running 4 tests
-test min_windows_conserve_and_grant_the_same_amount ... ok
 test window_quota_conserved_over_any_event_sequence ... ok
+test min_windows_conserve_and_grant_the_same_amount ... ok
 test budget_spend_never_overdrafts ... ok
 test consumer_ledger_merge_is_commutative ... ok
 
@@ -513,10 +517,10 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 5 tests
 test defer_when_nothing_covers ... ok
-test golden_timeline_over_schedule ... ok
-test weekly_binding_recovers_at_weekly_reset ... ok
 test daily_exhausted_but_weekly_surplus_switches_to_api_until_daily_resets ... ok
 test estimate_above_daily_capacity_routes_to_api ... ok
+test golden_timeline_over_schedule ... ok
+test weekly_binding_recovers_at_weekly_reset ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -525,7 +529,7 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test credential_limit_consumed_without_unit_conversion ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running unittests src/lib.rs (target/debug/deps/af_release_gate-079e8f468130f066)
 
@@ -544,15 +548,15 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 14 tests
 test canary_caps_probes_until_predicate_passes ... ok
-test item_heavier_than_cap_never_admits ... ok
-test config_validation_rejects_lower_ge_upper ... ok
 test canary_defect_keeps_gate_gated ... ok
+test config_validation_rejects_lower_ge_upper ... ok
+test item_heavier_than_cap_never_admits ... ok
+test gate_config_roundtrips_through_json ... ok
 test night_ratio_is_deterministic_credit_scheme ... ok
 test night_ratio_one_admits_everything ... ok
 test night_window_contains_handles_wrap ... ok
 test night_window_exit_resets_credit ... ok
 test refill_signal_fires_below_lower_and_clears_above ... ok
-test gate_config_roundtrips_through_json ... ok
 test wip_cap_blocks_admit_and_complete_releases_capacity ... ok
 test wip_never_exceeds_cap_even_on_exact_fit ... ok
 test blocking_admit_times_out_when_no_capacity_freed ... ok
@@ -563,13 +567,13 @@ test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/order_release.rs (target/debug/deps/order_release-fe6a96f86cd99eef)
 
 running 7 tests
-test missing_preconditions_win_over_closed_ramp ... ok
-test missing_preconditions_do_not_spend_night_credit ... ok
-test missing_preconditions_win_over_full_gate ... ok
-test non_positive_weight_does_not_enter_the_gate ... ok
 test admit_rejects_when_release_edge_is_absent ... ok
 test full_gate_rejects_release_until_capacity_returns ... ok
+test missing_preconditions_do_not_spend_night_credit ... ok
+test missing_preconditions_win_over_full_gate ... ok
 test ramp_phase_blocks_until_promotion_then_admits ... ok
+test missing_preconditions_win_over_closed_ramp ... ok
+test non_positive_weight_does_not_enter_the_gate ... ok
 
 test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -578,21 +582,21 @@ test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 19 tests
 test invalid_declaration_does_not_create_a_database ... ok
 test system_clock_open_stamps_unix_wall_time ... ok
-test night_wip_cap_persists_spent_credit_without_the_item ... ok
-test night_window_edge_survives_restart ... ok
-test open_forks_on_created_then_already_declared ... ok
-test storage_profile_matches_wal_recipe ... ok
-test refill_latch_survives_restart ... ok
-test promoted_canary_stays_open_across_restart ... ok
 test fractional_wip_survives_reopen_after_partial_complete ... ok
+test storage_profile_matches_wal_recipe ... ok
+test open_forks_on_created_then_already_declared ... ok
+test night_wip_cap_persists_spent_credit_without_the_item ... ok
 test night_throttle_survives_restart ... ok
-test unrelated_database_is_rejected ... ok
+test refill_latch_survives_restart ... ok
+test night_window_edge_survives_restart ... ok
+test promoted_canary_stays_open_across_restart ... ok
 test restart_restores_wip_and_never_over_releases ... ok
+test unrelated_database_is_rejected ... ok
 test schema_mismatch_fails_closed ... ok
 test canary_cursor_restores_and_stays_capped ... ok
 test concurrent_first_open_one_creator ... ok
-test predicate_presence_must_match_persisted_canary ... ok
 test wall_stamp_follows_injected_clock_and_reopen_does_not_rewrite ... ok
+test predicate_presence_must_match_persisted_canary ... ok
 test corrupt_rows_fail_closed ... ok
 test declaration_mismatch_fails_closed_without_rewrite ... ok
 
@@ -601,13 +605,13 @@ test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/properties.rs (target/debug/deps/properties-22e3126274a9cc95)
 
 running 5 tests
+test conwip_capacity_never_over_releases ... ok
 test canary_batch_is_monotonic_and_never_reverts ... ok
 test rejection_does_not_partially_commit ... ok
-test conwip_capacity_never_over_releases ... ok
 test conwip_does_not_over_release_after_restart ... ok
 test fractional_milli_weights_survive_restart ... ok
 
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.71s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
 
      Running unittests src/lib.rs (target/debug/deps/af_sampling-3b32c61dd2aa5156)
 
@@ -615,17 +619,17 @@ running 40 tests
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
 test clock::tests::system_clock_reads_unix_millis ... ok
 test csp1::tests::disabled_bypasses_everything ... ok
+test csp1::tests::defect_caught_in_sampling_returns_to_screening ... ok
+test csp1::tests::set_rate_is_clamped_to_f_min ... ok
+test csp1::tests::rejects_f_below_f_min_at_construction ... ok
 test csp1::tests::streak_resets_on_defect_during_screening ... ok
 test csp1::tests::switches_to_sampling_after_i_consecutive_conforming ... ok
-test csp1::tests::defect_caught_in_sampling_returns_to_screening ... ok
-test csp1::tests::rejects_f_below_f_min_at_construction ... ok
+test csp1::tests::sim_1000_items_planted_defects ... ok
+test csp1::tests::long_run_sampling_rate_hovers_at_f_min_when_clamped ... ok
 test golden::tests::rejects_bad_injector_config ... ok
 test golden::tests::alarm_fires_when_golden_defect_released ... ok
 test golden::tests::no_alarm_under_full_screening ... ok
-test csp1::tests::set_rate_is_clamped_to_f_min ... ok
 test golden::tests::zero_p_injects_nothing ... ok
-test csp1::tests::sim_1000_items_planted_defects ... ok
-test csp1::tests::long_run_sampling_rate_hovers_at_f_min_when_clamped ... ok
 test golden::tests::injects_at_rate_p_with_70_30_mix ... ok
 test persist::tests::invalid_declaration_does_not_create_a_file ... ok
 test promotion::tests::criteria_refuse_violations_and_low_consistency ... ok
@@ -642,18 +646,18 @@ test persist::tests::foreign_table_is_not_this_ledger ... ok
 test persist::tests::memory_open_uses_foreign_keys_and_normal_sync ... ok
 test persist::tests::seq_above_i64_is_rejected ... ok
 test persist::tests::file_pragmas_and_foreign_key_are_enforced ... ok
+test persist::tests::schema_version_mismatch_fails_closed ... ok
+test persist::tests::tampered_trajectory_action_refuses_startup ... ok
 test persist::tests::outcome_bits_roundtrip_across_restart ... ok
 test persist::tests::first_open_is_created_and_reentry_is_already_declared ... ok
-test persist::tests::tampered_trajectory_action_refuses_startup ... ok
-test persist::tests::schema_version_mismatch_fails_closed ... ok
 test persist::tests::restart_restores_golden_records_and_rejects_duplicates ... ok
 test persist::tests::restart_keeps_full_window_left_by_recover ... ok
 test persist::tests::declaration_mismatch_fails_closed_and_keeps_prior_state ... ok
-test persist::tests::restart_restores_promotion_and_continues_like_the_live_engine ... ok
 test persist::tests::tampered_watermark_or_window_refuses_startup ... ok
+test persist::tests::restart_restores_promotion_and_continues_like_the_live_engine ... ok
 test persist::tests::concurrent_first_open_one_creator ... ok
 
-test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
 
      Running tests/end_to_end.rs (target/debug/deps/end_to_end-40f0854347b8a6d8)
 
@@ -670,16 +674,16 @@ test dual_watermark_moves_only_on_threshold_crossing ... ok
 test golden_injection_does_not_change_lineage_counts ... ok
 test restart_does_not_drop_watermark ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.06s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s
 
      Running unittests src/lib.rs (target/debug/deps/af_sandbox-eb960fcf9f517c37)
 
 running 5 tests
 test budget::tests::refusal_is_returned_unchanged ... ok
 test budget::tests::accepts_sandbox_concurrency_slot ... ok
-test budget::tests::wrong_dimension_and_zero_slots_are_not_rewritten ... ok
-test session::tests::deadline_is_inclusive_and_overflow_fails_closed ... ok
 test types::tests::rejects_blank_injection ... ok
+test session::tests::deadline_is_inclusive_and_overflow_fails_closed ... ok
+test budget::tests::wrong_dimension_and_zero_slots_are_not_rewritten ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -687,49 +691,49 @@ test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 21 tests
 test collect_on_a_restarted_backend_is_stale ... ok
-test open_forwards_injected_limits_and_clock ... ok
 test collect_returns_requested_bytes_and_fails_closed_on_a_miss ... ok
-test resume_while_down_still_kills_handles ... ok
-test close_is_idempotent_and_blocks_later_use ... ok
+test open_forwards_injected_limits_and_clock ... ok
 test down_backend_wins_over_the_deadline ... ok
-test sandbox_down_on_open_and_exec ... ok
 test deadline_wins_over_a_bad_credential_when_the_backend_is_up ... ok
-test stale_epoch_wins_over_a_bad_credential_and_a_down_backend ... ok
-test missing_tool_does_not_reach_backend ... ok
-test reattach_does_not_adopt_a_session_the_host_did_not_open ... ok
-test budget_refusal_is_echoed_and_not_charged_here ... ok
+test close_is_idempotent_and_blocks_later_use ... ok
 test clock_timeout_does_not_call_backend ... ok
-test backend_restart_invalidates_handles_without_resume ... ok
-test exec_runs_when_whitelist_and_charge_agree ... ok
-test resume_fences_old_handles_and_allows_a_new_session ... ok
+test budget_refusal_is_echoed_and_not_charged_here ... ok
+test missing_tool_does_not_reach_backend ... ok
 test nonzero_exit_is_a_finished_exec ... ok
+test exec_runs_when_whitelist_and_charge_agree ... ok
+test resume_while_down_still_kills_handles ... ok
+test stale_epoch_wins_over_a_bad_credential_and_a_down_backend ... ok
 test reported_elapsed_at_the_cap_discards_output ... ok
-test wrong_dimension_and_zero_slots_do_not_run ... ok
+test resume_fences_old_handles_and_allows_a_new_session ... ok
+test sandbox_down_on_open_and_exec ... ok
+test backend_restart_invalidates_handles_without_resume ... ok
 test attenuated_token_keeps_fact_but_exec_is_denied ... ok
+test wrong_dimension_and_zero_slots_do_not_run ... ok
+test reattach_does_not_adopt_a_session_the_host_did_not_open ... ok
 test namespace_mismatch_and_spend_cap_are_denials ... ok
 
-test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running unittests src/lib.rs (target/debug/deps/af_station-606b51d3254ca666)
 
 running 20 tests
-test clock::tests::system_clock_reads_unix_millis ... ok
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
-test tests::preexisting_task_table_is_not_adopted ... ok
+test clock::tests::system_clock_reads_unix_millis ... ok
 test tests::open_in_memory_is_created ... ok
+test tests::preexisting_task_table_is_not_adopted ... ok
 test tests::enqueue_and_get_roundtrip ... ok
-test tests::primary_key_conflict_is_not_reported_as_duplicate ... ok
 test tests::corrupt_or_invalid_stored_calendar_fails_closed ... ok
-test tests::expired_lease_is_reclaimed_and_takeover_works ... ok
-test tests::idempotency_key_prevents_duplicate_enqueue ... ok
-test tests::overlapping_calendar_is_rejected_and_not_stored ... ok
 test tests::role_routes_claim_to_matching_worker_only ... ok
+test tests::end_to_end_lifecycle ... ok
+test tests::overlapping_calendar_is_rejected_and_not_stored ... ok
+test tests::idempotency_key_prevents_duplicate_enqueue ... ok
+test tests::primary_key_conflict_is_not_reported_as_duplicate ... ok
+test tests::expired_lease_is_reclaimed_and_takeover_works ... ok
 test tests::open_file_is_created_then_already_declared ... ok
 test tests::heartbeat_renews_lease_and_only_claimant_can_use_it ... ok
+test tests::pragmas_follow_the_ledger_recipe_and_foreign_keys_reject ... ok
 test tests::schema_version_mismatch_fails_closed ... ok
 test tests::fingerprint_mismatch_fails_closed ... ok
-test tests::pragmas_follow_the_ledger_recipe_and_foreign_keys_reject ... ok
-test tests::end_to_end_lifecycle ... ok
 test tests::two_threads_race_on_same_task_exactly_one_wins ... ok
 test tests::live_schema_drift_fails_closed ... ok
 test tests::stress_four_threads_drain_forty_tasks_without_double_claim ... ok
@@ -744,11 +748,11 @@ test resume_while_lease_holds_is_reentrant ... ok
 test expired_interrupt_reenters_queued_resume_point ... ok
 test expired_owner_complete_races_takeover_keeps_one_row ... ok
 test eight_threads_claim_and_complete_one_task_exactly_once ... ok
+test foreign_complete_storm_leaves_every_claimed_row ... ok
 test interleaved_claim_and_complete_partition_without_losing_rows ... ok
 test concurrent_complete_does_not_drop_ledger_rows ... ok
-test foreign_complete_storm_leaves_every_claimed_row ... ok
 
-test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 
      Running tests/properties.rs (target/debug/deps/properties-28a60b43ecba6c66)
 
@@ -757,34 +761,34 @@ test concurrent_claim_complete_is_a_partition ... ok
 test concurrent_complete_keeps_every_row ... ok
 test op_sequence_matches_model_across_reopen ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
 
      Running tests/shift_window.rs (target/debug/deps/shift_window-3f0e8d72769c82db)
 
 running 25 tests
+test claimed_on_shift_survives_off_shift_until_lease_ends ... ok
 test empty_calendar_never_dispatches ... ok
 test overdue_deadline_does_not_gate_dispatch ... ok
-test dst_spring_gap_window_does_not_dispatch ... ok
 test off_shift_stays_queued_until_window_opens ... ok
-test dst_fall_back_dispatches_both_clock_faces ... ok
-test claimed_on_shift_survives_off_shift_until_lease_ends ... ok
+test dst_spring_gap_window_does_not_dispatch ... ok
 test off_shift_claim_reclaims_expired_lease_without_dispatching ... ok
-test restart_claim ... ok
-test restart_heartbeat ... ok
-test restart_new_task_roundtrip ... ok
-test restart_idempotency_key ... ok
-test restart_rebind_replaces_shift ... ok
-test dst_spring_wide_window_covers_both_sides_of_gap ... ok
 test restart_complete ... ok
-test holiday_blocks_and_makeup_saturday_opens ... ok
+test dst_spring_wide_window_covers_both_sides_of_gap ... ok
+test restart_new_task_roundtrip ... ok
+test dst_fall_back_dispatches_both_clock_faces ... ok
+test restart_rebind_replaces_shift ... ok
+test restart_claim ... ok
 test cross_midnight_two_windows_dispatch ... ok
-test restart_reclaim ... ok
+test restart_idempotency_key ... ok
 test submillisecond_deadline_is_rejected ... ok
+test restart_heartbeat ... ok
+test shift_window_is_half_open ... ok
 test role_exact_match_still_required_on_shift ... ok
 test unbound_shift_keeps_role_only_routing ... ok
 test restart_role_shift_binding ... ok
+test holiday_blocks_and_makeup_saturday_opens ... ok
+test restart_reclaim ... ok
 test restart_worker_shift_binding ... ok
-test shift_window_is_half_open ... ok
 test sla_deadline_is_utc_and_duplicate_key_keeps_it ... ok
 test worker_shift_intersects_role_shift ... ok
 
@@ -793,34 +797,34 @@ test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running unittests src/lib.rs (target/debug/deps/af_stop-6f96ae4ae3274322)
 
 running 29 tests
-test clock::tests::system_clock_monotonic_does_not_go_backwards ... ok
 test clock::tests::manual_clock_advance_is_shared_and_wall_rewind_stays_off_the_monotonic_clock ... ok
-test tests::rule1_fingerprint_streak_stops_at_nth ... ok
-test tests::mixed_stream_end_to_end ... ok
+test clock::tests::system_clock_monotonic_does_not_go_backwards ... ok
 test tests::fingerprint_stop_wins_over_threshold_escalate ... ok
+test ledger::tests::declaration_json_rejects_unknown_version ... ok
+test tests::mixed_stream_end_to_end ... ok
 test tests::rule1_alternating_tools_never_triggers ... ok
+test tests::fingerprint_store_wire_is_sorted_and_rejects_duplicates ... ok
+test tests::rule1_fingerprint_streak_stops_at_nth ... ok
 test tests::rule1_different_error_code_is_different_fingerprint ... ok
 test tests::rule1_success_breaks_the_streak ... ok
 test tests::rule2_check_first_failure_stops_immediately ... ok
 test tests::rule3_generic_errors_escalate_at_threshold ... ok
 test tests::rule3_tool_errors_also_count_toward_threshold ... ok
-test tests::store_override_lower_limit_and_escalate_action ... ok
 test tests::store_override_whitelisted_fingerprint_never_stops ... ok
-test wire::tests::unknown_version_is_rejected_without_reading_the_body ... ok
-test wire::tests::direct_serde_of_the_envelope_also_rejects_unknown_versions ... ok
-test wire::tests::version_one_with_a_bad_body_is_a_json_error ... ok
-test wire::tests::encode_refuses_to_write_an_unknown_version ... ok
-test wire::tests::missing_or_unreadable_version_is_rejected ... ok
 test tests::snapshot_roundtrip_continues_decisions_and_rejects_unknown_version ... ok
+test wire::tests::direct_serde_of_the_envelope_also_rejects_unknown_versions ... ok
+test wire::tests::unknown_version_is_rejected_without_reading_the_body ... ok
+test wire::tests::missing_or_unreadable_version_is_rejected ... ok
+test wire::tests::version_one_with_a_bad_body_is_a_json_error ... ok
 test wire::tests::wire_roundtrip_keeps_version_one ... ok
-test ledger::tests::declaration_json_rejects_unknown_version ... ok
-test tests::fingerprint_store_wire_is_sorted_and_rejects_duplicates ... ok
+test tests::store_override_lower_limit_and_escalate_action ... ok
+test wire::tests::encode_refuses_to_write_an_unknown_version ... ok
 test ledger::tests::memory_ledger_still_enables_foreign_keys_and_busy_timeout ... ok
 test ledger::tests::file_pragmas_match_the_ledger_recipe ... ok
-test ledger::tests::user_version_zero_with_tables_is_not_treated_as_create ... ok
-test ledger::tests::incomplete_schema_is_not_repaired ... ok
 test ledger::tests::unknown_schema_user_version_fails_closed ... ok
+test ledger::tests::user_version_zero_with_tables_is_not_treated_as_create ... ok
 test ledger::tests::tampered_disposition_version_fails_at_open ... ok
+test ledger::tests::incomplete_schema_is_not_repaired ... ok
 test ledger::tests::tampered_row_format_version_fails_at_open ... ok
 
 test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -843,58 +847,58 @@ test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 13 tests
 test unknown_declaration_version_does_not_initialize ... ok
 test store_registration_order_matches_on_reentry ... ok
-test wall_clock_does_not_drive_expiry_or_drop_the_count ... ok
+test advance_while_closed_does_not_expire_the_window_or_drop_the_count ... ok
+test fingerprint_row_roundtrips_across_restart ... ok
 test fingerprint_stop_still_beats_threshold_after_restart ... ok
 test reopen_reports_already_declared_and_keeps_the_declaration ... ok
-test window_roll_keeps_count_and_survives_restart ... ok
-test fingerprint_row_roundtrips_across_restart ... ok
-test engine_counters_roundtrip_across_restart ... ok
+test wall_clock_does_not_drive_expiry_or_drop_the_count ... ok
 test whitelisted_fingerprint_stays_continue_after_restart ... ok
-test ledger_feed_matches_the_pure_engine_across_restart ... ok
+test window_roll_keeps_count_and_survives_restart ... ok
+test engine_counters_roundtrip_across_restart ... ok
 test declaration_mismatch_is_fail_closed_and_preserves_rows ... ok
-test advance_while_closed_does_not_expire_the_window_or_drop_the_count ... ok
+test ledger_feed_matches_the_pure_engine_across_restart ... ok
 test concurrent_first_open_one_creator ... ok
 
-test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running unittests src/lib.rs (target/debug/deps/af_trace-81fd75373c999846)
 
 running 39 tests
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
-test otel::tests::zero_batch_size_uses_the_bsp_default ... ok
+test http_util::tests::parse_response_reads_content_length ... ok
 test http_util::tests::parse_url_appends_the_entries_path ... ok
 test merkle::tests::single_leaf_root_is_prefixed_hash_and_proof_is_empty ... ok
-test merkle::tests::two_leaves_are_one_internal_node ... ok
 test merkle::tests::flipped_sibling_does_not_rebuild_the_root ... ok
-test http_util::tests::parse_response_reads_content_length ... ok
+test merkle::tests::two_leaves_are_one_internal_node ... ok
+test otel::tests::zero_batch_size_uses_the_bsp_default ... ok
 test sha256::tests::hex_and_base64_roundtrip ... ok
+test rekor::tests::second_leaf_proof_covers_both_entries ... ok
 test sha256::tests::nist_sha256_vectors ... ok
 test sha256::tests::rfc4231_hmac_sha256 ... ok
-test rekor::tests::second_leaf_proof_covers_both_entries ... ok
-test rekor::tests::refused_port_is_unreachable ... ok
-test trace::tests::append_line_on_dev_full_returns_error ... ok
 test rekor::tests::memory_log_receipt_verifies_and_rejects_tampering ... ok
+test trace::tests::append_line_on_dev_full_returns_error ... ok
 test rekor::tests::http_stub_submits_and_connection_drop_is_unreachable ... ok
+test rekor::tests::refused_port_is_unreachable ... ok
 test merkle::tests::inclusion_matches_root_for_uneven_trees ... ok
-test trace::tests::critical_persist_failure_is_fail_closed ... ok
-test store::tests::finding_c_foreign_sqlite_is_not_adopted ... ok
-test anchor::tests::refused_endpoint_does_not_fail_open_and_still_persists_critical ... ok
-test trace::tests::configured_endpoint_without_feature_stays_offline ... ok
 test anchor::tests::disabled_anchor_does_not_write_sidecar_or_gap ... ok
-test anchor::tests::batch_window_uses_the_injected_clock ... ok
-test store::tests::pragmas_created_then_already_declared_keeps_gap ... ok
-test trace::tests::orphan_jsonl_and_bad_dir_fail_closed ... ok
-test anchor::tests::wedged_rekor_does_not_block_the_next_critical_write ... ok
-test anchor::tests::batch_n_submits_and_shutdown_flushes_the_remainder ... ok
-test store::tests::finding_c_torn_tables_without_declaration_row_are_not_filled ... ok
+test anchor::tests::refused_endpoint_does_not_fail_open_and_still_persists_critical ... ok
 test anchor::tests::default_batch_seals_each_event ... ok
-test trace::tests::normal_persist_failure_counts_gap ... ok
-test trace::tests::offline_lane_counts_persisted_normals_and_skips_critical ... ok
+test anchor::tests::batch_window_uses_the_injected_clock ... ok
+test store::tests::finding_c_torn_tables_without_declaration_row_are_not_filled ... ok
+test anchor::tests::batch_n_submits_and_shutdown_flushes_the_remainder ... ok
+test trace::tests::orphan_jsonl_and_bad_dir_fail_closed ... ok
 test anchor::tests::unreachable_queues_for_retry_without_blocking_critical ... ok
-test trace::tests::declaration_gap_and_corrupt_log_fail_closed ... ok
-test trace::tests::restart_restores_critical_log_gap_counter_seq_and_clock ... ok
-test store::tests::declaration_mismatch_fails_closed_without_rewriting ... ok
+test anchor::tests::wedged_rekor_does_not_block_the_next_critical_write ... ok
+test store::tests::pragmas_created_then_already_declared_keeps_gap ... ok
+test store::tests::finding_c_foreign_sqlite_is_not_adopted ... ok
+test trace::tests::configured_endpoint_without_feature_stays_offline ... ok
+test trace::tests::critical_persist_failure_is_fail_closed ... ok
+test trace::tests::offline_lane_counts_persisted_normals_and_skips_critical ... ok
+test trace::tests::normal_persist_failure_counts_gap ... ok
 test anchor::tests::restart_retries_the_persisted_queue ... ok
+test trace::tests::declaration_gap_and_corrupt_log_fail_closed ... ok
+test store::tests::declaration_mismatch_fails_closed_without_rewriting ... ok
+test trace::tests::restart_restores_critical_log_gap_counter_seq_and_clock ... ok
 test trace::tests::zero_loss_when_under_capacity_and_closed_channel_errors ... ok
 test trace::tests::normal_overflow_drops_and_counts_gap ... ok
 test trace::tests::gap_spans_coalesce_when_critical_is_also_full ... ok
@@ -907,59 +911,59 @@ test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 1 test
 test flood_100k_normal_events ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.81s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
 
      Running unittests src/lib.rs (target/debug/deps/af_workorder-c6e5116ebf20de78)
 
 running 49 tests
 test change::tests::empty_diff_summary_is_rejected ... ok
-test change::tests::invalid_change_cannot_spawn_successor ... ok
 test change::tests::drain_all_plus_hot_takeover_conflicts ... ok
 test change::tests::from_equals_to_is_rejected ... ok
-test decision::tests::empty_signature_is_rejected ... ok
+test change::tests::invalid_change_cannot_spawn_successor ... ok
+test change::tests::serde_roundtrip_keeps_all_fields ... ok
+test change::tests::signing_domain_bytes_stay_on_v1 ... ok
 test decision::tests::approver_can_approve_when_hash_and_signature_ok ... ok
 test change::tests::spawn_successor_binds_new_version_and_supersedes ... ok
-test decision::tests::hash_mismatch_is_caught ... ok
-test decision::tests::reviser_cannot_approve_but_can_revise ... ok
-test decision::tests::reader_issuing_approve_is_rejected ... ok
-test decision::tests::arbiter_has_full_power ... ok
 test decision::tests::approver_can_reject_too ... ok
+test decision::tests::empty_signature_is_rejected ... ok
+test decision::tests::arbiter_has_full_power ... ok
+test decision::tests::hash_mismatch_is_caught ... ok
+test change::tests::invalid_change_order_is_not_signed ... ok
+test decision::tests::reader_issuing_approve_is_rejected ... ok
 test decision::tests::reader_with_forged_approve_permission_is_still_rejected_by_role_cap ... ok
+test decision::tests::reviser_cannot_approve_but_can_revise ... ok
 test hash::tests::nist_sha256_known_vectors ... ok
-test identity::tests::generate_is_deterministic_and_ignores_nothing_but_order_id ... ok
-test change::tests::serde_roundtrip_keeps_all_fields ... ok
 test identity::tests::parse_rejects_empty_and_whitespace ... ok
+test identity::tests::generate_is_deterministic_and_ignores_nothing_but_order_id ... ok
+test order::tests::cancel_works_from_active_states_and_freezes_order ... ok
+test order::tests::close_requires_final_and_qualified_artifact ... ok
+test order::tests::full_happy_path_reaches_closed ... ok
 test hash::tests::distinct_inputs_have_distinct_hashes ... ok
 test identity::tests::shard_key_matches_sha256_mod_and_rejects_zero ... ok
-test decision::tests::decision_artifact_serde_roundtrip ... ok
-test order::tests::cancel_works_from_active_states_and_freezes_order ... ok
-test order::tests::full_happy_path_reaches_closed ... ok
 test order::tests::graph_version_never_changes_through_any_operation ... ok
 test order::tests::illegal_transitions_are_rejected_as_illegal_not_missing ... ok
-test order::tests::close_requires_final_and_qualified_artifact ... ok
+test order::tests::order_overdue_uses_stored_absolute_deadline ... ok
+test order::tests::precondition_materials_can_only_be_registered_in_created ... ok
 test order::tests::release_with_line_but_no_voucher_reports_only_voucher ... ok
 test order::tests::release_with_unsigned_voucher_names_the_voucher ... ok
-test order::tests::release_without_anything_lists_both_missing_in_fixed_order ... ok
 test order::tests::release_with_voucher_only_reports_only_line ... ok
+test order::tests::release_without_anything_lists_both_missing_in_fixed_order ... ok
 test order::tests::stable_id_survives_run_change_and_the_lifecycle ... ok
-test change::tests::invalid_change_order_is_not_signed ... ok
-test order::tests::order_overdue_uses_stored_absolute_deadline ... ok
 test order::tests::legacy_payload_without_stable_id_is_a_rejection_envelope ... ok
-test change::tests::signing_domain_bytes_stay_on_v1 ... ok
-test order::tests::unknown_fields_are_rejected_and_every_name_is_listed ... ok
-test sla::tests::from_calendar_rejects_negative_duration ... ok
 test sla::tests::no_deadline_never_overdue ... ok
 test sla::tests::overdue_compares_absolute_instants ... ok
-test sla::tests::priority_orders_low_to_critical ... ok
+test sla::tests::from_calendar_rejects_negative_duration ... ok
 test state::tests::cancel_allowed_only_before_completion ... ok
+test sla::tests::priority_orders_low_to_critical ... ok
+test state::tests::transition_table_is_exactly_the_asked_lifecycle ... ok
+test order::tests::unknown_fields_are_rejected_and_every_name_is_listed ... ok
+test decision::tests::decision_artifact_serde_roundtrip ... ok
 test state::tests::terminal_states ... ok
 test sla::tests::sla_serde_roundtrip_accepts_legacy_rfc3339 ... ok
-test state::tests::transition_table_is_exactly_the_asked_lifecycle ... ok
-test order::tests::precondition_materials_can_only_be_registered_in_created ... ok
 test change::tests::verified_signature_spawns_successor ... ok
-test sign::tests::sign_verify_roundtrip_is_deterministic_and_debug_hides_seed ... ok
-test change::tests::signed_change_order_roundtrip_verifies ... ok
 test change::tests::tampered_order_or_signature_fails_verify_and_spawn ... ok
+test change::tests::signed_change_order_roundtrip_verifies ... ok
+test sign::tests::sign_verify_roundtrip_is_deterministic_and_debug_hides_seed ... ok
 test sign::tests::rejects_tamper_wrong_key_bad_algorithm_and_invalid_public_key ... ok
 
 test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
@@ -967,8 +971,8 @@ test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/calendar_sla.rs (target/debug/deps/calendar_sla-e08b133c929cfdf7)
 
 running 3 tests
-test fall_back_order_deadline_is_post_fold_utc_instant ... ok
 test calendar_deadline_enters_lifecycle_and_judges_by_absolute_instant ... ok
+test fall_back_order_deadline_is_post_fold_utc_instant ... ok
 test spring_forward_order_deadline_is_post_gap_utc_instant ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -976,8 +980,8 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/identity.rs (target/debug/deps/identity-c3c859d8e0f4b737)
 
 running 4 tests
-test shard_key_is_deterministic_for_a_stable_id ... ok
 test decision_artifact_hash_includes_stable_id ... ok
+test shard_key_is_deterministic_for_a_stable_id ... ok
 test same_stable_id_keeps_identity_across_runs ... ok
 test legacy_payload_without_stable_id_is_rejected ... ok
 
@@ -990,7 +994,7 @@ test reject_decision_names_missing_qualified_final_artifact ... ok
 test signed_change_order_roundtrip ... ok
 test qualified_final_artifact_release_decision ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running tests/lifecycle.rs (target/debug/deps/lifecycle-ff97a1cd8780f404)
 
@@ -1018,7 +1022,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test crates/af-dspy-ir/src/guardrail.rs - guardrail::Guardrails<C>::judge_repair (line 162) ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
 
    Doc-tests af_effect_gateway
 
@@ -1079,7 +1083,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test crates/af-sandbox/src/budget.rs - budget::decide_concurrency (line 74) ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
 
    Doc-tests af_station
 
@@ -1092,7 +1096,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test crates/af-stop/src/lib.rs - (line 19) ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
 
    Doc-tests af_trace
 

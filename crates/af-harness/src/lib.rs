@@ -44,7 +44,8 @@ pub use error::Error;
 pub use http::{HttpClient, HttpResponse, UreqClient};
 pub use render::render;
 pub use run::{
-    Breakpoint, Launch, Opened, RunReport, RunStatus, TokenTotals, ToolFailure, ToolRegistry,
+    Breakpoint, KeyRefresher, Launch, Opened, RunReport, RunStatus, TokenTotals, ToolFailure,
+    ToolRegistry,
 };
 pub use spec::{
     decode_spec, encode_spec, AgentSpec, AuthStyle, BudgetRef, BudgetUnit, ContextTemplate,

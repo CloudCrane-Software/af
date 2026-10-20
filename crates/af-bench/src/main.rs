@@ -642,6 +642,10 @@ fn run_swev(args: &Args) -> Result<(), String> {
                 .map_err(|err| format!("建 run 目录失败: {err}"))?;
             // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻 run 现取（401 竞态实证）。
             let key = resolve_key(prof.key_cmd)?;
+            // 401 重取器：长题 >1h 撞 mcode 令牌寿命时，harness 端点 401 会重跑本命令换新 key 重试一次。
+            let key_cmd: &'static str = prof.key_cmd;
+            let key_refresh: Option<af_harness::KeyRefresher> =
+                Some(std::sync::Arc::new(move || resolve_key(key_cmd)));
             let opened = Opened::open(&attempt_dir).map_err(|err| format!("open run: {err}"))?;
             let user_message = if attempt == 1 {
                 task.prompt()
@@ -654,6 +658,7 @@ fn run_swev(args: &Args) -> Result<(), String> {
                 vars: BTreeMap::new(),
                 user_message,
                 key: EndpointKey::new(key),
+                key_refresh,
                 parent: &root.token,
                 public_key: &root.keypair.public(),
                 namespace: "bench".into(),
@@ -867,6 +872,10 @@ fn run_tb(args: &Args) -> Result<(), String> {
         std::fs::create_dir_all(&run_dir).map_err(|err| format!("建 run 目录失败: {err}"))?;
         // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻 run 现取（401 竞态实证）。
         let key = resolve_key(prof.key_cmd)?;
+        // 401 重取器：长题 >1h 撞 mcode 令牌寿命时，harness 端点 401 会重跑本命令换新 key 重试一次。
+        let key_cmd: &'static str = prof.key_cmd;
+        let key_refresh: Option<af_harness::KeyRefresher> =
+            Some(std::sync::Arc::new(move || resolve_key(key_cmd)));
         let opened = Opened::open(&run_dir).map_err(|err| format!("open run: {err}"))?;
         let started = Instant::now();
         let report = match opened.run(Launch {
@@ -875,6 +884,7 @@ fn run_tb(args: &Args) -> Result<(), String> {
             vars: BTreeMap::new(),
             user_message: task.prompt.clone(),
             key: EndpointKey::new(key),
+            key_refresh,
             parent: &root.token,
             public_key: &root.keypair.public(),
             namespace: "bench".into(),
@@ -1030,6 +1040,10 @@ fn run_injec(args: &Args) -> Result<(), String> {
         std::fs::create_dir_all(&run_dir).map_err(|err| format!("建 run 目录失败: {err}"))?;
         // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻 run 现取（401 竞态实证）。
         let key = resolve_key(prof.key_cmd)?;
+        // 401 重取器：长题 >1h 撞 mcode 令牌寿命时，harness 端点 401 会重跑本命令换新 key 重试一次。
+        let key_cmd: &'static str = prof.key_cmd;
+        let key_refresh: Option<af_harness::KeyRefresher> =
+            Some(std::sync::Arc::new(move || resolve_key(key_cmd)));
         let opened = Opened::open(&run_dir).map_err(|err| format!("open run: {err}"))?;
         let started = Instant::now();
         let report = opened
@@ -1039,6 +1053,7 @@ fn run_injec(args: &Args) -> Result<(), String> {
                 vars: BTreeMap::new(),
                 user_message: task.prompt.clone(),
                 key: EndpointKey::new(key),
+                key_refresh,
                 parent: &root.token,
                 public_key: &root.keypair.public(),
                 namespace: "bench".into(),

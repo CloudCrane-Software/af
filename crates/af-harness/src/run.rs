@@ -10,7 +10,7 @@
 use crate::authz::{issue_run_credential, RunCredential};
 use crate::budget::{BudgetBinding, BudgetRecord, BudgetState};
 use crate::clock::{Clock, SharedClock};
-use crate::endpoint::{complete_once, effect_label, EndpointKey, TranscriptItem};
+use crate::endpoint::{complete_once, effect_label, EndpointKey, ModelMessage, TranscriptItem};
 use crate::error::{Error, Result};
 use crate::render::render;
 use crate::spec::{AgentSpec, EffectClass, ToolDecl};
@@ -81,6 +81,10 @@ pub struct ToolFailure {
     pub message: String,
 }
 
+/// 401 时的密钥重取器：重跑一次密钥解析命令拿新 key。明文只经内存进请求头，
+/// 不进错误文本、不进 trace。返回 Err 表示本次重取失败（照常失败，不无限重试）。
+pub type KeyRefresher = Arc<dyn Fn() -> std::result::Result<String, String> + Send + Sync>;
+
 /// 一次 `run` 的输入。父凭证和工单由调用方持有，执行器不把它们落库。
 pub struct Launch<'a> {
     pub spec: AgentSpec,
@@ -88,6 +92,9 @@ pub struct Launch<'a> {
     pub vars: BTreeMap<String, String>,
     pub user_message: String,
     pub key: EndpointKey,
+    /// Some 时端点 401（invalid token，如 mcode 令牌 1h 寿命撞长题）重取密钥重试
+    /// 该请求一次。可靠性修复，不改测量语义：不重置对话/预算/轮次。
+    pub key_refresh: Option<KeyRefresher>,
     pub parent: &'a Biscuit,
     pub public_key: &'a PublicKey,
     pub namespace: String,
@@ -267,6 +274,8 @@ struct Live {
     engine: StopEngine,
     budget: BudgetState,
     transcript: Vec<TranscriptItem>,
+    /// 当前生效密钥。401 重取成功后在此换新，后续轮次直接用（旧 key 已死不再碰）。
+    key: EndpointKey,
 }
 
 enum TurnOutcome {
@@ -342,6 +351,7 @@ impl Opened {
             engine,
             budget,
             transcript,
+            key: launch.key.clone(),
         })
     }
 
@@ -414,13 +424,19 @@ impl Opened {
         request.push(TranscriptItem::System { text: system });
         request.extend(live.transcript.iter().cloned());
         let tools = visible_tools(&launch.spec, &live.cred.tools);
-        let message = complete_once(
+        let message = match complete_once(
             &self.http,
             &launch.spec.endpoint,
-            &launch.key,
+            &live.key,
             &request,
             &tools,
-        )?;
+        ) {
+            Err(Error::Endpoint {
+                status: 401,
+                message,
+            }) => self.retry_with_fresh_key(launch, live, &request, &tools, 401, message)?,
+            other => other?,
+        };
         live.row.model_calls = live.row.model_calls.saturating_add(1);
         self.trace.write_normal(
             "harness.model",
@@ -451,6 +467,54 @@ impl Opened {
         }
         live.row.turn_index = live.row.turn_index.saturating_add(1);
         self.settle_turn(launch, live, per_turn, any_tool, &assistant_text, pass)
+    }
+
+    /// 401（invalid token：mcode 令牌 1h 寿命撞 >1h 长题、OAuth 对被并发轮换）时的
+    /// 单次重取重试。语义（可靠性修复，不改测量口径）：
+    ///   · 只重跑一次密钥解析命令，只重试当前这一个请求——不重置对话/预算/轮次；
+    ///   · 重取结果与旧 key 相同（或重取失败、无重取器）→ 照常失败，错误里注明；
+    ///   · 重取到新 key → 换用新 key 重试一次，无论成败后续轮次都用新 key
+    ///     （旧 key 已死，不再每轮撞 401）。新 key 明文只进请求头，不进错误文本。
+    fn retry_with_fresh_key(
+        &self,
+        launch: &Launch<'_>,
+        live: &mut Live,
+        request: &[TranscriptItem],
+        tools: &[ToolDecl],
+        status: u16,
+        message: String,
+    ) -> Result<ModelMessage> {
+        let fail = |message: String| Error::Endpoint { status, message };
+        let Some(refresher) = &launch.key_refresh else {
+            return Err(fail(message));
+        };
+        let fresh = match refresher() {
+            Ok(key) => key,
+            Err(err) => {
+                return Err(fail(format!(
+                    "{message}；[401 后重取密钥失败: {}]",
+                    err.chars().take(160).collect::<String>()
+                )));
+            }
+        };
+        if fresh == live.key.expose() {
+            return Err(fail(format!(
+                "{message}；[401 后重取密钥与旧密钥相同，判定密钥面无变化，不再重试]"
+            )));
+        }
+        let key = EndpointKey::new(fresh);
+        self.trace.write_normal(
+            "harness.key_refresh",
+            json!({
+                "run_id": live.row.run_id,
+                "turn": live.row.turn_index,
+                "reason": "endpoint_401",
+                "retried": true,
+            }),
+        );
+        let outcome = complete_once(&self.http, &launch.spec.endpoint, &key, request, tools);
+        live.key = key;
+        outcome
     }
 
     fn settle_turn(

@@ -89,6 +89,7 @@ impl Fixture {
             ]),
             user_message: "开始".into(),
             key: EndpointKey::new("sk-test-secret"),
+            key_refresh: None,
             parent: &self.token,
             public_key: &self.public_key,
             namespace: "line-a".into(),
@@ -509,4 +510,64 @@ fn missing_required_argument_does_not_call_the_handler() {
                 if name == "git" && output["error_code"] == "E_SCHEMA"
         )
     }));
+}
+
+#[test]
+fn endpoint_401_refreshes_key_and_retries_the_same_request_once() {
+    let fix = Fixture::new();
+    let stub = StubServer::spawn().unwrap();
+    let mut spec = spec_at(&stub.url());
+    spec.policy.max_turns = 4;
+    spec.policy.stop.tool_free_turn_limit = 8;
+    stub.push(StubResponse::json(401, "invalid token: expired"));
+    stub.push(StubResponse::json(200, assistant_text("任务 DONE")));
+    let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
+    let mut launch = fix.launch(spec, ToolRegistry::new());
+    launch.key_refresh = Some(Arc::new(|| Ok("sk-rotated-fresh-key".into())));
+    let report = opened.run(launch).unwrap();
+    assert!(matches!(report.status, RunStatus::Completed { ref signal } if signal == "DONE"));
+    assert_eq!(report.model_calls, 1); // 同一轮内重试，不烧轮次
+    let recorded = stub.requests();
+    assert_eq!(recorded.len(), 2);
+    assert!(recorded[0]
+        .headers
+        .iter()
+        .any(|(name, value)| name == "authorization" && value == "Bearer sk-test-secret"));
+    assert!(recorded[1]
+        .headers
+        .iter()
+        .any(|(name, value)| name == "authorization" && value == "Bearer sk-rotated-fresh-key"));
+}
+
+#[test]
+fn endpoint_401_with_unchanged_key_fails_without_retry() {
+    let fix = Fixture::new();
+    let stub = StubServer::spawn().unwrap();
+    let mut spec = spec_at(&stub.url());
+    spec.policy.max_turns = 4;
+    stub.push(StubResponse::json(401, "invalid token: expired"));
+    let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
+    let mut launch = fix.launch(spec, ToolRegistry::new());
+    // 重取器返回与旧 key 相同的值 → 密钥面无变化，照常失败且不重发请求。
+    launch.key_refresh = Some(Arc::new(|| Ok("sk-test-secret".into())));
+    let err = opened.run(launch).unwrap_err();
+    assert!(matches!(err, Error::Endpoint { status: 401, .. }), "{err}");
+    let text = err.to_string();
+    assert!(text.contains("与旧密钥相同"), "{text}");
+    assert_eq!(stub.requests().len(), 1);
+}
+
+#[test]
+fn endpoint_401_without_refresher_fails_unchanged() {
+    let fix = Fixture::new();
+    let stub = StubServer::spawn().unwrap();
+    let mut spec = spec_at(&stub.url());
+    spec.policy.max_turns = 4;
+    stub.push(StubResponse::json(401, "invalid token: expired"));
+    let opened = Opened::open_with_clock(&fix.dir, fix.clock.clone()).unwrap();
+    let launch = fix.launch(spec, ToolRegistry::new());
+    let err = opened.run(launch).unwrap_err();
+    assert!(matches!(err, Error::Endpoint { status: 401, .. }), "{err}");
+    assert!(!err.to_string().contains("重取"));
+    assert_eq!(stub.requests().len(), 1);
 }

@@ -109,6 +109,7 @@ fn smoke() -> Result<(), Box<dyn std::error::Error>> {
         vars: BTreeMap::new(),
         user_message: "ping".into(),
         key: EndpointKey::new(api_key),
+        key_refresh: None,
         parent: &root.token,
         public_key: &public_key,
         namespace: "line-a".into(),
