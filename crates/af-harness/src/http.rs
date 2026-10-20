@@ -31,8 +31,14 @@ pub struct UreqClient {
 
 impl UreqClient {
     pub fn new() -> Self {
+        // 慢速本地模型（8b 档全思考预算可达分钟级）与慢网供给面都要覆盖；
+        // AF_HARNESS_HTTP_TIMEOUT_SEC 可覆盖，默认 600s。
+        let timeout_sec = std::env::var("AF_HARNESS_HTTP_TIMEOUT_SEC")
+            .ok()
+            .and_then(|text| text.parse::<u64>().ok())
+            .unwrap_or(600);
         let agent = ureq::AgentBuilder::new()
-            .timeout(Duration::from_secs(30))
+            .timeout(Duration::from_secs(timeout_sec))
             .redirects(0)
             .build();
         Self { agent }

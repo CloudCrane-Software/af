@@ -817,10 +817,7 @@ fn report_of(row: &RunRecord, status: RunStatus) -> Result<RunReport> {
     let transcript: Vec<TranscriptItem> = parse_stored(&row.transcript_json, "对话快照")?;
     let mut tokens = TokenTotals::default();
     for item in &transcript {
-        if let TranscriptItem::Assistant {
-            usage: Some(u), ..
-        } = item
-        {
+        if let TranscriptItem::Assistant { usage: Some(u), .. } = item {
             tokens.input = tokens.input.saturating_add(u.input_tokens);
             tokens.output = tokens.output.saturating_add(u.output_tokens);
             tokens.cache_read = tokens.cache_read.saturating_add(u.cache_read_tokens);
