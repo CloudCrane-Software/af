@@ -9,8 +9,11 @@
 //!
 //! 密钥纪律：明文只从解析器命令出来进请求头，不打印、不落文档。
 //! 记录纪律：--trial 的行标记 trial=true，只校准管道，不进决策（50-方案 §3）。
-//! 可靠性纪律：端点 429/5xx 由 harness HTTP 层指数退避重试（≤5 次，尊重 Retry-After），
+//! 可靠性纪律：端点 429/5xx 与传输读超时由 harness HTTP 层指数退避重试（≤5 次，尊重 Retry-After），
 //!           重试耗尽才记 run_failed；结果行带 http_retries 计数，区分供给面抖动与真实失败。
+//! 证据链纪律（D-20，2026-10-20）：swev run 目录重跑按序号递增不覆写（run_dir 字段）；
+//!           结果行带 eval_sha256（判分日志字节指纹）；eval 超时击杀落 EVAL_TIMEOUT_KILLED 标记行；
+//!           glm 档案 key_cmd 首选 bao-agent、escrow 明文路径仅作回退。
 
 use af_credential::{issue_root, RootSpec};
 use af_harness::{
@@ -35,6 +38,38 @@ fn main() {
     if let Err(err) = run() {
         eprintln!("af-bench failed: {err}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// D-20 项 1：run 目录序号按既有同名前缀目录递增，重跑不覆写。
+    #[test]
+    fn next_attempt_index_counts_existing_dirs_only() {
+        let root = std::env::temp_dir().join(format!("af-bench-d20-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let task = "astropy__astropy-12907";
+        let profile = "glm-cp";
+        // 空目录 → 第一跑 a1。
+        assert_eq!(next_attempt_index(&root, task, profile), 1);
+        // 既有 a1/a2 → 下一跑 a3；不匹配前缀的目录（他题/他档案/杂件）不计数。
+        for name in [
+            "swev-astropy__astropy-12907-glm-cp-a1",
+            "swev-astropy__astropy-12907-glm-cp-a2",
+            "swev-astropy__astropy-13033-glm-cp-a1",
+            "swev-astropy__astropy-12907-kimi-k3-a7",
+            "not-a-run-dir",
+        ] {
+            std::fs::create_dir_all(root.join(name)).unwrap();
+        }
+        assert_eq!(next_attempt_index(&root, task, profile), 3);
+        // 垃圾后缀（非数字）必须被忽略，不能打断递增。
+        std::fs::write(root.join("swev-astropy__astropy-12907-glm-cp-aX"), "").unwrap();
+        assert_eq!(next_attempt_index(&root, task, profile), 3);
+        let _ = std::fs::remove_dir_all(&root);
     }
 }
 
@@ -170,7 +205,9 @@ fn profile(name: &str) -> Result<Profile, String> {
                 temperature_milli: None,
                 top_p_milli: None,
             },
-            key_cmd: "RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key",
+            key_cmd: // D-20 项 6：key_cmd 抗单点——首选 bao-agent（无 escrow 明文 root-token 依赖），
+                // bao-agent 不可用（缺失/锁死/网络）时回退旧 escrow 路径，两条路都是"命令名+路径"，零明文落码。
+                "K=$(bao-agent get company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 --field api_key --reveal 2>/dev/null) && [ -n \"$K\" ] && printf '%s' \"$K\" || { RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key; }",
         }),
         "glm-cp-max" => Ok(Profile {
             endpoint: EndpointSpec {
@@ -185,7 +222,8 @@ fn profile(name: &str) -> Result<Profile, String> {
                 temperature_milli: None,
                 top_p_milli: None,
             },
-            key_cmd: "RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key",
+            key_cmd: // 同 glm-cp：bao-agent 首选 + escrow 回退（D-20 项 6）。
+                "K=$(bao-agent get company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 --field api_key --reveal 2>/dev/null) && [ -n \"$K\" ] && printf '%s' \"$K\" || { RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key; }",
         }),
         "step-5" => Ok(Profile {
             endpoint: EndpointSpec {
@@ -549,6 +587,28 @@ fn status_label(status: &RunStatus) -> String {
     }
 }
 
+/// D-20 项 1（判分复核实证的假阴性根因修复）：swev run 目录唯一化。
+/// 旧实现固定 `swev-<task>-<profile>-a1` 且先 `remove_dir_all`——同一 --out 重跑同题时
+/// 第二跑静默覆写第一跑的 eval.log/agent.diff（step5-12907 假阴性即此机理）。
+/// 新实现：后缀序号按既有同名前缀目录的最大序号 +1 递增（a1/a2/…），绝不删除旧目录。
+fn next_attempt_index(runs_root: &Path, task_id: &str, profile: &str) -> u32 {
+    let prefix = format!("swev-{task_id}-{profile}-a");
+    let mut max = 0u32;
+    if let Ok(entries) = std::fs::read_dir(runs_root) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let lossy = name.to_string_lossy();
+            let Some(rest) = lossy.strip_prefix(&prefix) else {
+                continue;
+            };
+            if let Ok(n) = rest.parse::<u32>() {
+                max = max.max(n);
+            }
+        }
+    }
+    max + 1
+}
+
 #[allow(clippy::too_many_lines)]
 fn run() -> Result<(), String> {
     let args = Args::parse()?;
@@ -600,6 +660,9 @@ fn run_swev(args: &Args) -> Result<(), String> {
                     "trial": args.trial,
                     "reward": Value::Null,
                     "status": "setup_failed",
+                    // D-20：供给失败行也保持字段齐备（run 目录未建/eval 未跑 → null）。
+                    "run_dir": Value::Null,
+                    "eval_sha256": Value::Null,
                     "verifier_note": err.chars().take(300).collect::<String>(),
                 });
                 use std::io::Write as _;
@@ -623,17 +686,17 @@ fn run_swev(args: &Args) -> Result<(), String> {
         .map_err(|err| format!("issue root: {err}"))?;
         let order = bench_order(&task.instance_id)?;
         let task_started = Instant::now();
-        // fix2：attempt 恒 1（审计 D5：关闭 gate 反馈重试，榜单口径单次采样）；
-        // gate 只记账（no_patch/test_edit 落行）。单次迭代的 for 保留 attempt 命名与
-        // run 目录 -a1 后缀（历史结果行字段兼容）。
+        // fix2（审计 D5）：gate 反馈重试关闭，榜单口径每 run 单次采样；gate 只记账
+        // （no_patch/test_edit 落行）。D-20 起 attempt 命名沿用为 run 目录序号（重跑递增）。
         let mut gate = "ok".to_string();
-        // HTTP 层退避重试计数（429/5xx 供给面瞬断），累计进结果行。
+        // HTTP 层退避重试计数（429/5xx/传输读超时等供给面瞬断），累计进结果行。
         let mut http_retries: u64 = 0;
         let report;
         let run_dir;
-        // fix2：单次执行块（attempt 恒 1，审计 D5 关闭 gate 反馈重试）。
+        // D-20 项 1：attempt = run 目录序号（重跑递增防覆写，见 next_attempt_index）；
+        // gate 反馈重试仍关闭（审计 D5），结果行 attempts 字段恒 1 的口径不变。
+        let attempt = next_attempt_index(&runs_root, &task.instance_id, &args.profile);
         'run: {
-            let attempt: u32 = 1;
             let env_for_tool = env_cell.clone();
             let recent = std::sync::Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
             let recent_for_tool = recent.clone();
@@ -698,7 +761,7 @@ fn run_swev(args: &Args) -> Result<(), String> {
                 "swev-{}-{}-a{}",
                 task.instance_id, args.profile, attempt
             ));
-            let _ = std::fs::remove_dir_all(&attempt_dir);
+            // D-20 项 1：只新建、不删除——旧目录是判分复核的证据，绝不覆写。
             std::fs::create_dir_all(&attempt_dir)
                 .map_err(|err| format!("建 run 目录失败: {err}"))?;
             // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻 run 现取（401 竞态实证）。
@@ -764,6 +827,9 @@ fn run_swev(args: &Args) -> Result<(), String> {
                         "reward": Value::Null,
                         "status": "run_failed",
                         "scaffold": "v3",
+                        // D-20 项 1：run_failed 行也记实际目录（trail 留在现场供复核）。
+                        "run_dir": attempt_dir.display().to_string(),
+                        "eval_sha256": Value::Null,
                         "http_retries": http_retries,
                         "verifier_note": err.to_string().chars().take(300).collect::<String>(),
                     });
@@ -782,7 +848,9 @@ fn run_swev(args: &Args) -> Result<(), String> {
         }
         let agent_wall_ms = task_started.elapsed().as_millis() as u64;
         let task_json = args.data_root.join(format!("{}.json", task.instance_id));
-        let (resolved, note) = swev::verify(&args.host, &env_cell, task, &run_dir, &task_json);
+        // D-20 项 2：判分时同步取 eval.log sha256，结果行可回溯到产生 resolved 的确切日志字节。
+        let (resolved, note, eval_sha256) =
+            swev::verify(&args.host, &env_cell, task, &run_dir, &task_json);
         env_cell.cleanup();
         if resolved == Some(true) {
             pass += 1;
@@ -802,6 +870,10 @@ fn run_swev(args: &Args) -> Result<(), String> {
             // reasoning 档位按审计 §6.A.7 显式声明（保持 Off = mini 默认不发 thinking）。
             "scaffold": "v3",
             "reasoning_tier": "off",
+            // D-20 项 1：实际 run 目录（重跑按序号递增，不再同名覆写）。
+            "run_dir": run_dir.display().to_string(),
+            // D-20 项 2：eval.log sha256（判分时计算，判分复核可逐字节对账）。
+            "eval_sha256": eval_sha256,
             "gate": gate,
             // fix2：attempt 恒 1（审计 D5 关闭 gate 重试），字段保留供历史行兼容。
             "attempts": 1,

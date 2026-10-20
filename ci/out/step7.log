@@ -78,6 +78,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
          │   └── rfc6979 v0.4.0
          │       └── ecdsa v0.16.9 (*)
          ├── sha2 v0.10.9
+         │   ├── af-bench v0.1.0 (*)
          │   ├── af-effect-gateway v0.1.0 (*)
          │   ├── af-workorder v0.1.0 (*)
          │   ├── ed25519-dalek v2.2.0 (*)
@@ -131,6 +132,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
      │               └── cedar-policy-formatter v4.14.0
      │                   └── cedar-policy v4.14.0 (*)
      ├── sha2 v0.10.9
+     │   ├── af-bench v0.1.0 (*)
      │   ├── af-effect-gateway v0.1.0 (*)
      │   ├── af-workorder v0.1.0 (*)
      │   ├── ed25519-dalek v2.2.0 (*)
@@ -282,6 +284,7 @@ warning[duplicate]: found 2 duplicate entries for crate 'digest'
      │   └── rfc6979 v0.4.0
      │       └── ecdsa v0.16.9 (*)
      ├── sha2 v0.10.9
+     │   ├── af-bench v0.1.0 (*)
      │   ├── af-effect-gateway v0.1.0 (*)
      │   ├── af-workorder v0.1.0 (*)
      │   ├── ed25519-dalek v2.2.0 (*)
@@ -404,6 +407,12 @@ warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
           ├── proptest v1.12.0 (*)
           └── rusty-fork v0.3.1
               └── proptest v1.12.0 (*)
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
+   │
+25 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
     ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:133:1
@@ -553,12 +562,6 @@ warning[duplicate]: found 3 duplicate entries for crate 'itertools'
       │   └── cedar-policy-formatter v4.14.0
       │       └── cedar-policy v4.14.0 (*)
       └── cedar-policy-formatter v4.14.0 (*)
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/deny.toml:25:4
-   │
-25 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
     ┌─ /home/pan-ding/workspace/agent黑灯工厂/af/Cargo.lock:208:1
@@ -906,9 +909,10 @@ warning[duplicate]: found 2 duplicate entries for crate 'sha2'
           ├── af-harness v0.1.0 (*)
           └── af-sandbox v0.1.0 (*)
     ├ sha2 v0.10.9
+      ├── af-bench v0.1.0
       ├── af-effect-gateway v0.1.0
       │   └── af-harness v0.1.0
-      │       └── af-bench v0.1.0
+      │       └── af-bench v0.1.0 (*)
       ├── af-workorder v0.1.0
       │   ├── af-bench v0.1.0 (*)
       │   ├── af-effect-gateway v0.1.0 (*)

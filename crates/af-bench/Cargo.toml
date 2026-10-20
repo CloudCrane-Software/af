@@ -11,8 +11,11 @@ af-harness = { path = "../af-harness" }
 af-meter = { path = "../af-meter" }
 af-stop = { path = "../af-stop" }
 af-workorder = { path = "../af-workorder" }
+# 判分证据链（D-20 项 2）：结果行带 eval.log sha256。sha2 0.10 已是树内依赖
+# （af-effect-gateway/af-engine 在用），不引入新第三方 crate，版本钉锁内现值不升不降。
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = "=0.10.9"
 thiserror = { workspace = true }
 
 [lints]

@@ -2,6 +2,10 @@
 //!
 //! 判分链：agent 在 /testbed 改代码 → git diff 取证 → 容器内执行官方 eval_script
 //! （内嵌 test_patch 与 START/END 测试段）→ 本地 swev-judge.py（swebench 4.1 官方解析器）裁决。
+//!
+//! D-20 证据链加固（2026-10-20，可靠性修复，不改判分语义）：
+//! - eval 桥接 timeout 击杀时在 eval.log 末尾写显式标记行 `EVAL_TIMEOUT_KILLED <秒数>`；
+//! - 判分时计算 eval.log sha256，随结果行落 eval_sha256 字段（判分复核可逐字节对账）。
 
 use serde::Deserialize;
 use std::path::Path;
@@ -130,30 +134,32 @@ pub fn diff_touches_tests(diff: &str) -> Vec<String> {
 
 /// 判分：取证 diff → 写入 eval 脚本 → 容器内执行 → 本地官方判分。
 /// `task_json_path` 是 swev-prep 产出的原始任务包（判分器全字段来源）。
-/// 返回 (resolved, note)。
+/// 返回 (resolved, note, eval_sha256)——eval_sha256 是判分日志的字节指纹
+/// （D-20 项 2：判分可追溯；桥接/判分早期失败时为 None）。
 pub fn verify(
     host: &str,
     env: &tb::TbEnv,
     task: &SwevTask,
     work_dir: &Path,
     task_json_path: &Path,
-) -> (Option<bool>, String) {
+) -> (Option<bool>, String, Option<String>) {
     let _agent_diff = match capture_diff(host, env, work_dir) {
         Ok(d) => d,
-        Err(err) => return (None, err),
+        Err(err) => return (None, err, None),
     };
     let diff_path = work_dir.join("agent.diff");
     let eval_path = work_dir.join("eval.sh");
     if std::fs::write(&eval_path, &task.eval_script).is_err() {
-        return (None, "写 eval.sh 失败".into());
+        return (None, "写 eval.sh 失败".into(), None);
     }
     // eval 脚本经 stdin 喂给容器 bash，避免 docker cp 往返。
     // stderr 必须并入日志：set -x 轨迹与 START/END 标记走 stderr，官方判分需要。
     // host == "local" 时免 ssh 一跳，其余语义一致。
     // fix2 对齐（审计 D9/§6.A.8）：eval 超时 1200 → 1800s（官方 run_evaluation --timeout 默认）。
+    const EVAL_TIMEOUT_SEC: u32 = 1800;
     let run_cmd = format!("docker exec -i {} bash -s 2>&1", env.container);
     let log_path = work_dir.join("eval.log");
-    let bridge = format!("timeout 1800 {run_cmd}");
+    let bridge = format!("timeout {EVAL_TIMEOUT_SEC} {run_cmd}");
     let mut bridge_cmd = if host == "local" {
         let mut cmd = Command::new("bash");
         cmd.arg("-c").arg(&bridge);
@@ -172,9 +178,24 @@ pub fn verify(
         ))
         .stderr(std::process::Stdio::null())
         .status();
-    if status.is_err() {
-        return (None, "eval 执行桥接失败".into());
+    let mut eval_timed_out = false;
+    match status {
+        Err(err) => return (None, format!("eval 执行桥接失败: {err}"), None),
+        Ok(st) => {
+            if st.code() == Some(124) {
+                // D-20 项 4：timeout 击杀显式化——在日志末尾落标记行，
+                // 不再留无标记截断日志（判分复核据此与"截断/失败日志"灰区区分）。
+                eval_timed_out = true;
+                let marker = format!("\nEVAL_TIMEOUT_KILLED {EVAL_TIMEOUT_SEC}\n");
+                if let Ok(mut log) = std::fs::OpenOptions::new().append(true).open(&log_path) {
+                    use std::io::Write as _;
+                    let _ = log.write_all(marker.as_bytes());
+                }
+            }
+        }
     }
+    // D-20 项 2：判分时计算日志指纹（含超时标记行——哈希的是判分器实际读到的字节）。
+    let eval_sha256 = sha256_hex(&log_path);
     let judge = Command::new("/home/pan-ding/swev-venv/bin/python")
         .arg("/home/pan-ding/workspace/agent黑灯工厂/tools/swev-judge.py")
         .arg(task_json_path)
@@ -187,7 +208,22 @@ pub fn verify(
             match serde_json::from_str::<serde_json::Value>(text.trim()) {
                 Ok(row) => {
                     let resolved = row.get("resolved").and_then(serde_json::Value::as_bool);
-                    (resolved, format!("judge: {}", text.trim()))
+                    // D-20 项 3 消费端：judge JSON 带 log_parsed 时在 note 前缀如实透传
+                    // （截断日志的判 false 与"真失败"不再同貌）。
+                    let parsed_note = match row.get("log_parsed") {
+                        Some(serde_json::Value::Bool(false)) => "[log_parsed=false] ".to_string(),
+                        _ => String::new(),
+                    };
+                    let timeout_note = if eval_timed_out {
+                        format!("eval 超时击杀（已落标记 {EVAL_TIMEOUT_SEC}s）；")
+                    } else {
+                        String::new()
+                    };
+                    (
+                        resolved,
+                        format!("{timeout_note}{parsed_note}judge: {}", text.trim()),
+                        eval_sha256,
+                    )
                 }
                 Err(err) => (
                     None,
@@ -195,6 +231,7 @@ pub fn verify(
                         "judge 输出不是 JSON: {err}: {}",
                         &text[..text.len().min(200)]
                     ),
+                    eval_sha256,
                 ),
             }
         }
@@ -208,9 +245,18 @@ pub fn verify(
                     .take(300)
                     .collect::<String>()
             ),
+            eval_sha256,
         ),
-        Err(err) => (None, format!("judge 启动失败: {err}")),
+        Err(err) => (None, format!("judge 启动失败: {err}"), eval_sha256),
     }
+}
+
+/// eval.log 的 sha256 十六进制串；读不到文件时 None（D-20 项 2）。
+fn sha256_hex(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let data = std::fs::read(path).ok()?;
+    let digest = Sha256::digest(&data);
+    Some(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn tb_ssh(host: &str, script: &str, timeout_sec: u32) -> Result<(bool, String), String> {

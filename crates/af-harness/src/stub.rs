@@ -1,6 +1,7 @@
 //! 本 crate 的 HTTP/1.1 stub。只听 `127.0.0.1`，按队列回放响应。
 //!
-//! 测试用它代替供应商。不睡眠：`Drop` 先置关闭标志，再连接自己把 `accept` 唤醒。
+//! 测试用它代替供应商。每连接一线程（stall 响应按住一条连接时不得堵住其他连接）；
+//! `Drop` 先置关闭标志，再连接自己把 `accept` 唤醒。
 
 use std::collections::VecDeque;
 use std::io::{Read, Write};
@@ -18,6 +19,8 @@ pub struct StubResponse {
     pub body: String,
     /// 限流测试用：响应携带 `Retry-After` 头（秒）。
     pub retry_after: Option<u64>,
+    /// 读超时测试用：先按住连接不回任何字节（秒），模拟服务端读挂起。
+    pub stall_secs: Option<u64>,
 }
 
 impl StubResponse {
@@ -27,6 +30,7 @@ impl StubResponse {
             content_type: "application/json".into(),
             body: body.into(),
             retry_after: None,
+            stall_secs: None,
         }
     }
 
@@ -36,11 +40,28 @@ impl StubResponse {
             content_type: "text/event-stream".into(),
             body: body.into(),
             retry_after: None,
+            stall_secs: None,
+        }
+    }
+
+    /// 一条按住连接不回字节的响应（读超时重试测试用）。
+    pub fn stalled(status: u16) -> Self {
+        Self {
+            status,
+            content_type: "application/json".into(),
+            body: String::new(),
+            retry_after: None,
+            stall_secs: Some(1),
         }
     }
 
     pub fn with_retry_after(mut self, secs: u64) -> Self {
         self.retry_after = Some(secs);
+        self
+    }
+
+    pub fn with_stall(mut self, secs: u64) -> Self {
+        self.stall_secs = Some(secs);
         self
     }
 }
@@ -122,27 +143,48 @@ fn serve(
         if shutdown.load(Ordering::SeqCst) {
             break;
         }
-        let Ok((mut stream, _)) = listener.accept() else {
+        let Ok((stream, _)) = listener.accept() else {
             break;
         };
         if shutdown.load(Ordering::SeqCst) {
             break;
         }
-        let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
-        let Ok(Some(raw)) = read_request(&mut stream) else {
-            continue;
-        };
-        requests
-            .lock()
-            .unwrap_or_else(|err| err.into_inner())
-            .push(parse_request(&raw));
-        let response = script
-            .lock()
-            .unwrap_or_else(|err| err.into_inner())
-            .pop_front()
-            .unwrap_or_else(|| StubResponse::json(500, r#"{"error":"stub script exhausted"}"#));
-        let _ = write_response(&mut stream, &response);
+        let flag = Arc::clone(&shutdown);
+        let recorded = Arc::clone(&requests);
+        let queued = Arc::clone(&script);
+        // 每连接一线程：stall 响应按住一条连接时不得堵住后续连接的回放
+        // （读超时重试测试的第二次请求要能立即被服务）。
+        thread::spawn(move || handle_conn(stream, flag, recorded, queued));
     }
+}
+
+fn handle_conn(
+    mut stream: TcpStream,
+    shutdown: Arc<AtomicBool>,
+    requests: Arc<Mutex<Vec<RecordedRequest>>>,
+    script: Arc<Mutex<VecDeque<StubResponse>>>,
+) {
+    if shutdown.load(Ordering::SeqCst) {
+        return;
+    }
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let Ok(Some(raw)) = read_request(&mut stream) else {
+        return;
+    };
+    requests
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+        .push(parse_request(&raw));
+    let response = script
+        .lock()
+        .unwrap_or_else(|err| err.into_inner())
+        .pop_front()
+        .unwrap_or_else(|| StubResponse::json(500, r#"{"error":"stub script exhausted"}"#));
+    if let Some(secs) = response.stall_secs {
+        // 按住连接不吐字节：客户端（配置了整体超时）会在这里撞上读超时。
+        thread::sleep(Duration::from_secs(secs));
+    }
+    let _ = write_response(&mut stream, &response);
 }
 
 struct RawRequest {

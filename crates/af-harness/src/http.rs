@@ -2,10 +2,11 @@
 //!
 //! 客户端不读 `HTTP_PROXY` / `ALL_PROXY`。测试打 `127.0.0.1` 的 stub 时不能被环境代理拐走。
 //!
-//! 供给面瞬断（429/5xx）在本层指数退避重试，重试耗尽才把非 2xx 交回协议层——
+//! 供给面瞬断（429/5xx/传输读超时）在本层指数退避重试，重试耗尽才把非 2xx 交回协议层——
 //! 这是可靠性修复：让限流风暴下的任务等到位，而不是直接记 run_failed 浪费轮次。
 
 use crate::error::{redact, Error, Result};
+use std::error::Error as StdError;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -79,9 +80,15 @@ impl UreqClient {
     /// 测试注入短等待的构造口（仅测试构建存在，避免 dead_code 基线噪声）。
     #[cfg(test)]
     pub(crate) fn with_retry(retry: RetryConfig) -> Self {
+        Self::with_retry_and_timeout(retry, Duration::from_secs(10))
+    }
+
+    /// 测试注入短等待与短客户端超时的构造口（读超时重试端到端测试用）。
+    #[cfg(test)]
+    pub(crate) fn with_retry_and_timeout(retry: RetryConfig, timeout: Duration) -> Self {
         Self::build(
             ureq::AgentBuilder::new()
-                .timeout(Duration::from_secs(10))
+                .timeout(timeout)
                 .redirects(0)
                 .build(),
             retry,
@@ -111,6 +118,33 @@ impl Default for UreqClient {
 /// 429/5xx 是供给面瞬断，值得退避；4xx 其余是请求本身的问题，重试只会烧时间。
 fn retryable(status: u16) -> bool {
     matches!(status, 429 | 500 | 502 | 503 | 504)
+}
+
+/// 传输层读超时与 429/5xx 同属供给面瞬断，纳入同一退避集（D-20 项 5：2026-10-20
+/// 瞬态网络抖动曾把可成功的 run 浪费成 run_failed）。ureq 2.12 的 ErrorKind 没有专门
+/// 的超时变体：读超时（消息形如 "timed out reading response"）以
+/// io::Error(kind=TimedOut) 挂在 source 链上传播，故沿链下探判定，另留消息兜底。
+/// 其余传输错误（DNS/连接拒绝/TLS）重试无益，保持立即失败。
+fn retryable_transport(err: &ureq::Transport) -> bool {
+    if io_source_is_timed_out(err.source()) {
+        return true;
+    }
+    err.to_string().contains("timed out")
+}
+
+/// source 链上任一环是 io::Error(kind=TimedOut) 即判为传输超时。
+fn io_source_is_timed_out(source: Option<&(dyn StdError + 'static)>) -> bool {
+    let mut current = source;
+    while let Some(err) = current {
+        if err
+            .downcast_ref::<std::io::Error>()
+            .is_some_and(|io| io.kind() == std::io::ErrorKind::TimedOut)
+        {
+            return true;
+        }
+        current = err.source();
+    }
+    false
 }
 
 /// Retry-After 只认秒数形式（供应商限流均为此形式）；HTTP-date 形式回落指数退避。
@@ -164,7 +198,13 @@ impl HttpClient for UreqClient {
                     (status, text, after)
                 }
                 Err(ureq::Error::Transport(err)) => {
-                    return Err(Error::Transport(redact(&err.to_string(), secret)));
+                    if !retryable_transport(&err) || retries >= self.retry.max_retries {
+                        return Err(Error::Transport(redact(&err.to_string(), secret)));
+                    }
+                    std::thread::sleep(backoff_delay(&self.retry, retries));
+                    retries += 1;
+                    self.retries_done.fetch_add(1, Ordering::Relaxed);
+                    continue;
                 }
             };
             if !retryable(status) || retries >= self.retry.max_retries {
@@ -264,5 +304,55 @@ mod tests {
         assert!(second >= Duration::from_secs(8) && second <= Duration::from_secs(12));
         let huge = backoff_delay(&config, 30);
         assert!(huge <= config.max_delay * 12 / 10);
+    }
+
+    #[test]
+    fn transport_timeout_is_detected_by_io_source_kind() {
+        // ureq 2.12 读超时的实际形态：io::Error(kind=TimedOut) 挂在 source 链上。
+        let timeout_io =
+            std::io::Error::new(std::io::ErrorKind::TimedOut, "timed out reading response");
+        assert!(io_source_is_timed_out(Some(&timeout_io)));
+        // 深一层嵌套也要能探到。
+        let wrapped: Box<dyn StdError + Send + Sync> =
+            Box::new(std::io::Error::new(std::io::ErrorKind::TimedOut, "nested"));
+        assert!(io_source_is_timed_out(Some(&*wrapped)));
+        // 非超时 io 错误与空 source 链都不判超时。
+        let refused =
+            std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "Connection refused");
+        assert!(!io_source_is_timed_out(Some(&refused)));
+        assert!(!io_source_is_timed_out(None));
+    }
+
+    #[test]
+    fn retries_read_timeout_then_succeeds() {
+        // 端到端（D-20 项 5）：服务端按住连接不吐字节 → 客户端读超时 → 退避重试 → 次轮 200。
+        let stub = StubServer::spawn().unwrap();
+        let client = UreqClient::with_retry_and_timeout(
+            RetryConfig {
+                base_delay: Duration::from_millis(1),
+                max_delay: Duration::from_millis(5),
+                max_retries: 5,
+            },
+            Duration::from_millis(500),
+        );
+        stub.push(StubResponse::stalled(200).with_stall(2));
+        stub.push(StubResponse::json(200, r#"{"ok":true}"#));
+        let response = client.post_json(&stub.url(), &[], "{}", "").unwrap();
+        assert_eq!(response.status, 200);
+        assert_eq!(response.retries, 1);
+        assert_eq!(client.retries_done(), 1);
+        assert_eq!(stub.requests().len(), 2);
+    }
+
+    #[test]
+    fn does_not_retry_non_timeout_transport_errors() {
+        // 连接拒绝类传输错误不算瞬断：立即失败，零重试（退避集不得过度扩张）。
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        drop(listener);
+        let client = fast_client();
+        let err = client.post_json(&url, &[], "{}", "").unwrap_err();
+        assert!(matches!(err, Error::Transport(_)), "got {err:?}");
+        assert_eq!(client.retries_done(), 0);
     }
 }
