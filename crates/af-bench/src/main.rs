@@ -219,6 +219,9 @@ fn profile(name: &str) -> Result<Profile, String> {
             endpoint: EndpointSpec {
                 protocol: Protocol::OpenaiChatCompletions,
                 // anolis ollama（2×V100S-32G）经 ssh 隧道暴露在本机 11435。
+                // 读超时不在档案级配置：走 harness 全局（UreqClient 默认 600s，
+                // AF_HARNESS_HTTP_TIMEOUT_SEC 可覆盖）——30B 全思考预算单响应可超分钟级，
+                // 2026-10-20 d3 臂 run_failed 系旧二进制（30s）所致，见 commit 96d7d57。
                 base_url: "http://127.0.0.1:11435/v1".into(),
                 model: "qwen3-coder-30b".into(),
                 key_ref: "ollama-local".into(),
