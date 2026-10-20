@@ -121,9 +121,16 @@ pub fn complete_once(
         .collect();
     let response = client.post_json(&url, &header_refs, &body_text, secret)?;
     if !(200..300).contains(&response.status) {
+        let mut message = redact(&truncate(&response.body), secret);
+        if response.retries > 0 {
+            message = format!(
+                "[HTTP 层退避重试 {} 次后仍失败] {message}",
+                response.retries
+            );
+        }
         return Err(Error::Endpoint {
             status: response.status,
-            message: redact(&truncate(&response.body), secret),
+            message,
         });
     }
     let message = if endpoint.stream {
@@ -994,5 +1001,49 @@ mod tests {
         let text = err.to_string();
         assert!(!text.contains("sk-test-secret"), "{text}");
         assert!(matches!(err, Error::Endpoint { status: 401, .. }));
+    }
+
+    fn fast_client() -> UreqClient {
+        UreqClient::with_retry(crate::http::RetryConfig {
+            base_delay: std::time::Duration::from_millis(1),
+            max_delay: std::time::Duration::from_millis(5),
+            max_retries: 5,
+        })
+    }
+
+    #[test]
+    fn complete_once_weathers_a_429_storm_via_backoff() {
+        let stub = StubServer::spawn().unwrap();
+        let client = fast_client();
+        let mut spec = decode_spec(crate::EXAMPLE_SPEC_JSON).unwrap();
+        spec.endpoint.base_url = stub.url();
+        for _ in 0..3 {
+            stub.push(StubResponse::json(429, r#"{"error":{"code":"1302"}}"#));
+        }
+        stub.push(StubResponse::json(
+            200,
+            r#"{"choices":[{"message":{"role":"assistant","content":"撑过去了"},"finish_reason":"stop"}]}"#,
+        ));
+        let transcript = vec![TranscriptItem::User { text: "go".into() }];
+        let message = complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap();
+        assert_eq!(message.text, "撑过去了");
+        assert_eq!(stub.requests().len(), 4);
+    }
+
+    #[test]
+    fn exhausted_retries_are_named_in_the_endpoint_error() {
+        let stub = StubServer::spawn().unwrap();
+        let client = fast_client();
+        let mut spec = decode_spec(crate::EXAMPLE_SPEC_JSON).unwrap();
+        spec.endpoint.base_url = stub.url();
+        for _ in 0..6 {
+            stub.push(StubResponse::json(429, "账户限流 1302"));
+        }
+        let transcript = vec![TranscriptItem::User { text: "go".into() }];
+        let err = complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap_err();
+        let text = err.to_string();
+        assert!(matches!(err, Error::Endpoint { status: 429, .. }));
+        assert!(text.contains("退避重试 5 次后仍失败"), "{text}");
+        assert_eq!(stub.requests().len(), 6);
     }
 }

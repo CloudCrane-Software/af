@@ -200,6 +200,11 @@ impl Opened {
         self.status
     }
 
+    /// 本 Run 到目前为止 HTTP 层累计的退避重试次数（429/5xx 供给面瞬断观测口径）。
+    pub fn http_retries(&self) -> u64 {
+        self.http.retries_done()
+    }
+
     /// 启动或续跑。终态 Run 直接返回已落库的报告。
     pub fn run(&self, launch: Launch<'_>) -> Result<RunReport> {
         launch.spec.validate()?;

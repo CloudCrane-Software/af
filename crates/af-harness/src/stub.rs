@@ -16,6 +16,8 @@ pub struct StubResponse {
     pub status: u16,
     pub content_type: String,
     pub body: String,
+    /// 限流测试用：响应携带 `Retry-After` 头（秒）。
+    pub retry_after: Option<u64>,
 }
 
 impl StubResponse {
@@ -24,6 +26,7 @@ impl StubResponse {
             status,
             content_type: "application/json".into(),
             body: body.into(),
+            retry_after: None,
         }
     }
 
@@ -32,7 +35,13 @@ impl StubResponse {
             status: 200,
             content_type: "text/event-stream".into(),
             body: body.into(),
+            retry_after: None,
         }
+    }
+
+    pub fn with_retry_after(mut self, secs: u64) -> Self {
+        self.retry_after = Some(secs);
+        self
     }
 }
 
@@ -218,10 +227,15 @@ fn parse_request(raw: &RawRequest) -> RecordedRequest {
 
 fn write_response(stream: &mut TcpStream, response: &StubResponse) -> std::io::Result<()> {
     let bytes = response.body.as_bytes();
+    let retry_after = response
+        .retry_after
+        .map(|secs| format!("Retry-After: {secs}\r\n"))
+        .unwrap_or_default();
     let head = format!(
-        "HTTP/1.1 {} OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        "HTTP/1.1 {} OK\r\nContent-Type: {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n",
         response.status,
         response.content_type,
+        retry_after,
         bytes.len()
     );
     stream.write_all(head.as_bytes())?;

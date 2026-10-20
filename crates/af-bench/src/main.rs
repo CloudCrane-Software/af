@@ -7,6 +7,8 @@
 //!
 //! 密钥纪律：明文只从解析器命令出来进请求头，不打印、不落文档。
 //! 记录纪律：--trial 的行标记 trial=true，只校准管道，不进决策（50-方案 §3）。
+//! 可靠性纪律：端点 429/5xx 由 harness HTTP 层指数退避重试（≤5 次，尊重 Retry-After），
+//!           重试耗尽才记 run_failed；结果行带 http_retries 计数，区分供给面抖动与真实失败。
 
 use af_credential::{issue_root, RootSpec};
 use af_harness::{
@@ -573,6 +575,8 @@ fn run_swev(args: &Args) -> Result<(), String> {
         let mut attempt: u32 = 1;
         let mut gate = "ok".to_string();
         let mut gate_feedback = String::new();
+        // HTTP 层退避重试计数（429/5xx 供给面瞬断），跨 attempt 累计进结果行。
+        let mut http_retries: u64 = 0;
         let report;
         let run_dir;
         loop {
@@ -661,6 +665,7 @@ fn run_swev(args: &Args) -> Result<(), String> {
                 breakpoint: af_harness::Breakpoint::None,
             }) {
                 Ok(r) => {
+                    http_retries += opened.http_retries();
                     let diff =
                         swev::capture_diff(&args.host, &env_cell, &attempt_dir).unwrap_or_default();
                     if attempt < 2 {
@@ -686,6 +691,7 @@ fn run_swev(args: &Args) -> Result<(), String> {
                     break;
                 }
                 Err(err) => {
+                    http_retries += opened.http_retries();
                     env_cell.cleanup();
                     infra += 1;
                     let row = json!({
@@ -696,6 +702,7 @@ fn run_swev(args: &Args) -> Result<(), String> {
                         "reward": Value::Null,
                         "status": "run_failed",
                         "scaffold": "v2",
+                        "http_retries": http_retries,
                         "verifier_note": err.to_string().chars().take(300).collect::<String>(),
                     });
                     use std::io::Write as _;
@@ -731,6 +738,7 @@ fn run_swev(args: &Args) -> Result<(), String> {
             "scaffold": "v2",
             "gate": gate,
             "attempts": attempt,
+            "http_retries": http_retries,
             "turns": report.turns,
             "model_calls": report.model_calls,
             "tokens": {
@@ -888,6 +896,7 @@ fn run_tb(args: &Args) -> Result<(), String> {
                     "trial": args.trial,
                     "reward": Value::Null,
                     "status": "run_failed",
+                    "http_retries": opened.http_retries(),
                     "verifier_note": err.to_string().chars().take(300).collect::<String>(),
                 });
                 use std::io::Write as _;
@@ -918,6 +927,7 @@ fn run_tb(args: &Args) -> Result<(), String> {
             "trial": args.trial,
             "reward": reward,
             "status": status_label(&report.status),
+            "http_retries": opened.http_retries(),
             "turns": report.turns,
             "model_calls": report.model_calls,
             "tokens": {
@@ -1056,6 +1066,7 @@ fn run_injec(args: &Args) -> Result<(), String> {
             "injection_success": outcome.injection_success,
             "user_tool_called": outcome.user_tool_called,
             "status": status_label(&report.status),
+            "http_retries": opened.http_retries(),
             "turns": report.turns,
             "model_calls": report.model_calls,
             "tokens": {
