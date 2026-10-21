@@ -98,6 +98,27 @@ pub struct TbEnv {
     pub workdir: String,
 }
 
+// ---- 容器资源护栏（2026-10-21 运营者指令：既要吃满资源，又不能把机器跑死）----
+// 事故背景：anolis（16C/125G）10-21 因"测评容器无内存上限 + 无 swap"耗尽假死，
+// 运营者硬重启两次。此后 af-bench 在每个 docker 宿主创建的每个容器都带
+// --memory/--pids-limit。口径：上限是天花板不是预留——实测单容器 agent 期
+// 30-90MiB、判分期峰值 ~889MiB（本地臂 423 点采样），正常负载远低于此；
+// 上限只为单容器失控（内存泄漏 / fork 炸弹）时不拖垮整机。
+// 校准=按 anolis 125G×调度器并发度（factory-sched HOST_LIMITS anolis=14 臂齐发）：
+//   agent 容器 6g×14=84G + 宿主系统与在役 ollama 30B（~18G）后仍留 ~19G 余量；
+//   TB 任务/验证器容器 2g×14=28G（TB 为轻量挑战，实测峰值 <1G）。
+// 本代际（fix2）判分在 agent 容器内原地执行（docker exec 喂官方 eval_script），
+// 没有 fix3 的独立干净判分容器——判分负载随 agent 容器 6g/512 封顶，故不设
+// 判分容器常量（4g/256 为 fix3 口径，见 main=f373113，不适用于本代际）。
+// 常量数值与 main 护栏提交逐字一致；只往本代际已有的 docker run 创建点加标志，
+// 不引入任何 fix3 行为。基建修复不改判分语义，结果代号仍 fix2。
+/// swev agent 容器（sweb.eval 镜像，agent 工作与原地判分都在这一个容器里）。
+pub const SWEV_AGENT_CONTAINER_MEM: &str = "6g";
+pub const SWEV_AGENT_CONTAINER_PIDS: &str = "512";
+/// TB 路径全部容器统一口径（任务环境/清卷辅助/验证器容器，均为轻量负载）。
+pub const TB_CONTAINER_MEM: &str = "2g";
+pub const TB_CONTAINER_PIDS: &str = "256";
+
 impl TbEnv {
     /// 建环境与容器。任务目录须已在 anolis:/data/bench/tb/<task>。
     pub fn setup(host: &str, task: &TbTask, profile: &str) -> Result<Self, String> {
@@ -128,6 +149,7 @@ impl TbEnv {
             host,
             &format!(
                 "docker run -d --name {container} \
+                 --memory {TB_CONTAINER_MEM} --pids-limit {TB_CONTAINER_PIDS} \
                  -e HTTPS_PROXY=http://172.17.0.1:8123 \
                  -e HTTP_PROXY=http://172.17.0.1:8123 \
                  -e NO_PROXY=localhost,127.0.0.1,100.64.0.0/10 \
@@ -207,7 +229,7 @@ impl TbEnv {
         let _ = ssh(
             &self.host,
             &format!(
-                "docker run --rm -v {vol}:/vol --entrypoint sh python:3.12-slim -c 'rm -rf /vol/* /vol/.[!.]*; chmod 777 /vol' 2>/dev/null || rm -rf {vol}"
+                "docker run --rm --memory {TB_CONTAINER_MEM} --pids-limit {TB_CONTAINER_PIDS} -v {vol}:/vol --entrypoint sh python:3.12-slim -c 'rm -rf /vol/* /vol/.[!.]*; chmod 777 /vol' 2>/dev/null || rm -rf {vol}"
             ),
             120,
         );
@@ -245,7 +267,7 @@ impl TbEnv {
         let run_log = match ssh(
             &self.host,
             &format!(
-                "docker run --rm -v {vol}/app:/app -v {vol}/logs:/logs {verifier} bash /tests/test.sh"
+                "docker run --rm --memory {TB_CONTAINER_MEM} --pids-limit {TB_CONTAINER_PIDS} -v {vol}/app:/app -v {vol}/logs:/logs {verifier} bash /tests/test.sh"
             ),
             1200,
         ) {
@@ -299,4 +321,21 @@ pub fn bash_tool_decl(workdir: &str) -> Value {
         },
         "effect": "external_once"
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 资源护栏常量必须与运营者校准口径一致（agent 6g/512、TB 2g/256）：
+    /// 防后人误改把护栏改没或改歪（2026-10-21 anolis 无上限容器耗尽事故的固化）。
+    /// 校准推导见常量定义处注释（125G×14 臂 + 宿主/ollama 余量）。
+    /// 本代际判分在 agent 容器内原地执行，无 fix3 独立判分容器（4g/256 不适用）。
+    #[test]
+    fn container_guardrail_constants_match_calibration() {
+        assert_eq!(SWEV_AGENT_CONTAINER_MEM, "6g");
+        assert_eq!(SWEV_AGENT_CONTAINER_PIDS, "512");
+        assert_eq!(TB_CONTAINER_MEM, "2g");
+        assert_eq!(TB_CONTAINER_PIDS, "256");
+    }
 }

@@ -69,8 +69,14 @@ pub fn setup(host: &str, task: &SwevTask, profile: &str) -> Result<tb::TbEnv, St
     };
     // fix2 环境卫生（mini-swe-agent env 块同源）：分页器挂死与进度条/着色噪音
     // 是 SWE 容器高频暗坑，容器级环境变量一次性根治。测量语义变更，计入 fix2。
+    // 资源护栏（2026-10-21，常量与校准注释见 tb 模块）：agent 容器 6g/512。
+    // 基建修复不改判分语义：上限远高于实测峰值（agent 期 30-90MiB）；
+    // 本代际判分在该容器内原地执行，判分负载同受此封顶。
+    let mem = tb::SWEV_AGENT_CONTAINER_MEM;
+    let pids = tb::SWEV_AGENT_CONTAINER_PIDS;
     let script = format!(
         "docker run -d --name {container} \
+         --memory {mem} --pids-limit {pids} \
          {proxy_env} \
          -e PAGER=cat -e MANPAGER=cat -e LESS=-R \
          -e PIP_PROGRESS_BAR=off -e TQDM_DISABLE=1 -e NO_COLOR=1 \
