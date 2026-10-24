@@ -4,15 +4,20 @@
 //! - M1：拒绝式信封 E0001-E0004；七段 AST（全文 `deny_unknown_fields`，构造字段
 //!   解析为结构体）；引用完整性（类型/节点/store/端口）；INV-2 写入串行化
 //!   编译期判定；语义层一次收齐（Report 范式，承 af-graph `validate.rs`）。
-//! - M2（本模块期）：`context.sections` 装配校验（来源可解析/视图策略域/
-//!   配额为正 + 可配置总量上限）+ INV-1 上下文完整性（E2301-E2304、E2401-E2403）。
-//! - M3-M4（INV-3/INV-4 / route 归一化+CEL+topology_selector）不在本模块期范围。
+//! - M2：`context.sections` 装配校验（来源可解析/视图策略域/配额为正 +
+//!   可配置总量上限）+ INV-1 上下文完整性（E2301-E2304、E2401-E2403）。
+//! - M3：INV-3 生成器-验证器分离（直接自环）+ INV-4 评估输入外部化。
+//! - M4（本模块期）：CEL 保守子集静态判定（§1.4，E1051-E1053/E2203）+
+//!   route 归一化（§1.5，E2101-E2103）+ topology_selector 编译期解析语义
+//!   （裁决 §二-1）。
 //!
 //! 权威语法规范：《DSL-语法提案-B》（正本）+ 择优裁决 2026-10-24 §二。
 
+pub mod cel;
 pub mod envelope;
 pub mod error;
 pub mod model;
+pub mod route;
 pub mod shape;
 pub mod validate;
 

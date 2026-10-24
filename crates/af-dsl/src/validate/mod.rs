@@ -57,6 +57,10 @@ pub struct ValidateOptions {
     /// 每节点 `context.sections` 的 quota_tokens 总量上限（policy:none 段按 0
     /// 计入）；None = 不核对总量（默认，§5 语义原样）。
     pub context_quota_cap: Option<u64>,
+    /// 已声明的版本化图/子图名集（M4 起，topology_selector 候选解析用；
+    /// 裁决 §二-1：候选图是包产物，v0.1 单文档不自带声明面——经装载侧
+    /// 注入；默认空集 = 任何候选引用都判未声明）。
+    pub declared_graphs: BTreeSet<String>,
 }
 
 /// 带可配置项的语义校验（一次收齐）。

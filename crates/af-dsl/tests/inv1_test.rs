@@ -60,6 +60,7 @@ fn six_golden_samples_pass_full_m2_validation() {
             &doc,
             &ValidateOptions {
                 context_quota_cap: Some(100_000),
+                ..Default::default()
             },
         );
         assert!(r2.is_ok(), "sample{i}（cap=100000）不应违例：\n{r2}");
@@ -222,6 +223,7 @@ fn total_quota_cap_is_configurable_and_default_off() {
         &doc,
         &ValidateOptions {
             context_quota_cap: Some(1000),
+            ..Default::default()
         },
     );
     assert_eq!(r.codes(), ["E2302"]);
@@ -234,6 +236,7 @@ fn total_quota_cap_is_configurable_and_default_off() {
         &doc,
         &ValidateOptions {
             context_quota_cap: Some(7100),
+            ..Default::default()
         },
     );
     assert!(r2.is_ok(), "恰等上限不应报：\n{r2}");

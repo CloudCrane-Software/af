@@ -47,6 +47,7 @@ dependencies = [
 name = "af-dsl"
 version = "0.1.0"
 dependencies = [
+ "cel-interpreter",
  "serde",
  "serde_json",
  "serde_yaml",
