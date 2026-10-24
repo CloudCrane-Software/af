@@ -7,14 +7,16 @@
 //! - 容器资源护栏常量 ← af-bench tb.rs:101-120（含 2026-10-21 anolis 事故校准注释）；
 //! - `bash_tool_decl` ← af-bench tb.rs:307-324。
 //!
-//! `ssh` 桥接与 `TbEnv` 生命周期（setup/exec/verify/cleanup）不属 P1：
-//! HostBridge 抽象在 P2、TB 单元在 P5（方案 §5）。
+//! `ssh` 桥接已随 P2 收敛为 [`crate::hostbridge::HostBridge`] 真实现（tb.rs:42-64
+//! 与 swev.rs:268-293 合一，行为以 tb.rs:42-64 为准）；`TbEnv` 生命周期
+//! setup/exec/cleanup 挂 bridge 随 P2 搬入；verify（tb.rs:226-292）留 P5 TB 单元。
 //!
 //! 行为逐字节等价：`load_tb_tasks`/`bash_tool_decl`/护栏常量由 tests/p1_comparison.rs
 //! 活源对拍（#[path] 编译 af-bench tb.rs 原文件）；`shell_quote`/`split_rc`/`tail`
 //! 在 af-bench 为私有、无法外部对拍（见 p1_comparison.rs 模块注），以 tests/p1_suite.rs
 //! 黄金值断言固化。
 
+use crate::hostbridge::HostBridge;
 use serde_json::{json, Value};
 use std::path::Path;
 
@@ -123,4 +125,46 @@ pub fn bash_tool_decl(workdir: &str) -> Value {
         },
         "effect": "external_once"
     })
+}
+
+// ---- TbEnv 生命周期（P2 搬入，挂 HostBridge；verify 留 P5 TB 单元）----
+
+/// 任务容器句柄（← af-bench tb.rs:94-99 原样）。
+/// 字段与可见性逐字保留（P5 TB verify 容器链消费 container/task/host）。
+pub struct TbEnv {
+    pub container: String,
+    pub task: String,
+    pub host: String,
+    pub workdir: String,
+}
+
+impl TbEnv {
+    /// 建环境与容器（← af-bench tb.rs:122-171 原样；模块级 `ssh()` 换 `bridge.run()`，
+    /// 命令串与超时逐字节不变）。任务目录须已在 anolis:/data/bench/tb/<task>。
+    pub fn setup(
+        _bridge: &dyn HostBridge,
+        _host: &str,
+        _task: &TbTask,
+        _profile: &str,
+    ) -> Result<Self, String> {
+        unimplemented!("P2 GREEN 落位：tb.rs:124-171 setup（RED 先行，tests/p2_bridge.rs）");
+    }
+
+    /// 任务工作目录（TB=/app，SWE-V=/testbed）——bash 工具每条命令都先 cd 到这里。
+    /// ← af-bench tb.rs:173-176 原样。
+    pub fn workdir(&self) -> &str {
+        &self.workdir
+    }
+
+    /// bash 工具体（← af-bench tb.rs:186-222 原样，`ssh()` 换 `bridge.run()`）：
+    /// fix2 带内恢复语义（不改判分链）——exit=N 末行、超时教学反馈、桥接失败
+    /// 可重试文案、截断附换窄命令指引。
+    pub fn exec(&self, _bridge: &dyn HostBridge, _command: &str) -> String {
+        unimplemented!("P2 GREEN 落位：tb.rs:186-222 exec（RED 先行，tests/p2_bridge.rs）");
+    }
+
+    /// 清容器（← af-bench tb.rs:294-296 原样，`ssh()` 换 `bridge.run()`）。
+    pub fn cleanup(&self, _bridge: &dyn HostBridge) {
+        unimplemented!("P2 GREEN 落位：tb.rs:294-296 cleanup（RED 先行，tests/p2_bridge.rs）");
+    }
 }

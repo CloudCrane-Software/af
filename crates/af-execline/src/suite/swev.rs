@@ -7,13 +7,17 @@
 //!   `ARCHAEOLOGY_PATTERNS` ← af-bench main.rs:543, 548-577，测量语义载荷
 //!   一个字节不动（方案 §1.1 行 4）。
 //!
-//! 容器 setup / capture_diff / verify / sha256_hex 不属 P1：宿主桥接抽象在 P2、
-//! 判分单元与证据链在 P3（方案 §5）。判分三件套（task_json/eval.log/agent.diff）
-//! 语义由后续 P3 以原样模块产出，本包不动其接口。
+//! 容器 setup 已随 P2 搬入（挂 HostBridge，代理注入与资源护栏进命令构造）；
+//! capture_diff / verify / sha256_hex 属 P3（判分单元与证据链，方案 §5）。
+//! 判分三件套（task_json/eval.log/agent.diff）语义由 P3 以原样模块产出，
+//! 本包不动其接口。
 //!
 //! 行为逐字节等价由 tests/p1_comparison.rs 对照测试钉死（#[path] 直接编译
-//! af-bench 原文件，同输入同输出），黄金值见 tests/p1_suite.rs。
+//! af-bench 原文件，同输入同输出），黄金值见 tests/p1_suite.rs；P2 生命周期
+//! 命令构造由 tests/p2_bridge.rs FakeBridge 断言钉死。
 
+use crate::hostbridge::HostBridge;
+use crate::suite::tb::TbEnv;
 use serde::Deserialize;
 use std::path::Path;
 
@@ -118,3 +122,14 @@ pub const ARCHAEOLOGY_PATTERNS: &[&str] = &[
     "find / -name",
     "find / -type",
 ];
+
+/// 起容器（← af-bench swev.rs:55-99 原样；模块级 `tb_ssh()` 换 `bridge.run()`，
+/// 命令串与超时逐字节不变）。sweb.eval 镜像自带 /testbed 与全部测试资产，无需 build。
+pub fn setup(
+    _bridge: &dyn HostBridge,
+    _host: &str,
+    _task: &SwevTask,
+    _profile: &str,
+) -> Result<TbEnv, String> {
+    unimplemented!("P2 GREEN 落位：swev.rs:55-99 setup（RED 先行，tests/p2_bridge.rs）");
+}
