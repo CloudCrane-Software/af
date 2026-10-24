@@ -115,13 +115,62 @@ impl HarnessRunner {
     }
 }
 
+/// harness 侧账面工单的固定绑定（旧路 bench_order 语句级对照）。
+pub const BENCH_PAPER_LINE_ID: &str = "bench-line";
+/// 账面工单图版本（WorkOrder::new 第二参，旧路同值）。
+pub const BENCH_PAPER_GRAPH_VERSION: &str = "bench";
+
+/// harness 侧账面工单构造件（正式；消债 C，原补丁台账-第二阶段 #C）。
+///
+/// 旧路 `bench_order`（af-bench main.rs:515-537+687）的语句级对照四步：
+/// `bind_line(bench-line/1)` + `attach_budget_voucher(v-{run_id}, 1, signed)`
+/// + `release` + `start` → 终态 **InProgress**。这是 harness 进程内的
+/// 会话级记账门槛材料——真实 af-harness effect gateway 对 declare 有
+/// 订单态门（要求 [Released, InProgress]，af-effect-gateway lib.rs:132），
+/// 裸 `WorkOrder::new`（Created）的首个工具 side-effect 即被拒。
+///
+/// **吸收方案 §1.1/§2.3 "四步不搬"判定已被证伪**：P4 吸收按"af-harness
+/// 只查 id 非空（run.rs:221-223）"的误判省略了四步——该检查只是入参校验，
+/// declare 真正的门在 effect gateway 的订单态校验；FakeRunner（P4/P5
+/// 验证缝）与 L0 回放（P6）都无法暴露，F-首单首次真跑触发（EX3001：
+/// 订单态拒绝 declare）。与订单面 driver→af-engine 的真生命周期门控
+/// 互不替代：两套四步各司其职（订单面门控订单，本构造件门控 harness
+/// 会话内的 effect 记账）。
+pub fn bench_paper_order(run_id: &str) -> Result<WorkOrder, String> {
+    let mut order = WorkOrder::new(
+        run_id.to_string(),
+        GraphVersion::new(BENCH_PAPER_GRAPH_VERSION),
+        Sla::new(None, Priority::Normal),
+    );
+    order
+        .bind_line(af_workorder::LineBinding {
+            line_id: BENCH_PAPER_LINE_ID.into(),
+            line_version: "1".into(),
+        })
+        .map_err(|err| format!("bind line: {err}"))?;
+    order
+        .attach_budget_voucher(af_workorder::BudgetVoucher {
+            voucher_id: format!("v-{run_id}"),
+            amount: 1,
+            signed: true,
+        })
+        .map_err(|err| format!("voucher: {err}"))?;
+    order
+        .release()
+        .map_err(|err| format!("harness 侧工单 release: {err}"))?;
+    order
+        .start()
+        .map_err(|err| format!("harness 侧工单 start: {err}"))?;
+    Ok(order)
+}
+
 impl AgentRunner for HarnessRunner {
     /// 语句级对照（af-bench main.rs）：
     /// - 根凭证逐题签发 ← main.rs:681-686（issue_root：bash/bench/10000 cents）；
     /// - bash 工具注册（command 参数提取 ← main.rs:703-710；护栏在单元侧闭包）；
-    /// - harness 侧账面工单 ← WorkOrder::new(run_id)（main.rs:687 经 bench_order
-    ///   的 new 部分；四步生命周期按方案 §1.1 不搬，P5 由 driver 引擎 op 承接——
-    ///   af-harness 只查 id 非空，run.rs:221-223）；
+    /// - harness 侧账面工单 ← [`bench_paper_order`]（main.rs:687 经 bench_order
+    ///   四步生命周期：bind_line/voucher/release/start——**不是**裸 new；
+    ///   "四步不搬"误判已被 F-首单证伪，见构造件文档）；
     /// - key 紧邻现取 + 401 重取器 ← main.rs:768-772（OAuth 会被 sidecar 轮换，
     ///   构建期可能几十分钟；长题 >1h 撞令牌寿命时端点 401 重跑 key_cmd 一次）；
     /// - Launch 组装 ← main.rs:776-798（vars 空/namespace bench/StopPolicy 缺省/
@@ -164,11 +213,12 @@ impl AgentRunner for HarnessRunner {
             message: format!("open run: {err}"),
             http_retries: 0,
         })?;
-        let order = WorkOrder::new(
-            launch.run_id.clone(),
-            GraphVersion::new("bench"),
-            Sla::new(None, Priority::Normal),
-        );
+        // harness 侧账面工单（正式构造件；消债 C）：四步后 InProgress，
+        // effect gateway 的 declare 门放行。
+        let order = bench_paper_order(&launch.run_id).map_err(|err| AgentRunFailure {
+            message: format!("harness 侧账面工单构造失败: {err}"),
+            http_retries: 0,
+        })?;
         let result = opened.run(Launch {
             spec: launch.spec,
             run_id: launch.run_id,

@@ -45,7 +45,8 @@ pub mod shadow;
 pub mod suite;
 
 pub use agent::{
-    AgentLaunch, AgentRunFailure, AgentRunOutcome, AgentRunner, BashFn, HarnessRunner,
+    bench_paper_order, AgentLaunch, AgentRunFailure, AgentRunOutcome, AgentRunner, BashFn,
+    HarnessRunner,
 };
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use driver::{AttemptLayout, DriveReport, DriverConfig, OrderLifecycleDriver};
