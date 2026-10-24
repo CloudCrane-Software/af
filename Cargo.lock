@@ -85,8 +85,10 @@ dependencies = [
 name = "af-execline"
 version = "0.1.0"
 dependencies = [
+ "af-credential",
  "af-harness",
  "af-mes",
+ "af-meter",
  "af-stop",
  "af-workorder",
  "serde",

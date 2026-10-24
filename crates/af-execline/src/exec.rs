@@ -11,22 +11,51 @@ use std::path::{Path, PathBuf};
 use af_workorder::WorkArtifact;
 
 use crate::error::ExeclineError;
+use crate::record::RecordSink;
 
 /// 执行上下文。
+///
+/// P4 扩展（吸收方案 §2.2"ExecContext 增字段"）：每单执行期输入——"同一档跑
+/// 不同题"的东西进这里，不进单元声明。判据一句话（方案原文）：换档案/换档位
+/// =换 spec；换题/换宿主/换输出根=换 ctx。`task_id` 为表列之外的补充字段：
+/// 方案 §2.2 判据明言"换题=换 ctx"，题目标识因此进 ctx（单元从
+/// `<data_root>/<task_id>.json` 装载任务包）。attempt 目录的驱动层分配与
+/// RecordSink 的文件实现是 P5（方案 §5-P5）；P4 直调单元的调用方自备。
 pub struct ExecContext<'a> {
     pub order_id: &'a str,
     pub stable_id: &'a str,
     pub line_id: &'a str,
     /// 工件产出目录（执行面创建并传入）。
     pub out_dir: &'a Path,
+    /// 目标题标识（swe-v = instance_id；换题=换 ctx）。
+    pub task_id: &'a str,
+    /// 执行宿主别名（anolis/local），缺省 anolis（main.rs:102）。
+    pub host_alias: &'a str,
+    /// 题库根（load task_json / eval_script；main.rs:640, 850）。
+    pub data_root: &'a Path,
+    /// run 目录（重跑递增不覆写，D-20；驱动层 next_attempt_index 分配=P5 接线）。
+    pub attempt_dir: &'a Path,
+    /// 结果行写入器（append+flush 语义，main.rs:644-648）。
+    pub record_sink: &'a dyn RecordSink,
+    /// 试验标记（不进决策，main.rs:11）。
+    pub trial: bool,
 }
 
 /// 执行产出：工件（进订单）+ 产出文件（进证据目录）+ 备注。
+///
+/// P4 扩展（吸收方案 §2.2"ExecOutput 增字段"）：判定值（只从 judge stdout
+/// JSON 取）、本单元落的 `af.plan.record.v1` 行、判分三件套实际路径。
 #[derive(Debug, Clone)]
 pub struct ExecOutput {
     pub artifacts: Vec<WorkArtifact>,
     pub outputs: Vec<PathBuf>,
     pub note: String,
+    /// 判定（resolved）；None = 无判定（供给面失败/未跑完）。
+    pub verdict: Option<bool>,
+    /// 本单元落的 `af.plan.record.v1` 行（失败路径无 v1 投影 → None）。
+    pub record: Option<serde_json::Value>,
+    /// 判分三件套实际路径（task_json 引用 / eval.log / agent.diff）。
+    pub evidence: Vec<PathBuf>,
 }
 
 /// 执行单元。
@@ -91,6 +120,9 @@ impl ExecuteUnit for StubExecuteUnit {
             }],
             outputs: vec![artifact_path],
             note: format!("stub 单元产出工件 {}", self.artifact_id),
+            verdict: None,
+            record: None,
+            evidence: Vec::new(),
         })
     }
 }
@@ -109,11 +141,18 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let unit = StubExecuteUnit::qualified_final("fa-wo-exec");
+        let sink = crate::record::PendingRecordSink;
         let ctx = ExecContext {
             order_id: "wo-exec",
             stable_id: "sid-wo-exec",
             line_id: "line-poc",
             out_dir: &dir,
+            task_id: "astropy__astropy-12907",
+            host_alias: "local",
+            data_root: &dir,
+            attempt_dir: &dir,
+            record_sink: &sink,
+            trial: false,
         };
         let output = unit.execute(&ctx).unwrap();
         assert_eq!(output.artifacts.len(), 1);

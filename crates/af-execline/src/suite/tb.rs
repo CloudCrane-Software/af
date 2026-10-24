@@ -131,6 +131,9 @@ pub fn bash_tool_decl(workdir: &str) -> Value {
 
 /// 任务容器句柄（← af-bench tb.rs:94-99 原样）。
 /// 字段与可见性逐字保留（P5 TB verify 容器链消费 container/task/host）。
+/// P4 增 `Clone`（派生，行为无变化）：swev 单元的 bash 工具闭包需拥有环境
+/// 句柄（af-harness 工具函数体 'static，run.rs:53-55），Arc<TbEnv> 克隆进闭包。
+#[derive(Clone)]
 pub struct TbEnv {
     pub container: String,
     pub task: String,

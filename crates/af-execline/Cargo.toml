@@ -16,9 +16,18 @@ description = "统一执行面 PoC：订单生命周期驱动（af-engine 门控
 # 与 judge.rs 指纹门共用；p1_comparison 经 #[path] 编译 af-bench 原文件亦依赖它
 # （随 P1 先入 dev-deps，P3 升主依赖）。钉锁树内现值（af-bench/af-effect-gateway
 # 同款），不升不降。
+# P4（SwevExecuteUnit，方案 §5-P4）：af-credential/af-meter/af-stop 补齐 af-bench
+# 依赖集（方案 §1.2-3：af-harness 已依赖三者，加列无环；workspace 内无 crate
+# 依赖 af-execline，方向 af-execline ← 各 crate 单向）——
+#   af-credential：HarnessRunner issue_root（根凭证，main.rs:681-686）；
+#   af-meter：BudgetLedger（Launch.budget 的 Cents 账本，main.rs:789-793）；
+#   af-stop：StopPolicy（Launch.stop_policy，main.rs:796）。
 [dependencies]
+af-credential = { path = "../af-credential" }
 af-harness = { path = "../af-harness" }
+af-meter = { path = "../af-meter" }
 af-mes = { path = "../af-mes" }
+af-stop = { path = "../af-stop" }
 af-workorder = { path = "../af-workorder" }
 serde = { workspace = true }
 serde_json = { workspace = true }

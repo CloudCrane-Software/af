@@ -77,6 +77,11 @@ fn config(order_id: &str, out_dir: PathBuf) -> DriverConfig {
         },
         out_dir,
         station_id: "st-poc".to_string(),
+        // P4 扩展透传字段（方案 §2.2）：PoC 生命周期用桩单元，不消费这些字段。
+        host_alias: "anolis".into(),
+        data_root: PathBuf::new(),
+        task_id: String::new(),
+        trial: false,
     }
 }
 

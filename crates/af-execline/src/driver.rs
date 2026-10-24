@@ -47,6 +47,15 @@ pub struct DriverConfig {
     pub out_dir: PathBuf,
     /// MES 事件的 station_id。
     pub station_id: String,
+    /// ---- P4（方案 §2.2 ExecContext 扩展的驱动侧透传）----
+    /// 执行宿主别名（缺省 anolis；换宿主=换 ctx）。
+    pub host_alias: String,
+    /// 题库根（单元从 `<data_root>/<task_id>.json` 装载任务包）。
+    pub data_root: PathBuf,
+    /// 目标题（swe-v = instance_id；换题=换 ctx）。
+    pub task_id: String,
+    /// 试验标记（--trial 行口径，不进决策）。
+    pub trial: bool,
 }
 
 /// 一次 `drive` 的报告。
@@ -212,15 +221,31 @@ impl OrderLifecycleDriver {
                 artifacts: self.order.artifacts().to_vec(),
                 outputs: Vec::new(),
                 note: "replay: 工件已登记，未重跑执行单元".to_string(),
+                verdict: None,
+                record: None,
+                evidence: Vec::new(),
             });
         }
         let artifacts_dir = self.cfg.out_dir.join(ARTIFACTS_DIR);
         std::fs::create_dir_all(&artifacts_dir)?;
+        // P4 扩展字段（方案 §2.2）：宿主/题库/题目/试验标记从 DriverConfig 透传。
+        // attempt 目录与 record sink 的驱动层接线是 P5（方案 §5-P5：attempt 由
+        // 驱动层 next_attempt_index 分配、RecordSink 文件实现落驱动层）——P4 以
+        // out_dir/runs 占位与 fail-loud 占位 sink 传入保类型完整；驱动面现役
+        // 单元（Stub）不消费这两项，真实单元经驱动执行前必须先完成 P5 接线
+        // （占位 sink 误用即 Err，不静默丢行）。
+        let pending_sink = crate::record::PendingRecordSink;
         let ctx = ExecContext {
             order_id: &self.cfg.order_id,
             stable_id: self.order.stable_id().as_str(),
             line_id: &self.cfg.line.line_id,
             out_dir: &artifacts_dir,
+            task_id: &self.cfg.task_id,
+            host_alias: &self.cfg.host_alias,
+            data_root: &self.cfg.data_root,
+            attempt_dir: &self.cfg.out_dir.join("runs"),
+            record_sink: &pending_sink,
+            trial: self.cfg.trial,
         };
         let output = match unit.execute(&ctx) {
             Ok(output) => output,

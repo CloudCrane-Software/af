@@ -1,11 +1,13 @@
 //! af-execline —— 统一执行面 PoC（订单生命周期驱动）。
 //!
 //! 定位（ADR-002）：第二阶段 `crates/af-execline` 的第一块砖——证明订单语义与
-//! 执行可编程耦合。纯进程内实现，不连 docker / LLM / 网络：
+//! 执行可编程耦合。P4 起 swe-v 真实执行单元（[`suite::swev_unit`]）在订单面
+//! 之外也可直调（判分链 + 结果行先独立验收；驱动层接线 = P5）：
 //!
 //! ```text
 //! 构造订单 → af-engine 门控（bind_line→attach_voucher→release→start）
-//!          → 执行桩单元（产出工件）→ attach_artifact → complete → close
+//!          → 执行单元（桩或 swe-v：setup→run→gate→verify→行落盘）
+//!          → attach_artifact → complete → close
 //! ```
 //!
 //! 判定一律走真 af-engine 子进程（9-op 单行 JSON stdin/stdout 协议，不打桩，
@@ -26,6 +28,7 @@
 //! 错误码契约（ADR-007）：稳定码 EX1xxx（引擎）/ EX2xxx（账本）/ EX3xxx
 //! （执行单元），数字只增不改，见 [`error::ErrorCode]]。
 
+pub mod agent;
 pub mod clock;
 pub mod driver;
 pub mod engine;
@@ -36,8 +39,10 @@ pub mod judge;
 pub mod ledger;
 pub mod mes;
 pub mod profile;
+pub mod record;
 pub mod suite;
 
+pub use agent::{AgentLaunch, AgentRunner, AgentRunFailure, AgentRunOutcome, BashFn, HarnessRunner};
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use driver::{DriveReport, DriverConfig, OrderLifecycleDriver};
 pub use engine::{EngineAccept, EngineClient, EngineOutcome, EngineRejection};
@@ -47,3 +52,5 @@ pub use hostbridge::{HostBridge, SshBridge};
 pub use judge::{invoke as judge_invoke, JudgeLocator};
 pub use ledger::{LedgerRecord, OrderLedger};
 pub use mes::MesFileWriter;
+pub use record::{ExecutionFacts, PendingRecordSink, RecordSink};
+pub use suite::swev_unit::{SwevExecuteUnit, SwevUnitSpec};
