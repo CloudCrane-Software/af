@@ -305,9 +305,12 @@ fn corpus_golden_path(name: &str) -> std::path::PathBuf {
 }
 
 /// 单份核验（与 CLI 同口径）：重新 load + 全量校验 + lower + pretty 序列化，
-/// 再补换行，与 `testdata/golden/<stem>.ir.json` **逐字节**比对。任何一位
-/// 不同即 panic——这是篡改检测测试借用的同一把牙齿。
-fn assert_golden_byte_exact(name: &str) {
+/// 再补换行，与给定 golden 路径的文件**逐字节**比对。任何一位不同即
+/// panic——这是篡改检测测试借用的同一把牙齿。
+///
+/// golden 路径参数化（GOLDEN-RACE 修复）：缺省 wrapper 取仓库正本
+/// `testdata/golden/`；篡改检测传 tempdir 副本路径——共享模具零写入。
+fn assert_golden_byte_exact_at(name: &str, golden_path: &std::path::Path) {
     let src_path = corpus_src_path(name);
     let src =
         std::fs::read_to_string(&src_path).unwrap_or_else(|e| panic!("读取 {src_path:?}：{e}"));
@@ -324,9 +327,8 @@ fn assert_golden_byte_exact(name: &str) {
         .chain(std::iter::once(b'\n'))
         .collect();
 
-    let golden_path = corpus_golden_path(name);
     let actual =
-        std::fs::read(&golden_path).unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
+        std::fs::read(golden_path).unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
 
     if expected != actual {
         // 报告首个差异位与上下文，避免整个文件倾倒进断言消息
@@ -349,6 +351,11 @@ fn assert_golden_byte_exact(name: &str) {
             ctx(&actual)
         );
     }
+}
+
+/// 仓库正本口径的核验（主回归用）：golden 取 `testdata/golden/<stem>.ir.json`。
+fn assert_golden_byte_exact(name: &str) {
+    assert_golden_byte_exact_at(name, &corpus_golden_path(name));
 }
 
 /// G3 主回归：17 份语料全部重新 lower+serialize，与 golden 逐字节相等。
@@ -399,9 +406,20 @@ fn g3_golden_corpus_manifest_closed() {
     );
 }
 
-/// 篡改检测（证明测试有牙齿）：临时篡改 `TAMPER_TARGET` 的 golden 一个
-/// 字符（首字节 '{' → ' '），断言逐字节核验**失败**；随后恢复原字节并
-/// 复核通过。任何一步异常都会留下失败测试或（被恢复的）原样文件。
+/// 篡改检测的副本目录（GOLDEN-RACE 修复，2026-10-25）：篡改一律发生在
+/// tempdir 副本上，共享 golden 模具零写入——`cargo test -jN` 下同二进制内
+/// 其他 byte_exact 用例并发读正本，原地改写/恢复之间存在真实竞态窗口
+/// （线程间无任何同步，纯靠时序错开——消债批复工 run#1 曾实证 2 例
+/// byte_exact 假红，孤立重跑即绿）。目录名带进程号 + 用例标签，互不碰撞。
+fn tamper_copy_dir(tag: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("af-golden-tamper-{}-{tag}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("创建篡改副本目录失败");
+    dir
+}
+
+/// 篡改检测（证明测试有牙齿）：把 `TAMPER_TARGET` 的 golden **复制到
+/// tempdir 副本**后篡改一个字符（首字节 '{' → ' '），断言对副本的逐字节
+/// 核验**失败**；随后恢复副本原字节并复核通过。共享模具全程只读。
 #[test]
 fn g3_golden_tamper_detection() {
     let golden_path = corpus_golden_path(TAMPER_TARGET);
@@ -413,24 +431,27 @@ fn g3_golden_tamper_detection() {
         "golden 应以 '{{' 开头，才有可篡改的字符"
     );
 
-    // 篡改一个字符并落盘
+    // 副本篡改：断言面参数化到副本路径，testdata/golden 零写入
+    let stem = TAMPER_TARGET.strip_suffix(".yaml").unwrap();
+    let copy = tamper_copy_dir("g3").join(format!("{stem}.ir.json"));
+    std::fs::write(&copy, &original).expect("落 golden 副本失败");
     let mut tampered = original.clone();
     tampered[0] = b' ';
-    std::fs::write(&golden_path, &tampered).expect("写入篡改 golden 失败");
+    std::fs::write(&copy, &tampered).expect("写入篡改副本失败");
 
     // 核验必须失败（panic 被捕获）；临时静音 panic 钩子避免噪音
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
-    let caught = std::panic::catch_unwind(|| assert_golden_byte_exact(TAMPER_TARGET));
+    let caught = std::panic::catch_unwind(|| assert_golden_byte_exact_at(TAMPER_TARGET, &copy));
     std::panic::set_hook(prev_hook);
     assert!(
         caught.is_err(),
         "篡改 golden 一个字符后逐字节核验仍未失败——测试没有牙齿"
     );
 
-    // 恢复原字节并复核
-    std::fs::write(&golden_path, &original).expect("恢复 golden 失败");
-    assert_golden_byte_exact(TAMPER_TARGET);
+    // 恢复副本原字节并复核（共享模具不动）
+    std::fs::write(&copy, &original).expect("恢复 golden 副本失败");
+    assert_golden_byte_exact_at(TAMPER_TARGET, &copy);
 }
 
 // ---------------------------------------------------------------------------
@@ -468,8 +489,9 @@ fn repo_packages_root() -> std::path::PathBuf {
 
 /// 单份核验（registry 注入链，与 CLI `--registry` 同口径）：装载
 /// af/packages → `validate_with`（declared_graphs 注入）→ lower → pretty
-/// 序列化 + 换行，与 `testdata/golden/<stem>.ir.json` **逐字节**比对。
-fn assert_golden_byte_exact_with_registry(name: &str) {
+/// 序列化 + 换行，与给定 golden 路径的文件**逐字节**比对。
+/// golden 路径参数化同 [`assert_golden_byte_exact_at`]（GOLDEN-RACE 修复）。
+fn assert_golden_byte_exact_with_registry_at(name: &str, golden_path: &std::path::Path) {
     let src_path = corpus_src_path(name);
     let src =
         std::fs::read_to_string(&src_path).unwrap_or_else(|e| panic!("读取 {src_path:?}：{e}"));
@@ -490,9 +512,8 @@ fn assert_golden_byte_exact_with_registry(name: &str) {
         .chain(std::iter::once(b'\n'))
         .collect();
 
-    let golden_path = corpus_golden_path(name);
     let actual =
-        std::fs::read(&golden_path).unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
+        std::fs::read(golden_path).unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
 
     if expected != actual {
         let (el, al) = (expected.len(), actual.len());
@@ -514,6 +535,11 @@ fn assert_golden_byte_exact_with_registry(name: &str) {
             ctx(&actual)
         );
     }
+}
+
+/// 仓库正本口径的注入链核验：golden 取 `testdata/golden/<stem>.ir.json`。
+fn assert_golden_byte_exact_with_registry(name: &str) {
+    assert_golden_byte_exact_with_registry_at(name, &corpus_golden_path(name));
 }
 
 /// 注入是承重墙（禁旁路）：不注入（默认空集）4 份必被 E2001 拒——候选图
@@ -562,9 +588,10 @@ fn g3p2_selector_golden_byte_exact() {
     }
 }
 
-/// 篡改检测第二目标（21 份抽样 2 份复核仍有效，本份走注入链）：临时篡改
-/// `SELECTOR_TAMPER_TARGET` 的 golden 首字符（'{' → ' '），断言注入链核验
-/// **失败**；随后恢复原字节并复核通过。
+/// 篡改检测第二目标（21 份抽样 2 份复核仍有效，本份走注入链）：把
+/// `SELECTOR_TAMPER_TARGET` 的 golden 复制到 tempdir 副本后篡改首字符
+/// （'{' → ' '），断言注入链对副本的核验**失败**；随后恢复副本原字节并
+/// 复核通过。共享模具零写入（同 GOLDEN-RACE 修复）。
 #[test]
 fn g3p2_selector_tamper_detection() {
     let golden_path = corpus_golden_path(SELECTOR_TAMPER_TARGET);
@@ -576,20 +603,24 @@ fn g3p2_selector_tamper_detection() {
         "golden 应以 '{{' 开头，才有可篡改的字符"
     );
 
+    let stem = SELECTOR_TAMPER_TARGET.strip_suffix(".yaml").unwrap();
+    let copy = tamper_copy_dir("g3p2").join(format!("{stem}.ir.json"));
+    std::fs::write(&copy, &original).expect("落 golden 副本失败");
     let mut tampered = original.clone();
     tampered[0] = b' ';
-    std::fs::write(&golden_path, &tampered).expect("写入篡改 golden 失败");
+    std::fs::write(&copy, &tampered).expect("写入篡改副本失败");
 
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
-    let caught =
-        std::panic::catch_unwind(|| assert_golden_byte_exact_with_registry(SELECTOR_TAMPER_TARGET));
+    let caught = std::panic::catch_unwind(|| {
+        assert_golden_byte_exact_with_registry_at(SELECTOR_TAMPER_TARGET, &copy)
+    });
     std::panic::set_hook(prev_hook);
     assert!(
         caught.is_err(),
         "篡改 golden 一个字符后注入链逐字节核验仍未失败——测试没有牙齿"
     );
 
-    std::fs::write(&golden_path, &original).expect("恢复 golden 失败");
-    assert_golden_byte_exact_with_registry(SELECTOR_TAMPER_TARGET);
+    std::fs::write(&copy, &original).expect("恢复 golden 副本失败");
+    assert_golden_byte_exact_with_registry_at(SELECTOR_TAMPER_TARGET, &copy);
 }
