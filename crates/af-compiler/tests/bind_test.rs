@@ -32,12 +32,14 @@ fn repo_registry() -> ComponentRegistry {
         .unwrap_or_else(|e| panic!("仓库正本 af/packages 组件清单应装载：{e}"))
 }
 
-/// 装载面：三份清单文件（根级 routes + sweng + swarmkit）共 7 条声明；
-/// 两次装载 digest 逐位一致（确定性）；版本表按名字可达。
+/// 装载面：五份清单文件（根级 routes+扩容 + adaskit + autogen + sweng +
+/// swarmkit）共 57 条声明（P2-L11 首批 7 + P2-L12 扩容 50——闸门 §⑤ 清款，
+/// 逐名断言见 `registry_decl_test.rs`）；两次装载 digest 逐位一致（确定性）；
+/// 版本表按名字可达。
 #[test]
 fn repo_components_registry_loads_deterministically() {
     let reg = repo_registry();
-    assert_eq!(reg.component_count(), 7, "根级 2 条 model_route + sweng 4 + swarmkit 1");
+    assert_eq!(reg.component_count(), 57, "P2-L11 首批 7 + P2-L12 扩容 50");
 
     let again = repo_registry();
     assert_eq!(reg.digest(), again.digest(), "两次装载 digest 逐位一致");
