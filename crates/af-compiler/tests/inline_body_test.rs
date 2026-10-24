@@ -8,7 +8,10 @@ mod common;
 use af_compiler::ir::*;
 
 /// DSL 侧节点/边总量（递归穿 loop/map 体）。
-fn count_dsl(nodes: &[af_dsl::model::NodeDecl], edges: &[af_dsl::model::EdgeDecl]) -> (usize, usize) {
+fn count_dsl(
+    nodes: &[af_dsl::model::NodeDecl],
+    edges: &[af_dsl::model::EdgeDecl],
+) -> (usize, usize) {
     let mut n = nodes.len();
     let mut e = edges.len();
     for node in nodes {
@@ -76,14 +79,24 @@ fn sample3_subgraph_naming_and_loop_map_specs() {
     assert_eq!(lp.max_iterations, 3);
     assert_eq!(
         lp.carried,
-        vec![CarriedState { store: "transcript".into(), max_items: Some(64), max_bytes: None }]
+        vec![CarriedState {
+            store: "transcript".into(),
+            max_items: Some(64),
+            max_bytes: None
+        }]
     );
     assert_eq!(
         lp.safety_points,
-        vec![SafetyPoint { node: "converge_gate".into(), kind: SafetyPointKind::Gate }]
+        vec![SafetyPoint {
+            node: "converge_gate".into(),
+            kind: SafetyPointKind::Gate
+        }]
     );
     assert!(lp.args.is_empty());
-    assert_eq!(lp.exit_when.as_ref().unwrap().source, "tally.result.top_share_milli >= 700");
+    assert_eq!(
+        lp.exit_when.as_ref().unwrap().source,
+        "tally.result.top_share_milli >= 700"
+    );
     assert_eq!(lp.on_exhausted, Some(OnExhausted::Continue));
 
     // 子图 debate_kv/rounds：entry = 首元素 debate_map；nodes 按 id 排序；3 边
@@ -119,7 +132,10 @@ fn sample6_nested_loops_and_cross_layer_safety_points() {
     names.sort_unstable();
     assert_eq!(
         names,
-        ["voyager_curriculum/explore", "voyager_curriculum/explore/acquire"]
+        [
+            "voyager_curriculum/explore",
+            "voyager_curriculum/explore/acquire"
+        ]
     );
 
     // 外层 explore：carried 按 store 名排序（curriculum < skill_library）；
@@ -133,7 +149,10 @@ fn sample6_nested_loops_and_cross_layer_safety_points() {
     assert_eq!(lp.carried[1].store, "skill_library");
     assert_eq!(
         lp.safety_points,
-        vec![SafetyPoint { node: "acquire.admit".into(), kind: SafetyPointKind::Gate }]
+        vec![SafetyPoint {
+            node: "acquire.admit".into(),
+            kind: SafetyPointKind::Gate
+        }]
     );
     assert_eq!(
         lp.exit_when.as_ref().unwrap().source,
@@ -152,12 +171,22 @@ fn sample6_nested_loops_and_cross_layer_safety_points() {
     let ilp = acquire.loop_spec.as_ref().unwrap();
     assert_eq!(ilp.body, "voyager_curriculum/explore/acquire");
     assert_eq!(ilp.max_iterations, 6);
-    assert_eq!(ilp.args.get("goal_text").map(String::as_str), Some("proposer.goal.text"));
+    assert_eq!(
+        ilp.args.get("goal_text").map(String::as_str),
+        Some("proposer.goal.text")
+    );
     assert_eq!(
         ilp.carried,
-        vec![CarriedState { store: "skill_library".into(), max_items: Some(512), max_bytes: None }]
+        vec![CarriedState {
+            store: "skill_library".into(),
+            max_items: Some(512),
+            max_bytes: None
+        }]
     );
-    assert_eq!(ilp.exit_when.as_ref().unwrap().source, "attempt.passed == true");
+    assert_eq!(
+        ilp.exit_when.as_ref().unwrap().source,
+        "attempt.passed == true"
+    );
     assert_eq!(ilp.on_exhausted, Some(OnExhausted::Continue));
 
     let inner = &g.subgraphs["voyager_curriculum/explore/acquire"];
@@ -169,7 +198,10 @@ fn sample6_nested_loops_and_cross_layer_safety_points() {
     // L4 逃逸：拓扑位 + 记账视图同数据
     let code_exec = &inner.nodes.iter().find(|n| n.id == "code_exec").unwrap();
     let esc = code_exec.escape.as_ref().unwrap();
-    assert_eq!(esc.impl_ref, "packages/openworld@1.0.0/hatches/code_exec.py");
+    assert_eq!(
+        esc.impl_ref,
+        "packages/openworld@1.0.0/hatches/code_exec.py"
+    );
     assert_eq!(esc.owner, "lang-team");
     assert_eq!(esc.share_budget_pct, 25);
     assert_eq!(p.body.escapes["explore.acquire.code_exec"], *esc);
@@ -187,7 +219,10 @@ fn sample4_sample2_subgraph_shapes() {
     let search = &g4.subgraphs["aflow_search/search"];
     assert_eq!(search.entry, "synth");
     let run = &search.nodes.iter().find(|n| n.id == "run").unwrap();
-    assert_eq!(run.map_spec.as_ref().unwrap().body, "aflow_search/search/run");
+    assert_eq!(
+        run.map_spec.as_ref().unwrap().body,
+        "aflow_search/search/run"
+    );
     assert_eq!(run.map_spec.as_ref().unwrap().over, "synth.candidates");
     let run_sg = &g4.subgraphs["aflow_search/search/run"];
     assert_eq!(run_sg.entry, "gen_a");
@@ -209,10 +244,16 @@ fn sample4_sample2_subgraph_shapes() {
     let build = &g2.nodes.iter().find(|n| n.id == "build").unwrap();
     let lp = build.loop_spec.as_ref().unwrap();
     assert_eq!(lp.max_iterations, 3);
-    assert_eq!(lp.exit_when.as_ref().unwrap().source, "attempt.passed == true");
+    assert_eq!(
+        lp.exit_when.as_ref().unwrap().source,
+        "attempt.passed == true"
+    );
     assert_eq!(lp.on_exhausted, Some(OnExhausted::Fail));
     assert_eq!(
         lp.safety_points,
-        vec![SafetyPoint { node: "qa".into(), kind: SafetyPointKind::Check }]
+        vec![SafetyPoint {
+            node: "qa".into(),
+            kind: SafetyPointKind::Check
+        }]
     );
 }

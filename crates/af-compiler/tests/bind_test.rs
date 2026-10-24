@@ -47,9 +47,14 @@ fn repo_components_registry_loads_deterministically() {
 
     let main = reg.versions_of("route.main").expect("route.main 应注册");
     assert!(main.contains_key("1"));
-    let locate = reg.versions_of("pkg.sweng.locate").expect("pkg.sweng.locate 应注册");
+    let locate = reg
+        .versions_of("pkg.sweng.locate")
+        .expect("pkg.sweng.locate 应注册");
     assert!(locate.contains_key("1"));
-    assert!(reg.versions_of("pkg.nope.tool").is_none(), "未注册名不可达（fail-closed）");
+    assert!(
+        reg.versions_of("pkg.nope.tool").is_none(),
+        "未注册名不可达（fail-closed）"
+    );
 }
 
 /// af-dsl 侧零感知：manifest.json 四包闭包不受 components.json 影响
@@ -99,19 +104,28 @@ fn sample2_binds_all_uses_refs_with_first_class_fills() {
         "未版本化引用升格为 name@version；effect_class 注册表回填"
     );
     assert_eq!(eng.components.tools[0].class, ComponentClass::Tool);
-    assert_eq!(eng.components.model_route.as_ref().unwrap().reference, "route.main@1");
+    assert_eq!(
+        eng.components.model_route.as_ref().unwrap().reference,
+        "route.main@1"
+    );
     assert!(eng.components.unit.is_none());
     assert!(eng.components.memory.is_empty());
 
     // AgentSpec 四元组可装载面：endpoint 实数据（model_route 声明原样）
     let agent = eng.agent.as_ref().expect("uses.model 节点应有 agent 投影");
     assert_eq!(agent.endpoint.model, "GLM-5.3");
-    assert_eq!(agent.endpoint.base_url, "https://open.bigmodel.cn/api/anthropic");
+    assert_eq!(
+        agent.endpoint.base_url,
+        "https://open.bigmodel.cn/api/anthropic"
+    );
     assert_eq!(agent.endpoint.key_ref, "zhipu-coding-plan");
 
     // 规划师走廉价路由
     let planner = &report.bindings["planner"];
-    assert_eq!(planner.components.model_route.as_ref().unwrap().reference, "route.cheap@1");
+    assert_eq!(
+        planner.components.model_route.as_ref().unwrap().reference,
+        "route.cheap@1"
+    );
     assert_eq!(
         planner.agent.as_ref().unwrap().endpoint.model,
         "GLM-5.3-Flash"
@@ -128,7 +142,10 @@ fn sample2_binds_all_uses_refs_with_first_class_fills() {
     let pm = &report.bindings["pm"];
     assert_eq!(
         pm.artifacts["prd"].provenance,
-        Some(ProvenanceSpec { envelope_of: Some("prd".into()), eval_sha256: None }),
+        Some(ProvenanceSpec {
+            envelope_of: Some("prd".into()),
+            eval_sha256: None
+        }),
         "envelope<T> 声明 → provenance.envelope_of 回填"
     );
 
@@ -236,9 +253,12 @@ fn e9001_unregistered_reference_is_rejected() {
     let report = bind(&ir, &ComponentRegistry::empty());
     assert!(!report.is_ok());
     assert!(
-        report.violations.iter().any(|v| v.code == BindCode::RefMissing
-            && v.node == "worker"
-            && v.reference == "pkg.kit.hammer@1"),
+        report
+            .violations
+            .iter()
+            .any(|v| v.code == BindCode::RefMissing
+                && v.node == "worker"
+                && v.reference == "pkg.kit.hammer@1"),
         "应逐条点名：{:?}",
         report.violations
     );
@@ -271,8 +291,7 @@ fn e9002_version_mismatch_is_rejected() {
     assert!(report
         .violations
         .iter()
-        .any(|v| v.code == BindCode::VersionMismatch
-            && v.reference == "pkg.kit.hammer@2"));
+        .any(|v| v.code == BindCode::VersionMismatch && v.reference == "pkg.kit.hammer@2"));
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -335,11 +354,18 @@ fn escape_injection_point_passes_escape_spec_through() {
     let reg = ComponentRegistry::load(&root).unwrap();
     let ir = probe_ir("\"pkg.kit.hammer@1\"");
     let report = bind(&ir, &reg);
-    assert!(report.is_ok(), "全注册探针应零违例：{:?}", report.violations);
+    assert!(
+        report.is_ok(),
+        "全注册探针应零违例：{:?}",
+        report.violations
+    );
 
     let esc = &report.escapes["hatch"];
     assert_eq!(esc.kind, Some(EscapeKind::DynamicToolRegistry));
-    assert_eq!(esc.impl_ref, "packages/kit@1.0.0/hatches/registry.py", "impl_ref 保留");
+    assert_eq!(
+        esc.impl_ref, "packages/kit@1.0.0/hatches/registry.py",
+        "impl_ref 保留"
+    );
     assert_eq!(esc.reason, "动作词表运行时解析（测试探针）");
     assert_eq!(esc.owner, "g2b-team");
     assert_eq!(esc.share_budget_pct, 10, "记账字段透传");
@@ -396,8 +422,14 @@ fn registry_rejects_tool_without_effect_class() {
         r#"{"components":[{"class":"tool","name":"pkg.kit.hammer","version":"1"}]}"#,
     );
     let err = ComponentRegistry::load(&root).unwrap_err();
-    assert!(matches!(err, ComponentRegistryError::Invalid { .. }), "got: {err}");
-    assert!(err.to_string().contains("effect_class"), "点名缺失字段：{err}");
+    assert!(
+        matches!(err, ComponentRegistryError::Invalid { .. }),
+        "got: {err}"
+    );
+    assert!(
+        err.to_string().contains("effect_class"),
+        "点名缺失字段：{err}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -418,14 +450,25 @@ fn registry_rejects_model_route_without_endpoint() {
 #[test]
 fn registry_rejects_endpoint_discipline_violations() {
     for (tag, endpoint) in [
-        ("bad-url", r#"{"protocol":"anthropic-messages","base_url":"ftp://x","model":"m","key_ref":"K","reasoning_tier":"off"}"#),
-        ("user-info", r#"{"protocol":"anthropic-messages","base_url":"https://u:p@x","model":"m","key_ref":"K","reasoning_tier":"off"}"#),
-        ("sk-key", r#"{"protocol":"anthropic-messages","base_url":"https://x","model":"m","key_ref":"sk-live","reasoning_tier":"off"}"#),
+        (
+            "bad-url",
+            r#"{"protocol":"anthropic-messages","base_url":"ftp://x","model":"m","key_ref":"K","reasoning_tier":"off"}"#,
+        ),
+        (
+            "user-info",
+            r#"{"protocol":"anthropic-messages","base_url":"https://u:p@x","model":"m","key_ref":"K","reasoning_tier":"off"}"#,
+        ),
+        (
+            "sk-key",
+            r#"{"protocol":"anthropic-messages","base_url":"https://x","model":"m","key_ref":"sk-live","reasoning_tier":"off"}"#,
+        ),
     ] {
         let root = temp_root(tag);
         write_components(
             &root,
-            &format!(r#"{{"components":[{{"class":"model_route","name":"route.main","version":"1","endpoint":{endpoint}}}]}}"#),
+            &format!(
+                r#"{{"components":[{{"class":"model_route","name":"route.main","version":"1","endpoint":{endpoint}}}]}}"#
+            ),
         );
         let err = ComponentRegistry::load(&root).unwrap_err();
         assert!(
@@ -469,7 +512,10 @@ fn registry_rejects_name_containing_at_sign() {
         r#"{"components":[{"class":"tool","name":"bad@name","version":"1","effect_class":"pure"}]}"#,
     );
     let err = ComponentRegistry::load(&root).unwrap_err();
-    assert!(matches!(err, ComponentRegistryError::Invalid { .. }), "got: {err}");
+    assert!(
+        matches!(err, ComponentRegistryError::Invalid { .. }),
+        "got: {err}"
+    );
     let _ = std::fs::remove_dir_all(&root);
 }
 
@@ -484,6 +530,8 @@ fn violations_are_collected_not_first_stopped() {
         .iter()
         .map(|v: &BindViolation| v.reference.as_str())
         .collect();
-    assert!(refs.contains(&"pkg.kit.hammer@1") && refs.contains(&"pkg.kit.saw@1"),
-        "一次收齐：{refs:?}");
+    assert!(
+        refs.contains(&"pkg.kit.hammer@1") && refs.contains(&"pkg.kit.saw@1"),
+        "一次收齐：{refs:?}"
+    );
 }

@@ -26,7 +26,9 @@
 - **bind_test（17）**：仓库正本注册表装载（7 条声明/双跑 digest 一致/未注册名不可达）；图清单-组件清单解耦对照（af-dsl `package_count()==4` 复核）；sample2 全字段绑定（三工具 effect_class 回填 persist/pure/pure、未版本化引用升格 `@1`、route.main/route.cheap 分流、AgentSpec endpoint 实数据、QA unit 绑定、pm `envelope<prd>`→provenance.envelope_of 回填、transform 节点组件面全空）；sample3 嵌套体内节点（`rounds.debate_map.debater`）共享路由绑定；E9001（未注册/`bad@@ref` 不可解析）；E9002（`@2` 未声明/未版本化命中双版本）；E9003（unit 当 tool 用）；逃逸注入点（kind/impl_ref/reason/owner/share_budget_pct 五字段透传断言）；空注册表 × 无引用文档通过；装载纪律五反例（tool 缺 effect_class、model_route 缺 endpoint、端点三违例 ftp-url/userinfo/sk-key、跨文件重复引用、name 内嵌 '@'）；违例一次收齐（两条未注册同时点名）。
 - **plan_test（7）**：sample2 计划形状（信封 v=1/plan_id 派生形+12 位 hex/compiled_from 三摘要+registry_digest/line+order 骨架/graph 原形/自含四块/node_exec 路径字典序+体内节点+工具 effect_class+unit 绑定+终态工件在 build.report+pm envelope 溯源/预算三账/安全点收集）；GPTSwarm 六逃逸入计划+impl_ref 保留+工具节点 external_once；三样例 IR+计划双层确定性；decode 往返；信封四反例（v=2 版本先行/未知顶层键/缺 v/body 未知字段）；未绑定拒绝生成（Unbound 一次点名≥4 条）；`plan_json_pretty` 单入口=分步产物逐位一致。
 
-## 结构体清单（新增 29 型 + 1 常量 + 1 CLI）
+## 结构体清单（新增 41 型 + 1 常量 + 1 CLI）
+
+> 勘误（2026-10-24，P2-Q03）：本节标题原记「29 型」，系计数笔误。实数 41 型 = 表列 38 具名型 + `OtelSlot`/`EventsSlot`/`MesSlot` 三槽型（表中「（+Otel/Events/Mes 三槽）」括注所覆盖），与 `src/components.rs`（9）+ `src/bind.rs`（7）+ `src/plan.rs`（25）的 `pub struct`/`pub enum` 实数相符（独立验证报告 §8；表列与代码无缺无溢，错者仅标题数字）。
 
 | 模块 | 型 | 说明 |
 |---|---|---|
@@ -83,6 +85,10 @@
 | 9 | `sla.priority` 词表闭于 `Normal` 单值（deny 未知） | 草案仅示例 Normal；扩展词表待执行面对接 |
 | 10 | 组件引用串 = DSL 现实形（`pkg.sweng.locate@1`），非草案 `c-tool.<名>@<版本>` | af/packages 四包 + golden 21 源的现实形态是正本；`c-*` 形是 §2.2 草案 id 约定，未落地 |
 | 11 | `plan_id` 派生式自定（草案未定） | 裁决 5——内容寻址确定性 |
+| 12 | `compiled_from` 多第 4 键 `registry_digest`（草案仅 dsl_digest/compiler_version/graph_version 三键） | E9004 携带面：digest 由 bind 产出、随计划携带，执行面装载时对本地注册表重算核对、不符即拒启动（§2.2；见上 E900x 段 E9004 行与裁决 6）。键位有正当理由，原漏登本表，兹补登 |
+| 13 | `node_exec[].unit` 缺草案字段 `selector`（契约 §7.1 为 `{unit_id, unit_version, selector}`；实现 `UnitBinding` 仅 `{unit_id, unit_version}`） | **契约字段缺失**（独立验证点名项）：v0.1 组件绑定面无 selector 数据源——`topology_selector` 属 af-dsl 图清单注入链（草稿级），非组件注册表面——不伪造占位；unit 绑定声明面开后回填（同遗留 3 性质） |
+| 14 | `node_exec[].budget` 为数组 `[{id, dimension, cap}]`（草案为单对象 `{dimension, unit, per_turn, node_cap}`） | 节点预算 = IR 预算账中 `scope == node:<路径>` 条目的逐条投影（id/dimension/cap 三元组，DSL 声明面原样；无命中即空数组）；草案单对象形的 `per_turn`/`node_cap` 无编译期来源 |
+| 15 | `artifact_contract[]` 多键 `provenance`（草案仅 name/is_final/qualified_by） | ADR-010 envelope 溯源：`envelope<T>` 声明机械解析回填 `provenance.envelope_of`（裁决 3），须在计划面可见。键位有正当理由，原漏登本表，兹补登 |
 
 ## 遗留（转 G2c/执行面对接）
 
@@ -93,3 +99,11 @@
 5. **组件清单的 `unit_bindings`/`domain pack` 聚合面**（§2.2 的 line 级快照）——`line` 槽位已占住，待 af-workorder `bind_line` 对接。
 6. **G3 golden 计划快照入库**：`af-compiler-plan` 三样例输出可作第二批 golden（本包已验证 CLI 可用与逐位确定性；入库动作归 G3 任务包，避免本包动 golden 禁区）。
 7. af/packages 首批组件声明 = 三门样例引用闭包（7 条）；其余 golden 源引用（crewkit/reactkit/reflexkit 等）未注册——按需扩清单即放行，E9001 fail-closed 语义已验证（Voyager 实跑拒绝）。
+
+## 更新记录
+
+- **2026-10-24（分支 `phase2-g2b-hyg`，任务包 P2-Q03）——G2b 卫生债清偿。依据：G2G3-放行裁决-20261024.md §一附条件**（G2 门放行附强制条件，「放行不豁免，CI integration 批强制清除」），三件：
+  1. **fmt 全量归零**：`cargo fmt -p af-compiler` 一次收齐（基线 `cargo fmt -p af-compiler -- --check` rc=1，去重 117 处 hunk——本工作树实跑复核 120 行原始 `Diff in` 去重 117，与独立验证报告 §7 计数一致；其中 49 处出自 G2b、68 处 G2a 基线既有，归属见该报告分文件表）。清偿后 `cargo fmt --check -p af-compiler` **rc=0**。**零语义**：改动仅 13 个 `.rs` 文件的格式（611 插入/183 删除），非空白字符多重集核对仅尾随逗号增补与配对大括号增减（rustfmt 机械动作），全量 `cargo test -p af-compiler` **53/53 原绿**（af-dsl 244/244 非干扰）。
+  2. **偏差表补登**：独立验证发现 4 项「未列入偏差表的出入」原漏登（其 §5.3 列 a-d，§9 称「四项未登记」；放行裁决 §一附条件②表述为「三项」，以验证文档所列为准全数补登为上表 **#12-#15**，含裁决点名的 `node_exec.unit` 缺 `selector` 契约字段）。表从 11 条增到 15 条。
+  3. **结构体计数勘误**：本文件「结构体清单」标题 29→41（见该节勘误注；提交 `e85bfdb` 信息中的「29 型」同源笔误，不可改写，以此勘误为准）。
+  - 证据文档：af-compiler-G2b-独立验证-20261024.md（有条件通过）+ G2G3-放行裁决-20261024.md §一/§三.2；本次清偿明细见 RESULT-hygene.md。

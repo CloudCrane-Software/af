@@ -324,7 +324,11 @@ impl fmt::Display for PlanError {
                 f,
                 "绑定未过（{} 条 E900x 违例）：{}",
                 violations.len(),
-                violations.iter().map(|v| v.to_string()).collect::<Vec<_>>().join("；")
+                violations
+                    .iter()
+                    .map(|v| v.to_string())
+                    .collect::<Vec<_>>()
+                    .join("；")
             ),
             Self::Lower(detail) => write!(f, "入口内 lowering 失败：{detail}"),
             Self::Serialize(detail) => write!(f, "计划序列化失败：{detail}"),
@@ -338,7 +342,9 @@ impl std::error::Error for PlanError {}
 /// [`PlanError::Unbound`]（一次点名全部违例）。
 pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePlan, PlanError> {
     if !report.is_ok() {
-        return Err(PlanError::Unbound { violations: report.violations.clone() });
+        return Err(PlanError::Unbound {
+            violations: report.violations.clone(),
+        });
     }
     let body = &ir.body;
     let dsl_digest = {
@@ -346,8 +352,12 @@ pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePl
             .map_err(|e| PlanError::Serialize(format!("IR 序列化失败：{e}")))?;
         crate::lower::digest_of(json.as_bytes())
     };
-    let plan_id =
-        format!("plan.{}@{}+{}", body.graph.name, body.graph.graph_version, &dsl_digest[..12]);
+    let plan_id = format!(
+        "plan.{}@{}+{}",
+        body.graph.name,
+        body.graph.graph_version,
+        &dsl_digest[..12]
+    );
 
     // node_exec：绑定投影 → 计划面（BTreeMap 迭代 = 点号路径字典序）。
     let node_exec: Vec<PlanNodeExec> = report
@@ -360,9 +370,18 @@ pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePl
                 unit_version: u.version.clone(),
             }),
             components: PlanComponents {
-                model_route: b.components.model_route.as_ref().map(|m| m.reference.clone()),
+                model_route: b
+                    .components
+                    .model_route
+                    .as_ref()
+                    .map(|m| m.reference.clone()),
                 loop_policy: None,
-                memory: b.components.memory.iter().map(|m| m.reference.clone()).collect(),
+                memory: b
+                    .components
+                    .memory
+                    .iter()
+                    .map(|m| m.reference.clone())
+                    .collect(),
                 tools: b
                     .components
                     .tools
@@ -380,7 +399,11 @@ pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePl
                 .budgets
                 .iter()
                 .filter(|e| e.scope == format!("node:{path}"))
-                .map(|e| NodeBudget { id: e.id.clone(), dimension: e.dimension, cap: e.cap })
+                .map(|e| NodeBudget {
+                    id: e.id.clone(),
+                    dimension: e.dimension,
+                    cap: e.cap,
+                })
                 .collect(),
             artifact_contract: b
                 .artifacts
@@ -398,7 +421,12 @@ pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePl
 
     // 恢复预案：安全点从全图 loop 声明收集（体内相对路径 + loop 归属）。
     let mut safety_points = Vec::new();
-    collect_safety_points(&body.graph.nodes, "", &body.graph.subgraphs, &mut safety_points);
+    collect_safety_points(
+        &body.graph.nodes,
+        "",
+        &body.graph.subgraphs,
+        &mut safety_points,
+    );
 
     Ok(ExecutablePlan {
         version: PLAN_VERSION,
@@ -424,7 +452,10 @@ pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePl
                 line: None,
                 budget_voucher: None,
                 artifacts: Vec::new(),
-                sla: SlaSlot { deadline: None, priority: PlanPriority::Normal },
+                sla: SlaSlot {
+                    deadline: None,
+                    priority: PlanPriority::Normal,
+                },
                 supersedes: None,
                 history: Vec::new(),
             },
@@ -438,14 +469,21 @@ pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePl
                 stop: body.policies.stop.clone(),
                 failures: body.policies.failures.clone(),
             },
-            resources: ResourcesSlot { gates: Vec::new(), limits: Vec::new() },
+            resources: ResourcesSlot {
+                gates: Vec::new(),
+                limits: Vec::new(),
+            },
             observation: ObservationSlot {
                 span_tree: ["invoke_workflow", "invoke_agent", "chat", "execute_tool"]
                     .iter()
                     .map(|s| (*s).to_string())
                     .collect(),
                 ctx_propagation: "env".to_string(),
-                otel: OtelSlot { enabled: false, endpoint: None, batch_size: 512 },
+                otel: OtelSlot {
+                    enabled: false,
+                    endpoint: None,
+                    batch_size: 512,
+                },
                 events: EventsSlot {
                     root_env: "AF_OBS_ROOT".to_string(),
                     line: String::new(),
@@ -483,7 +521,11 @@ fn collect_safety_points(
 ) {
     use crate::ir::SafetyPointKind;
     for n in nodes {
-        let path = if parent.is_empty() { n.id.clone() } else { format!("{parent}.{}", n.id) };
+        let path = if parent.is_empty() {
+            n.id.clone()
+        } else {
+            format!("{parent}.{}", n.id)
+        };
         if let Some(lp) = &n.loop_spec {
             for sp in &lp.safety_points {
                 out.push(PlanSafetyPoint {
@@ -553,7 +595,10 @@ impl fmt::Display for PlanParseError {
             Self::MissingVersion => write!(f, "计划信封缺 v 键"),
             Self::VersionNotInteger => write!(f, "计划信封 v 非整数"),
             Self::VersionNotOne { found } => {
-                write!(f, "计划信封 v={found} 非 {PLAN_VERSION}（拒绝式：整份拒绝）")
+                write!(
+                    f,
+                    "计划信封 v={found} 非 {PLAN_VERSION}（拒绝式：整份拒绝）"
+                )
             }
             Self::UnknownTopKey { key } => {
                 write!(f, "计划信封未知顶层键 {key:?}（只认 v + body）")
@@ -591,5 +636,7 @@ pub fn decode_plan(src: &str) -> Result<ExecutablePlan, PlanParseError> {
     }
 
     // ④ body 形状（deny_unknown_fields 全层）。
-    serde_json::from_value(value).map_err(|e| PlanParseError::MalformedBody { detail: e.to_string() })
+    serde_json::from_value(value).map_err(|e| PlanParseError::MalformedBody {
+        detail: e.to_string(),
+    })
 }

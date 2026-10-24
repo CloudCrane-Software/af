@@ -4,10 +4,7 @@
 /// 装载一个 golden 样例：读文件 + load + 全量校验（零违例断言）。
 /// 返回 `(Document, 源文本)`。
 pub fn sample(name: &str) -> (af_dsl::Document, String) {
-    let path = format!(
-        "{}/../af-dsl/testdata/{name}",
-        env!("CARGO_MANIFEST_DIR")
-    );
+    let path = format!("{}/../af-dsl/testdata/{name}", env!("CARGO_MANIFEST_DIR"));
     let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("读取 {path:?}：{e}"));
     let doc = af_dsl::load_str(&src).unwrap_or_else(|e| panic!("{name} 装载失败：{e}"));
     let report = af_dsl::validate(&doc);

@@ -47,7 +47,11 @@ fn repo_registry() -> ComponentRegistry {
 fn full_chain_plan(name: &str) -> String {
     let ir = gate_sample(name);
     let report = bind(&ir, &repo_registry());
-    assert!(report.is_ok(), "{name} 绑定应零违例：{:?}", report.violations);
+    assert!(
+        report.is_ok(),
+        "{name} 绑定应零违例：{:?}",
+        report.violations
+    );
     let plan = generate_plan(&ir, &report).unwrap_or_else(|e| panic!("{name} 计划生成失败：{e}"));
     serde_json::to_string_pretty(&plan).unwrap()
 }
@@ -79,7 +83,10 @@ fn sample2_plan_shape_matches_contract_skeleton() {
     assert_eq!(tail.len(), 12, "dsl_digest 前 12 位");
     assert!(tail.chars().all(|c| c.is_ascii_hexdigit()), "十六进制段");
     assert_eq!(body.compiled_from.graph_version, "1.0");
-    assert_eq!(body.compiled_from.compiler_version, env!("CARGO_PKG_VERSION"));
+    assert_eq!(
+        body.compiled_from.compiler_version,
+        env!("CARGO_PKG_VERSION")
+    );
     assert_eq!(body.compiled_from.dsl_digest.len(), 64);
     // 绑定快照摘要随计划携带（§2.2——执行面 E9004 核对面）
     assert_eq!(body.compiled_from.registry_digest, repo_registry().digest());
@@ -122,7 +129,10 @@ fn sample2_plan_shape_matches_contract_skeleton() {
             ("pkg.sweng.view@1", EffectClass::Pure),
         ]
     );
-    assert_eq!(engineer.components.model_route.as_deref(), Some("route.main@1"));
+    assert_eq!(
+        engineer.components.model_route.as_deref(),
+        Some("route.main@1")
+    );
     // node_exec 按点号路径字典序（确定性）
     let ids: Vec<&str> = body.node_exec.iter().map(|n| n.node_id.as_str()).collect();
     let mut sorted = ids.clone();
@@ -130,7 +140,11 @@ fn sample2_plan_shape_matches_contract_skeleton() {
     assert_eq!(ids, sorted, "node_exec 按路径字典序");
 
     // QA 节点：判定单元绑定（§7.1 unit 面）
-    let qa = body.node_exec.iter().find(|n| n.node_id == "build.qa").unwrap();
+    let qa = body
+        .node_exec
+        .iter()
+        .find(|n| n.node_id == "build.qa")
+        .unwrap();
     let unit = qa.unit.as_ref().unwrap();
     assert_eq!(unit.unit_id, "pkg.sweng.test_unit");
     assert_eq!(unit.unit_version, "1");
@@ -144,8 +158,15 @@ fn sample2_plan_shape_matches_contract_skeleton() {
         .find(|a| a.name == "prd")
         .expect("pm.prd 工件契约应在场");
     assert!(!prd.is_final, "终态发射者是 build 非 pm");
-    assert_eq!(prd.provenance.as_ref().unwrap().envelope_of.as_deref(), Some("prd"));
-    let build = body.node_exec.iter().find(|n| n.node_id == "build").unwrap();
+    assert_eq!(
+        prd.provenance.as_ref().unwrap().envelope_of.as_deref(),
+        Some("prd")
+    );
+    let build = body
+        .node_exec
+        .iter()
+        .find(|n| n.node_id == "build")
+        .unwrap();
     let report = build
         .artifact_contract
         .iter()
@@ -184,7 +205,10 @@ fn gptswarm_plan_carries_escape_specs() {
         .expect("graph_edit 逃逸应在场");
     assert_eq!(graph_edit.owner, "lang-team");
     assert_eq!(graph_edit.share_budget_pct, 10);
-    assert_eq!(graph_edit.kind, Some(af_compiler::ir::EscapeKind::ProgramSynthesis));
+    assert_eq!(
+        graph_edit.kind,
+        Some(af_compiler::ir::EscapeKind::ProgramSynthesis)
+    );
     // 注入点键 = 节点点号路径（体内可寻址）
     assert!(plan.body.escapes.contains_key("search.graph_edit"));
     // GPTSwarm 工具引用绑定（pkg.swarmkit.tools@1 → execute_map 体内）
@@ -192,9 +216,17 @@ fn gptswarm_plan_carries_escape_specs() {
         .body
         .node_exec
         .iter()
-        .find(|n| n.components.tools.iter().any(|t| t.reference == "pkg.swarmkit.tools@1"))
+        .find(|n| {
+            n.components
+                .tools
+                .iter()
+                .any(|t| t.reference == "pkg.swarmkit.tools@1")
+        })
         .expect("工具节点应在场");
-    assert_eq!(tool_node.components.tools[0].effect_class, EffectClass::ExternalOnce);
+    assert_eq!(
+        tool_node.components.tools[0].effect_class,
+        EffectClass::ExternalOnce
+    );
 }
 
 // ============================================================
@@ -252,13 +284,19 @@ fn plan_envelope_is_rejecting() {
     value["v"] = serde_json::json!(2);
     value["body"]["poison"] = serde_json::json!(1);
     let err = decode_plan(&value.to_string()).unwrap_err();
-    assert!(matches!(err, PlanParseError::VersionNotOne { found: 2 }), "got: {err}");
+    assert!(
+        matches!(err, PlanParseError::VersionNotOne { found: 2 }),
+        "got: {err}"
+    );
 
     // 未知顶层键
     let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
     value["extra"] = serde_json::json!(1);
     let err = decode_plan(&value.to_string()).unwrap_err();
-    assert!(matches!(err, PlanParseError::UnknownTopKey { .. }), "got: {err}");
+    assert!(
+        matches!(err, PlanParseError::UnknownTopKey { .. }),
+        "got: {err}"
+    );
 
     // 缺 v
     let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -270,7 +308,10 @@ fn plan_envelope_is_rejecting() {
     let mut value: serde_json::Value = serde_json::from_str(&json).unwrap();
     value["body"]["mystery"] = serde_json::json!(1);
     let err = decode_plan(&value.to_string()).unwrap_err();
-    assert!(matches!(err, PlanParseError::MalformedBody { .. }), "got: {err}");
+    assert!(
+        matches!(err, PlanParseError::MalformedBody { .. }),
+        "got: {err}"
+    );
 }
 
 /// fail-loud：绑定违例非空 → 计划生成拒绝（Unbound 一次点名全部 E900x）。
@@ -283,7 +324,10 @@ fn unbound_report_refuses_plan_generation() {
     match err {
         PlanError::Unbound { violations } => {
             assert!(!violations.is_empty());
-            assert!(violations.len() >= 4, "sample2 全部 uses 引用逐条点名：{violations:?}");
+            assert!(
+                violations.len() >= 4,
+                "sample2 全部 uses 引用逐条点名：{violations:?}"
+            );
         }
         other => panic!("应为 Unbound：{other}"),
     }

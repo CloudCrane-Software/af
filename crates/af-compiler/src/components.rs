@@ -142,9 +142,16 @@ pub enum ComponentRegistryError {
     /// components.json 读失败。
     ReadFailed { path: PathBuf, cause: String },
     /// JSON 解析或静态校验失败（inline 解析无路径 → None）。
-    Invalid { path: Option<PathBuf>, message: String },
+    Invalid {
+        path: Option<PathBuf>,
+        message: String,
+    },
     /// 同一 `name@version` 被多份清单声明（first = 首声者路径）。
-    DuplicateComponentRef { reference: String, first: PathBuf, second: PathBuf },
+    DuplicateComponentRef {
+        reference: String,
+        first: PathBuf,
+        second: PathBuf,
+    },
 }
 
 impl fmt::Display for ComponentRegistryError {
@@ -159,7 +166,11 @@ impl fmt::Display for ComponentRegistryError {
                 Some(p) => write!(f, "components.json 非法 {}: {message}", p.display()),
                 None => write!(f, "components.json 非法：{message}"),
             },
-            Self::DuplicateComponentRef { reference, first, second } => write!(
+            Self::DuplicateComponentRef {
+                reference,
+                first,
+                second,
+            } => write!(
                 f,
                 "组件引用 {reference:?} 重复声明：{} 与 {}",
                 first.display(),
@@ -189,7 +200,10 @@ impl ComponentRegistry {
     /// 空注册表（无 --registry 时的绑定面：一切带引用的文档将被 E9001 拒，
     /// fail-closed——与 af-dsl `declared_graphs` 默认空集同语义）。
     pub fn empty() -> Self {
-        Self { declarations: BTreeMap::new(), digest: crate::lower::digest_of(b"[]") }
+        Self {
+            declarations: BTreeMap::new(),
+            digest: crate::lower::digest_of(b"[]"),
+        }
     }
 
     /// 扫描包根：根级 + 全部包目录的 components.json（规则见模块注释）。
@@ -264,7 +278,10 @@ impl ComponentRegistry {
             }
         }
         let digest = Self::compute_digest(&declarations);
-        Ok(Self { declarations, digest })
+        Ok(Self {
+            declarations,
+            digest,
+        })
     }
 
     /// `registry_digest`：全量声明按 `(name, version)` 字典序（BTreeMap 迭代
@@ -272,8 +289,7 @@ impl ComponentRegistry {
     fn compute_digest(declarations: &BTreeMap<String, BTreeMap<String, ComponentDecl>>) -> String {
         let all: Vec<&ComponentDecl> = declarations.values().flat_map(BTreeMap::values).collect();
         // serde_json 对本类型理论不可达失败（内部不变量；装载面已收全部错误源）
-        let canonical =
-            serde_json::to_string(&all).expect("组件声明规范序列化失败（内部不变量）");
+        let canonical = serde_json::to_string(&all).expect("组件声明规范序列化失败（内部不变量）");
         crate::lower::digest_of(canonical.as_bytes())
     }
 
@@ -301,7 +317,10 @@ impl ComponentRegistry {
 /// model_route↔endpoint）；端点纪律（af-harness `validate_endpoint` 同源）。
 fn validate_decl(d: &ComponentDecl) -> Result<(), String> {
     if d.name.is_empty() || d.name.contains('@') {
-        return Err(format!("name {:?} 非空必填且不得含 '@'（组合引用保留分隔符）", d.name));
+        return Err(format!(
+            "name {:?} 非空必填且不得含 '@'（组合引用保留分隔符）",
+            d.name
+        ));
     }
     if d.version.is_empty() || d.version.contains('@') {
         return Err(format!(
@@ -318,7 +337,10 @@ fn validate_decl(d: &ComponentDecl) -> Result<(), String> {
                 ));
             }
             if d.endpoint.is_some() {
-                return Err(format!("tool 组件 {:?} 不得携带 endpoint（类别×字段正交）", d.name));
+                return Err(format!(
+                    "tool 组件 {:?} 不得携带 endpoint（类别×字段正交）",
+                    d.name
+                ));
             }
         }
         ComponentClass::ModelRoute => {

@@ -22,7 +22,10 @@ pub mod ir;
 pub mod lower;
 pub mod plan;
 
-pub use bind::{bind, BindCode, BindReport, BindViolation, BoundAgent, BoundComponents, BoundNodeExec, ResolvedComponent};
+pub use bind::{
+    bind, BindCode, BindReport, BindViolation, BoundAgent, BoundComponents, BoundNodeExec,
+    ResolvedComponent,
+};
 pub use components::{
     ComponentClass, ComponentDecl, ComponentRegistry, ComponentRegistryError, ComponentsFile,
     EndpointSpec,
