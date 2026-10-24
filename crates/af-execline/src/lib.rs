@@ -33,6 +33,8 @@ pub mod error;
 pub mod exec;
 pub mod ledger;
 pub mod mes;
+pub mod profile;
+pub mod suite;
 
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use driver::{DriveReport, DriverConfig, OrderLifecycleDriver};

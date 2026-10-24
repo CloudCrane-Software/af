@@ -8,7 +8,12 @@ description = "统一执行面 PoC：订单生命周期驱动（af-engine 门控
 # af-workorder：订单模型与门控错误类型（本 crate 不重定义）。
 # af-engine 只以子进程方式调用（9-op 单行 JSON 协议），不作为库依赖——真引擎不打桩。
 # af-mes：只用 MesEvent 类型 + 自有文件 stub writer，不连 ClickHouse（ADR-004 过渡态）。
+# af-harness：P1（af-bench 吸收）——profile 表与 suite::status_label 直接使用其公开
+# 类型（EndpointSpec/Protocol/AuthStyle/ReasoningTier/RunStatus）。原计划此依赖 P4 落位，
+# 因上述纯函数签名绑定 af-harness 类型而提前（偏差见 RESULT-P1.md）；不改依赖方向
+# （af-execline ← af-harness，无环：af-harness 不依赖 af-execline）。
 [dependencies]
+af-harness = { path = "../af-harness" }
 af-mes = { path = "../af-mes" }
 af-workorder = { path = "../af-workorder" }
 serde = { workspace = true }
@@ -19,6 +24,11 @@ thiserror = { workspace = true }
 # 集成测试构造 WorkOrder 快照与断言门控错误。版本随 workspace，不另引。
 af-mes = { path = "../af-mes" }
 af-workorder = { path = "../af-workorder" }
+# P1：status_label 六态测试构造 RunStatus::Stopped 需要 af-stop::Decision。
+af-stop = { path = "../af-stop" }
+# P1 对照测试经 #[path] 把 af-bench swev.rs 原文件编译进测试二进制（同输入对拍），
+# 其 sha256_hex 需要 sha2。钉锁树内现值（af-bench/af-effect-gateway 同款），不升不降。
+sha2 = "=0.10.9"
 
 [lints]
 workspace = true
