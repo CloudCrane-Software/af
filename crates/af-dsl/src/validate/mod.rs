@@ -154,7 +154,14 @@ impl<'a> Index<'a> {
                     owner_path: path.clone(),
                     decl: lp,
                 });
-                self.walk(&lp.body.nodes, &lp.body.edges, &path, &child, in_map, report);
+                self.walk(
+                    &lp.body.nodes,
+                    &lp.body.edges,
+                    &path,
+                    &child,
+                    in_map,
+                    report,
+                );
             }
             if let Some(mp) = &n.map {
                 let child = format!("{path}.map_body");

@@ -50,7 +50,10 @@ fn stop_when_non_boolean_is_e1053() {
     assert_eq!(codes(&src), ["E1053"]);
     assert_eq!(
         msgs(&src),
-        [("E1053", "policies.stop[0].when CEL 谓词求值非布尔：结果为 int".to_string())]
+        [(
+            "E1053",
+            "policies.stop[0].when CEL 谓词求值非布尔：结果为 int".to_string()
+        )]
     );
 }
 
@@ -72,7 +75,11 @@ fn stop_when_valid_global_vocabulary_passes() {
         "[]",
         "policies:\n  budgets: []\n  stop:\n    - { when: \"last_tool.first_line in ['FINISH', 'FINAL ANSWER']\", outcome: completed }\n    - { when: \"steps.tool_free >= 2\", outcome: failed }\n    - { when: \"input.q == 'x'\", outcome: completed }\n  failures: []\n",
     );
-    assert!(codes(&src).is_empty(), "全局词表合法表达式应放行：\n{}", run(&src));
+    assert!(
+        codes(&src).is_empty(),
+        "全局词表合法表达式应放行：\n{}",
+        run(&src)
+    );
 }
 
 #[test]
@@ -106,8 +113,15 @@ edges: []\npolicies: {{ budgets: [], stop: [], failures: [] }}\n"
 #[test]
 fn exit_when_attempt_and_scope_chain_roots_pass() {
     // attempt.passed（体内验证面内建）+ 体外根 n1（作用域链向外）+ 全局 steps。
-    let src = loop_doc("attempt.passed == true && n1.answer.ok == true && steps.turns >= 1", None);
-    assert!(codes(&src).is_empty(), "exit_when 词表根应放行：\n{}", run(&src));
+    let src = loop_doc(
+        "attempt.passed == true && n1.answer.ok == true && steps.turns >= 1",
+        None,
+    );
+    assert!(
+        codes(&src).is_empty(),
+        "exit_when 词表根应放行：\n{}",
+        run(&src)
+    );
 }
 
 #[test]
@@ -146,7 +160,11 @@ fn assert_inputs_binding_from_incoming_edges() {
         "[{ from: n0, output: answer, to: n2, input: answer }]",
         EMPTY_POLICIES,
     );
-    assert!(codes(&src).is_empty(), "inputs 建模合法表达式应放行：\n{}", run(&src));
+    assert!(
+        codes(&src).is_empty(),
+        "inputs 建模合法表达式应放行：\n{}",
+        run(&src)
+    );
 }
 
 #[test]
@@ -190,7 +208,11 @@ nodes:\n  - {{ id: n0, kind: task, emits: {{ answer: a }} }}\n
   - id: approver\n    kind: task\n    consumes: {{ answer: a }}\n    emits: {{ decision: a }}\n    human:\n      station: desk\n      role: reviewer\n      resume:\n        schema: {{ type: object, required: [approved], properties: {{ approved: {{ type: boolean }} }} }}\n    route:\n      default: exit\n      rules:\n        - {{ when: \"resume.approved == false\", goto: n0 }}\n  - id: n1\n    kind: task\n    emits: {{ answer: a }}\n\
 edges: [{{ from: n0, output: answer, to: approver, input: answer }}, {{ from: approver, output: decision, to: n0, input: answer }}]\n{EMPTY_POLICIES}"
     );
-    assert!(codes(&src).is_empty(), "resume 词表根应放行：\n{}", run(&src));
+    assert!(
+        codes(&src).is_empty(),
+        "resume 词表根应放行：\n{}",
+        run(&src)
+    );
 }
 
 // ---------- map 体 item 根 ----------
@@ -218,7 +240,11 @@ types:\n  - name: in_t\n    schema:\n      type: object\n      required: [tags]\
 nodes:\n  - id: n1\n    kind: task\n    map:\n      over: input.tags\n      body:\n        nodes:\n          - id: guard\n            kind: gate\n            emits: {{ done: a }}\n            assert: \"item == 'x'\"\n        edges: []\n    emits: {{ items: {{ from_body: guard.done }} }}\n\
 edges: []\n{EMPTY_POLICIES}"
     );
-    assert!(codes(&src).is_empty(), "item 根（string 元素）应放行：\n{}", run(&src));
+    assert!(
+        codes(&src).is_empty(),
+        "item 根（string 元素）应放行：\n{}",
+        run(&src)
+    );
 }
 
 // ---------- 判定不改变既有层行为（一次收齐、无双报） ----------

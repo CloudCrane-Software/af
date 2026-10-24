@@ -56,7 +56,10 @@ fn sole_writer_differs_from_declared_is_e2311() {
 #[test]
 fn zero_writer_is_tolerated_in_m1() {
     // 声明写者不写、无人写：非串行化违例，M1 不报（RESULT-M1 偏差表登记）。
-    let src = doc_with_store("n1", "  - { id: n1, kind: task, uses: { model: route.main@1 }, emits: { answer: a } }\n");
+    let src = doc_with_store(
+        "n1",
+        "  - { id: n1, kind: task, uses: { model: route.main@1 }, emits: { answer: a } }\n",
+    );
     assert_eq!(check(&src), Vec::<&str>::new());
 }
 

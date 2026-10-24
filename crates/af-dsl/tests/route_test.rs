@@ -113,7 +113,10 @@ fn multiple_exit_rules_are_benign_and_union() {
         guards_of(&norm),
         vec![("x".to_string(), "!((a == 1) || (b == 2))".to_string())]
     );
-    assert_eq!(norm.exit_guard, Some("(a == 1) || (b == 2) && !((a == 1))".to_string()));
+    assert_eq!(
+        norm.exit_guard,
+        Some("(a == 1) || (b == 2) && !((a == 1))".to_string())
+    );
 }
 
 // ---------- 构造违例（一次收齐） ----------
@@ -121,11 +124,8 @@ fn multiple_exit_rules_are_benign_and_union() {
 #[test]
 fn uncovered_out_edge_is_e2101() {
     // 规则 → y，default → x；z 两条路都不沾 → E2101（无重复目标混入）。
-    let issues = normalize(
-        &route(&[("a == 1", "y")], "x"),
-        &targets(&["x", "y", "z"]),
-    )
-    .expect_err("z 未覆盖应报违例");
+    let issues = normalize(&route(&[("a == 1", "y")], "x"), &targets(&["x", "y", "z"]))
+        .expect_err("z 未覆盖应报违例");
     assert_eq!(
         issues,
         vec![RouteIssue::UncoveredTarget {
@@ -136,8 +136,8 @@ fn uncovered_out_edge_is_e2101() {
 
 #[test]
 fn unknown_goto_is_e2102_for_rule_and_default() {
-    let issues = normalize(&route(&[("a == 1", "ghost")], "x"), &targets(&["x"]))
-        .expect_err("ghost 悬空");
+    let issues =
+        normalize(&route(&[("a == 1", "ghost")], "x"), &targets(&["x"])).expect_err("ghost 悬空");
     assert_eq!(
         issues,
         vec![RouteIssue::UnknownGoto {
@@ -145,8 +145,8 @@ fn unknown_goto_is_e2102_for_rule_and_default() {
             what: GotoRef::Rule(0),
         }]
     );
-    let issues = normalize(&route(&[("a == 1", "x")], "ghost"), &targets(&["x"]))
-        .expect_err("default 悬空");
+    let issues =
+        normalize(&route(&[("a == 1", "x")], "ghost"), &targets(&["x"])).expect_err("default 悬空");
     assert_eq!(
         issues,
         vec![RouteIssue::UnknownGoto {
@@ -268,9 +268,7 @@ fn route_yaml(default: &str, rules: &[(&str, &str)]) -> String {
     }
     let mut s = format!("    route:\n      default: {default}\n      rules:\n");
     for (when, goto) in rules {
-        s.push_str(&format!(
-            "        - {{ when: \"{when}\", goto: {goto} }}\n"
-        ));
+        s.push_str(&format!("        - {{ when: \"{when}\", goto: {goto} }}\n"));
     }
     s
 }
@@ -368,7 +366,10 @@ fn route_duplicate_target_is_exactly_e2103() {
 
 #[test]
 fn route_when_non_subset_function_is_e1052() {
-    let src = doc(&route_yaml("n3", &[("size(steps.turns) > 0", "n2")]), BOTH_EDGES);
+    let src = doc(
+        &route_yaml("n3", &[("size(steps.turns) > 0", "n2")]),
+        BOTH_EDGES,
+    );
     assert_eq!(codes(&src), ["E1052"]);
     assert_eq!(
         msgs(&src),

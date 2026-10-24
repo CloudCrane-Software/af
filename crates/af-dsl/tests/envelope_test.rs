@@ -65,7 +65,10 @@ fn unknown_top_key_is_e0004() {
 
 #[test]
 fn multiple_unknown_top_keys_collect_all() {
-    assert_eq!(envelope_codes("version: 1\nb1: 1\nb2: 2\n"), ["E0004", "E0004"]);
+    assert_eq!(
+        envelope_codes("version: 1\nb1: 1\nb2: 2\n"),
+        ["E0004", "E0004"]
+    );
 }
 
 #[test]

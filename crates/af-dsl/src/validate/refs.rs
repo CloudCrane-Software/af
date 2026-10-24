@@ -40,10 +40,7 @@ fn check_meta(doc: &Document, ix: &Index<'_>, report: &mut Report) {
             report.push(
                 ErrorCode::DanglingReference,
                 "root",
-                format!(
-                    "meta.output.from 指向未声明节点 {:?}",
-                    doc.meta.output.from
-                ),
+                format!("meta.output.from 指向未声明节点 {:?}", doc.meta.output.from),
             );
             return;
         }
@@ -321,7 +318,13 @@ fn check_from_body(
 }
 
 /// map.over：`input.字段` 或 同作用域 `节点.端口`（E2105），且必须是 list（E2104）。
-fn check_over(doc: &Document, ix: &Index<'_>, map_node: &NodeRef<'_>, over: &str, report: &mut Report) {
+fn check_over(
+    doc: &Document,
+    ix: &Index<'_>,
+    map_node: &NodeRef<'_>,
+    over: &str,
+    report: &mut Report,
+) {
     if let Some(field) = over.strip_prefix("input.") {
         match input_property(doc, field) {
             // schema 无 properties 可查 → 不判定（E2205 域已另行报 meta.input 问题）。
@@ -411,9 +414,7 @@ fn check_arg_ref(
 ) {
     if let Some(field) = value.strip_prefix("input.") {
         let field = field.split('.').next().unwrap_or(field);
-        if input_has_properties(doc)
-            && input_property(doc, field).is_none()
-        {
+        if input_has_properties(doc) && input_property(doc, field).is_none() {
             report.push(
                 ErrorCode::ArgOverRefDangling,
                 &owner.scope,

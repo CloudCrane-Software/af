@@ -188,11 +188,7 @@ pub(crate) fn synth_from_schema(schema: &serde_json::Value) -> Value {
             schema
                 .get("properties")
                 .and_then(|p| p.as_object())
-                .map(|props| {
-                    props
-                        .iter()
-                        .map(|(k, v)| (k.clone(), synth_from_schema(v)))
-                })
+                .map(|props| props.iter().map(|(k, v)| (k.clone(), synth_from_schema(v))))
                 .into_iter()
                 .flatten(),
         ),

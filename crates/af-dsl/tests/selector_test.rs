@@ -64,14 +64,20 @@ fn selector_without_fallback_is_rejected_as_e1002() {
 
 #[test]
 fn undeclared_rule_candidate_is_e2001_with_default_empty_registry() {
-    let src = base_doc(&selector_yaml(&[("input.q == 'x'", "pkg.g1@1")], "pkg.g0@1"));
+    let src = base_doc(&selector_yaml(
+        &[("input.q == 'x'", "pkg.g1@1")],
+        "pkg.g0@1",
+    ));
     assert_eq!(codes(&src, &[]), ["E2001", "E2001"]);
 }
 
 #[test]
 fn declared_versioned_candidates_pass_clean() {
     let src = base_doc(&selector_yaml(
-        &[("input.q == 'x'", "pkg.g1@1"), ("steps.turns >= 9", "pkg.g2@1")],
+        &[
+            ("input.q == 'x'", "pkg.g1@1"),
+            ("steps.turns >= 9", "pkg.g2@1"),
+        ],
         "pkg.g0@1",
     ));
     assert!(
@@ -83,7 +89,10 @@ fn declared_versioned_candidates_pass_clean() {
 
 #[test]
 fn undeclared_fallback_is_e2001_even_when_rules_declared() {
-    let src = base_doc(&selector_yaml(&[("input.q == 'x'", "pkg.g1@1")], "pkg.g0@1"));
+    let src = base_doc(&selector_yaml(
+        &[("input.q == 'x'", "pkg.g1@1")],
+        "pkg.g0@1",
+    ));
     let r = run(&src, &["pkg.g1@1"]);
     let msgs: Vec<(String, String)> = r
         .violations
@@ -115,7 +124,10 @@ fn unversioned_candidate_form_is_e2001() {
 
 #[test]
 fn selector_when_non_subset_function_is_e1052() {
-    let src = base_doc(&selector_yaml(&[("size(input.q) > 0", "pkg.g1@1")], "pkg.g0@1"));
+    let src = base_doc(&selector_yaml(
+        &[("size(input.q) > 0", "pkg.g1@1")],
+        "pkg.g0@1",
+    ));
     assert_eq!(codes(&src, &["pkg.g0@1", "pkg.g1@1"]), ["E1052"]);
     assert_eq!(
         run(&src, &["pkg.g0@1", "pkg.g1@1"]).violations[0].message,
@@ -132,7 +144,10 @@ fn selector_when_unknown_root_is_e2203() {
 #[test]
 fn selector_when_node_id_root_is_not_in_global_vocabulary() {
     // 选择器在 meta 层（无节点作用域链）：节点 id 根不在其位置词表 → E2203。
-    let src = base_doc(&selector_yaml(&[("n1.answer == a", "pkg.g1@1")], "pkg.g0@1"));
+    let src = base_doc(&selector_yaml(
+        &[("n1.answer == a", "pkg.g1@1")],
+        "pkg.g0@1",
+    ));
     assert_eq!(codes(&src, &["pkg.g0@1", "pkg.g1@1"]), ["E2203"]);
 }
 
@@ -149,7 +164,10 @@ fn declared_set_membership_does_not_excuse_unversioned_form() {
 
 #[test]
 fn declared_set_is_a_set() {
-    let src = base_doc(&selector_yaml(&[("input.q == 'x'", "pkg.g1@1")], "pkg.g0@1"));
+    let src = base_doc(&selector_yaml(
+        &[("input.q == 'x'", "pkg.g1@1")],
+        "pkg.g0@1",
+    ));
     let mut declared = BTreeSet::new();
     declared.insert("pkg.g0@1".to_string());
     declared.insert("pkg.g0@1".to_string());

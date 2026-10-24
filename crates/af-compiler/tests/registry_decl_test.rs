@@ -69,7 +69,11 @@ const DECLS_50: &[(&str, &str, ComponentClass)] = &[
     ("pkg.autogen.team.stall_unit", "1", ComponentClass::Unit),
     ("pkg.autogen.team.term_unit", "1", ComponentClass::Unit),
     ("pkg.camelkit.social_eval", "1", ComponentClass::Unit),
-    ("pkg.crewkit.guardrail.structural", "1", ComponentClass::Unit),
+    (
+        "pkg.crewkit.guardrail.structural",
+        "1",
+        ComponentClass::Unit,
+    ),
     ("pkg.langgraph.verify", "1", ComponentClass::Unit),
     ("pkg.reflexkit.evaluator", "1", ComponentClass::Unit),
     ("pkg.sweagent.aci_schema", "1", ComponentClass::Unit),
@@ -103,9 +107,12 @@ fn all_50_p2l12_declarations_resolve_with_expected_version_and_class() {
         let versions = reg
             .versions_of(name)
             .unwrap_or_else(|| panic!("{name} 应已注册（P2-L12 声明）"));
-        let decl = versions
-            .get(*version)
-            .unwrap_or_else(|| panic!("{name}@{version} 应已声明（已声明版本：{:?}）", versions.keys()));
+        let decl = versions.get(*version).unwrap_or_else(|| {
+            panic!(
+                "{name}@{version} 应已声明（已声明版本：{:?}）",
+                versions.keys()
+            )
+        });
         assert_eq!(decl.class, *class, "{name}@{version} 类应为 {class:?}");
         assert_eq!(decl.name, *name);
         assert_eq!(decl.version, *version);
@@ -129,7 +136,11 @@ fn all_50_p2l12_declarations_resolve_with_expected_version_and_class() {
 #[test]
 fn repo_registry_total_is_57_after_p2l12_expansion() {
     let reg = repo_registry();
-    assert_eq!(reg.component_count(), 57, "7（P2-L11 首批）+ 50（P2-L12 扩容）");
+    assert_eq!(
+        reg.component_count(),
+        57,
+        "7（P2-L11 首批）+ 50（P2-L12 扩容）"
+    );
 }
 
 /// 未版本化草稿引用的 7 名恰好单版本声明（bind 解析不歧义——闸门 §③
@@ -149,7 +160,12 @@ fn unversioned_referenced_names_declare_exactly_one_version() {
         let versions = reg
             .versions_of(name)
             .unwrap_or_else(|| panic!("{name} 应已注册"));
-        assert_eq!(versions.len(), 1, "{name} 未版本化引用须恰好单版本（当前 {:?}）", versions.keys());
+        assert_eq!(
+            versions.len(),
+            1,
+            "{name} 未版本化引用须恰好单版本（当前 {:?}）",
+            versions.keys()
+        );
     }
 }
 
@@ -195,7 +211,10 @@ policies:
         report.violations
     );
     assert!(
-        !report.violations.iter().any(|v| v.code == BindCode::RefMissing),
+        !report
+            .violations
+            .iter()
+            .any(|v| v.code == BindCode::RefMissing),
         "名已注册，不应再报 E9001：{:?}",
         report.violations
     );

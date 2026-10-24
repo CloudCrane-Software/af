@@ -187,9 +187,7 @@ pub struct UsesDecl {
 /// deny_unknown_fields」硬边界——多余键/对象 schema → E1003。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EmitSpec {
-    FromBody {
-        from_body: String,
-    },
+    FromBody { from_body: String },
     Type(PortType),
 }
 
@@ -202,9 +200,11 @@ impl<'de> Deserialize<'de> for EmitSpec {
                 if m.len() == 1 && m.contains_key(&key) {
                     let path = match m.get(&key) {
                         Some(serde_yaml::Value::String(s)) => s,
-                        _ => return Err(serde::de::Error::custom(
-                            "invalid type: from_body 的值必须是字符串路径（节点.端口）",
-                        )),
+                        _ => {
+                            return Err(serde::de::Error::custom(
+                                "invalid type: from_body 的值必须是字符串路径（节点.端口）",
+                            ))
+                        }
                     };
                     Ok(EmitSpec::FromBody {
                         from_body: path.clone(),

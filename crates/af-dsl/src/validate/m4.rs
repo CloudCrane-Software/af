@@ -129,7 +129,11 @@ fn global_env(doc: &Document) -> CelEnv {
     let mut env = CelEnv::new();
     env.add(
         "steps",
-        cel::vmap(STEPS_FIELDS.iter().map(|f| ((*f).to_string(), Value::Int(0)))),
+        cel::vmap(
+            STEPS_FIELDS
+                .iter()
+                .map(|f| ((*f).to_string(), Value::Int(0))),
+        ),
     );
     env.add(
         "budget",
@@ -144,7 +148,10 @@ fn global_env(doc: &Document) -> CelEnv {
         "last_tool",
         cel::vmap([
             ("name".to_string(), Value::String(String::new().into())),
-            ("first_line".to_string(), Value::String(String::new().into())),
+            (
+                "first_line".to_string(),
+                Value::String(String::new().into()),
+            ),
             ("ok".to_string(), Value::Bool(true)),
         ]),
     );
@@ -206,7 +213,9 @@ fn add_attempt(doc: &Document, ix: &Index<'_>, env: &mut CelEnv, body_scope: &st
     hm.insert("passed".to_string(), Value::Bool(true));
     if let Some(scope) = ix.scopes.get(body_scope) {
         for path in scope.ids.values() {
-            let Some(nref) = ix.nodes.get(path) else { continue };
+            let Some(nref) = ix.nodes.get(path) else {
+                continue;
+            };
             if matches!(nref.node.kind.as_str(), "check" | "gate") {
                 for (port, spec) in nref.node.emits.iter().flatten() {
                     hm.insert(port.clone(), emit_port_value(doc, ix, nref, port, spec));
@@ -223,7 +232,9 @@ fn add_attempt(doc: &Document, ix: &Index<'_>, env: &mut CelEnv, body_scope: &st
 fn add_item(doc: &Document, ix: &Index<'_>, env: &mut CelEnv, from_scope: &str) {
     for label in scope_chain(ix, from_scope) {
         if let Some(owner_path) = label.strip_suffix(".map_body") {
-            let Some(map_node) = ix.nodes.get(owner_path) else { continue };
+            let Some(map_node) = ix.nodes.get(owner_path) else {
+                continue;
+            };
             let over = match &map_node.node.map {
                 Some(m) => m.over.as_str(),
                 None => continue,
@@ -404,10 +415,7 @@ fn synth_expr(doc: &Document, e: &TypeExpr) -> Value {
 }
 
 fn type_schema<'a>(doc: &'a Document, name: &str) -> Option<&'a serde_json::Value> {
-    doc.types
-        .iter()
-        .find(|t| t.name == name)
-        .map(|t| &t.schema)
+    doc.types.iter().find(|t| t.name == name).map(|t| &t.schema)
 }
 
 // ---------- route 归一化接线 ----------

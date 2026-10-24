@@ -82,7 +82,10 @@ fn escape_with_adjudicated_kind_parses() {
             "policies: { budgets: [], stop: [], failures: [] }\n",
         );
         let parsed: Document = load_str(&src).unwrap_or_else(|e| panic!("{kind} 应合法：{e}"));
-        assert_eq!(parsed.nodes[0].escape.as_ref().unwrap().impl_ref, "p/x@1/h.py");
+        assert_eq!(
+            parsed.nodes[0].escape.as_ref().unwrap().impl_ref,
+            "p/x@1/h.py"
+        );
     }
 }
 
@@ -90,16 +93,17 @@ fn escape_with_adjudicated_kind_parses() {
 
 #[test]
 fn unknown_field_in_meta_is_e1001() {
-    let src = doc(
-        "  - id: n1\n    kind: task\n    emits: { answer: a }",
-        "",
-    ).replace("  entry: n1", "  entry: n1\n  bogus_meta: 1");
+    let src = doc("  - id: n1\n    kind: task\n    emits: { answer: a }", "")
+        .replace("  entry: n1", "  entry: n1\n  bogus_meta: 1");
     assert_eq!(shape_codes(&src), ["E1001"]);
 }
 
 #[test]
 fn unknown_field_in_node_is_e1001() {
-    let src = doc("  - id: n1\n    kind: task\n    bogus_node: 1\n    emits: { answer: a }", "");
+    let src = doc(
+        "  - id: n1\n    kind: task\n    bogus_node: 1\n    emits: { answer: a }",
+        "",
+    );
     assert_eq!(shape_codes(&src), ["E1001"]);
 }
 
@@ -303,7 +307,10 @@ fn from_body_with_extra_key_is_rejected() {
 
 #[test]
 fn malformed_type_expression_is_e1003() {
-    let src = doc("  - id: n1\n    kind: task\n    emits: { answer: \"list<<\" }", "");
+    let src = doc(
+        "  - id: n1\n    kind: task\n    emits: { answer: \"list<<\" }",
+        "",
+    );
     assert_eq!(shape_codes(&src), ["E1003"]);
 }
 

@@ -431,7 +431,8 @@ fn require_args_k(nref: &NodeRef<'_>, i: usize, s: &SectionDecl, report: &mut Re
             &nref.scope,
             format!(
                 "node '{}' section[{i}] policy '{}' 参数 args.k 缺失或非正整数",
-                nref.path, s.policy.as_deref().unwrap_or_default()
+                nref.path,
+                s.policy.as_deref().unwrap_or_default()
             ),
         );
     }

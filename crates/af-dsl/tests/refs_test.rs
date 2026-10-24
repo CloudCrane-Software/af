@@ -12,7 +12,14 @@ const DEF_META: &str = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\
 const DEF_TYPES: &str = "types:\n  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }\n  - { name: a, schema: { type: object, required: [text], properties: { text: { type: string } } } }\n";
 const DEF_POLICIES: &str = "policies:\n  budgets: []\n  stop: []\n  failures: []\n";
 
-fn build(meta: &str, types: &str, stores: &str, nodes: &str, edges: &str, policies: &str) -> String {
+fn build(
+    meta: &str,
+    types: &str,
+    stores: &str,
+    nodes: &str,
+    edges: &str,
+    policies: &str,
+) -> String {
     let stores = if stores.is_empty() {
         String::new()
     } else {
@@ -27,7 +34,14 @@ fn build(meta: &str, types: &str, stores: &str, nodes: &str, edges: &str, polici
 }
 
 fn base() -> String {
-    build(DEF_META, DEF_TYPES, "", "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n", "", DEF_POLICIES)
+    build(
+        DEF_META,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n",
+        "",
+        DEF_POLICIES,
+    )
 }
 
 fn check(src: &str) -> Vec<&'static str> {
@@ -80,7 +94,10 @@ fn entry_ghost_is_e2001() {
 
 #[test]
 fn output_from_ghost_is_e2001() {
-    let src = base().replace("output: { ref: a, from: n1 }", "output: { ref: a, from: ghost }");
+    let src = base().replace(
+        "output: { ref: a, from: n1 }",
+        "output: { ref: a, from: ghost }",
+    );
     assert_eq!(check(&src), ["E2001"]);
 }
 
@@ -95,13 +112,19 @@ fn edge_endpoint_ghost_is_e2001() {
 
 #[test]
 fn writes_unknown_store_is_e2001() {
-    let src = base().replace("    uses: { model: route.main@1 }", "    uses: { model: route.main@1 }\n    writes: [ghost_s]");
+    let src = base().replace(
+        "    uses: { model: route.main@1 }",
+        "    uses: { model: route.main@1 }\n    writes: [ghost_s]",
+    );
     assert_eq!(check(&src), ["E2001"]);
 }
 
 #[test]
 fn reads_unknown_store_is_e2001() {
-    let src = base().replace("    uses: { model: route.main@1 }", "    uses: { model: route.main@1 }\n    reads: [ghost_s]");
+    let src = base().replace(
+        "    uses: { model: route.main@1 }",
+        "    uses: { model: route.main@1 }\n    reads: [ghost_s]",
+    );
     assert_eq!(check(&src), ["E2001"]);
 }
 
@@ -171,13 +194,19 @@ fn emits_unknown_type_is_e2205() {
 
 #[test]
 fn list_payload_unknown_type_is_e2205() {
-    let src = base().replace("emits: { answer: a }", "emits: { answer: \"list<ghost_t>\" }");
+    let src = base().replace(
+        "emits: { answer: a }",
+        "emits: { answer: \"list<ghost_t>\" }",
+    );
     assert_eq!(check(&src), ["E2205"]);
 }
 
 #[test]
 fn envelope_payload_unknown_type_is_e2205() {
-    let src = base().replace("emits: { answer: a }", "emits: { answer: \"envelope<ghost_t>\" }");
+    let src = base().replace(
+        "emits: { answer: a }",
+        "emits: { answer: \"envelope<ghost_t>\" }",
+    );
     assert_eq!(check(&src), ["E2205"]);
 }
 
@@ -204,38 +233,44 @@ fn meta_input_unknown_type_is_e2205() {
 
 #[test]
 fn edge_output_port_missing_is_e2201() {
-    let src = base().replace(
-        "edges: []",
-        "edges:\n  - { from: n1, output: nope, to: n2, input: x }",
-    ).replace(
-        "    emits: { answer: a }\n",
-        "    emits: { answer: a }\n  - id: n2\n    kind: task\n",
-    );
+    let src = base()
+        .replace(
+            "edges: []",
+            "edges:\n  - { from: n1, output: nope, to: n2, input: x }",
+        )
+        .replace(
+            "    emits: { answer: a }\n",
+            "    emits: { answer: a }\n  - id: n2\n    kind: task\n",
+        );
     assert_eq!(check(&src), ["E2201"]);
 }
 
 #[test]
 fn edge_input_port_not_consumed_is_e2201() {
     // 消费者声明了 consumes：入边端口必须 ∈ consumes 键集。
-    let src = base().replace(
-        "edges: []",
-        "edges:\n  - { from: n1, output: answer, to: n2, input: nope }",
-    ).replace(
-        "    emits: { answer: a }\n",
-        "    emits: { answer: a }\n  - id: n2\n    kind: task\n    consumes: { answer: a }\n",
-    );
+    let src = base()
+        .replace(
+            "edges: []",
+            "edges:\n  - { from: n1, output: answer, to: n2, input: nope }",
+        )
+        .replace(
+            "    emits: { answer: a }\n",
+            "    emits: { answer: a }\n  - id: n2\n    kind: task\n    consumes: { answer: a }\n",
+        );
     assert_eq!(check(&src), ["E2201"]);
 }
 
 #[test]
 fn edge_type_mismatch_is_e2201() {
-    let src = base().replace(
-        "edges: []",
-        "edges:\n  - { from: n1, output: answer, to: n2, input: x }",
-    ).replace(
-        "    emits: { answer: a }\n",
-        "    emits: { answer: a }\n  - id: n2\n    kind: task\n    consumes: { x: in_t }\n",
-    );
+    let src = base()
+        .replace(
+            "edges: []",
+            "edges:\n  - { from: n1, output: answer, to: n2, input: x }",
+        )
+        .replace(
+            "    emits: { answer: a }\n",
+            "    emits: { answer: a }\n  - id: n2\n    kind: task\n    consumes: { x: in_t }\n",
+        );
     assert_eq!(check(&src), ["E2201"]);
 }
 

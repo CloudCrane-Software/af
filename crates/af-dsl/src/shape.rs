@@ -44,7 +44,11 @@ pub fn check_vocab(doc: &Document) -> Vec<crate::error::Violation> {
                     out.push(Violation::new(
                         ErrorCode::InvalidEnumValue,
                         scope.to_string(),
-                        format!("ops[{i}] 算子 {:?} 不在闭环词表 {:?}", op.op, crate::model::OP_KINDS),
+                        format!(
+                            "ops[{i}] 算子 {:?} 不在闭环词表 {:?}",
+                            op.op,
+                            crate::model::OP_KINDS
+                        ),
                     ));
                 }
             }
@@ -57,7 +61,8 @@ pub fn check_vocab(doc: &Document) -> Vec<crate::error::Violation> {
                         scope.to_string(),
                         format!(
                             "context.sections[{i}] 来源 {:?} 不在闭环词表 {:?}",
-                            s.from, crate::model::SECTION_FROMS
+                            s.from,
+                            crate::model::SECTION_FROMS
                         ),
                     ));
                 }
@@ -69,7 +74,10 @@ pub fn check_vocab(doc: &Document) -> Vec<crate::error::Violation> {
 
 /// 深度遍历全部节点（含 loop/map 体内嵌），scope 标当前所在体
 /// （"root" / "<节点路径>.loop_body" / "<节点路径>.map_body"，与 validate 索引一致）。
-pub(crate) fn walk_nodes<'a>(doc: &'a Document, f: &mut impl FnMut(&'a crate::model::NodeDecl, &str)) {
+pub(crate) fn walk_nodes<'a>(
+    doc: &'a Document,
+    f: &mut impl FnMut(&'a crate::model::NodeDecl, &str),
+) {
     fn walk_body<'a>(
         nodes: &'a [crate::model::NodeDecl],
         parent_path: &str,

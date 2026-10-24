@@ -106,7 +106,12 @@ fn spec_inv4_fixture_triggers_exactly_e2331_with_e2303() {
 fn plain_task_reading_eval_input_store_is_e2331() {
     // uses.tool 而非 model：非 LLM-bound，无 E2303——纯 E2331。
     let src = doc(
-        &reader("thief", "task", ", uses: { tool: pkg.exfil@1 }", "reads: [answers_ref],"),
+        &reader(
+            "thief",
+            "task",
+            ", uses: { tool: pkg.exfil@1 }",
+            "reads: [answers_ref],",
+        ),
         "[{ from: loader, output: done, to: thief, input: done }]",
     );
     assert_eq!(check(&src), ["E2331"]);
@@ -126,7 +131,10 @@ fn section_reference_to_eval_input_store_is_e2331() {
     // reads 之外的另一条读通道：from:store 段（无 reads[] → 无 E2303；
     // 入边端口 done 已被 from:edge 段恰一个引用 → 无 E2304）。
     let solver = "  - id: solver\n    kind: task\n    uses: { model: route.main@1 }\n    consumes: { done: signal }\n    emits: { answer: a }\n    context:\n      sections:\n        - { from: edge, port: done, quota_tokens: 50 }\n        - { from: store, store: answers_ref, policy: latest_k, args: { k: 4 }, quota_tokens: 120 }\n";
-    let src = doc(solver, "[{ from: loader, output: done, to: solver, input: done }]");
+    let src = doc(
+        solver,
+        "[{ from: loader, output: done, to: solver, input: done }]",
+    );
     assert_eq!(check(&src), ["E2331"]);
     assert_eq!(
         msgs(&src),
@@ -156,7 +164,12 @@ fn gate_with_unit_reading_eval_input_store_is_e2331() {
     // §5 集合字面：{writer, 绑 uses.unit 的 check 节点}——gate 属验证面但
     // 非评估器（评估器外部化要求 kind=check + uses.unit 严格双条件）。
     let src = doc(
-        &reader("guard", "gate", ", uses: { unit: pkg.guard@1 }", "reads: [answers_ref],"),
+        &reader(
+            "guard",
+            "gate",
+            ", uses: { unit: pkg.guard@1 }",
+            "reads: [answers_ref],",
+        ),
         "[{ from: loader, output: done, to: guard, input: done }]",
     );
     assert_eq!(check(&src), ["E2331"]);
@@ -177,7 +190,12 @@ fn writer_reading_own_eval_input_store_is_clean() {
 fn check_with_unit_reading_eval_input_store_is_clean() {
     // 样例 4 assess 模式：check + uses.unit 是唯一合法候选外读者。
     let src = doc(
-        &reader("assess", "check", ", uses: { unit: pkg.searchkit.assess@1 }", "reads: [answers_ref],"),
+        &reader(
+            "assess",
+            "check",
+            ", uses: { unit: pkg.searchkit.assess@1 }",
+            "reads: [answers_ref],",
+        ),
         "[{ from: loader, output: done, to: assess, input: done }]",
     );
     assert_eq!(check(&src), Vec::<&str>::new());
@@ -205,8 +223,19 @@ fn two_offenders_report_two_e2331_in_path_order() {
     // solver（sections 通道，无入边）与 thief（reads 通道）并犯 → 两条
     // E2331，顺序 = 节点索引序（BTree 路径序：solver < thief）。
     let solver = "  - id: solver\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n    context:\n      sections:\n        - { from: store, store: answers_ref, policy: latest_k, args: { k: 4 }, quota_tokens: 120 }\n";
-    let nodes = format!("{solver}{}", reader("thief", "task", ", uses: { tool: pkg.exfil@1 }", "reads: [answers_ref],"));
-    let src = doc(&nodes, "[{ from: loader, output: done, to: thief, input: done }]");
+    let nodes = format!(
+        "{solver}{}",
+        reader(
+            "thief",
+            "task",
+            ", uses: { tool: pkg.exfil@1 }",
+            "reads: [answers_ref],"
+        )
+    );
+    let src = doc(
+        &nodes,
+        "[{ from: loader, output: done, to: thief, input: done }]",
+    );
     assert_eq!(check(&src), ["E2331", "E2331"]);
 }
 
@@ -215,7 +244,12 @@ fn dangling_writer_suppresses_e2331_noise() {
     // writer 路径悬空已由 refs 层 E2001 定罪；INV-4 对该 store 跳过
     // （合法读者集合无从建立，双码只产噪声——承 M1 偏差⑨纪律）。
     let src = doc(
-        &reader("thief", "task", ", uses: { tool: pkg.exfil@1 }", "reads: [answers_ref],"),
+        &reader(
+            "thief",
+            "task",
+            ", uses: { tool: pkg.exfil@1 }",
+            "reads: [answers_ref],",
+        ),
         "[{ from: loader, output: done, to: thief, input: done }]",
     )
     .replace(

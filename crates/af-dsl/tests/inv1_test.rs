@@ -96,10 +96,8 @@ fn spec_inv1_fixture_triggers_exactly_e2301_e2303() {
 
 #[test]
 fn input_field_not_in_schema_is_e2301() {
-    let src = llm(
-        "context: { sections: [\
-{ from: input, fields: [ghost], policy: project, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: input, fields: [ghost], policy: project, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2301"]);
     assert_eq!(
         msgs(&src),
@@ -113,10 +111,8 @@ fn input_field_not_in_schema_is_e2301() {
 #[test]
 fn edge_port_not_incoming_is_e2301() {
     // n1 无任何入边，from:edge 段引用端口 ghost。
-    let src = llm(
-        "context: { sections: [\
-{ from: edge, port: ghost, policy: project, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: edge, port: ghost, policy: project, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2301"]);
     assert_eq!(
         msgs(&src),
@@ -129,10 +125,8 @@ fn edge_port_not_incoming_is_e2301() {
 
 #[test]
 fn store_not_declared_is_e2301() {
-    let src = llm(
-        "context: { sections: [\
-{ from: store, store: ghost, policy: full, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: store, store: ghost, policy: full, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2301"]);
     assert_eq!(
         msgs(&src),
@@ -146,18 +140,22 @@ fn store_not_declared_is_e2301() {
 #[test]
 fn section_missing_source_field_is_e2301() {
     // 平铺联合体的每 from 必配来源字段：input.fields / edge.port / template.template_ref。
-    let src = llm(
-        "context: { sections: [\
+    let src = llm("context: { sections: [\
 { from: input, quota_tokens: 100 }, \
 { from: edge, quota_tokens: 100 }, \
-{ from: template, quota_tokens: 100 }] }",
-    );
+{ from: template, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2301", "E2301", "E2301"]);
     assert_eq!(
         msgs(&src),
         [
-            ("E2301", "node 'n1' section[0] from 'input' 缺来源字段 fields[]".to_string()),
-            ("E2301", "node 'n1' section[1] from 'edge' 缺来源字段 port".to_string()),
+            (
+                "E2301",
+                "node 'n1' section[0] from 'input' 缺来源字段 fields[]".to_string()
+            ),
+            (
+                "E2301",
+                "node 'n1' section[1] from 'edge' 缺来源字段 port".to_string()
+            ),
             (
                 "E2301",
                 "node 'n1' section[2] from 'template' 缺来源字段 template_ref".to_string()
@@ -177,10 +175,8 @@ fn store_section_missing_store_name_is_e2301_and_e2401() {
 
 #[test]
 fn quota_zero_is_e2302() {
-    let src = llm(
-        "context: { sections: [\
-{ from: template, template_ref: pkg.t, quota_tokens: 0 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: template, template_ref: pkg.t, quota_tokens: 0 }] }");
     assert_eq!(check(&src), ["E2302"]);
     assert_eq!(
         msgs(&src),
@@ -195,20 +191,16 @@ fn quota_zero_is_e2302() {
 #[test]
 fn quota_zero_with_policy_none_on_store_is_legal() {
     // 提案 §7-5：`none` 段配额记 0 是词法变通——policy:none 的 store 段 quota 0 合法。
-    let src = llm(
-        "context: { sections: [\
-{ from: store, store: s, policy: none, quota_tokens: 0 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: store, store: s, policy: none, quota_tokens: 0 }] }");
     assert_eq!(check(&src), Vec::<&str>::new());
 }
 
 #[test]
 fn quota_zero_with_policy_none_on_non_store_is_e2401_and_e2302() {
     // none 是 store 视图策略：input 段带 none → E2401（不适用）；例外不生效 → E2302。
-    let src = llm(
-        "context: { sections: [\
-{ from: input, fields: [q], policy: none, quota_tokens: 0 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: input, fields: [q], policy: none, quota_tokens: 0 }] }");
     assert_eq!(check(&src), ["E2401", "E2302"]);
 }
 
@@ -380,10 +372,8 @@ fn store_policy_missing_is_e2401() {
 
 #[test]
 fn store_policy_unknown_is_e2401() {
-    let src = llm(
-        "context: { sections: [\
-{ from: store, store: s, policy: rolling, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: store, store: s, policy: rolling, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2401"]);
     assert_eq!(
         msgs(&src),
@@ -396,10 +386,8 @@ fn store_policy_unknown_is_e2401() {
 
 #[test]
 fn store_view_policy_on_input_section_is_e2401() {
-    let src = llm(
-        "context: { sections: [\
-{ from: input, fields: [q], policy: full, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: input, fields: [q], policy: full, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2401"]);
     assert_eq!(
         msgs(&src),
@@ -413,10 +401,8 @@ fn store_view_policy_on_input_section_is_e2401() {
 
 #[test]
 fn policy_on_template_section_is_e2401() {
-    let src = llm(
-        "context: { sections: [\
-{ from: template, template_ref: pkg.t, policy: project, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: template, template_ref: pkg.t, policy: project, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2401"]);
     assert_eq!(
         msgs(&src),
@@ -429,10 +415,8 @@ fn policy_on_template_section_is_e2401() {
 
 #[test]
 fn latest_k_without_args_k_is_e2401() {
-    let src = llm(
-        "context: { sections: [\
-{ from: store, store: s, policy: latest_k, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: store, store: s, policy: latest_k, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2401"]);
     assert_eq!(
         msgs(&src),
@@ -445,19 +429,15 @@ fn latest_k_without_args_k_is_e2401() {
 
 #[test]
 fn latest_k_with_zero_k_is_e2401() {
-    let src = llm(
-        "context: { sections: [\
-{ from: store, store: s, policy: latest_k, args: { k: 0 }, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: store, store: s, policy: latest_k, args: { k: 0 }, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2401"]);
 }
 
 #[test]
 fn retrieve_without_component_is_e2401() {
-    let src = llm(
-        "context: { sections: [\
-{ from: store, store: s, policy: retrieve, args: { k: 3 }, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: store, store: s, policy: retrieve, args: { k: 3 }, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2401"]);
     assert_eq!(
         msgs(&src),
@@ -470,10 +450,8 @@ fn retrieve_without_component_is_e2401() {
 
 #[test]
 fn retrieve_without_args_k_is_e2401() {
-    let src = llm(
-        "context: { sections: [\
-{ from: store, store: s, policy: retrieve, component: pkg.sim@1, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: store, store: s, policy: retrieve, component: pkg.sim@1, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2401"]);
     assert_eq!(
         msgs(&src),
@@ -486,10 +464,8 @@ fn retrieve_without_args_k_is_e2401() {
 
 #[test]
 fn summarize_without_component_is_e2401() {
-    let src = llm(
-        "context: { sections: [\
-{ from: store, store: s, policy: summarize, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: store, store: s, policy: summarize, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2401"]);
     assert_eq!(
         msgs(&src),
@@ -504,10 +480,8 @@ fn summarize_without_component_is_e2401() {
 
 #[test]
 fn arg_not_in_formals_is_e2402() {
-    let src = llm(
-        "context: { sections: [\
-{ from: arg, name: ghost, policy: project, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: arg, name: ghost, policy: project, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2402"]);
     assert_eq!(
         msgs(&src),
@@ -521,10 +495,8 @@ fn arg_not_in_formals_is_e2402() {
 #[test]
 fn map_implicit_item_not_visible_at_root_is_e2402() {
     // map 的隐式形参 item 只在 map 体内可见——根图不是体。
-    let src = llm(
-        "context: { sections: [\
-{ from: arg, name: item, policy: project, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: arg, name: item, policy: project, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2402"]);
 }
 
@@ -577,10 +549,8 @@ fn arg_resolution_walks_scope_chain_outward() {
 
 #[test]
 fn template_vars_input_field_dangling_is_e2403() {
-    let src = llm(
-        "context: { sections: [\
-{ from: template, template_ref: pkg.t, vars: { x: input.nope }, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: template, template_ref: pkg.t, vars: { x: input.nope }, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2403"]);
     assert_eq!(
         msgs(&src),
@@ -593,10 +563,8 @@ fn template_vars_input_field_dangling_is_e2403() {
 
 #[test]
 fn template_vars_arg_dangling_is_e2403() {
-    let src = llm(
-        "context: { sections: [\
-{ from: template, template_ref: pkg.t, vars: { x: arg.nope }, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: template, template_ref: pkg.t, vars: { x: arg.nope }, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2403"]);
     assert_eq!(
         msgs(&src),
@@ -610,19 +578,15 @@ fn template_vars_arg_dangling_is_e2403() {
 #[test]
 fn template_vars_literal_and_valid_refs_are_clean() {
     // 字面量（非 input./arg. 前缀）不判；input.q 可解析。
-    let src = llm(
-        "context: { sections: [\
-{ from: template, template_ref: pkg.t, vars: { v: b, q2: input.q }, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: template, template_ref: pkg.t, vars: { v: b, q2: input.q }, quota_tokens: 100 }] }");
     assert_eq!(check(&src), Vec::<&str>::new());
 }
 
 #[test]
 fn template_vars_empty_ref_is_e2403() {
-    let src = llm(
-        "context: { sections: [\
-{ from: template, template_ref: pkg.t, vars: { a: 'input.', b: 'arg.' }, quota_tokens: 100 }] }",
-    );
+    let src = llm("context: { sections: [\
+{ from: template, template_ref: pkg.t, vars: { a: 'input.', b: 'arg.' }, quota_tokens: 100 }] }");
     assert_eq!(check(&src), ["E2403", "E2403"]);
     assert_eq!(
         msgs(&src),

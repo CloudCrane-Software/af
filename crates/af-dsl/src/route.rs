@@ -83,7 +83,10 @@ pub enum RouteIssue {
 /// 全部构造校验通过 → Ok；任一违例 → Err（违例一次收齐，序：E2102（规则序
 /// → default）→ E2103（目标名序）→ E2101（目标名序，且在 E2102/E2103 在场
 /// 时整体抑制——覆盖面不可信，不产噪声级联）。
-pub fn normalize(route: &RouteDecl, out_targets: &BTreeSet<String>) -> Result<RouteNorm, Vec<RouteIssue>> {
+pub fn normalize(
+    route: &RouteDecl,
+    out_targets: &BTreeSet<String>,
+) -> Result<RouteNorm, Vec<RouteIssue>> {
     let mut issues = Vec::new();
     let valid = |g: &str| g == EXIT || out_targets.contains(g);
 
@@ -112,11 +115,13 @@ pub fn normalize(route: &RouteDecl, out_targets: &BTreeSet<String>) -> Result<Ro
                 std::collections::btree_map::Entry::Vacant(e) => {
                     e.insert(GotoRef::Rule(i));
                 }
-                std::collections::btree_map::Entry::Occupied(e) => issues.push(RouteIssue::DuplicateTarget {
-                    target: r.goto.clone(),
-                    first: *e.get(),
-                    later: GotoRef::Rule(i),
-                }),
+                std::collections::btree_map::Entry::Occupied(e) => {
+                    issues.push(RouteIssue::DuplicateTarget {
+                        target: r.goto.clone(),
+                        first: *e.get(),
+                        later: GotoRef::Rule(i),
+                    })
+                }
             }
         }
     }

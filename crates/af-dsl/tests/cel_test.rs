@@ -97,15 +97,23 @@ fn sixteen_legal_fixtures_pass_all_three_judgments() {
     let qa = vmap(&[("passed", Value::Bool(true))]);
     let attempt = vmap(&[("passed", Value::Bool(true))]);
     let tally = vmap(&[("result", vmap(&[("top_share_milli", Value::Int(0))]))]);
-    let vote = vmap(&[("stats", vmap(&[("top_count", Value::Int(0)), ("answers", Value::Int(1))]))]);
+    let vote = vmap(&[(
+        "stats",
+        vmap(&[("top_count", Value::Int(0)), ("answers", Value::Int(1))]),
+    )]);
     let observation = vmap(&[("observation", vmap(&[("ok", Value::Bool(true))]))]);
     let resume = vmap(&[("approved", Value::Bool(true))]);
-    let inputs_report_check =
-        vmap(&[("report", vmap(&[("ok", Value::Bool(true))])), ("check", vmap(&[("pass", Value::Bool(true))]))]);
+    let inputs_report_check = vmap(&[
+        ("report", vmap(&[("ok", Value::Bool(true))])),
+        ("check", vmap(&[("pass", Value::Bool(true))])),
+    ]);
     let inputs_result = vmap(&[("result", vmap(&[("top_share_milli", Value::Int(0))]))]);
     let fixtures: &[(&str, Value)] = &[
         // s1/policies/stop[0]
-        ("last_tool.first_line in ['FINISH', 'FINAL ANSWER']", last_tool_env()),
+        (
+            "last_tool.first_line in ['FINISH', 'FINAL ANSWER']",
+            last_tool_env(),
+        ),
         // s1/policies/stop[1]
         ("steps.tool_free >= 2", steps_env()),
         // s2/qa route rules[0]
@@ -122,11 +130,17 @@ fn sixteen_legal_fixtures_pass_all_three_judgments() {
         // s3/vote route rules[0]
         ("vote.stats.top_count * 2 > vote.stats.answers", vote),
         // s4/loop exit_when
-        ("budget.cents_spent >= budget.cents_cap * 9 / 10", budget_env()),
+        (
+            "budget.cents_spent >= budget.cents_cap * 9 / 10",
+            budget_env(),
+        ),
         // s5/format_check assert
         ("inputs.observation.ok == true", observation),
         // s5/format_check route rules[0]
-        ("format_check.passed == false", vmap(&[("passed", Value::Bool(true))])),
+        (
+            "format_check.passed == false",
+            vmap(&[("passed", Value::Bool(true))]),
+        ),
         // s5/approve route rules[0]
         ("resume.approved == false", resume.clone()),
         // s5/loop exit_when
@@ -134,11 +148,17 @@ fn sixteen_legal_fixtures_pass_all_three_judgments() {
         // s6/admit assert
         ("inputs.report.ok && inputs.check.pass", inputs_report_check),
         // s6/admit route rules[0]
-        ("admit.passed == false", vmap(&[("passed", Value::Bool(true))])),
+        (
+            "admit.passed == false",
+            vmap(&[("passed", Value::Bool(true))]),
+        ),
         // s6/acquire loop exit_when
         ("attempt.passed == true", attempt),
         // s6/explore loop exit_when
-        ("budget.cents_spent >= budget.cents_cap * 9 / 10", budget_env()),
+        (
+            "budget.cents_spent >= budget.cents_cap * 9 / 10",
+            budget_env(),
+        ),
     ];
     assert_eq!(fixtures.len(), 16, "§4.7 清单恰 16 条");
     for (src, binding) in fixtures {
@@ -167,7 +187,10 @@ fn method_call_rejected_as_e1052() {
         &env(&[("last_tool", last_tool_env())]),
     );
     assert_eq!(e.code.code(), "E1052");
-    assert_eq!(e.detail, "非算子函数/方法调用 \"contains\"（函数与方法调用一律拒绝）");
+    assert_eq!(
+        e.detail,
+        "非算子函数/方法调用 \"contains\"（函数与方法调用一律拒绝）"
+    );
 }
 
 // ---------- 反例 2：非算子函数 size（E1052，§4.7 反向对照） ----------
@@ -179,7 +202,10 @@ fn size_function_rejected_as_e1052() {
         &env(&[("input", vmap(&[("personas", Value::Int(0))]))]),
     );
     assert_eq!(e.code.code(), "E1052");
-    assert_eq!(e.detail, "非算子函数/方法调用 \"size\"（函数与方法调用一律拒绝）");
+    assert_eq!(
+        e.detail,
+        "非算子函数/方法调用 \"size\"（函数与方法调用一律拒绝）"
+    );
 }
 
 // ---------- 反例 3：保守子集外算子（三元 / 一元负号 → E1052） ----------
@@ -191,11 +217,17 @@ fn ternary_and_negate_not_in_conservative_subset() {
         &env(&[("steps", steps_env())]),
     );
     assert_eq!(e.code.code(), "E1052");
-    assert_eq!(e.detail, "非算子函数/方法调用 \"_?_:_\"（函数与方法调用一律拒绝）");
+    assert_eq!(
+        e.detail,
+        "非算子函数/方法调用 \"_?_:_\"（函数与方法调用一律拒绝）"
+    );
 
     let e = err_of("-(steps.turns) < 0", &env(&[("steps", steps_env())]));
     assert_eq!(e.code.code(), "E1052");
-    assert_eq!(e.detail, "非算子函数/方法调用 \"-_\"（函数与方法调用一律拒绝）");
+    assert_eq!(
+        e.detail,
+        "非算子函数/方法调用 \"-_\"（函数与方法调用一律拒绝）"
+    );
 }
 
 // ---------- 反例 4：未知根绑定（E2203，§4.7 反向对照） ----------
@@ -218,7 +250,10 @@ fn non_boolean_rejected_as_e1053() {
     assert_eq!(e.code.code(), "E1053");
     assert_eq!(e.detail, "谓词求值非布尔：结果为 int");
 
-    let e = err_of("last_tool.first_line", &env(&[("last_tool", last_tool_env())]));
+    let e = err_of(
+        "last_tool.first_line",
+        &env(&[("last_tool", last_tool_env())]),
+    );
     assert_eq!(e.code.code(), "E1053");
     assert_eq!(e.detail, "谓词求值非布尔：结果为 string");
 }
@@ -246,7 +281,10 @@ fn judgment_order_is_parse_then_operators_then_roots_then_boolean() {
     let e = err_of("size(ghost) > 0", &env(&[("steps", steps_env())]));
     assert_eq!(e.code.code(), "E1052");
     // 同时踩 E2203 与（对合法根才会显现的）E1053 → 只报 E2203。
-    let e = err_of("ghost.x && steps.turns + 1", &env(&[("steps", steps_env())]));
+    let e = err_of(
+        "ghost.x && steps.turns + 1",
+        &env(&[("steps", steps_env())]),
+    );
     assert_eq!(e.code.code(), "E2203");
 }
 
