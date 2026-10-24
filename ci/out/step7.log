@@ -679,12 +679,6 @@ warning[duplicate]: found 3 duplicate entries for crate 'itertools'
       │       └── cedar-policy v4.14.0 (*)
       └── cedar-policy-formatter v4.14.0 (*)
 
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/deny.toml:28:4
-   │
-28 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
-
 warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
     ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/Cargo.lock:212:1
     │  
@@ -1095,6 +1089,12 @@ warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
       ├── rand v0.10.3 (*)
       └── rand_xorshift v0.5.0
           └── proptest v1.12.0 (*)
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/deny.toml:28:4
+   │
+28 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 2 duplicate entries for crate 'sha2'
     ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/Cargo.lock:282:1
