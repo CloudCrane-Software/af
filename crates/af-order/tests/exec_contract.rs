@@ -59,7 +59,7 @@ const F2_FLAGS: &[&str] = &[
     "auto",
 ];
 
-fn submit_command(exec_flags: &[&str]) -> Command {
+fn submit_parsed(exec_flags: &[&str]) -> Command {
     let mut parts = vec![
         "submit".to_string(),
         "--spec".into(),
@@ -68,17 +68,29 @@ fn submit_command(exec_flags: &[&str]) -> Command {
         "st".into(),
     ];
     parts.extend(exec_flags.iter().map(|f| (*f).to_string()));
-    let command = parse_args(&parts).expect("应解析为 Submit");
-    match command {
+    parse_args(&parts).expect("应解析为 Submit")
+}
+
+fn submit_exec(exec_flags: &[&str]) -> Option<RealExec> {
+    match submit_parsed(exec_flags) {
         Command::Submit { exec, .. } => exec,
         other => panic!("应解析为 Submit，实际 {other:?}"),
     }
 }
 
+fn submit_mes_ch(exec_flags: &[&str]) -> Option<String> {
+    match submit_parsed(exec_flags) {
+        Command::Submit { mes_ch, .. } => mes_ch,
+        other => panic!("应解析为 Submit，实际 {other:?}"),
+    }
+}
+
 /// F-首单命令逐字兼容：旗标名、取值、缺省全部与归档证据链一致。
+/// （mes_ch 在正式契约中上移为 Submit 独立记账声明——语义与补丁期等价，
+/// GREEN 实现时随契约归位调整断言位置。）
 #[test]
 fn f1_archived_command_parses_verbatim() {
-    let exec = submit_command(F1_FLAGS).expect("F1 命令应有真实执行面");
+    let exec = submit_exec(F1_FLAGS).expect("F1 命令应有真实执行面");
     assert_eq!(
         exec,
         RealExec {
@@ -88,27 +100,33 @@ fn f1_archived_command_parses_verbatim() {
             host: "anolis".into(),
             max_turns: 60,
             spend_cap_cents: 100,
-            mes_ch: Some("auto".into()),
         }
     );
+    assert_eq!(submit_mes_ch(F1_FLAGS).as_deref(), Some("auto"));
 }
 
 /// F-第二单命令逐字兼容（换仓库换协议档全通——执行面与端点档案解耦）。
 #[test]
 fn f2_archived_command_parses_verbatim() {
-    let exec = submit_command(F2_FLAGS).expect("F2 命令应有真实执行面");
-    assert_eq!(exec.task, "psf__requests-1142");
-    assert_eq!(exec.profile, "step-5");
-    assert_eq!(exec.host, "anolis");
-    assert_eq!(exec.max_turns, 60);
-    assert_eq!(exec.spend_cap_cents, 100);
-    assert_eq!(exec.mes_ch.as_deref(), Some("auto"));
+    let exec = submit_exec(F2_FLAGS).expect("F2 命令应有真实执行面");
+    assert_eq!(
+        exec,
+        RealExec {
+            task: "psf__requests-1142".into(),
+            profile: "step-5".into(),
+            data_root: PathBuf::from("/tmp/swev-s1"),
+            host: "anolis".into(),
+            max_turns: 60,
+            spend_cap_cents: 100,
+        }
+    );
+    assert_eq!(submit_mes_ch(F2_FLAGS).as_deref(), Some("auto"));
 }
 
 /// 缺省 = fix2 代际（host anolis / 250 轮 / $3 / 无 CH 下游）。
 #[test]
 fn exec_defaults_are_fix2_generation() {
-    let exec = submit_command(&[
+    let exec = submit_exec(&[
         "--task",
         "t-1",
         "--profile",
@@ -121,7 +139,22 @@ fn exec_defaults_are_fix2_generation() {
     assert_eq!(exec.host, "anolis");
     assert_eq!(exec.max_turns, 250);
     assert_eq!(exec.spend_cap_cents, 300);
-    assert_eq!(exec.mes_ch, None);
+    // --mes-ch 与执行面正交：不声明 = None
+    assert_eq!(
+        submit_mes_ch(&["--task", "t-1", "--profile", "p", "--data-root", "/d"]),
+        None
+    );
+}
+
+/// --mes-ch 单独出现合法（记账声明与执行面正交——冒烟档也要记账）。
+#[test]
+fn mes_ch_is_orthogonal_to_exec_face() {
+    assert_eq!(
+        submit_mes_ch(&["--mes-ch", "auto"]).as_deref(),
+        Some("auto"),
+        "冒烟档 + CH 记账应被接受"
+    );
+    assert!(submit_exec(&["--mes-ch", "auto"]).is_none());
 }
 
 /// 三件套全给或全不给（半套 = 用法错误 OR1001 / 退出码 2）。
@@ -133,11 +166,13 @@ fn exec_trio_is_all_or_nothing() {
         vec!["--profile", "glm-cp", "--data-root", "/tmp/d"],
         vec!["--data-root", "/tmp/d"],
     ] {
-        let err = parse_args(&args(&[
-            vec!["submit", "--spec", "o.json", "--state", "st"],
-            partial.clone(),
-        ]
-        .concat()))
+        let err = parse_args(&args(
+            &[
+                vec!["submit", "--spec", "o.json", "--state", "st"],
+                partial.clone(),
+            ]
+            .concat(),
+        ))
         .unwrap_err();
         assert!(
             err.to_string().contains("OR1001"),
@@ -146,16 +181,10 @@ fn exec_trio_is_all_or_nothing() {
         );
         assert_eq!(err.exit_code(), 2);
     }
-    // 全不给 = None（冒烟档），且 --host 等附属旗标不得单独出现
-    assert!(submit_command(&[]).is_none());
+    // 全不给 = None（冒烟档），且 --host 等执行附属旗标不得单独出现
+    assert!(submit_exec(&[]).is_none());
     let err = parse_args(&args(&[
-        "submit",
-        "--spec",
-        "o.json",
-        "--state",
-        "st",
-        "--host",
-        "anolis",
+        "submit", "--spec", "o.json", "--state", "st", "--host", "anolis",
     ]))
     .unwrap_err();
     assert!(err.to_string().contains("OR1001"), "{err}");
@@ -165,9 +194,36 @@ fn exec_trio_is_all_or_nothing() {
 #[test]
 fn exec_numeric_flags_reject_garbage() {
     for bad in [
-        vec!["--task", "t", "--profile", "p", "--data-root", "/d", "--max-turns", "six"],
-        vec!["--task", "t", "--profile", "p", "--data-root", "/d", "--spend-cap-cents", "1.5"],
-        vec!["--task", "t", "--profile", "p", "--data-root", "/d", "--max-turns", "-1"],
+        vec![
+            "--task",
+            "t",
+            "--profile",
+            "p",
+            "--data-root",
+            "/d",
+            "--max-turns",
+            "six",
+        ],
+        vec![
+            "--task",
+            "t",
+            "--profile",
+            "p",
+            "--data-root",
+            "/d",
+            "--spend-cap-cents",
+            "1.5",
+        ],
+        vec![
+            "--task",
+            "t",
+            "--profile",
+            "p",
+            "--data-root",
+            "/d",
+            "--max-turns",
+            "-1",
+        ],
     ] {
         let err = parse_args(&args(
             &[vec!["submit", "--spec", "o.json", "--state", "st"], bad].concat(),
@@ -189,7 +245,6 @@ fn swev_spec_mapping_overrides_budget_hats() {
         host: "anolis".into(),
         max_turns: 60,
         spend_cap_cents: 100,
-        mes_ch: None,
     };
     let spec = swev_unit_spec_for(&exec);
     assert_eq!(spec.profile, "glm-cp");
@@ -298,15 +353,15 @@ fn submit_mes_ch_declaration_flows_to_driver_seam() {
     );
     let summary: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(summary["state"], "Closed");
-    assert_eq!(summary["mes_ch"]["kind"], "clickhouse");
+    assert_eq!(summary["mes_ch"]["kind"], "click_house");
     assert_eq!(summary["mes_ch"]["shipped"], 4, "{summary}");
     assert_eq!(summary["mes_ch"]["already_in_ch"], 0);
     assert_eq!(summary["mes_ch"]["rows_delivered"], 4);
     // 凭据零落回执：endpoint 只含 host:port
     assert_eq!(summary["mes_ch"]["endpoint_host"], mock_addr(&mock));
 
-    let mut kinds: Vec<&str> = mock
-        .inserts()
+    let inserts = mock.inserts();
+    let mut kinds: Vec<&str> = inserts
         .iter()
         .flat_map(|c| c.rows.iter().map(|r| r.kind.as_str()))
         .collect();

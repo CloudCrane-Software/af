@@ -28,11 +28,13 @@
 
 pub mod cli;
 pub mod error;
+pub mod exec;
 pub mod spec;
 pub mod state;
 pub mod voucher;
 
 pub use error::OrderError;
+pub use exec::{parse_exec_flags, swev_unit_spec_for, RealExec, EXEC_FLAGS};
 pub use spec::{parse_spec, OrderSpec, SpecError, SPEC_FIELDS};
 pub use state::{OrderSummary, StateDir};
 pub use voucher::{issue_or_load, VoucherRecord};

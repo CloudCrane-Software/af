@@ -123,8 +123,8 @@ pub const BENCH_PAPER_GRAPH_VERSION: &str = "bench";
 /// harness 侧账面工单构造件（正式；消债 C，原补丁台账-第二阶段 #C）。
 ///
 /// 旧路 `bench_order`（af-bench main.rs:515-537+687）的语句级对照四步：
-/// `bind_line(bench-line/1)` + `attach_budget_voucher(v-{run_id}, 1, signed)`
-/// + `release` + `start` → 终态 **InProgress**。这是 harness 进程内的
+/// `bind_line(bench-line/1)` → `attach_budget_voucher(v-{run_id}, 1, signed)`
+/// → `release` → `start`，终态 **InProgress**。这是 harness 进程内的
 /// 会话级记账门槛材料——真实 af-harness effect gateway 对 declare 有
 /// 订单态门（要求 [Released, InProgress]，af-effect-gateway lib.rs:132），
 /// 裸 `WorkOrder::new`（Created）的首个工具 side-effect 即被拒。
