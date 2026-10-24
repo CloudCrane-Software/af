@@ -318,13 +318,11 @@ fn tb_exec_timeout_without_marker_teaches_and_exits_124() {
     let out = env.exec(&bridge, "sleep 999");
     assert_eq!(
         out,
-        concat!(
-            "partial output\n\n[harness] The command was killed after exceeding the 180s timeout \
+        "partial output\n\n[harness] The command was killed after exceeding the 180s timeout \
 (no exit code was reported). Partial output (if any) is above. Re-run with a different approach: \
 pipe input or use non-interactive flags (-y / -n / DEBIAN_FRONTEND=noninteractive), wrap long \
 work in an explicit `timeout <secs> ...`, and avoid commands that never exit on their own \
 (servers, watch loops, pagers).\nexit=124"
-        )
     );
 }
 
