@@ -237,24 +237,7 @@ impl OrderLifecycleDriver {
             }
         };
         // 协议一次一个工件：逐个过引擎登记。任一被拒都入账并向上传播。
-        for artifact in &output.artifacts {
-            let request = engine_request(
-                &self.order,
-                "attach_artifact",
-                json!({ "artifact": artifact }),
-            )?;
-            match self.client.call(&request)? {
-                EngineOutcome::Accept(accept) => self.order = accept.order,
-                EngineOutcome::Reject(rejection) => {
-                    let (kind, detail) = rejection_kind_and_detail(&rejection);
-                    self.append_record("attach_artifact", idem, false, Some((kind, detail)), None)?;
-                    return Err(ExeclineError::EngineRejected {
-                        op: "attach_artifact".to_string(),
-                        rejection,
-                    });
-                }
-            }
-        }
+        self.attach_artifacts(&output.artifacts, &idem)?;
         self.append_record(
             "attach_artifact",
             idem.clone(),
@@ -343,6 +326,40 @@ impl OrderLifecycleDriver {
     fn replay_skip(&mut self, idem: String) -> Result<(), ExeclineError> {
         self.replay_hits += 1;
         self.append_record("replay_skip", idem, true, None, Some(self.order.clone()))
+    }
+
+    /// 逐个工件过引擎登记（协议一次一个工件）。任一被拒：入账 ok=false 并
+    /// 返回类型化错误；ok=true 行与幂等键落账由调用方（`execute`）负责。
+    fn attach_artifacts(
+        &mut self,
+        artifacts: &[af_workorder::WorkArtifact],
+        idem: &str,
+    ) -> Result<(), ExeclineError> {
+        for artifact in artifacts {
+            let request = engine_request(
+                &self.order,
+                "attach_artifact",
+                json!({ "artifact": artifact }),
+            )?;
+            match self.client.call(&request)? {
+                EngineOutcome::Accept(accept) => self.order = accept.order,
+                EngineOutcome::Reject(rejection) => {
+                    let (kind, detail) = rejection_kind_and_detail(&rejection);
+                    self.append_record(
+                        "attach_artifact",
+                        idem.to_string(),
+                        false,
+                        Some((kind, detail)),
+                        None,
+                    )?;
+                    return Err(ExeclineError::EngineRejected {
+                        op: "attach_artifact".to_string(),
+                        rejection,
+                    });
+                }
+            }
+        }
+        Ok(())
     }
 
     /// 追加一行账本。`state_after` 取当前快照状态；拒绝行不带快照。
@@ -436,5 +453,76 @@ impl fmt::Debug for OrderLifecycleDriver {
             .field("ledger", &self.ledger.path())
             .field("engine_bin", &self.client.bin())
             .finish_non_exhaustive()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use af_workorder::{OrderState::*, Priority};
+
+    fn order() -> WorkOrder {
+        WorkOrder::new(
+            "wo-unit",
+            GraphVersion::new("g-1"),
+            Sla::new(None, Priority::Normal),
+        )
+    }
+
+    /// 请求线形状：op + 整单快照 + 该 op 参数合并；快照可解析回同身份订单。
+    #[test]
+    fn engine_request_merges_op_order_and_params() {
+        let request = engine_request(
+            &order(),
+            "bind_line",
+            json!({ "line": { "line_id": "l", "line_version": "v" } }),
+        )
+        .expect("组请求");
+        let obj = request.as_object().expect("请求是对象");
+        assert_eq!(obj["op"], json!("bind_line"));
+        assert!(obj.contains_key("line"), "op 参数应合并进顶层");
+        assert!(!obj.contains_key("voucher"), "未传的参数不得出现");
+        let decoded: WorkOrder = serde_json::from_value(obj["order"].clone()).expect("快照可解析");
+        assert_eq!(decoded.stable_id(), order().stable_id());
+        assert_eq!(decoded.state(), Created);
+    }
+
+    /// 无参数的 op（release/start/complete/close）只带 op + order。
+    #[test]
+    fn engine_request_without_params_is_minimal() {
+        let request = engine_request(&order(), "release", json!({})).expect("组请求");
+        let obj = request.as_object().expect("请求是对象");
+        assert_eq!(obj.len(), 2, "只应有 op 与 order 两个键");
+        assert_eq!(obj["op"], json!("release"));
+    }
+
+    /// 状态名用 OrderState 的 serde 名（ledger state_after 的线格式）。
+    #[test]
+    fn state_name_matches_serde_names() {
+        assert_eq!(state_name(Created), "Created");
+        assert_eq!(state_name(Released), "Released");
+        assert_eq!(state_name(InProgress), "InProgress");
+        assert_eq!(state_name(Completed), "Completed");
+        assert_eq!(state_name(Closed), "Closed");
+        assert_eq!(state_name(Cancelled), "Cancelled");
+    }
+
+    /// 拒绝的入账标签：gate/bad_request/...，与 EngineRejection 变体对应。
+    #[test]
+    fn rejection_labels_match_kinds() {
+        let gate = EngineRejection::Gate {
+            gate: crate::engine::GateRejection::PreconditionsNotMet {
+                transition: af_workorder::Transition::Release,
+                missing: vec![af_workorder::Missing::BudgetVoucherNotIssued],
+            },
+        };
+        let (kind, detail) = rejection_kind_and_detail(&gate);
+        assert_eq!(kind, "gate");
+        assert!(detail.contains("BudgetVoucherNotIssued"), "{detail}");
+
+        let (kind, _) = rejection_kind_and_detail(&EngineRejection::BadRequest {
+            message: "缺少字段 op".into(),
+        });
+        assert_eq!(kind, "bad_request");
     }
 }
