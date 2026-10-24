@@ -467,6 +467,185 @@ fn pop_wall(row: &mut Value, key: &str) -> u64 {
 
 // ---- 主链：FakeRunner+FakeBridge 单题全流程（方案 §5-P4 草案第一条）----
 
+/// 三件套落盘断言（§1.1 不变量：路径与字节语义不动）；返回 eval.log 指纹。
+fn assert_trio_on_disk(attempt_dir: &Path) -> String {
+    assert_eq!(
+        std::fs::read_to_string(attempt_dir.join("agent.diff")).unwrap(),
+        NORMAL_DIFF,
+        "agent.diff = capture_diff 文本"
+    );
+    assert_eq!(
+        std::fs::read_to_string(attempt_dir.join("eval.sh")).unwrap(),
+        "#!/bin/bash\nset -uxo pipefail\nfixture eval script body\n",
+        "eval.sh = task.eval_script 逐字节"
+    );
+    assert_eq!(
+        std::fs::read_to_string(attempt_dir.join("eval.log")).unwrap(),
+        "+ fake eval output line\n",
+        "eval.log = 容器输出"
+    );
+    sha256_of(&attempt_dir.join("eval.log"))
+}
+
+/// 18 键 legacy 行字段级断言（main.rs:861-890）；返回弹出的 agent_wall_ms。
+fn assert_legacy_row(parts: &Parts, eval_sha: &str) -> (Value, u64) {
+    let legacy_rows = parts.sink.legacy_rows();
+    assert_eq!(legacy_rows.len(), 1, "恰一行 legacy");
+    let mut legacy = legacy_rows.into_iter().next().unwrap();
+    assert_eq!(legacy.as_object().unwrap().len(), 18, "18 键齐备");
+    let wall = pop_wall(&mut legacy, "agent_wall_ms");
+    assert_eq!(
+        legacy,
+        json!({
+            "suite": "swe-v",
+            "task_id": TASK,
+            "profile": PROFILE,
+            "trial": false,
+            "reward": true,
+            "status": "completed",
+            "scaffold": "v3",
+            "reasoning_tier": "off",
+            "run_dir": parts.attempt_dir.display().to_string(),
+            "eval_sha256": eval_sha,
+            "gate": "ok",
+            "attempts": 1,
+            "http_retries": 2,
+            "turns": 3,
+            "model_calls": 5,
+            "tokens": {"input": 100, "output": 50, "cache_read": 10},
+            "verifier_note": "judge: {\"resolved\": true}",
+        }),
+        "18 键字段级对照（judge note 无超时/log_parsed 前缀）"
+    );
+    (legacy, wall)
+}
+
+/// v1 行映射断言（契约 §1.2 行形状 + 方案 §1.4 映射表）；返回弹出的 wall_ms。
+fn assert_v1_row(parts: &Parts, eval_sha: &str, legacy_wall: u64) -> (Value, u64) {
+    let v1_rows = parts.sink.v1_rows();
+    assert_eq!(v1_rows.len(), 1, "恰一行 v1 投影");
+    let mut v1 = v1_rows.into_iter().next().unwrap();
+    assert_eq!(v1.as_object().unwrap().len(), 14, "v1 14 键齐备");
+    let wall_v1 = pop_wall(&mut v1, "wall_ms");
+    assert_eq!(wall_v1, legacy_wall, "两轨同源：agent_wall_ms == wall_ms");
+    assert_eq!(
+        v1,
+        json!({
+            "plan_id": "wo-p4",
+            "node_id": "line-p4",
+            "item_id": TASK,
+            "attempt": 1,
+            "host_alias": "local",
+            "unit_id": "swev-unit",
+            "unit_version": "0.1.0",
+            "status": "completed",
+            "verdict": true,
+            "evidence": {
+                "run_dir": parts.attempt_dir.display().to_string(),
+                "evidence_digest": eval_sha,
+            },
+            "gate": "ok",
+            "usage": {
+                "turns": 3,
+                "unit_calls": 5,
+                "http_retries": 2,
+                "quota": {"input": 100, "output": 50, "cache_read": 10},
+            },
+            "note": "judge: {\"resolved\": true}",
+        }),
+        "v1 映射：task_id→item_id / reward→verdict / gate→gate / \
+         turns+model_calls+tokens+http_retries→usage / note"
+    );
+    (v1, wall_v1)
+}
+
+/// ExecOutput 扩展字段断言（§2.2：verdict/record/evidence/工件资格）。
+fn assert_exec_output(output: &ExecOutput, parts: &Parts, v1: &Value) {
+    assert_eq!(output.verdict, Some(true));
+    let mut record = output.record.clone().expect("record 携带 v1 行");
+    pop_wall(&mut record, "wall_ms");
+    assert_eq!(record, *v1, "record = v1 行同源（双轨不各自装配）");
+    let task_json = parts.data_root.join(format!("{TASK}.json"));
+    assert_eq!(
+        output.evidence,
+        vec![
+            task_json,
+            parts.attempt_dir.join("eval.log"),
+            parts.attempt_dir.join("agent.diff"),
+        ],
+        "evidence = 三件套实际路径"
+    );
+    for path in &output.evidence {
+        assert!(path.is_file(), "证据在盘: {}", path.display());
+    }
+    assert_eq!(output.note, "judge: {\"resolved\": true}");
+    assert_eq!(output.artifacts.len(), 1, "协议一次一个工件");
+    assert_eq!(output.artifacts[0].artifact_id, format!("swev-{TASK}"));
+    assert!(output.artifacts[0].is_final);
+    assert!(
+        output.artifacts[0].qualified,
+        "resolved=true → 合格终态工件"
+    );
+}
+
+/// AgentLaunch 形状断言（main.rs:736-798 组装面：提示词/采样覆写/policy/工具/预算）。
+fn assert_launch_shape(launch: &CapturedLaunch, attempt_dir: &Path) {
+    assert_eq!(launch.attempt_dir, *attempt_dir);
+    assert_eq!(launch.run_id, format!("{TASK}-a1"), "main.rs:778 run_id");
+    assert_eq!(
+        launch.user_message,
+        format!(
+            "Repository: astropy/astropy\n\nIssue description:\nFix the sampler\n\n{SWEV_INSTANCE_PROTOCOL}"
+        ),
+        "main.rs:775 prompt + instance 模板"
+    );
+    assert_eq!(launch.system, af_execline::suite::swev::SWEV_SYSTEM_PROMPT);
+    // 采样覆写（main.rs:634-636）+ glm-cp 档案基底（main.rs:59-74）。
+    assert_eq!(
+        launch.endpoint.base_url,
+        "https://open.bigmodel.cn/api/anthropic"
+    );
+    assert_eq!(launch.endpoint.model, "GLM-5.3-Flash");
+    assert_eq!(launch.endpoint.temperature_milli, Some(0));
+    assert_eq!(launch.endpoint.top_p_milli, Some(1_000));
+    assert_eq!(launch.endpoint.max_tokens, Some(32_000));
+    // Policy（main.rs:746-758）。
+    assert_eq!(launch.max_turns, 250);
+    assert_eq!(launch.completion_signals, vec!["TASK_COMPLETE".to_string()]);
+    assert_eq!(launch.tool_free_turn_limit, 3);
+    // 工具集（main.rs:742-745：bash 声明，workdir /testbed 进描述）。
+    assert_eq!(launch.tool_names, vec!["bash".to_string()]);
+    assert!(launch.bash_workdir_in_description.contains("/testbed"));
+    // 预算（main.rs:786-793：$3 上限、工具 1 分、账本 300）。
+    assert_eq!(launch.spend_cap_cents, 300);
+    assert_eq!(launch.tool_spend_cents, 1);
+    assert_eq!(launch.budget_ledger_cents, 300);
+}
+
+/// 桥调用序列断言（rm 前置 → docker run → capture×2(gate/verify) → cleanup rm）。
+fn assert_bridge_sequence(calls: &[(String, String, u32)]) {
+    assert_eq!(calls.len(), 5, "恰五次桥调用: {calls:#?}");
+    assert_eq!(
+        calls[0],
+        ("local".into(), format!("docker rm -f {CONTAINER}"), 30)
+    );
+    assert!(calls[1]
+        .1
+        .starts_with(&format!("docker run -d --name {CONTAINER}")));
+    assert!(calls[1].1.contains("--memory 6g"));
+    assert!(calls[1].1.contains("--pids-limit 512"));
+    assert!(calls[1]
+        .1
+        .contains("sweb.eval.x86_64.astropy-12907 sleep infinity"));
+    assert_eq!(calls[1].2, 120);
+    assert_eq!(calls[2], ("local".into(), CAPTURE_CMD.to_string(), 60));
+    assert_eq!(calls[3], ("local".into(), CAPTURE_CMD.to_string(), 60));
+    assert_eq!(
+        calls[4],
+        ("local".into(), format!("docker rm -f {CONTAINER}"), 60)
+    );
+}
+
 /// 三件套落盘 + 18 键 legacy 行字段级断言 + v1 行映射断言 + AgentLaunch
 /// 形状（main.rs:625-914 逐段对照：setup→run→gate→verify→行落盘→cleanup）。
 #[test]
@@ -479,174 +658,17 @@ fn full_flow_trio_rows_and_launch_shape() {
             r#"{"resolved": true}"#,
             |parts, outcome| {
                 let output = outcome.expect("全流程应 Ok");
-                let attempt_dir = &parts.attempt_dir;
-                let task_json = parts.data_root.join(format!("{TASK}.json"));
 
-                // ---- 三件套落盘（§1.1 不变量：路径与字节语义不动）----
-                assert_eq!(
-                    std::fs::read_to_string(attempt_dir.join("agent.diff")).unwrap(),
-                    NORMAL_DIFF,
-                    "agent.diff = capture_diff 文本"
-                );
-                assert_eq!(
-                    std::fs::read_to_string(attempt_dir.join("eval.sh")).unwrap(),
-                    "#!/bin/bash\nset -uxo pipefail\nfixture eval script body\n",
-                    "eval.sh = task.eval_script 逐字节"
-                );
-                assert_eq!(
-                    std::fs::read_to_string(attempt_dir.join("eval.log")).unwrap(),
-                    "+ fake eval output line\n",
-                    "eval.log = 容器输出"
-                );
-                let eval_sha = sha256_of(&attempt_dir.join("eval.log"));
+                // 三件套落盘 → 18 键 legacy 行 → v1 投影 → ExecOutput 扩展字段。
+                let eval_sha = assert_trio_on_disk(&parts.attempt_dir);
+                let (_legacy, legacy_wall) = assert_legacy_row(parts, &eval_sha);
+                let (v1, _wall_v1) = assert_v1_row(parts, &eval_sha, legacy_wall);
+                assert_exec_output(&output, parts, &v1);
 
-                // ---- 18 键 legacy 行（main.rs:861-890 字段级）----
-                let legacy_rows = parts.sink.legacy_rows();
-                assert_eq!(legacy_rows.len(), 1, "恰一行 legacy");
-                let mut legacy = legacy_rows.into_iter().next().unwrap();
-                assert_eq!(legacy.as_object().unwrap().len(), 18, "18 键齐备");
-                let wall = pop_wall(&mut legacy, "agent_wall_ms");
-                assert_eq!(
-                    legacy,
-                    json!({
-                        "suite": "swe-v",
-                        "task_id": TASK,
-                        "profile": PROFILE,
-                        "trial": false,
-                        "reward": true,
-                        "status": "completed",
-                        "scaffold": "v3",
-                        "reasoning_tier": "off",
-                        "run_dir": attempt_dir.display().to_string(),
-                        "eval_sha256": eval_sha,
-                        "gate": "ok",
-                        "attempts": 1,
-                        "http_retries": 2,
-                        "turns": 3,
-                        "model_calls": 5,
-                        "tokens": {"input": 100, "output": 50, "cache_read": 10},
-                        "verifier_note": "judge: {\"resolved\": true}",
-                    }),
-                    "18 键字段级对照（judge note 无超时/log_parsed 前缀）"
-                );
-
-                // ---- v1 行映射（契约 §1.2 行形状 + 方案 §1.4 映射表）----
-                let v1_rows = parts.sink.v1_rows();
-                assert_eq!(v1_rows.len(), 1, "恰一行 v1 投影");
-                let mut v1 = v1_rows.into_iter().next().unwrap();
-                assert_eq!(v1.as_object().unwrap().len(), 14, "v1 14 键齐备");
-                let wall_v1 = pop_wall(&mut v1, "wall_ms");
-                assert_eq!(wall_v1, wall, "两轨同源：agent_wall_ms == wall_ms");
-                assert_eq!(
-                    v1,
-                    json!({
-                        "plan_id": "wo-p4",
-                        "node_id": "line-p4",
-                        "item_id": TASK,
-                        "attempt": 1,
-                        "host_alias": "local",
-                        "unit_id": "swev-unit",
-                        "unit_version": "0.1.0",
-                        "status": "completed",
-                        "verdict": true,
-                        "evidence": {
-                            "run_dir": attempt_dir.display().to_string(),
-                            "evidence_digest": eval_sha,
-                        },
-                        "gate": "ok",
-                        "usage": {
-                            "turns": 3,
-                            "unit_calls": 5,
-                            "http_retries": 2,
-                            "quota": {"input": 100, "output": 50, "cache_read": 10},
-                        },
-                        "note": "judge: {\"resolved\": true}",
-                    }),
-                    "v1 映射：task_id→item_id / reward→verdict / gate→gate / \
-                     turns+model_calls+tokens+http_retries→usage / note"
-                );
-
-                // ---- ExecOutput 扩展字段（§2.2）----
-                assert_eq!(output.verdict, Some(true));
-                let mut record = output.record.clone().expect("record 携带 v1 行");
-                assert_eq!(pop_wall(&mut record, "wall_ms"), wall_v1);
-                assert_eq!(record, v1, "record = v1 行同源（双轨不各自装配）");
-                assert_eq!(
-                    output.evidence,
-                    vec![
-                        task_json.clone(),
-                        attempt_dir.join("eval.log"),
-                        attempt_dir.join("agent.diff"),
-                    ],
-                    "evidence = 三件套实际路径"
-                );
-                for path in &output.evidence {
-                    assert!(path.is_file(), "证据在盘: {}", path.display());
-                }
-                assert_eq!(output.note, "judge: {\"resolved\": true}");
-                assert_eq!(output.artifacts.len(), 1, "协议一次一个工件");
-                assert_eq!(output.artifacts[0].artifact_id, format!("swev-{TASK}"));
-                assert!(output.artifacts[0].is_final);
-                assert!(
-                    output.artifacts[0].qualified,
-                    "resolved=true → 合格终态工件"
-                );
-
-                // ---- AgentLaunch 形状（main.rs:736-798 组装面）----
+                // AgentLaunch 形状 + 桥调用序列。
                 let launch = parts.runner.launch();
-                assert_eq!(launch.attempt_dir, *attempt_dir);
-                assert_eq!(launch.run_id, format!("{TASK}-a1"), "main.rs:778 run_id");
-                assert_eq!(
-                    launch.user_message,
-                    format!(
-                        "Repository: astropy/astropy\n\nIssue description:\nFix the sampler\n\n{SWEV_INSTANCE_PROTOCOL}"
-                    ),
-                    "main.rs:775 prompt + instance 模板"
-                );
-                assert_eq!(launch.system, af_execline::suite::swev::SWEV_SYSTEM_PROMPT);
-                // 采样覆写（main.rs:634-636）+ glm-cp 档案基底（main.rs:59-74）。
-                assert_eq!(
-                    launch.endpoint.base_url,
-                    "https://open.bigmodel.cn/api/anthropic"
-                );
-                assert_eq!(launch.endpoint.model, "GLM-5.3-Flash");
-                assert_eq!(launch.endpoint.temperature_milli, Some(0));
-                assert_eq!(launch.endpoint.top_p_milli, Some(1_000));
-                assert_eq!(launch.endpoint.max_tokens, Some(32_000));
-                // Policy（main.rs:746-758）。
-                assert_eq!(launch.max_turns, 250);
-                assert_eq!(launch.completion_signals, vec!["TASK_COMPLETE".to_string()]);
-                assert_eq!(launch.tool_free_turn_limit, 3);
-                // 工具集（main.rs:742-745：bash 声明，workdir /testbed 进描述）。
-                assert_eq!(launch.tool_names, vec!["bash".to_string()]);
-                assert!(launch.bash_workdir_in_description.contains("/testbed"));
-                // 预算（main.rs:786-793：$3 上限、工具 1 分、账本 300）。
-                assert_eq!(launch.spend_cap_cents, 300);
-                assert_eq!(launch.tool_spend_cents, 1);
-                assert_eq!(launch.budget_ledger_cents, 300);
-
-                // ---- 桥调用序列（setup 前置 rm → run → capture×2(gate/verify) → cleanup rm）----
-                let calls = parts.bridge.calls();
-                assert_eq!(calls.len(), 5, "恰五次桥调用: {calls:#?}");
-                assert_eq!(
-                    calls[0],
-                    ("local".into(), format!("docker rm -f {CONTAINER}"), 30)
-                );
-                assert!(calls[1]
-                    .1
-                    .starts_with(&format!("docker run -d --name {CONTAINER}")));
-                assert!(calls[1].1.contains("--memory 6g"));
-                assert!(calls[1].1.contains("--pids-limit 512"));
-                assert!(calls[1]
-                    .1
-                    .contains("sweb.eval.x86_64.astropy-12907 sleep infinity"));
-                assert_eq!(calls[1].2, 120);
-                assert_eq!(calls[2], ("local".into(), CAPTURE_CMD.to_string(), 60));
-                assert_eq!(calls[3], ("local".into(), CAPTURE_CMD.to_string(), 60));
-                assert_eq!(
-                    calls[4],
-                    ("local".into(), format!("docker rm -f {CONTAINER}"), 60)
-                );
+                assert_launch_shape(&launch, &parts.attempt_dir);
+                assert_bridge_sequence(parts.bridge.calls().as_slice());
             },
         )
     })

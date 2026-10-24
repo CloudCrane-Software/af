@@ -226,13 +226,7 @@ impl ExecuteUnit for SwevExecuteUnit {
         // 不入重试、不阻断判分。
         let diff = swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, attempt_dir)
             .unwrap_or_default();
-        let gate = if diff.trim().is_empty() {
-            "no_patch"
-        } else if !swev::diff_touches_tests(&diff).is_empty() {
-            "test_edit"
-        } else {
-            "ok"
-        };
+        let gate = gate_of(&diff);
         // agent_wall_ms（main.rs:688/849）：run 相时长（key 现取 + 模型 + gate 取证），
         // 不含 setup/verify。
         let agent_wall_ms = run_started.elapsed().as_millis() as u64;
@@ -425,6 +419,18 @@ pub(crate) fn bash_guard_wrap(command: &str, out: String, recent: &mut Vec<Strin
     out
 }
 
+/// gate 计算（af-bench main.rs:806-813 原样）：空补丁 no_patch / 碰测试文件
+/// test_edit / 其余 ok。完成度记账非门控（审计 D5 关闭 gate 重试，§2.4）。
+fn gate_of(diff: &str) -> &'static str {
+    if diff.trim().is_empty() {
+        "no_patch"
+    } else if !swev::diff_touches_tests(diff).is_empty() {
+        "test_edit"
+    } else {
+        "ok"
+    }
+}
+
 /// 从 run 目录名解析 attempt 序号（swev-<task>-<profile>-a<N>，next_attempt_index
 /// 的命名约定）：目录由调用方/驱动层分配（§2.2），run_id 的 `-a<N>` 后缀取自
 /// 目录名（main.rs:778）。非约定命名 → 1（fix2 口径 attempt 恒 1，行内
@@ -501,6 +507,19 @@ mod tests {
         assert_eq!(
             attempt_from_dir(std::path::Path::new("/tmp/runs/free-name")),
             1
+        );
+    }
+
+    /// gate 三分支（main.rs:806-813）：空/纯空白 → no_patch；碰测试文件 →
+    /// test_edit；纯源码补丁 → ok。
+    #[test]
+    fn gate_of_three_branches() {
+        assert_eq!(gate_of(""), "no_patch");
+        assert_eq!(gate_of("  \n\t "), "no_patch");
+        assert_eq!(gate_of("diff --git a/x.py b/x.py\n"), "ok");
+        assert_eq!(
+            gate_of("diff --git a/x.py b/x.py\ndiff --git a/tox.ini b/tox.ini\n"),
+            "test_edit"
         );
     }
 }
