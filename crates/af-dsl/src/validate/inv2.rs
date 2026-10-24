@@ -76,7 +76,7 @@ pub(crate) fn check(ix: &Index<'_>, report: &mut Report) {
             if !carried.contains(s) {
                 report.push(
                     ErrorCode::CarriedNotCovering,
-                    &format!("{}.loop_body", site.owner_path),
+                    format!("{}.loop_body", site.owner_path),
                     format!(
                         "loop {:?} 体内（含嵌套体）写入体外声明的 store {s:?}，但 carried 未登记",
                         site.owner_path

@@ -190,7 +190,7 @@ impl<'a> Index<'a> {
     }
 
     /// 端口类型推导：直接类型，或 from_body 递归（map 构造自动包 list<>，loop 不包）。
-    /// depth 防	from_body 环；返回 None = 不可判定（悬空或环）。
+    /// depth 防 from_body 环；返回 None = 不可判定（悬空或环）。
     pub(crate) fn emit_type(&self, node: &NodeRef<'a>, port: &str, depth: u8) -> Option<PortType> {
         if depth == 0 {
             return None;
