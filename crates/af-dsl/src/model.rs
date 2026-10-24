@@ -655,8 +655,9 @@ pub struct ContextDecl {
 }
 
 /// section 平铺联合体：from ∈ {template,input,arg,edge,store}（M1 查词汇表），
-/// 各 from 形的字段闭包与来源可解析性在 M2（E2301/E2302/E2401/E2402/E2403）。
-/// quota_tokens 必填（M1 serde 层）；配额正数核对在 M2（E2302，policy:none 记 0 合法）。
+/// 各 from 形的字段闭包与来源可解析性在 M2（E2301/E2302/E2401/E2402/E2403，
+/// `validate/inv1.rs`）。quota_tokens 必填（M1 serde 层）；配额正数核对在 M2
+///（E2302，policy:none 记 0 合法）。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SectionDecl {

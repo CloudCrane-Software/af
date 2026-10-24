@@ -61,6 +61,31 @@ pub enum ErrorCode {
     /// E2211 loop.carried 未覆盖「体内（含嵌套体）写入的、体外声明的 store」。
     CarriedNotCovering,
 
+    // ---- E2xxx 语义：context.sections 装配 + L0 不变量 INV-1（M2）----
+    /// E2301 上下文来源不可解析：input.fields ∉ meta.input schema、edge.port ∉
+    /// 本节点入边端口集、store 名不在 stores 表、各 from 缺必配来源字段
+    /// （template.template_ref / input.fields / edge.port / store.store / arg.name）。
+    ContextSourceUnresolvable,
+    /// E2302 配额非正：quota_tokens = 0（例外：store 段 policy:none 记 0 合法）；
+    /// 可配置总量上限超限同码（信息注明「总量」，§6 无独立码位——见 RESULT-M2）。
+    QuotaNotPositive,
+    /// E2303 LLM-bound 节点（uses.model 在场）声明 reads[]（store 只能经
+    /// context.sections 进入 agent 上下文）。
+    AgentDirectStoreRead,
+    /// E2304 入边端口未被 section 恰一个引用（零引用 = 实际消费未声明；
+    /// 多引用 = 违反「恰被一个」）。
+    InputPortUnreferenced,
+    /// E2401 store 视图策略域：store 段缺策略/策略不在词表/参数不闭合
+    /// （latest_k·retrieve 须 args.k 正整数；retrieve·summarize 须 component）；
+    /// 非 store 段带策略或带不适用策略亦归此码。
+    StoreViewPolicyUnknown,
+    /// E2402 arg 段 name 不在所在体形参表（沿作用域链向外收集：loop args +
+    /// map 隐式 item）。
+    ArgNotInParams,
+    /// E2403 template 段 vars 引用悬空（input.字段 ∉ meta.input schema、
+    /// arg.名 ∉ 可见形参、前缀后空名）。
+    TemplateVarsDangling,
+
     // ---- E2xxx 语义：L0 不变量 INV-2（M1）----
     /// E2311 store 多写者 / 写者集合与声明不符（INV-2 串行化判定）。
     StoreMultiWriter,
@@ -93,6 +118,13 @@ impl ErrorCode {
             Self::BudgetCapOrScopeInvalid => "E2207",
             Self::StoreRetentionUnbounded => "E2208",
             Self::CarriedNotCovering => "E2211",
+            Self::ContextSourceUnresolvable => "E2301",
+            Self::QuotaNotPositive => "E2302",
+            Self::AgentDirectStoreRead => "E2303",
+            Self::InputPortUnreferenced => "E2304",
+            Self::StoreViewPolicyUnknown => "E2401",
+            Self::ArgNotInParams => "E2402",
+            Self::TemplateVarsDangling => "E2403",
             Self::StoreMultiWriter => "E2311",
             Self::MapSharedStoreWrite => "E2312",
         }
@@ -122,6 +154,13 @@ impl ErrorCode {
             Self::BudgetCapOrScopeInvalid => "budget_cap_or_scope_invalid",
             Self::StoreRetentionUnbounded => "store_retention_unbounded",
             Self::CarriedNotCovering => "carried_not_covering",
+            Self::ContextSourceUnresolvable => "context_source_unresolvable",
+            Self::QuotaNotPositive => "quota_not_positive",
+            Self::AgentDirectStoreRead => "agent_direct_store_read",
+            Self::InputPortUnreferenced => "input_port_unreferenced",
+            Self::StoreViewPolicyUnknown => "store_view_policy_unknown",
+            Self::ArgNotInParams => "arg_not_in_params",
+            Self::TemplateVarsDangling => "template_vars_dangling",
             Self::StoreMultiWriter => "store_multi_writer",
             Self::MapSharedStoreWrite => "map_shared_store_write",
         }

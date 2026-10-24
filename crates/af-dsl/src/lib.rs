@@ -1,12 +1,12 @@
 //! af-dsl：AFB（Agent Flow Blueprint）DSL 前端——信封 + 七段解析 + 静态校验。
 //!
 //! 施工按 ADR-002 crate 职责与裁决书 §四模块切分：
-//! - M1（本模块期）：拒绝式信封 E0001-E0004；七段 AST（全文
-//!   `deny_unknown_fields`，构造字段解析为结构体、语义校验留待后续模块）；
-//!   引用完整性（类型/节点/store/端口）；INV-2 写入串行化编译期判定；
-//!   语义层一次收齐（Report 范式，承 af-graph `validate.rs`）。
-//! - M2-M4（context.sections+INV-1 / INV-3+INV-4 / route 归一化+CEL+topology_selector）
-//!   不在本模块期范围。
+//! - M1：拒绝式信封 E0001-E0004；七段 AST（全文 `deny_unknown_fields`，构造字段
+//!   解析为结构体）；引用完整性（类型/节点/store/端口）；INV-2 写入串行化
+//!   编译期判定；语义层一次收齐（Report 范式，承 af-graph `validate.rs`）。
+//! - M2（本模块期）：`context.sections` 装配校验（来源可解析/视图策略域/
+//!   配额为正 + 可配置总量上限）+ INV-1 上下文完整性（E2301-E2304、E2401-E2403）。
+//! - M3-M4（INV-3/INV-4 / route 归一化+CEL+topology_selector）不在本模块期范围。
 //!
 //! 权威语法规范：《DSL-语法提案-B》（正本）+ 择优裁决 2026-10-24 §二。
 
@@ -43,7 +43,7 @@ pub fn load_str(src: &str) -> Result<Document, LoadError> {
     Ok(doc)
 }
 
-/// 语义层校验（引用闭包 + INV-2），一次收齐。签名承提案 B §3.1 草图。
+/// 语义层校验（引用闭包 + INV-1 + INV-2），一次收齐。签名承提案 B §3.1 草图。
 pub fn validate(doc: &Document) -> Report {
     validate::validate(doc)
 }

@@ -1,7 +1,8 @@
-//! 语义层校验编排（M1）：手写词表（E1004）→ 重复 id（E2003，建索引时收）
-//! → 引用闭包（refs）→ INV-2（inv2），一次收齐。
-//! 顺序固定以保证违例输出确定性（承提案 B §3.1 顺序说明的 M1 前缀）。
+//! 语义层校验编排（M1+M2）：手写词表（E1004）→ 重复 id（E2003，建索引时收）
+//! → 引用闭包（refs）→ context.sections 装配 + INV-1（inv1）→ INV-2（inv2），
+//! 一次收齐。顺序固定以保证违例输出确定性。
 
+mod inv1;
 mod inv2;
 mod refs;
 
@@ -44,12 +45,7 @@ pub(crate) struct Index<'a> {
 }
 
 pub fn validate(doc: &Document) -> Report {
-    let mut report = Report::default();
-    report.violations.extend(crate::shape::check_vocab(doc));
-    let index = Index::build(doc, &mut report);
-    refs::check(doc, &index, &mut report);
-    inv2::check(&index, &mut report);
-    report
+    validate_with(doc, &ValidateOptions::default())
 }
 
 /// 语义校验可配置项（M2 起）。§5 的 INV-1 无总量规则，默认全部不收紧。
@@ -62,8 +58,13 @@ pub struct ValidateOptions {
 
 /// 带可配置项的语义校验（一次收齐）。
 pub fn validate_with(doc: &Document, opts: &ValidateOptions) -> Report {
-    let _ = opts; // RED 占位：直通 M1 校验；M2 实装见 GREEN 提交
-    validate(doc)
+    let mut report = Report::default();
+    report.violations.extend(crate::shape::check_vocab(doc));
+    let index = Index::build(doc, &mut report);
+    refs::check(doc, &index, &mut report);
+    inv1::check(doc, &index, opts, &mut report);
+    inv2::check(&index, &mut report);
+    report
 }
 
 impl<'a> Index<'a> {

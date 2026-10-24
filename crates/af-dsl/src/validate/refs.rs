@@ -464,8 +464,9 @@ fn check_arg_ref(
     }
 }
 
-/// meta.input schema 的字段（无 properties/字段缺失 → None）。
-fn input_property<'a>(doc: &'a Document, field: &str) -> Option<&'a serde_json::Value> {
+/// meta.input schema 的字段（无 properties/字段缺失 → None）。pub(crate)：
+/// inv1 层的 input.fields/vars 引用核对共用。
+pub(crate) fn input_property<'a>(doc: &'a Document, field: &str) -> Option<&'a serde_json::Value> {
     doc.types
         .iter()
         .find(|t| t.name == doc.meta.input)?
@@ -474,7 +475,7 @@ fn input_property<'a>(doc: &'a Document, field: &str) -> Option<&'a serde_json::
         .get(field)
 }
 
-fn input_has_properties(doc: &Document) -> bool {
+pub(crate) fn input_has_properties(doc: &Document) -> bool {
     doc.types
         .iter()
         .find(|t| t.name == doc.meta.input)
