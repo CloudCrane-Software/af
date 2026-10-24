@@ -26,7 +26,7 @@
 //! 登记，见 RESULT-G2b 偏差表）。
 
 use crate::ir::EffectClass;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 /// 组件类别（落地契约 §2.2 五类 + `uses.unit` 判定单元）。DSL `uses` 四面
 /// （model/tools/unit/memory）各对一类；loop_policy / context_compaction 是
 /// 契约 §2.2 的另外两类，v0.1 的 `uses` 无声明面（保留装载能力）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComponentClass {
     ModelRoute,
@@ -50,7 +50,7 @@ pub enum ComponentClass {
 }
 
 /// 组件声明（components.json 单条；全文 `deny_unknown_fields`）。
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentDecl {
     /// 组件类别。
@@ -72,7 +72,7 @@ pub struct ComponentDecl {
 }
 
 /// components.json 文件正本结构。
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ComponentsFile {
     pub components: Vec<ComponentDecl>,
@@ -80,7 +80,7 @@ pub struct ComponentsFile {
 
 /// 端点镜像：af-harness `spec.rs::EndpointSpec`（`spec.rs:57-95`）字段级
 /// 对应——字段名/枚举值/Option 语义逐字相同，序列化面同形。
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EndpointSpec {
     pub protocol: Protocol,
@@ -101,7 +101,7 @@ pub struct EndpointSpec {
 }
 
 /// 协议（af-harness `Protocol` 镜像）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Protocol {
     #[serde(rename = "openai-chat-completions")]
     OpenaiChatCompletions,
@@ -110,7 +110,7 @@ pub enum Protocol {
 }
 
 /// 推理档位（af-harness `ReasoningTier` 镜像）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ReasoningTier {
     Off,
@@ -120,7 +120,7 @@ pub enum ReasoningTier {
 }
 
 /// 认证形态（af-harness `AuthStyle` 镜像）。
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthStyle {
     Bearer,
@@ -194,8 +194,87 @@ impl ComponentRegistry {
 
     /// 扫描包根：根级 + 全部包目录的 components.json（规则见模块注释）。
     pub fn load(root: impl AsRef<Path>) -> Result<Self, ComponentRegistryError> {
-        let _ = root;
-        todo!("G2b RED 桩：components.rs 装载未实现")
+        let root = root.as_ref();
+        if !root.exists() {
+            return Err(ComponentRegistryError::RootMissing(root.to_path_buf()));
+        }
+        if !root.is_dir() {
+            return Err(ComponentRegistryError::RootNotDir(root.to_path_buf()));
+        }
+        // 装载文件集（确定序）：根级共享清单在前，包目录按路径序在后。
+        let mut files: Vec<PathBuf> = Vec::new();
+        let root_file = root.join("components.json");
+        if root_file.is_file() {
+            files.push(root_file);
+        }
+        let mut dirs: Vec<PathBuf> = std::fs::read_dir(root)
+            .map_err(|e| ComponentRegistryError::ReadFailed {
+                path: root.to_path_buf(),
+                cause: e.to_string(),
+            })?
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.is_dir())
+            .collect();
+        dirs.sort();
+        for dir in dirs {
+            if dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with('.'))
+            {
+                continue; // 隐藏目录不是包
+            }
+            let f = dir.join("components.json");
+            if f.is_file() {
+                files.push(f); // 无 components.json 的包跳过（组件清单与图清单解耦）
+            }
+        }
+
+        let mut declarations: BTreeMap<String, BTreeMap<String, ComponentDecl>> = BTreeMap::new();
+        let mut first_seen: BTreeMap<String, PathBuf> = BTreeMap::new();
+        for path in files {
+            let src =
+                std::fs::read_to_string(&path).map_err(|e| ComponentRegistryError::ReadFailed {
+                    path: path.clone(),
+                    cause: e.to_string(),
+                })?;
+            let file: ComponentsFile =
+                serde_json::from_str(&src).map_err(|e| ComponentRegistryError::Invalid {
+                    path: Some(path.clone()),
+                    message: e.to_string(),
+                })?;
+            for decl in file.components {
+                validate_decl(&decl).map_err(|m| ComponentRegistryError::Invalid {
+                    path: Some(path.clone()),
+                    message: m,
+                })?;
+                let r = format!("{}@{}", decl.name, decl.version);
+                if let Some(first) = first_seen.get(&r) {
+                    return Err(ComponentRegistryError::DuplicateComponentRef {
+                        reference: r,
+                        first: first.clone(),
+                        second: path.clone(),
+                    });
+                }
+                first_seen.insert(r, path.clone());
+                declarations
+                    .entry(decl.name.clone())
+                    .or_default()
+                    .insert(decl.version.clone(), decl);
+            }
+        }
+        let digest = Self::compute_digest(&declarations);
+        Ok(Self { declarations, digest })
+    }
+
+    /// `registry_digest`：全量声明按 `(name, version)` 字典序（BTreeMap 迭代
+    /// 序）的规范序列化取 SHA-256——同包根两次装载逐位相同。
+    fn compute_digest(declarations: &BTreeMap<String, BTreeMap<String, ComponentDecl>>) -> String {
+        let all: Vec<&ComponentDecl> = declarations.values().flat_map(BTreeMap::values).collect();
+        // serde_json 对本类型理论不可达失败（内部不变量；装载面已收全部错误源）
+        let canonical =
+            serde_json::to_string(&all).expect("组件声明规范序列化失败（内部不变量）");
+        crate::lower::digest_of(canonical.as_bytes())
     }
 
     /// `registry_digest`（64 位小写十六进制）。
@@ -212,4 +291,81 @@ impl ComponentRegistry {
     pub fn component_count(&self) -> usize {
         self.declarations.values().map(BTreeMap::len).sum()
     }
+}
+
+// ============================================================
+// 静态校验（装载即拒）
+// ============================================================
+
+/// 单条声明校验：非空/无 `'@'`；类别×字段正交（tool↔effect_class、
+/// model_route↔endpoint）；端点纪律（af-harness `validate_endpoint` 同源）。
+fn validate_decl(d: &ComponentDecl) -> Result<(), String> {
+    if d.name.is_empty() || d.name.contains('@') {
+        return Err(format!("name {:?} 非空必填且不得含 '@'（组合引用保留分隔符）", d.name));
+    }
+    if d.version.is_empty() || d.version.contains('@') {
+        return Err(format!(
+            "name {:?} 的 version {:?} 非空必填且不得含 '@'",
+            d.name, d.version
+        ));
+    }
+    match d.class {
+        ComponentClass::Tool => {
+            if d.effect_class.is_none() {
+                return Err(format!(
+                    "tool 组件 {:?} 必填 effect_class（pure|persist|external_once——ADR-010 回填源）",
+                    d.name
+                ));
+            }
+            if d.endpoint.is_some() {
+                return Err(format!("tool 组件 {:?} 不得携带 endpoint（类别×字段正交）", d.name));
+            }
+        }
+        ComponentClass::ModelRoute => {
+            let Some(endpoint) = &d.endpoint else {
+                return Err(format!(
+                    "model_route 组件 {:?} 必填 endpoint（af-harness EndpointSpec 同形）",
+                    d.name
+                ));
+            };
+            validate_endpoint(endpoint)
+                .map_err(|m| format!("model_route 组件 {:?} 端点非法：{m}", d.name))?;
+            if d.effect_class.is_some() {
+                return Err(format!(
+                    "model_route 组件 {:?} 不得携带 effect_class（类别×字段正交）",
+                    d.name
+                ));
+            }
+        }
+        _ => {
+            if d.effect_class.is_some() || d.endpoint.is_some() {
+                return Err(format!(
+                    "组件 {:?}（{:?}）不得携带 effect_class/endpoint（类别×字段正交）",
+                    d.name, d.class
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// 端点纪律（af-harness `spec.rs validate_endpoint` 同源复制——模块注释的
+/// 双实现登记处）：http(s) 前缀、无 userinfo/空白、model 非空无空白、
+/// key_ref 引用名字符集且非 `sk-` 明文前缀。
+fn validate_endpoint(e: &EndpointSpec) -> Result<(), String> {
+    let base = e.base_url.as_str();
+    if !(base.starts_with("https://") || base.starts_with("http://")) {
+        return Err("base_url 必须以 http:// 或 https:// 开头".into());
+    }
+    if base.contains('@') || base.chars().any(char::is_whitespace) {
+        return Err("base_url 不允许用户信息或空白，密钥不能写进 URL".into());
+    }
+    if e.model.is_empty() || e.model.chars().any(char::is_whitespace) {
+        return Err("model 不能为空或含空白".into());
+    }
+    let ok_char = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-');
+    if e.key_ref.is_empty() || !e.key_ref.chars().all(ok_char) || e.key_ref.starts_with("sk-") {
+        return Err("key_ref 只存引用名（字母数字和 _.:-），不存明文密钥，也不以 sk- 开头".into());
+    }
+    Ok(())
 }

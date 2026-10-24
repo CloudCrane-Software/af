@@ -36,7 +36,9 @@
 //! ——见 RESULT-G2b 遗留。
 
 use crate::components::{ComponentClass, ComponentRegistry, EndpointSpec};
-use crate::ir::{ArtifactSpec, CelRef, EffectClass, EscapeSpec, IrProgram, OpSpec, SectionSpec};
+use crate::ir::{
+    ArtifactSpec, CelRef, EffectClass, EscapeSpec, IrProgram, OpSpec, ProvenanceSpec, SectionSpec,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
@@ -99,11 +101,13 @@ impl fmt::Display for BindViolation {
 /// 解析后的组件引用（版本化组合引用 + 类别 + 回填位）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedComponent {
+    /// 组件名（引用串去版本段——`name@version` 之 name）。
+    pub name: String,
     /// 解析后版本化引用（`name@version`——未版本化 DSL 引用在此升格）。
     pub reference: String,
     pub class: ComponentClass,
     pub version: String,
-    /// ADR-010 effect_class 回填（tool 类恒 `Some`）。
+    /// ADR-010 effect_class 回填（tool 类恒 `Some`——装载即校验）。
     pub effect_class: Option<EffectClass>,
     /// 实现定位串（声明原样）。
     pub impl_ref: Option<String>,
@@ -173,6 +177,183 @@ impl BindReport {
 
 /// `IrProgram` × `ComponentRegistry` → 绑定图（纯函数，无 I/O）。
 pub fn bind(ir: &IrProgram, registry: &ComponentRegistry) -> BindReport {
-    let _ = (ir, registry);
-    todo!("G2b RED 桩：bind.rs 绑定未实现")
+    let mut violations: Vec<BindViolation> = Vec::new();
+    let mut bindings: BTreeMap<String, BoundNodeExec> = BTreeMap::new();
+    for (path, exec) in &ir.body.node_exec {
+        let bound = bound_node_exec(exec, path, registry, &mut violations);
+        bindings.insert(path.clone(), bound);
+    }
+    BindReport {
+        bindings,
+        // 逃逸注入点：IR 记账视图原样透传（impl_ref 保留、字段不加工）。
+        escapes: ir.body.escapes.clone(),
+        registry_digest: registry.digest().to_string(),
+        violations,
+    }
+}
+
+/// 单节点投影：uses.* 四面解析 + effect_class/provenance 回填 + 其余透传。
+fn bound_node_exec(
+    exec: &crate::ir::NodeExec,
+    path: &str,
+    registry: &ComponentRegistry,
+    violations: &mut Vec<BindViolation>,
+) -> BoundNodeExec {
+    let c = &exec.components;
+    let model_route = c
+        .model
+        .as_deref()
+        .and_then(|r| resolve(r, ComponentClass::ModelRoute, path, registry, violations));
+    let agent = model_route.as_ref().map(|m| BoundAgent {
+        // model_route 类装载即校验 endpoint 在场（components.rs 不变量）
+        endpoint: m.endpoint.clone().expect("model_route 端点装载不变量"),
+    });
+    let tools = c
+        .tools
+        .keys()
+        .filter_map(|r| resolve(r, ComponentClass::Tool, path, registry, violations))
+        .collect();
+    let unit = c
+        .unit
+        .as_deref()
+        .and_then(|r| resolve(r, ComponentClass::Unit, path, registry, violations));
+    let memory = c
+        .memory
+        .iter()
+        .filter_map(|r| resolve(r, ComponentClass::Memory, path, registry, violations))
+        .collect();
+
+    // ADR-010 provenance 回填：类型声明 `envelope<T>` → envelope_of = T
+    // （声明面的机械推导，无第二份类型推导器；eval_sha256 运行期落）。
+    let artifacts = exec
+        .artifacts
+        .iter()
+        .map(|(port, a)| {
+            let mut a = a.clone();
+            if let Some(inner) = a
+                .r#type
+                .as_deref()
+                .and_then(|t| t.strip_prefix("envelope<"))
+                .and_then(|t| t.strip_suffix('>'))
+                .filter(|t| !t.is_empty())
+            {
+                a.provenance = Some(ProvenanceSpec {
+                    envelope_of: Some(inner.to_string()),
+                    eval_sha256: None,
+                });
+            }
+            (port.clone(), a)
+        })
+        .collect();
+
+    BoundNodeExec {
+        node_id: exec.node_id.clone(),
+        components: BoundComponents {
+            model_route,
+            loop_policy: None, // v0.1 uses 无声明面（占位）
+            memory,
+            tools,
+            context_compaction: None, // v0.1 uses 无声明面（占位）
+            unit,
+        },
+        agent,
+        reads: exec.reads.clone(),
+        writes: exec.writes.clone(),
+        consumes: exec.consumes.clone(),
+        artifacts,
+        context: exec.context.clone(),
+        ops: exec.ops.clone(),
+        assert: exec.assert.clone(),
+    }
+}
+
+/// 引用解析：切分 `name@version`（最后 `'@'`）→ 注册表对照 → 类别核对。
+/// 命中 → [`ResolvedComponent`]；未命中 → 记违例返回 None（一次收齐，
+/// 节点其余引用继续解析）。
+fn resolve(
+    reference: &str,
+    expected: ComponentClass,
+    node: &str,
+    registry: &ComponentRegistry,
+    violations: &mut Vec<BindViolation>,
+) -> Option<ResolvedComponent> {
+    let mut push = |code: BindCode, message: String| {
+        violations.push(BindViolation {
+            code,
+            node: node.to_string(),
+            reference: reference.to_string(),
+            message,
+        });
+    };
+    // ① 切分：name 非空、无内嵌 '@'；版本段（若有）非空。
+    let (name, want_version) = match reference.rsplit_once('@') {
+        Some((n, v)) if !n.is_empty() && !v.is_empty() => {
+            if n.contains('@') || v.contains('@') {
+                push(
+                    BindCode::RefMissing,
+                    "引用串不可解析（内嵌 '@'——无法对照注册表）".into(),
+                );
+                return None;
+            }
+            (n, Some(v))
+        }
+        Some(_) | None if !reference.is_empty() && !reference.contains('@') => {
+            (reference, None)
+        }
+        Some(_) | None => {
+            push(BindCode::RefMissing, "引用串不可解析（空串或内嵌 '@'）".into());
+            return None;
+        }
+    };
+    // ② 名字对照：未注册 → E9001。
+    let Some(versions) = registry.versions_of(name) else {
+        push(
+            BindCode::RefMissing,
+            format!("组件 {name:?} 未注册（注册表共 {} 条声明）", registry.component_count()),
+        );
+        return None;
+    };
+    // ③ 版本核对：请求版本未声明 / 未版本化引用命中多版本 → E9002。
+    let version = match want_version {
+        Some(v) if versions.contains_key(v) => v.to_string(),
+        Some(v) => {
+            let declared: Vec<&str> = versions.keys().map(String::as_str).collect();
+            push(
+                BindCode::VersionMismatch,
+                format!("{name:?} 请求版本 {v:?} 未声明（已声明：{declared:?}）"),
+            );
+            return None;
+        }
+        None => {
+            if versions.len() != 1 {
+                let declared: Vec<&str> = versions.keys().map(String::as_str).collect();
+                push(
+                    BindCode::VersionMismatch,
+                    format!(
+                        "未版本化引用 {name:?} 命中多版本声明 {declared:?}（须带 @version 消歧）"
+                    ),
+                );
+                return None;
+            }
+            versions.keys().next().expect("len==1 已判").clone()
+        }
+    };
+    // ④ 类别核对：声明类别与 uses 面不符 → E9003。
+    let decl = &versions[&version];
+    if decl.class != expected {
+        push(
+            BindCode::ClassMismatch,
+            format!("{name:?}@{version} 注册类别为 {:?}，此处按 {:?} 引用", decl.class, expected),
+        );
+        return None;
+    }
+    Some(ResolvedComponent {
+        name: name.to_string(),
+        reference: format!("{name}@{version}"),
+        class: decl.class,
+        version,
+        effect_class: decl.effect_class,
+        impl_ref: decl.impl_ref.clone(),
+        endpoint: decl.endpoint.clone(),
+    })
 }

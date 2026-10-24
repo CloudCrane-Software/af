@@ -81,6 +81,8 @@ fn sample2_plan_shape_matches_contract_skeleton() {
     assert_eq!(body.compiled_from.graph_version, "1.0");
     assert_eq!(body.compiled_from.compiler_version, env!("CARGO_PKG_VERSION"));
     assert_eq!(body.compiled_from.dsl_digest.len(), 64);
+    // 绑定快照摘要随计划携带（§2.2——执行面 E9004 核对面）
+    assert_eq!(body.compiled_from.registry_digest, repo_registry().digest());
 
     // line / order 骨架（执行面落位，编译期占位）
     assert!(body.line.line_id.is_none() && body.line.domain_pack_digest.is_none());
@@ -133,15 +135,23 @@ fn sample2_plan_shape_matches_contract_skeleton() {
     assert_eq!(unit.unit_id, "pkg.sweng.test_unit");
     assert_eq!(unit.unit_version, "1");
 
-    // pm 工件契约：终态位 + envelope 溯源回填
+    // pm 工件契约：envelope 溯源回填；终态位在 build.report（meta.output.from
+    // = build——G2a is_final 规则直传，golden IR 同判）
     let pm = body.node_exec.iter().find(|n| n.node_id == "pm").unwrap();
     let prd = pm
         .artifact_contract
         .iter()
         .find(|a| a.name == "prd")
         .expect("pm.prd 工件契约应在场");
-    assert!(prd.is_final, "meta.output.from 终态判定（G2a 规则直传）");
+    assert!(!prd.is_final, "终态发射者是 build 非 pm");
     assert_eq!(prd.provenance.as_ref().unwrap().envelope_of.as_deref(), Some("prd"));
+    let build = body.node_exec.iter().find(|n| n.node_id == "build").unwrap();
+    let report = build
+        .artifact_contract
+        .iter()
+        .find(|a| a.name == "report")
+        .expect("build.report 工件契约应在场");
+    assert!(report.is_final, "from_body 转发端口承终态位");
 
     // 预算段：三账原样（budgets 按 id 序）
     let budget_ids: Vec<&str> = body.budget.budgets.iter().map(|b| b.id.as_str()).collect();

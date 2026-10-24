@@ -19,11 +19,12 @@
 //! 逃逸注入（G2b 注入点）：`BindReport::escapes` → 计划 `escapes` 块
 //! （`impl_ref` 与记账字段透传——执行面按包内实现装载，编译器不解析）。
 
-use crate::bind::{BindReport, BindViolation};
+use crate::bind::{bind, BindReport, BindViolation};
 use crate::ir::{
     BudgetDimension, BudgetEntry, EffectClass, EscapeSpec, FailureEntry, GraphTemplate,
     InterfaceSpec, IrProgram, ProvenanceSpec, StopEntry, StoreSpec,
 };
+use crate::lower::lower;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -75,6 +76,9 @@ pub struct CompiledFrom {
     /// af-compiler 版本（`CARGO_PKG_VERSION`）。
     pub compiler_version: String,
     pub graph_version: String,
+    /// 绑定快照摘要（§2.2 registry_digest——组件注册表装载 digest 随计划
+    /// 携带；执行面装载时对本地注册表重算核对，不符即 E9004 拒启动）。
+    pub registry_digest: String,
 }
 
 /// 产线绑定槽（af-workorder `bind_line` 执行面补齐——编译期无来源，§2.2）。
@@ -306,6 +310,9 @@ pub struct PlanSafetyPoint {
 pub enum PlanError {
     /// 绑定未过（E900x 违例非空——stage 4 拒绝消费不可用绑定）。
     Unbound { violations: Vec<BindViolation> },
+    /// 入口内 lowering 失败（输入未过全量校验——与 G2a `snapshot_json` 的
+    /// 输入契约同语义，此处归并为串）。
+    Lower(String),
     /// 序列化不可达错误（serde_json 对本 schema 理论不可达）。
     Serialize(String),
 }
@@ -319,6 +326,7 @@ impl fmt::Display for PlanError {
                 violations.len(),
                 violations.iter().map(|v| v.to_string()).collect::<Vec<_>>().join("；")
             ),
+            Self::Lower(detail) => write!(f, "入口内 lowering 失败：{detail}"),
             Self::Serialize(detail) => write!(f, "计划序列化失败：{detail}"),
         }
     }
@@ -329,20 +337,200 @@ impl std::error::Error for PlanError {}
 /// `IR × 绑定报告 → 可执行计划`（纯函数）。绑定违例非空 →
 /// [`PlanError::Unbound`]（一次点名全部违例）。
 pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePlan, PlanError> {
-    let _ = (ir, report);
-    todo!("G2b RED 桩：plan.rs 计划生成未实现")
+    if !report.is_ok() {
+        return Err(PlanError::Unbound { violations: report.violations.clone() });
+    }
+    let body = &ir.body;
+    let dsl_digest = {
+        let json = serde_json::to_string(ir)
+            .map_err(|e| PlanError::Serialize(format!("IR 序列化失败：{e}")))?;
+        crate::lower::digest_of(json.as_bytes())
+    };
+    let plan_id =
+        format!("plan.{}@{}+{}", body.graph.name, body.graph.graph_version, &dsl_digest[..12]);
+
+    // node_exec：绑定投影 → 计划面（BTreeMap 迭代 = 点号路径字典序）。
+    let node_exec: Vec<PlanNodeExec> = report
+        .bindings
+        .iter()
+        .map(|(path, b)| PlanNodeExec {
+            node_id: path.clone(),
+            unit: b.components.unit.as_ref().map(|u| UnitBinding {
+                unit_id: u.name.clone(),
+                unit_version: u.version.clone(),
+            }),
+            components: PlanComponents {
+                model_route: b.components.model_route.as_ref().map(|m| m.reference.clone()),
+                loop_policy: None,
+                memory: b.components.memory.iter().map(|m| m.reference.clone()).collect(),
+                tools: b
+                    .components
+                    .tools
+                    .iter()
+                    .map(|t| PlanToolRef {
+                        reference: t.reference.clone(),
+                        // tool 类装载即校验 effect_class 在场（components.rs 不变量）
+                        effect_class: t.effect_class.expect("tool effect_class 装载不变量"),
+                    })
+                    .collect(),
+                context_compaction: None,
+            },
+            budget: body
+                .policies
+                .budgets
+                .iter()
+                .filter(|e| e.scope == format!("node:{path}"))
+                .map(|e| NodeBudget { id: e.id.clone(), dimension: e.dimension, cap: e.cap })
+                .collect(),
+            artifact_contract: b
+                .artifacts
+                .iter()
+                .map(|(port, a)| PlanArtifact {
+                    name: port.clone(),
+                    is_final: a.is_final,
+                    qualified_by: None, // v0.1 无静态推导源（close 门材料执行面回填）
+                    provenance: a.provenance.clone(),
+                })
+                .collect(),
+            retry: None, // 失败分类账是类级（recovery 块承载）；节点级位占住
+        })
+        .collect();
+
+    // 恢复预案：安全点从全图 loop 声明收集（体内相对路径 + loop 归属）。
+    let mut safety_points = Vec::new();
+    collect_safety_points(&body.graph.nodes, "", &body.graph.subgraphs, &mut safety_points);
+
+    Ok(ExecutablePlan {
+        version: PLAN_VERSION,
+        body: PlanBody {
+            plan_id,
+            compiled_from: CompiledFrom {
+                dsl_digest,
+                compiler_version: env!("CARGO_PKG_VERSION").to_string(),
+                graph_version: body.graph.graph_version.clone(),
+                registry_digest: report.registry_digest.clone(),
+            },
+            line: LineSlot {
+                line_id: None,
+                line_version: None,
+                domain_pack_digest: None,
+            },
+            order: OrderSlot {
+                id: String::new(),
+                stable_id: String::new(),
+                run_id: String::new(),
+                state: "Created".to_string(),
+                graph_version: body.graph.graph_version.clone(),
+                line: None,
+                budget_voucher: None,
+                artifacts: Vec::new(),
+                sla: SlaSlot { deadline: None, priority: PlanPriority::Normal },
+                supersedes: None,
+                history: Vec::new(),
+            },
+            graph: body.graph.clone(),
+            interface: body.interface.clone(),
+            types: body.types.clone(),
+            stores: body.stores.clone(),
+            node_exec,
+            budget: PlanBudget {
+                budgets: body.policies.budgets.clone(),
+                stop: body.policies.stop.clone(),
+                failures: body.policies.failures.clone(),
+            },
+            resources: ResourcesSlot { gates: Vec::new(), limits: Vec::new() },
+            observation: ObservationSlot {
+                span_tree: ["invoke_workflow", "invoke_agent", "chat", "execute_tool"]
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect(),
+                ctx_propagation: "env".to_string(),
+                otel: OtelSlot { enabled: false, endpoint: None, batch_size: 512 },
+                events: EventsSlot {
+                    root_env: "AF_OBS_ROOT".to_string(),
+                    line: String::new(),
+                    index: true,
+                    manifest: true,
+                },
+                mes: MesSlot {
+                    endpoint_ref: "env:MES_CH_URL".to_string(),
+                    database: "af_mes".to_string(),
+                    line_id: String::new(),
+                    station_id: String::new(),
+                },
+            },
+            recovery: RecoverySlot {
+                node_retry: None,
+                resume_source: ["run_store", "record_stream", "mes_events"]
+                    .iter()
+                    .map(|s| (*s).to_string())
+                    .collect(),
+                safety_points,
+                failures: body.policies.failures.clone(),
+            },
+            escapes: report.escapes.clone(),
+        },
+    })
+}
+
+/// 递归收集 loop 安全点（根图 + 全部子图按构造归属递归；体内相对路径
+/// 原样——IR `SafetyPoint.node` 语义，全局寻址 = `<loop 路径>.<node>`）。
+fn collect_safety_points(
+    nodes: &[crate::ir::IrNode],
+    parent: &str,
+    subgraphs: &BTreeMap<String, crate::ir::SubGraph>,
+    out: &mut Vec<PlanSafetyPoint>,
+) {
+    use crate::ir::SafetyPointKind;
+    for n in nodes {
+        let path = if parent.is_empty() { n.id.clone() } else { format!("{parent}.{}", n.id) };
+        if let Some(lp) = &n.loop_spec {
+            for sp in &lp.safety_points {
+                out.push(PlanSafetyPoint {
+                    loop_node: path.clone(),
+                    node: sp.node.clone(),
+                    kind: match sp.kind {
+                        SafetyPointKind::Check => "check",
+                        SafetyPointKind::Gate => "gate",
+                        SafetyPointKind::Human => "human",
+                    }
+                    .to_string(),
+                });
+            }
+        }
+        if let Some(lp) = &n.loop_spec {
+            if let Some(sg) = subgraphs.get(&lp.body) {
+                collect_safety_points(&sg.nodes, &path, subgraphs, out);
+            }
+        }
+        if let Some(mp) = &n.map_spec {
+            if let Some(sg) = subgraphs.get(&mp.body) {
+                collect_safety_points(&sg.nodes, &path, subgraphs, out);
+            }
+        }
+    }
 }
 
 /// `lower + bind + plan + serialize`（compact）——确定性计划快照。
-pub fn plan_json(doc: &af_dsl::Document, registry: &crate::components::ComponentRegistry) -> Result<String, PlanError> {
-    let _ = (doc, registry);
-    todo!("G2b RED 桩：plan_json 未实现")
+pub fn plan_json(
+    doc: &af_dsl::Document,
+    registry: &crate::components::ComponentRegistry,
+) -> Result<String, PlanError> {
+    let ir = lower(doc).map_err(|e| PlanError::Lower(e.to_string()))?;
+    let report = bind(&ir, registry);
+    let plan = generate_plan(&ir, &report)?;
+    serde_json::to_string(&plan).map_err(|e| PlanError::Serialize(e.to_string()))
 }
 
 /// 同 [`plan_json`]，pretty（缩进 2）——golden/人读形态，同样确定。
-pub fn plan_json_pretty(doc: &af_dsl::Document, registry: &crate::components::ComponentRegistry) -> Result<String, PlanError> {
-    let _ = (doc, registry);
-    todo!("G2b RED 桩：plan_json_pretty 未实现")
+pub fn plan_json_pretty(
+    doc: &af_dsl::Document,
+    registry: &crate::components::ComponentRegistry,
+) -> Result<String, PlanError> {
+    let ir = lower(doc).map_err(|e| PlanError::Lower(e.to_string()))?;
+    let report = bind(&ir, registry);
+    let plan = generate_plan(&ir, &report)?;
+    serde_json::to_string_pretty(&plan).map_err(|e| PlanError::Serialize(e.to_string()))
 }
 
 // ============================================================
@@ -381,7 +569,27 @@ impl std::error::Error for PlanParseError {}
 pub const PLAN_TOP_KEYS: [&str; 2] = ["v", "body"];
 
 /// 从 JSON 串解码计划（拒绝式信封；执行面 digest/组件核对归执行面）。
+/// 纪律承 `decode.rs`：版本先行（body 不解析）→ 未知顶层键 → body 形状。
 pub fn decode_plan(src: &str) -> Result<ExecutablePlan, PlanParseError> {
-    let _ = src;
-    todo!("G2b RED 桩：decode_plan 未实现")
+    // ① 根必须是 JSON 对象（无效 JSON → 退化归并 MissingVersion，承 decode.rs）。
+    let value: serde_json::Value =
+        serde_json::from_str(src).map_err(|_| PlanParseError::MissingVersion)?;
+    let map = value.as_object().ok_or(PlanParseError::MissingVersion)?;
+
+    // ② 版本三查：缺 → 非整数 → 非 1（单错短路，body 不解析）。
+    let version = match map.get("v") {
+        None => return Err(PlanParseError::MissingVersion),
+        Some(v) => v.as_u64().ok_or(PlanParseError::VersionNotInteger)?,
+    };
+    if version != u64::from(PLAN_VERSION) {
+        return Err(PlanParseError::VersionNotOne { found: version });
+    }
+
+    // ③ 信封未知顶层键（serde_json::Map 默认 BTreeMap——首个=字典序，确定）。
+    if let Some(key) = map.keys().find(|k| !PLAN_TOP_KEYS.contains(&k.as_str())) {
+        return Err(PlanParseError::UnknownTopKey { key: key.clone() });
+    }
+
+    // ④ body 形状（deny_unknown_fields 全层）。
+    serde_json::from_value(value).map_err(|e| PlanParseError::MalformedBody { detail: e.to_string() })
 }
