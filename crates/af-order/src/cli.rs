@@ -189,13 +189,7 @@ fn run_submit(
     let (voucher, record) = voucher::issue_or_load(&order_dir, &spec, &stable_id)?;
 
     // 真引擎子进程客户端（定位或构建 af-engine；EX1001/EX1002 fail-loud）
-    let workspace = workspace
-        .map(PathBuf::from)
-        .unwrap_or_else(default_workspace_root);
-    let target_dir = target_dir
-        .map(PathBuf::from)
-        .or_else(default_target_dir)
-        .unwrap_or_else(|| workspace.join("target"));
+    let (workspace, target_dir) = resolve_build_dirs(workspace, target_dir);
     let client = EngineClient::locate(&workspace, &target_dir)?;
 
     // 全生命周期驱动（复用 af-execline；同 order_id 重放不重复终态）
@@ -228,14 +222,36 @@ fn run_submit(
     to_pretty_json(&summary)
 }
 
-fn default_workspace_root() -> PathBuf {
-    std::env::var_os("AF_WORKSPACE_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
+/// 解析 workspace 根与构建目录（优先级：显式参数 > 环境变量 > 默认）。
+///
+/// workspace：`--workspace` > `AF_WORKSPACE_ROOT` > `.`（cwd）。
+/// target：`--target-dir` > `CARGO_TARGET_DIR` > `<workspace>/target`。
+fn resolve_build_dirs(workspace: Option<&Path>, target_dir: Option<&Path>) -> (PathBuf, PathBuf) {
+    resolve_build_dirs_with(
+        workspace,
+        target_dir,
+        std::env::var_os("AF_WORKSPACE_ROOT").map(PathBuf::from),
+        std::env::var_os("CARGO_TARGET_DIR").map(PathBuf::from),
+    )
 }
 
-fn default_target_dir() -> Option<PathBuf> {
-    std::env::var_os("CARGO_TARGET_DIR").map(PathBuf::from)
+/// 纯函数形态（env 值注入，可单测；并行测试下直接改环境变量有竞态）：
+/// 显式参数 > env > 默认。
+fn resolve_build_dirs_with(
+    workspace: Option<&Path>,
+    target_dir: Option<&Path>,
+    env_workspace: Option<PathBuf>,
+    env_target_dir: Option<PathBuf>,
+) -> (PathBuf, PathBuf) {
+    let workspace = workspace
+        .map(PathBuf::from)
+        .or(env_workspace)
+        .unwrap_or_else(|| PathBuf::from("."));
+    let target_dir = target_dir
+        .map(PathBuf::from)
+        .or(env_target_dir)
+        .unwrap_or_else(|| workspace.join("target"));
+    (workspace, target_dir)
 }
 
 // ---------- list ----------
@@ -320,6 +336,48 @@ fn to_pretty_json(value: &Value) -> Result<String, OrderError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 优先级全覆盖：显式参数 > env > 默认（env 以注入值断言，不真改环境）。
+    #[test]
+    fn resolve_build_dirs_prefers_explicit_args_then_env_then_defaults() {
+        // 显式参数双全
+        let (ws, td) = resolve_build_dirs_with(
+            Some(Path::new("/ws")),
+            Some(Path::new("/td")),
+            Some(PathBuf::from("/env-ws")),
+            Some(PathBuf::from("/env-td")),
+        );
+        assert_eq!(
+            (ws.as_path(), td.as_path()),
+            (Path::new("/ws"), Path::new("/td"))
+        );
+
+        // workspace 显式、target 走 env
+        let (ws, td) = resolve_build_dirs_with(
+            Some(Path::new("/ws")),
+            None,
+            Some(PathBuf::from("/env-ws")),
+            Some(PathBuf::from("/env-td")),
+        );
+        assert_eq!(
+            (ws.as_path(), td.as_path()),
+            (Path::new("/ws"), Path::new("/env-td"))
+        );
+
+        // 全靠 env workspace，target 落 env workspace 下
+        let (ws, td) = resolve_build_dirs_with(None, None, Some(PathBuf::from("/env-ws")), None);
+        assert_eq!(
+            (ws.as_path(), td.as_path()),
+            (Path::new("/env-ws"), Path::new("/env-ws/target"))
+        );
+
+        // 什么都没有：cwd + <cwd>/target
+        let (ws, td) = resolve_build_dirs_with(None, None, None, None);
+        assert_eq!(
+            (ws.as_path(), td.as_path()),
+            (Path::new("."), Path::new("./target"))
+        );
+    }
 
     /// 参数解析：三个子命令的形状与用法错误。
     #[test]

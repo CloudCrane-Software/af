@@ -94,6 +94,20 @@ fn assert_contiguous(records: &[LedgerRecord], what: &str) {
     assert_eq!(seqs, expected, "{what} 的 ledger 序号必须从 1 连续");
 }
 
+/// 断言子命令成功；失败时把 stdout/stderr 全文带进断言消息。
+fn expect_ok(out: &Output) {
+    assert!(
+        out.status.success(),
+        "应成功退出\nstdout: {}\nstderr: {}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    );
+}
+
+fn stderr_of(out: &Output) -> String {
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
 // ---------- ① submit 全生命周期落账 ----------
 
 #[test]
@@ -102,12 +116,7 @@ fn submit_full_lifecycle_lands_ledger_mes_voucher_and_artifact() {
     let spec = write_spec(&state, "order.json", &spec_text("wo-cli-1", 42));
 
     let out = submit(&spec, &state);
-    assert!(
-        out.status.success(),
-        "submit 应成功\nstdout: {}\nstderr: {}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr),
-    );
+    expect_ok(&out);
     let summary = stdout_json(&out);
     assert_eq!(summary["order_id"], "wo-cli-1");
     assert_eq!(summary["state"], "Closed");
@@ -218,11 +227,7 @@ fn list_and_show_read_back_orders() {
 
     // 空状态目录：list 不报错、输出为空
     let empty = run(&["list", "--state", state_str]);
-    assert!(
-        empty.status.success(),
-        "{}",
-        String::from_utf8_lossy(&empty.stderr)
-    );
+    expect_ok(&empty);
     assert!(
         String::from_utf8_lossy(&empty.stdout).trim().is_empty(),
         "空状态目录应列出零行"
@@ -235,20 +240,12 @@ fn list_and_show_read_back_orders() {
             &spec_text(order_id, budget),
         );
         let out = submit(&spec, &state);
-        assert!(
-            out.status.success(),
-            "{}",
-            String::from_utf8_lossy(&out.stderr)
-        );
+        expect_ok(&out);
     }
 
     // list：两行，各含 order_id / stable_id / state / ledger_ops
     let out = run(&["list", "--state", state_str]);
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    expect_ok(&out);
     let lines: Vec<serde_json::Value> = String::from_utf8_lossy(&out.stdout)
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -267,11 +264,7 @@ fn list_and_show_read_back_orders() {
 
     // show：ledger 摘要 + MES 事件
     let out = run(&["show", "wo-cli-a", "--state", state_str]);
-    assert!(
-        out.status.success(),
-        "{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    expect_ok(&out);
     let shown = stdout_json(&out);
     assert_eq!(shown["order_id"], "wo-cli-a");
     assert_eq!(shown["stable_id"], StableId::generate("wo-cli-a").as_str());
@@ -301,7 +294,7 @@ fn list_and_show_read_back_orders() {
     // 不存在的订单：非零退出 + stderr 点名订单号与稳定码
     let out = run(&["show", "wo-nope", "--state", state_str]);
     assert!(!out.status.success(), "查无此单必须失败");
-    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stderr = stderr_of(&out);
     assert!(stderr.contains("wo-nope"), "{stderr}");
     assert!(stderr.contains("OR2004"), "{stderr}");
 }
@@ -314,11 +307,7 @@ fn resubmit_same_order_id_is_idempotent() {
     let spec = write_spec(&state, "order.json", &spec_text("wo-cli-idem", 7));
 
     let first = submit(&spec, &state);
-    assert!(
-        first.status.success(),
-        "{}",
-        String::from_utf8_lossy(&first.stderr)
-    );
+    expect_ok(&first);
     assert_eq!(stdout_json(&first)["replayed"], false, "首驱不是重放");
 
     let voucher_after_first =
@@ -326,11 +315,7 @@ fn resubmit_same_order_id_is_idempotent() {
             .expect("首驱后凭证存在");
 
     let second = submit(&spec, &state);
-    assert!(
-        second.status.success(),
-        "重复 submit 同 order_id 应幂等成功: {}",
-        String::from_utf8_lossy(&second.stderr)
-    );
+    expect_ok(&second);
     let summary = stdout_json(&second);
     assert_eq!(summary["replayed"], true, "二次 submit 标记为重放");
     assert_eq!(summary["state"], "Closed", "终态不变");
@@ -403,7 +388,7 @@ fn bad_spec_is_rejected_with_reason() {
         let spec = write_spec(&state, &format!("bad-{index}.json"), text);
         let out = submit(&spec, &state);
         assert!(!out.status.success(), "坏 spec #{index} 必须非零退出");
-        let stderr = String::from_utf8_lossy(&out.stderr);
+        let stderr = stderr_of(&out);
         assert!(
             stderr.contains(needle),
             "错误信息应含原因 {needle:?}: {stderr}"
@@ -417,7 +402,7 @@ fn bad_spec_is_rejected_with_reason() {
     // spec 文件不存在：OR2001 + 路径
     let out = submit(&state.join("nope.json"), &state);
     assert!(!out.status.success());
-    let stderr = String::from_utf8_lossy(&out.stderr);
+    let stderr = stderr_of(&out);
     assert!(stderr.contains("OR2001"), "{stderr}");
     assert!(stderr.contains("nope.json"), "{stderr}");
 
