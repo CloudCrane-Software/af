@@ -1,0 +1,31 @@
+version: 1
+meta:
+  name: inv3_demo
+  graph_version: "1.0"
+  entry: solver
+  input: inv3_input
+  output: { ref: verdict_type, from: solver }
+types:
+  - name: inv3_input
+    schema:
+      type: object
+      required: [task]
+      properties: { task: { type: string } }
+  - name: patch_ref
+    schema:
+      type: object
+      required: [artifact_ref]
+      properties: { artifact_ref: { type: string } }
+  - name: verdict_type
+    schema:
+      type: object
+      required: [pass]
+      properties: { pass: { type: boolean } }
+nodes:
+  - id: solver
+    kind: check                       # 验证面
+    uses: { unit: pkg.sweng.test_unit@1 }
+    consumes: { patch: patch_ref }
+    emits: { patch: patch_ref, verdict: verdict_type }
+edges:
+  - { from: solver, output: patch, to: solver, input: patch }   # E2321：自验证（产出自扫）
