@@ -19,10 +19,11 @@
 //! 判分脚本与 venv 绝对路径绑本机（方案 R2）：判分固定本机执行（容器在
 //! anolis、judge 在本机的现行拓扑保持），不在 anolis 跑 judge。
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use crate::error::ExeclineError;
+use crate::suite::swev::sha256_hex;
 
 /// 判分器定位（方案 §3.2-2 / R2：路径参数化，默认 = 本机现产值；
 /// P4 起进 SwevUnitSpec 声明，随 unit_version 版本化）。
@@ -40,16 +41,32 @@ impl JudgeLocator {
     /// 本机现产值（← af-bench swev.rs:205-209 硬编码逐字迁移）+ 现产指纹锚
     /// `a292547f…`（方案 §3.1 本机 sha256sum 实测，2026-10-24 复测一致）。
     pub fn production() -> Self {
-        let _ = ();
-        unimplemented!("P3 GREEN 落位：swev.rs:205-209 硬编码迁移（RED 先行，tests/p3_judge.rs）");
+        Self {
+            python: PathBuf::from("/home/pan-ding/swev-venv/bin/python"),
+            script: PathBuf::from("/home/pan-ding/workspace/agent黑灯工厂/tools/swev-judge.py"),
+            script_sha256: "a292547f3bfce825b0b44997fd5cc145a5aa7ee89d8533729716c0275950617c"
+                .into(),
+        }
     }
 
     /// 指纹门（方案 §3.2-2 fail-loud）：`sha256(script)` 必须等于声明锚，否则
     /// EX3002 拒跑；脚本读不到 = 无法验真，同样拒跑。不降级、不跳判、不静默
-    /// 换脚本。
+    /// 换脚本。调用方：`suite::swev::verify` 入口（P3）与 P4 单元装载（双重
+    /// 防线）。
     pub fn check_fingerprint(&self) -> Result<(), ExeclineError> {
-        let _ = self;
-        unimplemented!("P3 GREEN 落位：指纹门（RED 先行，tests/p3_judge.rs）");
+        match sha256_hex(&self.script) {
+            Some(actual) if actual == self.script_sha256 => Ok(()),
+            Some(actual) => Err(ExeclineError::JudgeFingerprintMismatch {
+                script: self.script.display().to_string(),
+                expected: self.script_sha256.clone(),
+                actual,
+            }),
+            None => Err(ExeclineError::JudgeFingerprintMismatch {
+                script: self.script.display().to_string(),
+                expected: self.script_sha256.clone(),
+                actual: "脚本不可读（无法验真）".into(),
+            }),
+        }
     }
 }
 
@@ -59,11 +76,14 @@ impl JudgeLocator {
 /// stdout/stderr/退出码原样交调用方解读（`suite::swev::verify`）。
 pub fn invoke(
     locator: &JudgeLocator,
-    task_json: &std::path::Path,
-    log: &std::path::Path,
-    diff: &std::path::Path,
+    task_json: &Path,
+    log: &Path,
+    diff: &Path,
 ) -> std::io::Result<std::process::Output> {
-    let _ = Command::new(&locator.python);
-    let _ = (task_json, log, diff);
-    unimplemented!("P3 GREEN 落位：swev.rs:205-210 原样迁移（RED 先行，tests/p3_judge.rs）");
+    Command::new(&locator.python)
+        .arg(&locator.script)
+        .arg(task_json)
+        .arg(log)
+        .arg(diff)
+        .output()
 }

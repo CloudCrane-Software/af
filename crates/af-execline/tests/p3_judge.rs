@@ -53,26 +53,13 @@ fn bench_swev_src() -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("读 {} 失败: {err}", path.display()))
 }
 
-/// 造一个假判分定位：可执行假 python（按 `python_body` 行为）+ 假判分脚本（任意
-/// 字节）+ 与脚本真实 sha256 相符的锚（能过指纹门）。
-fn fake_locator(dir: &Path, python_body: &str, script_bytes: &[u8]) -> JudgeLocator {
-    let python = dir.join("fake-python");
-    write_exec(&python, python_body);
-    let script = dir.join("fake-swev-judge.py");
-    std::fs::write(&script, script_bytes).unwrap();
-    JudgeLocator {
-        script_sha256: sha256_of(&script),
-        python,
-        script,
-    }
-}
-
 // ---- 方案 §3.2-1：argv 契约（恰好三个位置参数、无 env 注入、不经 wrapper shell）----
 
 /// argv 契约行为证据：对抗路径（空格/引号/$/;/反斜杠）逐字节穿透、恰五元素
 /// [python, script, task_json, log, diff]（判分脚本恰收到三个位置参数）、
-/// 子进程环境与父进程全等（无注入/清洗）、父进程就是本测试二进制（无 shell
-/// 包装层）。若实现改成 bash -c 字符串拼接或加了 env 注入，四断言至少一个失配。
+/// 子进程原始环境与父进程全等（无注入/清洗，python3 假解释器不改动继承
+/// environ）、父进程不是 bash/ssh 包装层。若实现改成 bash -c 字符串拼接或
+/// 加了 env 注入，四断言至少一个失配。
 #[test]
 fn judge_invoke_argv_contract_no_env_injection_no_wrapper_shell() {
     let root = temp_root("argv");
@@ -88,14 +75,28 @@ fn judge_invoke_argv_contract_no_env_injection_no_wrapper_shell() {
     let env_dump = root.join("env.txt");
     let parent_dump = root.join("parent.txt");
     let python = root.join("fake-python");
+    // 假 python 用 python3 而非 bash：python 不改动继承 environ（bash 启动即
+    // 自维护 SHLVL/_/PWD/OLDPWD），dump 出的才是 execve 传入的原始环境——
+    // ②的全等断言才能零豁免。
     write_exec(
         &python,
         &format!(
-            "#!/bin/bash\n\
-             printf '%s\\n' \"$0\" \"$@\" > '{argv}'\n\
-             /usr/bin/printenv > '{env_}'\n\
-             /usr/bin/tr '\\0' ' ' < /proc/$PPID/cmdline > '{parent}' 2>/dev/null || true\n\
-             echo '{{\"resolved\": true}}'\n",
+            "#!/usr/bin/python3\n\
+             import os\n\
+             import sys\n\
+             with open('{argv}', 'w', encoding='utf-8') as f:\n\
+             \tfor arg in sys.argv:\n\
+             \t\tf.write(arg + '\\n')\n\
+             with open('{env_}', 'w', encoding='utf-8') as f:\n\
+             \tfor key, value in os.environ.items():\n\
+             \t\tf.write(key + '=' + value + '\\n')\n\
+             try:\n\
+             \twith open('/proc/' + str(os.getppid()) + '/cmdline', 'rb') as p:\n\
+             \t\twith open('{parent}', 'wb') as f:\n\
+             \t\t\tf.write(p.read().replace(b'\\0', b' '))\n\
+             except OSError:\n\
+             \tpass\n\
+             print('{{\"resolved\": true}}')\n",
             argv = argv_dump.display(),
             env_ = env_dump.display(),
             parent = parent_dump.display(),
@@ -146,7 +147,7 @@ fn judge_invoke_argv_contract_no_env_injection_no_wrapper_shell() {
     assert_eq!(dumped, mine, "子进程环境 ≠ 父进程环境 = 有 env 注入或清洗");
 
     // ③ 不经 wrapper shell：假 python 的父进程不得是 bash/ssh/timeout 等包装层
-    //    （`bash -c`/`ssh host` 包一层，$PPID 就换成它们）。argv 逐字节断言
+    //    （`bash -c`/`ssh host` 包一层，ppid 就换成它们）。argv 逐字节断言
     //    （①）已同时排除有损 shell 拼接。
     let parent = std::fs::read_to_string(&parent_dump).unwrap_or_default();
     if parent.trim().is_empty() {

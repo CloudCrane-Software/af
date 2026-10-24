@@ -8,9 +8,11 @@
 //!   一个字节不动（方案 §1.1 行 4）。
 //!
 //! 容器 setup 已随 P2 搬入（挂 HostBridge，代理注入与资源护栏进命令构造）；
-//! capture_diff / verify / sha256_hex 属 P3（判分单元与证据链，方案 §5）。
-//! 判分三件套（task_json/eval.log/agent.diff）语义由 P3 以原样模块产出，
-//! 本包不动其接口。
+//! capture_diff / verify / sha256_hex 已随 P3 搬入（判分单元与证据链，方案
+//! §5-P3）：capture_diff 走 bridge，eval 执行链与判分调用按 af-bench 原样
+//! （judge 子进程收敛到 [`crate::judge`]，argv 契约与指纹门见该模块）。
+//! 判分三件套（task_json/eval.log/agent.diff）由本模块以原样语义产出，
+//! 路径与字节语义不动（方案 §1.1 不变量）。
 //!
 //! 行为逐字节等价由 tests/p1_comparison.rs 对照测试钉死（#[path] 直接编译
 //! af-bench 原文件，同输入同输出），黄金值见 tests/p1_suite.rs；P2 生命周期
@@ -21,6 +23,7 @@ use crate::judge::JudgeLocator;
 use crate::suite::tb::{self, TbEnv};
 use serde::Deserialize;
 use std::path::Path;
+use std::process::Command;
 
 #[derive(Debug, Deserialize)]
 pub struct SwevTask {
@@ -178,27 +181,37 @@ pub fn setup(
 }
 
 /// 取证 agent diff（完成度门禁与判分共用）：写 work_dir/agent.diff 并返回文本。
-/// （P3 目标 ← af-bench swev.rs:102-117 原样搬入，`tb_ssh()` 换 `bridge.run()`；
-/// RED 桩，tests/p3_verify.rs。）
+/// （← af-bench swev.rs:102-117 原样搬入；模块级 `tb_ssh()` 换 `bridge.run()`，
+/// 命令串与超时逐字节不变——`diff' ` 后的尾随空格系源码原样。）
 pub fn capture_diff(
     bridge: &dyn HostBridge,
     host: &str,
     env: &TbEnv,
     work_dir: &Path,
 ) -> Result<String, String> {
-    let _ = (bridge, host, env, work_dir);
-    unimplemented!(
-        "P3 GREEN 落位：swev.rs:102-117 原样搬入接 bridge（RED 先行，tests/p3_verify.rs）"
+    let diff_cmd = format!(
+        "docker exec {} bash -lc 'cd /testbed && git -c core.fileMode=false diff' ",
+        env.container
     );
+    let agent_diff = match bridge.run(host, &diff_cmd, 60) {
+        Ok((_, text)) => text,
+        Err(err) => return Err(format!("取 diff 失败: {err}")),
+    };
+    let _ = std::fs::create_dir_all(work_dir);
+    let diff_path = work_dir.join("agent.diff");
+    if std::fs::write(&diff_path, &agent_diff).is_err() {
+        return Err("写 agent.diff 失败".into());
+    }
+    Ok(agent_diff)
 }
 
 /// 判分：指纹门 → 取证 diff → 写入 eval 脚本 → 容器内执行 → 本地官方判分。
 /// `task_json_path` 是 swev-prep 产出的原始任务包（判分器全字段来源）。
 /// 返回 (resolved, note, eval_sha256)——eval_sha256 是判分日志的字节指纹
 /// （D-20 项 2：判分可追溯；桥接/判分早期失败时为 None）。
-/// （P3 目标 ← af-bench swev.rs:145-258 原样搬入：`tb_ssh()` 换 `bridge.run()`、
-/// judge 直造 Command 换 [`crate::judge::invoke`]（argv 契约收敛点，路径来自
-/// locator）、新增指纹门前置（方案 §3.2-2）；RED 桩，tests/p3_verify.rs。）
+/// （← af-bench swev.rs:145-258 原样搬入：`tb_ssh()` 换 `bridge.run()`、judge
+/// 直造 Command 换 [`crate::judge::invoke`]（argv 契约收敛点，路径来自
+/// locator）；新增指纹门前置（方案 §3.2-2，偏差登记 RESULT-P3.md §3-1）。）
 pub fn verify(
     bridge: &dyn HostBridge,
     judge: &JudgeLocator,
@@ -208,6 +221,131 @@ pub fn verify(
     work_dir: &Path,
     task_json_path: &Path,
 ) -> (Option<bool>, String, Option<String>) {
-    let _ = (bridge, judge, host, env, task, work_dir, task_json_path);
-    unimplemented!("P3 GREEN 落位：swev.rs:145-258 原样搬入（RED 先行，tests/p3_verify.rs）");
+    // 指纹门先行（方案 §3.2-2 fail-loud 拒跑；P4 单元装载还会再加一道装载期
+    // 检查——双重防线）：判分脚本不可信即整链不启动（取证/eval/判分皆不跑），
+    // 防在不可信判分面上浪费整轮执行。
+    if let Err(err) = judge.check_fingerprint() {
+        return (None, err.to_string(), None);
+    }
+    let _agent_diff = match capture_diff(bridge, host, env, work_dir) {
+        Ok(d) => d,
+        Err(err) => return (None, err, None),
+    };
+    let diff_path = work_dir.join("agent.diff");
+    let eval_path = work_dir.join("eval.sh");
+    if std::fs::write(&eval_path, &task.eval_script).is_err() {
+        return (None, "写 eval.sh 失败".into(), None);
+    }
+    // eval 脚本经 stdin 喂给容器 bash，避免 docker cp 往返。
+    // stderr 必须并入日志：set -x 轨迹与 START/END 标记走 stderr，官方判分需要。
+    // host == "local" 时免 ssh 一跳，其余语义一致。
+    // fix2 对齐（审计 D9/§6.A.8）：eval 超时 1200 → 1800s（官方 run_evaluation
+    // --timeout 默认）。
+    // （注：此段不走 bridge.run——HostBridge 面按方案 §2.3 钉死，表达不了
+    // stdin/stdout 文件管道与外层 stderr 丢弃（外层 stderr 必须丢弃：容器内
+    // `2>&1` 已合并进日志，桥接层再并入会把 ssh 噪声写进判分日志）。语句与
+    // af-bench swev.rs:166-186 逐字对照，仅局部变量 `bridge` 更名
+    // `bridge_script` 避开本函数新增的 bridge 参数；登记 RESULT-P3.md §3-2。）
+    const EVAL_TIMEOUT_SEC: u32 = 1800;
+    let run_cmd = format!("docker exec -i {} bash -s 2>&1", env.container);
+    let log_path = work_dir.join("eval.log");
+    let bridge_script = format!("timeout {EVAL_TIMEOUT_SEC} {run_cmd}");
+    let mut bridge_cmd = if host == "local" {
+        let mut cmd = Command::new("bash");
+        cmd.arg("-c").arg(&bridge_script);
+        cmd
+    } else {
+        let mut cmd = Command::new("ssh");
+        cmd.arg("-o")
+            .arg("BatchMode=yes")
+            .arg(host)
+            .arg(&bridge_script);
+        cmd
+    };
+    let status = bridge_cmd
+        .stdin(std::process::Stdio::from(
+            std::fs::File::open(&eval_path).expect("eval.sh 刚写过"),
+        ))
+        .stdout(std::process::Stdio::from(
+            std::fs::File::create(&log_path).expect("eval.log 可建"),
+        ))
+        .stderr(std::process::Stdio::null())
+        .status();
+    let mut eval_timed_out = false;
+    match status {
+        Err(err) => return (None, format!("eval 执行桥接失败: {err}"), None),
+        Ok(st) => {
+            if st.code() == Some(124) {
+                // D-20 项 4：timeout 击杀显式化——在日志末尾落标记行，
+                // 不再留无标记截断日志（判分复核据此与"截断/失败日志"灰区区分）。
+                eval_timed_out = true;
+                let marker = format!("\nEVAL_TIMEOUT_KILLED {EVAL_TIMEOUT_SEC}\n");
+                if let Ok(mut log) = std::fs::OpenOptions::new().append(true).open(&log_path) {
+                    use std::io::Write as _;
+                    let _ = log.write_all(marker.as_bytes());
+                }
+            }
+        }
+    }
+    // D-20 项 2：判分时计算日志指纹（含超时标记行——哈希的是判分器实际读到的字节）。
+    let eval_sha256 = sha256_hex(&log_path);
+    // 判分子进程调用收敛到唯一模块（方案 §3.2-1；← swev.rs:205-210 原样，
+    // 硬编码路径换 locator 字段）。
+    match crate::judge::invoke(judge, task_json_path, &log_path, &diff_path) {
+        Ok(output) if output.status.success() => {
+            let text = String::from_utf8_lossy(&output.stdout);
+            match serde_json::from_str::<serde_json::Value>(text.trim()) {
+                Ok(row) => {
+                    let resolved = row.get("resolved").and_then(serde_json::Value::as_bool);
+                    // D-20 项 3 消费端：judge JSON 带 log_parsed 时在 note 前缀如实透传
+                    // （截断日志的判 false 与"真失败"不再同貌）。
+                    let parsed_note = match row.get("log_parsed") {
+                        Some(serde_json::Value::Bool(false)) => "[log_parsed=false] ".to_string(),
+                        _ => String::new(),
+                    };
+                    let timeout_note = if eval_timed_out {
+                        format!("eval 超时击杀（已落标记 {EVAL_TIMEOUT_SEC}s）；")
+                    } else {
+                        String::new()
+                    };
+                    (
+                        resolved,
+                        format!("{timeout_note}{parsed_note}judge: {}", text.trim()),
+                        eval_sha256,
+                    )
+                }
+                Err(err) => (
+                    None,
+                    format!(
+                        "judge 输出不是 JSON: {err}: {}",
+                        &text[..text.len().min(200)]
+                    ),
+                    eval_sha256,
+                ),
+            }
+        }
+        Ok(output) => (
+            None,
+            format!(
+                "judge 退出 {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+                    .chars()
+                    .take(300)
+                    .collect::<String>()
+            ),
+            eval_sha256,
+        ),
+        Err(err) => (None, format!("judge 启动失败: {err}"), eval_sha256),
+    }
+}
+
+/// eval.log 的 sha256 十六进制串；读不到文件时 None（D-20 项 2）。
+/// （← af-bench swev.rs:261-266 原样；私有 → pub(crate)：judge.rs 指纹门复用
+/// 同一实现，不另造哈希副本。）
+pub(crate) fn sha256_hex(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let data = std::fs::read(path).ok()?;
+    let digest = Sha256::digest(&data);
+    Some(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }

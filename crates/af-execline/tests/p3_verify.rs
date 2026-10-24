@@ -127,7 +127,7 @@ fn fake_docker_bin() -> PathBuf {
         &script,
         format!(
             "#!/bin/bash\n\
-             /usr/bin/cat > '{dir}/stdin-$3.txt'\n\
+             /usr/bin/cat > \"{dir}/stdin-$3.txt\"\n\
              echo '+ fake eval output line'\n\
              if [ \"$3\" = \"afexl-p3-timeout\" ]; then\n\
              \texit 124\n\
@@ -264,7 +264,7 @@ fn capture_diff_command_artifact_and_error_contract() {
 fn verify_timeout_marker_before_hash_and_note_stack() {
     with_fake_docker(|bin| {
         let (judge, jroot) = fake_judge("vtimeout", r#"{"resolved": false, "log_parsed": false}"#);
-        let (resolved, note, sha, root) = run_verify(&judge, "afexl-p3-timeout", "vtimeout");
+        let (resolved, note, sha, root) = run_verify(&judge, "afexl-p3-timeout", "vtimeout-run");
 
         assert_eq!(resolved, Some(false));
         // eval.sh = task.eval_script 逐字节（swev.rs:157-160）。
@@ -319,7 +319,7 @@ fn verify_normal_flow_and_log_parsed_prefix_matrix() {
     with_fake_docker(|_bin| {
         // 变体 A：log_parsed=false → 前缀透传。
         let (judge, _ja) = fake_judge("vnorm-a", r#"{"resolved": false, "log_parsed": false}"#);
-        let (resolved, note, sha, root) = run_verify(&judge, "afexl-p3-ok", "vnorm-a");
+        let (resolved, note, sha, root) = run_verify(&judge, "afexl-p3-ok", "vnorm-a-run");
         assert_eq!(resolved, Some(false));
         assert_eq!(
             note,
@@ -337,13 +337,13 @@ fn verify_normal_flow_and_log_parsed_prefix_matrix() {
 
         // 变体 B：log_parsed=true → 无前缀。
         let (judge, _jb) = fake_judge("vnorm-b", r#"{"resolved": true, "log_parsed": true}"#);
-        let (resolved, note, _sha, _root) = run_verify(&judge, "afexl-p3-ok", "vnorm-b");
+        let (resolved, note, _sha, _root) = run_verify(&judge, "afexl-p3-ok", "vnorm-b-run");
         assert_eq!(resolved, Some(true));
         assert_eq!(note, "judge: {\"resolved\": true, \"log_parsed\": true}");
 
         // 变体 C：log_parsed 缺席 → 无前缀。
         let (judge, _jc) = fake_judge("vnorm-c", r#"{"resolved": true}"#);
-        let (resolved, note, _sha, _root) = run_verify(&judge, "afexl-p3-ok", "vnorm-c");
+        let (resolved, note, _sha, _root) = run_verify(&judge, "afexl-p3-ok", "vnorm-c-run");
         assert_eq!(resolved, Some(true));
         assert_eq!(note, "judge: {\"resolved\": true}");
     })
@@ -365,7 +365,7 @@ fn verify_judge_failure_paths_match_bench_messages() {
             python,
             script,
         };
-        let (resolved, note, sha, vroot) = run_verify(&judge, "afexl-p3-ok", "jerr-run");
+        let (resolved, note, sha, vroot) = run_verify(&judge, "afexl-p3-ok", "jerr-run2");
         assert_eq!(resolved, None);
         assert!(
             note.starts_with("judge 退出 exit status: 3: boom detail"),
@@ -387,7 +387,7 @@ fn verify_judge_failure_paths_match_bench_messages() {
             python,
             script,
         };
-        let (resolved, note, sha, vroot) = run_verify(&judge, "afexl-p3-ok", "jnotjson-run");
+        let (resolved, note, sha, vroot) = run_verify(&judge, "afexl-p3-ok", "jnotjson-run2");
         assert_eq!(resolved, None);
         assert!(note.starts_with("judge 输出不是 JSON: "), "{note}");
         assert!(note.contains("not json at all"), "{note}");
@@ -406,7 +406,7 @@ fn verify_judge_failure_paths_match_bench_messages() {
             python: root.join("no-such-python"),
             script,
         };
-        let (resolved, note, sha, vroot) = run_verify(&judge, "afexl-p3-ok", "jspawn-run");
+        let (resolved, note, sha, vroot) = run_verify(&judge, "afexl-p3-ok", "jspawn-run2");
         assert_eq!(resolved, None);
         assert!(note.starts_with("judge 启动失败: "), "{note}");
         assert!(note.contains("No such file"), "{note}");
@@ -422,7 +422,7 @@ fn verify_judge_failure_paths_match_bench_messages() {
 #[test]
 fn verify_eval_sh_write_failure_short_circuits() {
     with_fake_docker(|_bin| {
-        let root = temp_root("vshfail");
+        let root = temp_root("vshfail-run");
         std::fs::create_dir_all(root.join("eval.sh")).unwrap(); // 目录占位 → fs::write 失败
         let bridge = FakeBridge::new(vec![Ok((true, "diff --git a/x b/x\n".into()))]);
         let (judge, _) = fake_judge("vshfail", r#"{"resolved": true}"#);
@@ -446,7 +446,7 @@ fn verify_eval_sh_write_failure_short_circuits() {
 #[test]
 fn verify_capture_diff_failure_short_circuits() {
     with_fake_docker(|_bin| {
-        let root = temp_root("vdiffail");
+        let root = temp_root("vdiffail-run");
         let bridge = FakeBridge::new(vec![Err("命令桥接启动失败: ssh dead".into())]);
         let (judge, _) = fake_judge("vdiffail", r#"{"resolved": true}"#);
         let task_json = root.join("task.json");
@@ -479,7 +479,7 @@ fn verify_capture_diff_failure_short_circuits() {
 fn verify_fingerprint_gate_blocks_before_any_work() {
     // 无需假 docker：门在最前，什么都不该跑。
     let bridge = FakeBridge::default();
-    let root = temp_root("vgate");
+    let root = temp_root("vgate-run");
     let (mut judge, _) = fake_judge("vgate", r#"{"resolved": true}"#);
     // 造改字节的脚本副本：锚仍声明原脚本 → 失配。
     let tampered = root.join("judge-tampered.py");

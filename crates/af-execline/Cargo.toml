@@ -12,12 +12,17 @@ description = "统一执行面 PoC：订单生命周期驱动（af-engine 门控
 # 类型（EndpointSpec/Protocol/AuthStyle/ReasoningTier/RunStatus）。原计划此依赖 P4 落位，
 # 因上述纯函数签名绑定 af-harness 类型而提前（偏差见 RESULT-P1.md）；不改依赖方向
 # （af-execline ← af-harness，无环：af-harness 不依赖 af-execline）。
+# sha2：P3（判分单元与证据链）——suite::swev::sha256_hex（eval.log 指纹，D-20 项 2）
+# 与 judge.rs 指纹门共用；p1_comparison 经 #[path] 编译 af-bench 原文件亦依赖它
+# （随 P1 先入 dev-deps，P3 升主依赖）。钉锁树内现值（af-bench/af-effect-gateway
+# 同款），不升不降。
 [dependencies]
 af-harness = { path = "../af-harness" }
 af-mes = { path = "../af-mes" }
 af-workorder = { path = "../af-workorder" }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = "=0.10.9"
 thiserror = { workspace = true }
 
 [dev-dependencies]
@@ -26,9 +31,6 @@ af-mes = { path = "../af-mes" }
 af-workorder = { path = "../af-workorder" }
 # P1：status_label 六态测试构造 RunStatus::Stopped 需要 af-stop::Decision。
 af-stop = { path = "../af-stop" }
-# P1 对照测试经 #[path] 把 af-bench swev.rs 原文件编译进测试二进制（同输入对拍），
-# 其 sha256_hex 需要 sha2。钉锁树内现值（af-bench/af-effect-gateway 同款），不升不降。
-sha2 = "=0.10.9"
 
 [lints]
 workspace = true
