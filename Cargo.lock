@@ -153,6 +153,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "af-order"
+version = "0.1.0"
+dependencies = [
+ "af-execline",
+ "af-workorder",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "af-release-gate"
 version = "0.1.0"
 dependencies = [
