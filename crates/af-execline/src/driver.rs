@@ -22,11 +22,12 @@ use crate::engine::{EngineClient, EngineOutcome, EngineRejection};
 use crate::error::ExeclineError;
 use crate::exec::{ExecContext, ExecOutput, ExecuteUnit};
 use crate::ledger::{LedgerRecord, OrderLedger};
-use crate::mes::MesFileWriter;
+use crate::mes::{MesFileWriter, MesSink, MesSyncReport};
 
 /// 账本与事件文件名（out 目录布局）。
 const LEDGER_FILE: &str = "ledger.jsonl";
-const MES_FILE: &str = "mes-events.jsonl";
+/// MES 正本文件名（mes_ch 的 sink 同用此名）。
+pub(crate) const MES_FILE: &str = "mes-events.jsonl";
 const ARTIFACTS_DIR: &str = "artifacts";
 /// run 目录根名（P5：attempt 目录在其下按布局分配）。
 const RUNS_DIR: &str = "runs";
@@ -117,6 +118,9 @@ pub struct DriveReport {
     pub appended: u64,
     /// 本次驱动产出的 MES 事件（纯重放时为空）。
     pub mes_events: Vec<af_mes::MesEvent>,
+    /// 驱动收尾的 MES 对账回执（B②③：文件 stub = no-op；CH sink = 读侧
+    /// event_id 对账差量送批结果）。凭据零落（host:port only）。
+    pub mes_sync: MesSyncReport,
     /// 执行单元产出（重放时由订单快照重建，产出文件不重写）。
     pub exec_output: Option<ExecOutput>,
 }
@@ -128,7 +132,8 @@ pub struct OrderLifecycleDriver {
     clock: Box<dyn Clock>,
     order: WorkOrder,
     ledger: OrderLedger,
-    mes: MesFileWriter,
+    /// MES 写缝（B②③）：缺省文件正本；CH 下游经 [`Self::open_with_sink`] 注入。
+    mes: Box<dyn MesSink>,
     /// 已成功完成的幂等键。
     done: BTreeSet<String>,
     /// 本次驱动累计的 MES 事件（`drive` 取出）。
@@ -138,11 +143,24 @@ pub struct OrderLifecycleDriver {
 }
 
 impl OrderLifecycleDriver {
-    /// 打开驱动。`out_dir` 下已有 ledger 则重载恢复（身份不符 = EX2002）。
+    /// 打开驱动（缺省 MES 文件正本 sink；冒烟/无 CH 下游形态）。
+    /// `out_dir` 下已有 ledger 则重载恢复（身份不符 = EX2002）。
     pub fn open(
         cfg: DriverConfig,
         client: EngineClient,
         clock: Box<dyn Clock>,
+    ) -> Result<Self, ExeclineError> {
+        let mes_file = cfg.out_dir.join(MES_FILE);
+        Self::open_with_sink(cfg, client, clock, Box::new(MesFileWriter::new(mes_file)))
+    }
+
+    /// 打开驱动并注入 MES 写缝（B②③ 正式缝：CH 下游 =
+    /// [`crate::mes_ch::MesChSink`]，订单面只声明目标不做写侧）。
+    pub fn open_with_sink(
+        cfg: DriverConfig,
+        client: EngineClient,
+        clock: Box<dyn Clock>,
+        mes: Box<dyn MesSink>,
     ) -> Result<Self, ExeclineError> {
         std::fs::create_dir_all(&cfg.out_dir)?;
         let ledger = OrderLedger::open(&cfg.out_dir.join(LEDGER_FILE))?;
@@ -172,7 +190,6 @@ impl OrderLifecycleDriver {
             .into_iter()
             .map(str::to_string)
             .collect();
-        let mes = MesFileWriter::new(cfg.out_dir.join(MES_FILE));
         Ok(Self {
             cfg,
             client,
@@ -371,11 +388,16 @@ impl OrderLifecycleDriver {
         let exec_output = self.execute(unit)?;
         self.complete()?;
         self.close()?;
+        // 收尾对账面（B②③）：CH sink = retry_outbox + 读侧 event_id 对账 +
+        // 差量送批（Parked = EX2003 fail-loud，订单本体已 Closed，重跑只补差量）；
+        // 文件 sink = no-op（冒烟路径行为不变）。
+        let mes_sync = self.mes.sync()?;
         Ok(DriveReport {
             order: self.order.clone(),
             replayed: self.replay_hits > 0,
             appended: self.ledger.seq() - seq_before,
             mes_events: std::mem::take(&mut self.drive_mes),
+            mes_sync,
             exec_output: Some(exec_output),
         })
     }
@@ -485,8 +507,8 @@ impl OrderLifecycleDriver {
         Ok(())
     }
 
-    /// 发一条 MES 事件（stub writer 落盘）。event_id 用账本序号保唯一。
-    /// 落盘失败 = 记账事故，向上传播不静默。
+    /// 发一条 MES 事件（经写缝：文件正本必写，CH 下游在对账面统一）。
+    /// event_id 用账本序号保唯一。写失败 = 记账事故，向上传播不静默。
     fn emit_mes(&mut self, kind: &str, quantity: u64) -> Result<(), ExeclineError> {
         let stable_id = self.order.stable_id().as_str().to_string();
         let seq = self.ledger.seq();

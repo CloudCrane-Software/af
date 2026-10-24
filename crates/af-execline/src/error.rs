@@ -24,6 +24,10 @@ pub enum ErrorCode {
     LedgerIo,
     /// ledger 内容损坏：序号不连续、坏行、身份不一致。
     LedgerCorrupt,
+    /// MES ClickHouse 真实记账失败（消债 B②③：驱动写缝的 CH 下游送批
+    /// Parked / 对账读失败 / 目标声明不可解析）。fail-loud——不接受
+    /// "可能已写"：at-least-once 由 outbox + 读侧 event_id 对账收敛。
+    MesCh,
     /// 执行单元失败。
     UnitFailed,
     /// 判分脚本指纹门失败：脚本 sha256 ≠ 声明锚，或脚本不可读（无法验真）。
@@ -43,6 +47,7 @@ impl ErrorCode {
             Self::EngineRejected => "EX1006",
             Self::LedgerIo => "EX2001",
             Self::LedgerCorrupt => "EX2002",
+            Self::MesCh => "EX2003",
             Self::UnitFailed => "EX3001",
             Self::JudgeFingerprintMismatch => "EX3002",
         }
@@ -59,6 +64,7 @@ impl ErrorCode {
             Self::EngineRejected => "ENGINE_REJECTED",
             Self::LedgerIo => "LEDGER_IO",
             Self::LedgerCorrupt => "LEDGER_CORRUPT",
+            Self::MesCh => "MES_CH",
             Self::UnitFailed => "UNIT_FAILED",
             Self::JudgeFingerprintMismatch => "JUDGE_FINGERPRINT_MISMATCH",
         }
@@ -94,6 +100,10 @@ pub enum ExeclineError {
     LedgerIo { detail: String },
     #[error("EX2002: ledger 损坏: {detail}")]
     LedgerCorrupt { detail: String },
+    /// EX2003：MES ClickHouse 记账失败（fail-loud；at-least-once 由 outbox +
+    /// 读侧 event_id 对账收敛，重跑 submit 只补差量）。
+    #[error("EX2003: MES ClickHouse 记账失败: {detail}")]
+    MesCh { detail: String },
     #[error("EX3001: 执行单元失败: {detail}")]
     UnitFailed { detail: String },
     #[error("EX3002: 判分脚本指纹不匹配: {script} 实测 {actual} ≠ 声明锚 {expected}（fail-loud：拒跑、不降级、不跳判、不静默换脚本；吸收方案 §3.2-2）")]
@@ -116,6 +126,7 @@ impl ExeclineError {
             Self::EngineRejected { .. } => ErrorCode::EngineRejected,
             Self::LedgerIo { .. } => ErrorCode::LedgerIo,
             Self::LedgerCorrupt { .. } => ErrorCode::LedgerCorrupt,
+            Self::MesCh { .. } => ErrorCode::MesCh,
             Self::UnitFailed { .. } => ErrorCode::UnitFailed,
             Self::JudgeFingerprintMismatch { .. } => ErrorCode::JudgeFingerprintMismatch,
         }
@@ -141,6 +152,7 @@ mod tests {
         assert_eq!(ErrorCode::EngineRejected.as_str(), "EX1006");
         assert_eq!(ErrorCode::LedgerIo.as_str(), "EX2001");
         assert_eq!(ErrorCode::LedgerCorrupt.as_str(), "EX2002");
+        assert_eq!(ErrorCode::MesCh.as_str(), "EX2003");
         assert_eq!(ErrorCode::UnitFailed.as_str(), "EX3001");
         assert_eq!(ErrorCode::JudgeFingerprintMismatch.as_str(), "EX3002");
         assert_eq!(

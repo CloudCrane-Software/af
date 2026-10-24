@@ -401,12 +401,24 @@ fn writer_with_auth_sends_x_clickhouse_user_and_key_headers() {
     let requests = mock.requests();
     assert!(!requests.is_empty(), "应有插入请求");
     let insert = &requests[0];
-    assert!(insert.request_line.starts_with("POST /"), "{}", insert.request_line);
+    assert!(
+        insert.request_line.starts_with("POST /"),
+        "{}",
+        insert.request_line
+    );
     assert_eq!(insert.header("x-clickhouse-user"), Some("meswriter"));
     assert_eq!(insert.header("x-clickhouse-key"), Some("mes-secret-1"));
     // 凭据不进 URL（明文只在头里）
-    assert!(!insert.request_line.contains("mes-secret-1"), "{}", insert.request_line);
-    assert!(!insert.request_line.contains("meswriter"), "{}", insert.request_line);
+    assert!(
+        !insert.request_line.contains("mes-secret-1"),
+        "{}",
+        insert.request_line
+    );
+    assert!(
+        !insert.request_line.contains("meswriter"),
+        "{}",
+        insert.request_line
+    );
     assert_rowbinary_insert(&mock.inserts()[0], &[row]);
 }
 
@@ -422,7 +434,10 @@ fn anonymous_writer_wire_is_unchanged_no_credentials() {
     config.max_rows = 1;
     config.max_buffered = 1;
     let mut writer = MesWriter::open(config, clock).unwrap();
-    assert_eq!(writer.push(event("anon", 1)).unwrap(), Accept::Sent { rows: 1 });
+    assert_eq!(
+        writer.push(event("anon", 1)).unwrap(),
+        Accept::Sent { rows: 1 }
+    );
     // 读路径同查（匿名 reader）
     mock.enqueue_query_body(Vec::new());
     let reader = MesReader::open(mock.url(), "af_mes").unwrap();
@@ -462,7 +477,8 @@ fn anonymous_writer_wire_is_unchanged_no_credentials() {
 fn reader_with_auth_sends_credentials_on_select() {
     let mock = MockClickHouse::start();
     mock.enqueue_query_body(Vec::new());
-    let reader = MesReader::open_with_auth(mock.url(), "af_mes", "mesreader", "mes-read-2").unwrap();
+    let reader =
+        MesReader::open_with_auth(mock.url(), "af_mes", "mesreader", "mes-read-2").unwrap();
     let got = reader
         .fetch_events(&EventFilter::default())
         .expect("空 SELECT 应成功");
@@ -477,7 +493,8 @@ fn reader_with_auth_sends_credentials_on_select() {
 /// 凭据纪律：WriterConfig 的 Debug 不得泄露口令（user 保留供诊断）。
 #[test]
 fn writer_config_debug_redacts_password() {
-    let config = WriterConfig::new("http://127.0.0.1:9", "/tmp/outbox").with_auth("u1", "p1-secret");
+    let config =
+        WriterConfig::new("http://127.0.0.1:9", "/tmp/outbox").with_auth("u1", "p1-secret");
     let rendered = format!("{config:?}");
     assert!(!rendered.contains("p1-secret"), "{rendered}");
     assert!(rendered.contains("u1"), "user 可见于诊断: {rendered}");

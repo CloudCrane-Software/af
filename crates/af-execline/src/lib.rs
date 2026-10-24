@@ -38,6 +38,7 @@ pub mod hostbridge;
 pub mod judge;
 pub mod ledger;
 pub mod mes;
+pub mod mes_ch;
 pub mod profile;
 pub mod record;
 pub mod shadow;
@@ -54,7 +55,10 @@ pub use exec::{ExecContext, ExecOutput, ExecuteUnit, StubExecuteUnit};
 pub use hostbridge::{HostBridge, SshBridge};
 pub use judge::{invoke as judge_invoke, JudgeLocator};
 pub use ledger::{LedgerRecord, OrderLedger};
-pub use mes::MesFileWriter;
+pub use mes::{MesFileWriter, MesSink, MesSyncKind, MesSyncReport};
+pub use mes_ch::{
+    resolve_mes_ch_endpoint, resolve_mes_ch_endpoint_with, MesChEndpoint, MesChSink, MesChTarget,
+};
 pub use record::{ExecutionFacts, FileRecordSink, PendingRecordSink, RecordSink, TbExecutionFacts};
 pub use suite::swev_unit::{SwevExecuteUnit, SwevUnitSpec};
 pub use suite::tb_unit::{TbExecuteUnit, TbUnitSpec};

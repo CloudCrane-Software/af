@@ -14,12 +14,12 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use af_execline::{
-    DriverConfig, EngineClient, ExeclineError, FixedClock, MesChSink, MesChTarget, MesFileWriter,
-    MesSink, MesSyncKind, OrderLifecycleDriver, StubExecuteUnit,
+    DriverConfig, EngineClient, FixedClock, MesChSink, MesChTarget, MesFileWriter, MesSink,
+    MesSyncKind, OrderLifecycleDriver, StubExecuteUnit,
 };
 use af_mes::mock::MockClickHouse;
-use af_mes::{Accept, EventFilter, ManualClock, MesReader, MesWriter, WriterConfig};
-use af_workorder::{BudgetVoucher, GraphVersion, LineBinding, Priority, Sla};
+use af_mes::{Accept, ManualClock, MesWriter, WriterConfig};
+use af_workorder::{BudgetVoucher, LineBinding, Priority, Sla};
 
 fn scratch(tag: &str) -> PathBuf {
     let nanos = std::time::SystemTime::now()
@@ -130,11 +130,7 @@ fn ch_sink_reconciles_by_event_id_and_ships_only_missing() {
     let raw_e1 = seed_ch_row(&mock, &dir.0, &event("sid:e1", "sid-r", "release"));
     mock.enqueue_query_body(raw_e1);
 
-    let mut sink = MesChSink::open(
-        &MesChTarget::Url(mock.url().to_string()),
-        &dir.0,
-    )
-    .unwrap();
+    let mut sink = MesChSink::open(&MesChTarget::Url(mock.url().to_string()), &dir.0).unwrap();
     sink.append(&event("sid:e1", "sid-r", "release")).unwrap();
     sink.append(&event("sid:e2", "sid-r", "start")).unwrap();
     let report = sink.sync().unwrap();
@@ -145,7 +141,9 @@ fn ch_sink_reconciles_by_event_id_and_ships_only_missing() {
     let inserts = mock.inserts();
     let shipped = inserts
         .iter()
-        .filter(|captured| captured.accepted && captured.rows.iter().any(|r| r.event_id == "sid:e2"))
+        .filter(|captured| {
+            captured.accepted && captured.rows.iter().any(|r| r.event_id == "sid:e2")
+        })
         .count();
     assert_eq!(shipped, 1, "e2 恰送一次");
     let shipped_e1 = inserts
@@ -154,7 +152,8 @@ fn ch_sink_reconciles_by_event_id_and_ships_only_missing() {
         .count();
     assert_eq!(shipped_e1, 1, "e1 只有预置那一次，sink 不重发");
 
-    let sql = mock.queries().last().expect("SELECT 应已发出");
+    let queries = mock.queries();
+    let sql = queries.last().expect("SELECT 应已发出");
     assert!(sql.contains("work_order_id"), "对账查询按工单过滤: {sql}");
     assert!(sql.contains("FINAL"), "读包装器口径: {sql}");
 }
@@ -170,21 +169,14 @@ fn ch_sink_full_overlap_ships_nothing() {
     let raw_e2 = seed_ch_row(&mock, &dir.0, &e2);
     mock.enqueue_query_body([raw_e1, raw_e2].concat());
 
-    let mut sink = MesChSink::open(
-        &MesChTarget::Url(mock.url().to_string()),
-        &dir.0,
-    )
-    .unwrap();
+    let mut sink = MesChSink::open(&MesChTarget::Url(mock.url().to_string()), &dir.0).unwrap();
     sink.append(&e1).unwrap();
     sink.append(&e2).unwrap();
     let report = sink.sync().unwrap();
     assert_eq!(report.shipped, 0);
     assert_eq!(report.already_in_ch, 2);
     let inserts_before = mock.inserts().len();
-    assert_eq!(
-        inserts_before, 2,
-        "只有两次预置插入，sink 全程零送批"
-    );
+    assert_eq!(inserts_before, 2, "只有两次预置插入，sink 全程零送批");
 }
 
 /// Parked fail-loud：CH 拒收（500）→ EX2003（真实落账纪律：不接受"可能已写"）；
@@ -194,11 +186,7 @@ fn ch_sink_parked_batch_fails_loud_ex2003() {
     let mock = MockClickHouse::start();
     mock.fail_next_inserts(1);
     let dir = Scratch(scratch("ch-park"));
-    let mut sink = MesChSink::open(
-        &MesChTarget::Url(mock.url().to_string()),
-        &dir.0,
-    )
-    .unwrap();
+    let mut sink = MesChSink::open(&MesChTarget::Url(mock.url().to_string()), &dir.0).unwrap();
     sink.append(&event("sid:e1", "sid-p", "release")).unwrap();
     let err = sink.sync().unwrap_err();
     assert_eq!(err.code(), af_execline::error::ErrorCode::MesCh, "{err}");
@@ -219,11 +207,7 @@ fn ch_sink_retry_after_park_converges_without_duplicate() {
     mock.enqueue_query_body(raw_e1.clone());
 
     // 第一轮：CH 拒收一次 → e2 park 进 outbox，EX2003 fail-loud
-    let mut sink = MesChSink::open(
-        &MesChTarget::Url(mock.url().to_string()),
-        &dir.0,
-    )
-    .unwrap();
+    let mut sink = MesChSink::open(&MesChTarget::Url(mock.url().to_string()), &dir.0).unwrap();
     sink.append(&e1).unwrap();
     sink.append(&e2).unwrap();
     mock.fail_next_inserts(1);
@@ -242,11 +226,7 @@ fn ch_sink_retry_after_park_converges_without_duplicate() {
     // 第二轮（新实例同目录：outbox 载入 + 文件正本仍在，正本不重写）：
     // retry_outbox 把 e2 送入 → SELECT 回放 {e1,e2} → 零补送。
     mock.enqueue_query_body([raw_e1, raw_e2].concat());
-    let mut sink2 = MesChSink::open(
-        &MesChTarget::Url(mock.url().to_string()),
-        &dir.0,
-    )
-    .unwrap();
+    let mut sink2 = MesChSink::open(&MesChTarget::Url(mock.url().to_string()), &dir.0).unwrap();
     let report = sink2.sync().unwrap();
     assert_eq!(report.shipped, 0, "重试入账后读侧认行，不再补送");
     assert_eq!(report.already_in_ch, 2);
@@ -270,10 +250,10 @@ fn ch_sink_retry_after_park_converges_without_duplicate() {
 fn ch_target_parse_and_endpoint_resolution() {
     use af_execline::resolve_mes_ch_endpoint_with;
 
-    assert_eq!(MesChTarget::parse("auto"), Ok(MesChTarget::Auto));
+    assert_eq!(MesChTarget::parse("auto").unwrap(), MesChTarget::Auto);
     assert_eq!(
-        MesChTarget::parse("http://mingda:8123"),
-        Ok(MesChTarget::Url("http://mingda:8123".into()))
+        MesChTarget::parse("http://mingda:8123").unwrap(),
+        MesChTarget::Url("http://mingda:8123".into())
     );
 
     // auto：env 优先，其次 0600 文件内容，两者皆无 = 显式报错（不静默降级）
@@ -285,9 +265,15 @@ fn ch_target_parse_and_endpoint_resolution() {
     .unwrap();
     assert_eq!(resolved.endpoint, "http://env-host:8123");
     assert!(resolved.auth.is_none());
-    let resolved = resolve_mes_ch_endpoint_with(&MesChTarget::Auto, None, Some("u1:p1@http-x"))
-        .unwrap();
+    let resolved = resolve_mes_ch_endpoint_with(
+        &MesChTarget::Auto,
+        None,
+        Some("http://u1:p1@file-host:8123"),
+    )
+    .unwrap();
+    assert_eq!(resolved.endpoint, "http://file-host:8123");
     assert_eq!(resolved.auth, Some(("u1".to_string(), "p1".to_string())));
+    assert_eq!(resolved.host_only, "file-host:8123");
     let err = resolve_mes_ch_endpoint_with(&MesChTarget::Auto, None, None).unwrap_err();
     assert_eq!(err.code(), af_execline::error::ErrorCode::MesCh, "{err}");
 
@@ -303,12 +289,9 @@ fn ch_target_parse_and_endpoint_resolution() {
         resolved.auth,
         Some(("mesu".to_string(), "mesp".to_string()))
     );
-    let resolved = resolve_mes_ch_endpoint_with(
-        &MesChTarget::Url("http://mingda:8123".into()),
-        None,
-        None,
-    )
-    .unwrap();
+    let resolved =
+        resolve_mes_ch_endpoint_with(&MesChTarget::Url("http://mingda:8123".into()), None, None)
+            .unwrap();
     assert!(resolved.auth.is_none());
     let err = resolve_mes_ch_endpoint_with(&MesChTarget::Url("mingda:8123".into()), None, None)
         .unwrap_err();
@@ -376,11 +359,7 @@ fn driver_consumes_ch_sink_end_to_end_and_replay_ships_nothing() {
     let order_id = "wo-mes-sink-e2e";
     let cfg = driver_config(order_id, dir.0.clone());
     let client = engine_client();
-    let sink = MesChSink::open(
-        &MesChTarget::Url(mock.url().to_string()),
-        &dir.0,
-    )
-    .unwrap();
+    let sink = MesChSink::open(&MesChTarget::Url(mock.url().to_string()), &dir.0).unwrap();
     let mut driver = OrderLifecycleDriver::open_with_sink(
         cfg,
         client,
@@ -394,8 +373,8 @@ fn driver_consumes_ch_sink_end_to_end_and_replay_ships_nothing() {
     assert_eq!(report.mes_events.len(), 4);
     assert_eq!(report.mes_sync.kind, MesSyncKind::ClickHouse);
     assert_eq!(report.mes_sync.shipped, 4, "四类跃迁全量入 CH");
-    let mut kinds: Vec<&str> = mock
-        .inserts()
+    let inserts = mock.inserts();
+    let mut kinds: Vec<&str> = inserts
         .iter()
         .flat_map(|captured| captured.rows.iter().map(|row| row.kind.as_str()))
         .collect();
@@ -410,11 +389,7 @@ fn driver_consumes_ch_sink_end_to_end_and_replay_ships_nothing() {
         .collect();
     mock.enqueue_query_body(raw_all);
     let cfg2 = driver_config(order_id, dir.0.clone());
-    let sink2 = MesChSink::open(
-        &MesChTarget::Url(mock.url().to_string()),
-        &dir.0,
-    )
-    .unwrap();
+    let sink2 = MesChSink::open(&MesChTarget::Url(mock.url().to_string()), &dir.0).unwrap();
     let mut driver2 = OrderLifecycleDriver::open_with_sink(
         cfg2,
         engine_client(),
