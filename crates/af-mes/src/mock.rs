@@ -25,10 +25,32 @@ pub struct CapturedInsert {
     pub raw_rowbinary: Vec<u8>,
 }
 
+/// 一次收到的原始请求形态（认证面测试用）：请求行 + 头全录（头名小写、按到达序）。
+/// clickhouse crate 的口令认证走 `X-ClickHouse-User` / `X-ClickHouse-Key` 头
+/// （headers.rs with_authentication），不在 URL query 里——认证回归断言据此取头。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapturedRequest {
+    pub request_line: String,
+    pub headers: Vec<(String, String)>,
+}
+
+impl CapturedRequest {
+    /// 按名取头（大小写不敏感；头名存储已转小写）。
+    pub fn header(&self, name: &str) -> Option<&str> {
+        let lower = name.to_ascii_lowercase();
+        self.headers
+            .iter()
+            .find(|(key, _)| *key == lower)
+            .map(|(_, value)| value.as_str())
+    }
+}
+
 struct State {
     fail_inserts: usize,
     inserts: Vec<CapturedInsert>,
     queries: Vec<String>,
+    /// 全部请求的原始形态（插入与非插入都含，按到达序）。
+    raw_requests: Vec<CapturedRequest>,
     scripted_bodies: VecDeque<Vec<u8>>,
     parse_error: Option<String>,
 }
@@ -52,6 +74,7 @@ impl MockClickHouse {
             fail_inserts: 0,
             inserts: Vec::new(),
             queries: Vec::new(),
+            raw_requests: Vec::new(),
             scripted_bodies: VecDeque::new(),
             parse_error: None,
         }));
@@ -99,6 +122,15 @@ impl MockClickHouse {
     pub fn queries(&self) -> Vec<String> {
         self.state.lock().expect("mock state").queries.clone()
     }
+
+    /// 全部已收请求的原始形态（插入与非插入都含，按到达序）。
+    pub fn requests(&self) -> Vec<CapturedRequest> {
+        let state = self.state.lock().expect("mock state");
+        if let Some(err) = &state.parse_error {
+            panic!("mock 没能解析插入: {err}");
+        }
+        state.raw_requests.clone()
+    }
 }
 
 impl Drop for MockClickHouse {
@@ -138,6 +170,17 @@ fn handle_one(stream: TcpStream, state: &Mutex<State>) -> Result<(), String> {
         return Ok(());
     };
     let body = read_body(&mut reader, &headers)?;
+    {
+        let mut guard = state.lock().expect("mock state");
+        guard.raw_requests.push(CapturedRequest {
+            request_line: request_line.trim_end().to_string(),
+            headers: headers
+                .into_iter()
+                .collect::<std::collections::BTreeMap<_, _>>()
+                .into_iter()
+                .collect(),
+        });
+    }
     let response = dispatch(&request_line, &body, state);
     let stream = reader.get_mut();
     stream.write_all(&response).map_err(|err| err.to_string())?;

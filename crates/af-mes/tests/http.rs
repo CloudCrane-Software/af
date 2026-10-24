@@ -377,3 +377,109 @@ fn reader_sends_select_final_and_decodes_rowbinary() {
     assert!(!sql.to_ascii_lowercase().contains("optimize"));
     assert!(!sql.to_ascii_lowercase().contains("rand64"));
 }
+
+// ---------------------------------------------------------------------------
+// 认证面（补丁台账-第二阶段 #A 转正式）：口令认证走官方客户端的
+// `X-ClickHouse-User` / `X-ClickHouse-Key` 头；匿名路径线格式逐字节不变。
+// ---------------------------------------------------------------------------
+
+/// 带认证 writer：插入请求必须携带 X-ClickHouse-User / X-ClickHouse-Key 头，
+/// 值与注入凭据一致（凭据只在头里出现一次，不进 URL query）。
+#[test]
+fn writer_with_auth_sends_x_clickhouse_user_and_key_headers() {
+    let mock = MockClickHouse::start();
+    let dir = Scratch(scratch("auth"));
+    let clock = Arc::new(ManualClock::new(0));
+    let mut config = WriterConfig::new(mock.url(), &dir.0);
+    config.max_rows = 1;
+    config.max_buffered = 1;
+    let config = config.with_auth("meswriter", "mes-secret-1");
+    let mut writer = MesWriter::open(config, clock).unwrap();
+    let row = event("auth-row", 1);
+    assert_eq!(writer.push(row.clone()).unwrap(), Accept::Sent { rows: 1 });
+
+    let requests = mock.requests();
+    assert!(!requests.is_empty(), "应有插入请求");
+    let insert = &requests[0];
+    assert!(insert.request_line.starts_with("POST /"), "{}", insert.request_line);
+    assert_eq!(insert.header("x-clickhouse-user"), Some("meswriter"));
+    assert_eq!(insert.header("x-clickhouse-key"), Some("mes-secret-1"));
+    // 凭据不进 URL（明文只在头里）
+    assert!(!insert.request_line.contains("mes-secret-1"), "{}", insert.request_line);
+    assert!(!insert.request_line.contains("meswriter"), "{}", insert.request_line);
+    assert_rowbinary_insert(&mock.inserts()[0], &[row]);
+}
+
+/// 匿名回归（#A 消除条件：`build_client` 旧行为逐字节不变）：
+/// 无凭据 writer 的全部请求不携带任何 ClickHouse 认证头，URL 也不含
+/// user/password 参数；显式 None 与缺省在请求线上完全一致。
+#[test]
+fn anonymous_writer_wire_is_unchanged_no_credentials() {
+    let mock = MockClickHouse::start();
+    let dir = Scratch(scratch("anon"));
+    let clock = Arc::new(ManualClock::new(0));
+    let mut config = WriterConfig::new(mock.url(), &dir.0);
+    config.max_rows = 1;
+    config.max_buffered = 1;
+    let mut writer = MesWriter::open(config, clock).unwrap();
+    assert_eq!(writer.push(event("anon", 1)).unwrap(), Accept::Sent { rows: 1 });
+    // 读路径同查（匿名 reader）
+    mock.enqueue_query_body(Vec::new());
+    let reader = MesReader::open(mock.url(), "af_mes").unwrap();
+    reader
+        .fetch_events(&EventFilter {
+            work_order_id: Some("WO".into()),
+            ..EventFilter::default()
+        })
+        .unwrap();
+
+    let requests = mock.requests();
+    assert!(requests.len() >= 2, "插入 + SELECT 至少两请求");
+    for request in &requests {
+        assert!(
+            request.header("x-clickhouse-user").is_none(),
+            "匿名请求不得带 X-ClickHouse-User: {:?}",
+            request.headers
+        );
+        assert!(
+            request.header("x-clickhouse-key").is_none(),
+            "匿名请求不得带 X-ClickHouse-Key: {:?}",
+            request.headers
+        );
+        assert!(
+            request.header("authorization").is_none(),
+            "匿名请求不得带 Authorization: {:?}",
+            request.headers
+        );
+        let lower = request.request_line.to_ascii_lowercase();
+        assert!(!lower.contains("user="), "{}", request.request_line);
+        assert!(!lower.contains("password="), "{}", request.request_line);
+    }
+}
+
+/// 带认证 reader：SELECT 请求同样携带认证头（CH 读侧对账的凭据面）。
+#[test]
+fn reader_with_auth_sends_credentials_on_select() {
+    let mock = MockClickHouse::start();
+    mock.enqueue_query_body(Vec::new());
+    let reader = MesReader::open_with_auth(mock.url(), "af_mes", "mesreader", "mes-read-2").unwrap();
+    let got = reader
+        .fetch_events(&EventFilter::default())
+        .expect("空 SELECT 应成功");
+    assert!(got.is_empty());
+
+    let requests = mock.requests();
+    let select = requests.last().expect("SELECT 请求");
+    assert_eq!(select.header("x-clickhouse-user"), Some("mesreader"));
+    assert_eq!(select.header("x-clickhouse-key"), Some("mes-read-2"));
+}
+
+/// 凭据纪律：WriterConfig 的 Debug 不得泄露口令（user 保留供诊断）。
+#[test]
+fn writer_config_debug_redacts_password() {
+    let config = WriterConfig::new("http://127.0.0.1:9", "/tmp/outbox").with_auth("u1", "p1-secret");
+    let rendered = format!("{config:?}");
+    assert!(!rendered.contains("p1-secret"), "{rendered}");
+    assert!(rendered.contains("u1"), "user 可见于诊断: {rendered}");
+    assert!(rendered.contains("***"), "口令应有占位符: {rendered}");
+}
