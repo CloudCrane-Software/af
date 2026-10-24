@@ -7,13 +7,13 @@ name = "af-bench"
 version = "0.1.0"
 dependencies = [
  "af-credential",
+ "af-execline",
  "af-harness",
  "af-meter",
  "af-stop",
  "af-workorder",
  "serde",
  "serde_json",
- "sha2 0.10.9",
  "thiserror 2.0.21",
 ]
 
