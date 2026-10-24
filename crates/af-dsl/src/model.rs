@@ -305,6 +305,21 @@ impl PortType {
             Self::Inline(p) => format!("{{type:{}}}", p.r#type.display()),
         }
     }
+
+    pub(crate) fn signal() -> Self {
+        Self::Named(TypeRef(TypeExpr::Signal))
+    }
+
+    pub(crate) fn boolean() -> Self {
+        Self::Inline(InlinePrimitive {
+            r#type: PrimitiveKind::Boolean,
+        })
+    }
+
+    /// 包一层 list<>（from_body 经 map 构造转发时用）。
+    pub(crate) fn list_of(inner: TypeExpr) -> Self {
+        Self::Named(TypeRef(TypeExpr::List(Box::new(inner))))
+    }
 }
 
 /// 字符串类型表达式：`name` | `list<name>` | `envelope<name>` | `signal`。

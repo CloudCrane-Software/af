@@ -11,7 +11,6 @@ use af_dsl::{load_str, validate, Document};
 const DEF_META: &str = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\n";
 const DEF_TYPES: &str = "types:\n  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }\n  - { name: a, schema: { type: object, required: [text], properties: { text: { type: string } } } }\n";
 const DEF_POLICIES: &str = "policies:\n  budgets: []\n  stop: []\n  failures: []\n";
-const DEF_NODES: &str = "nodes:\n  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n";
 
 fn build(meta: &str, types: &str, stores: &str, nodes: &str, edges: &str, policies: &str) -> String {
     let stores = if stores.is_empty() {

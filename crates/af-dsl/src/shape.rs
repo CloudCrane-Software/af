@@ -68,31 +68,28 @@ pub fn check_vocab(doc: &Document) -> Vec<crate::error::Violation> {
 }
 
 /// 深度遍历全部节点（含 loop/map 体内嵌），scope 标当前所在体
-/// （"root" / "n1.loop_body" / "n1.map_body" / 嵌套拼接）。
+/// （"root" / "<节点路径>.loop_body" / "<节点路径>.map_body"，与 validate 索引一致）。
 pub(crate) fn walk_nodes<'a>(doc: &'a Document, f: &mut impl FnMut(&'a crate::model::NodeDecl, &str)) {
     fn walk_body<'a>(
         nodes: &'a [crate::model::NodeDecl],
+        parent_path: &str,
         scope: &str,
         f: &mut impl FnMut(&'a crate::model::NodeDecl, &str),
     ) {
         for n in nodes {
             f(n, scope);
-            let child_scope = |suffix: &str| {
-                if scope == "root" {
-                    format!("{}.{suffix}", n.id)
-                } else {
-                    format!("{scope}.{}.{suffix}", n.id)
-                }
+            let path = if parent_path.is_empty() {
+                n.id.clone()
+            } else {
+                format!("{parent_path}.{}", n.id)
             };
             if let Some(lp) = &n.loop_spec {
-                let s = child_scope("loop_body");
-                walk_body(&lp.body.nodes, &s, f);
+                walk_body(&lp.body.nodes, &path, &format!("{path}.loop_body"), f);
             }
             if let Some(mp) = &n.map {
-                let s = child_scope("map_body");
-                walk_body(&mp.body.nodes, &s, f);
+                walk_body(&mp.body.nodes, &path, &format!("{path}.map_body"), f);
             }
         }
     }
-    walk_body(&doc.nodes, "root", f);
+    walk_body(&doc.nodes, "", "root", f);
 }
