@@ -17,7 +17,7 @@
 //! 命令构造由 tests/p2_bridge.rs FakeBridge 断言钉死。
 
 use crate::hostbridge::HostBridge;
-use crate::suite::tb::TbEnv;
+use crate::suite::tb::{self, TbEnv};
 use serde::Deserialize;
 use std::path::Path;
 
@@ -123,13 +123,55 @@ pub const ARCHAEOLOGY_PATTERNS: &[&str] = &[
     "find / -type",
 ];
 
-/// 起容器（← af-bench swev.rs:55-99 原样；模块级 `tb_ssh()` 换 `bridge.run()`，
+/// 起容器（← af-bench swev.rs:54-99 原样；模块级 `tb_ssh()` 换 `bridge.run()`，
 /// 命令串与超时逐字节不变）。sweb.eval 镜像自带 /testbed 与全部测试资产，无需 build。
 pub fn setup(
-    _bridge: &dyn HostBridge,
-    _host: &str,
-    _task: &SwevTask,
-    _profile: &str,
+    bridge: &dyn HostBridge,
+    host: &str,
+    task: &SwevTask,
+    profile: &str,
 ) -> Result<TbEnv, String> {
-    unimplemented!("P2 GREEN 落位：swev.rs:55-99 setup（RED 先行，tests/p2_bridge.rs）");
+    let container = format!(
+        "afbench-swev-{}-{profile}",
+        task.instance_id.replace("__", "-")
+    );
+    let _ = bridge.run(host, &format!("docker rm -f {container}"), 30);
+    // 出网代理按宿主区分：anolis 容器经宿主 squid（172.17.0.1:8123）；
+    // 本机（local）容器走 docker NAT 直连（本机无 8123 监听），语义同为"容器可出网"。
+    let proxy_env = if host == "local" {
+        ""
+    } else {
+        "-e HTTPS_PROXY=http://172.17.0.1:8123 \
+         -e HTTP_PROXY=http://172.17.0.1:8123 \
+         -e NO_PROXY=localhost,127.0.0.1,100.64.0.0/10"
+    };
+    // fix2 环境卫生（mini-swe-agent env 块同源）：分页器挂死与进度条/着色噪音
+    // 是 SWE 容器高频暗坑，容器级环境变量一次性根治。测量语义变更，计入 fix2。
+    // 资源护栏（2026-10-21，常量与校准注释见 tb 模块）：agent 容器 6g/512。
+    // 基建修复不改判分语义：上限远高于实测峰值（agent 期 30-90MiB）；
+    // 本代际判分在该容器内原地执行，判分负载同受此封顶。
+    let mem = tb::SWEV_AGENT_CONTAINER_MEM;
+    let pids = tb::SWEV_AGENT_CONTAINER_PIDS;
+    let script = format!(
+        "docker run -d --name {container} \
+         --memory {mem} --pids-limit {pids} \
+         {proxy_env} \
+         -e PAGER=cat -e MANPAGER=cat -e LESS=-R \
+         -e PIP_PROGRESS_BAR=off -e TQDM_DISABLE=1 -e NO_COLOR=1 \
+         {} sleep infinity",
+        task.image
+    );
+    match bridge.run(host, &script, 120) {
+        Ok((true, _)) => Ok(tb::TbEnv {
+            container,
+            task: task.instance_id.clone(),
+            host: host.into(),
+            workdir: "/testbed".into(),
+        }),
+        Ok((false, log)) => Err(format!(
+            "起容器失败: {}",
+            log.chars().take(400).collect::<String>()
+        )),
+        Err(err) => Err(err),
+    }
 }

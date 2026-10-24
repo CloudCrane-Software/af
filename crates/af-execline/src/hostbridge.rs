@@ -12,11 +12,17 @@
 //! anolis 分支（真 `ssh -o BatchMode=yes`）不在单测覆盖——属 L2 对拍面（方案 §4）；
 //! 其命令构造由源文本比对钉死（tests/p2_bridge.rs 的 cmp_p2_* 系列）。
 
+use std::process::Command;
+
+use crate::suite::tb::shell_quote;
+
 /// 宿主命令执行缝（方案 §2.3 原签名）。
 pub trait HostBridge {
     /// 执行一条宿主命令，返回 (status, stdout+stderr 合并文本)。
-    /// `host == "local"` 时本机直接执行（本机 docker 直执行面，免 ssh 一跳），
-    /// 其余经 `ssh <host>`（BatchMode）。两种路径都用 timeout 包裹，超时语义一致。
+    /// `host == "local"` 时本机直接执行（本机 docker 直执行面，免 ssh 一跳，
+    /// 2026-10-20 新增，测量语义不变：只是换了 docker 宿主）；其余经 `ssh <host>`。
+    /// 两种路径都用 timeout 包裹，超时语义一致。
+    /// （doc ← af-bench tb.rs:38-41 随函数体随迁。）
     fn run(&self, host: &str, script: &str, timeout_sec: u32) -> Result<(bool, String), String>;
 }
 
@@ -28,7 +34,26 @@ pub struct SshBridge;
 
 impl HostBridge for SshBridge {
     fn run(&self, host: &str, script: &str, timeout_sec: u32) -> Result<(bool, String), String> {
-        let _ = (host, script, timeout_sec);
-        unimplemented!("P2 GREEN 落位：tb.rs:42-64 真实现（RED 先行，tests/p2_bridge.rs）");
+        let quoted = format!("timeout {timeout_sec} bash -c {}", shell_quote(script));
+        let output = if host == "local" {
+            Command::new("bash").arg("-c").arg(&quoted).output()
+        } else {
+            Command::new("ssh")
+                .arg("-o")
+                .arg("BatchMode=yes")
+                .arg(host)
+                .arg(&quoted)
+                .output()
+        }
+        .map_err(|err| format!("命令桥接启动失败: {err}"))?;
+        let mut text = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.is_empty() {
+            if !text.is_empty() {
+                text.push('\n');
+            }
+            text.push_str(&stderr);
+        }
+        Ok((output.status.success(), text))
     }
 }

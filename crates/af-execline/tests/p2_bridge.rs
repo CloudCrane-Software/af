@@ -294,8 +294,9 @@ fn tb_exec_normal_splits_marker_and_appends_exit_line() {
     let bridge = FakeBridge::new(vec![Ok((true, "out line\n__AF_RC=0\n".into()))]);
     let env = TbEnv::setup(&FakeBridge::default(), "anolis", &tb_task(), "glm-cp").unwrap();
     let out = env.exec(&bridge, "ls");
-    // 剥掉标记行后正文为 "out line\n"，再补 "\nexit=0"。
-    assert_eq!(out, "out line\n\nexit=0");
+    // 剥标记行保留其前后换行（前换行属正文末行，P1 split_rc 黄金值
+    // "a\n\nstderr tail" 同款语义）：正文 "out line\n\n"，再补 "\nexit=0"。
+    assert_eq!(out, "out line\n\n\nexit=0");
     let calls = bridge.calls();
     assert_eq!(calls.len(), 1, "exec 只发一条桥命令");
     assert_eq!(
@@ -349,19 +350,19 @@ fn tb_exec_truncates_at_cap_12000() {
     let bridge = FakeBridge::new(vec![Ok((true, raw))]);
     let env = TbEnv::setup(&FakeBridge::default(), "anolis", &tb_task(), "glm-cp").unwrap();
     let out = env.exec(&bridge, "cat big");
-    // text = 20_000 个 a + "\n"（20_001 字节）→ 头 6_000 + elided 8_001 + 尾 6_000
-    // （尾段含正文末换行：5_999 个 a + "\n"）。
+    // 剥标记行保留前后换行：text = 20_000 a + "\n\n"（20_002 字节）
+    // → 头 6_000 + elided 8_002 + 尾 6_000（5_998 个 a + 两换行），再补 "\nexit=0"。
     let expected = format!(
-        "{}\n...[output truncated: 8001 bytes elided. Re-run with a narrower command: pipe \
+        "{}\n...[output truncated: 8002 bytes elided. Re-run with a narrower command: pipe \
 through head/tail/sed -n, grep for specific patterns, or redirect output to a file and read it \
-in parts.]\n{}\nexit=0",
+in parts.]\n{}\n\n\nexit=0",
         "a".repeat(6000),
-        format!("{}\n", "a".repeat(5999))
+        "a".repeat(5998)
     );
     assert_eq!(out, expected);
     assert!(
         out.len() < 12_500,
-        "截断后总长 {} 应显著低于原 20_001",
+        "截断后总长 {} 应显著低于原 20_002",
         out.len()
     );
 }

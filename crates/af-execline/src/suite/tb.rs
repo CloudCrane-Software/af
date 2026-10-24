@@ -142,12 +142,57 @@ impl TbEnv {
     /// 建环境与容器（← af-bench tb.rs:122-171 原样；模块级 `ssh()` 换 `bridge.run()`，
     /// 命令串与超时逐字节不变）。任务目录须已在 anolis:/data/bench/tb/<task>。
     pub fn setup(
-        _bridge: &dyn HostBridge,
-        _host: &str,
-        _task: &TbTask,
-        _profile: &str,
+        bridge: &dyn HostBridge,
+        host: &str,
+        task: &TbTask,
+        profile: &str,
     ) -> Result<Self, String> {
-        unimplemented!("P2 GREEN 落位：tb.rs:124-171 setup（RED 先行，tests/p2_bridge.rs）");
+        let task = &task.task_id;
+        let image = format!("afbench-tbenv-{task}");
+        let container = format!("afbench-{task}-{profile}");
+        let remote_dir = format!("/data/bench/tb/{task}");
+        let (ok, log) = bridge.run(
+            host,
+            &format!(
+                "docker build -q --network host \
+                 --build-arg HTTPS_PROXY=http://127.0.0.1:8123 \
+                 --build-arg HTTP_PROXY=http://127.0.0.1:8123 \
+                 --build-arg NO_PROXY=localhost,127.0.0.1,100.64.0.0/10 \
+                  \
+                  \
+                 -t {image} {remote_dir}/environment"
+            ),
+            1800,
+        )?;
+        if !ok {
+            return Err(format!("build {image} 失败: {}", tail(&log, 800)));
+        }
+        let _ = bridge.run(host, &format!("docker rm -f {container}"), 30);
+        // fix2 环境卫生（mini-swe-agent env 块同源）：分页器挂死与进度条/着色噪音
+        // 是 SWE 容器高频暗坑，容器级环境变量一次性根治。测量语义变更，计入 fix2。
+        let (ok, log) = bridge.run(
+            host,
+            &format!(
+                "docker run -d --name {container} \
+                 --memory {TB_CONTAINER_MEM} --pids-limit {TB_CONTAINER_PIDS} \
+                 -e HTTPS_PROXY=http://172.17.0.1:8123 \
+                 -e HTTP_PROXY=http://172.17.0.1:8123 \
+                 -e NO_PROXY=localhost,127.0.0.1,100.64.0.0/10 \
+                 -e PAGER=cat -e MANPAGER=cat -e LESS=-R \
+                 -e PIP_PROGRESS_BAR=off -e TQDM_DISABLE=1 -e NO_COLOR=1 \
+                 {image} sleep infinity"
+            ),
+            60,
+        )?;
+        if !ok {
+            return Err(format!("起容器 {container} 失败: {}", tail(&log, 400)));
+        }
+        Ok(Self {
+            container,
+            task: task.clone(),
+            host: host.into(),
+            workdir: "/app".into(),
+        })
     }
 
     /// 任务工作目录（TB=/app，SWE-V=/testbed）——bash 工具每条命令都先 cd 到这里。
@@ -156,15 +201,55 @@ impl TbEnv {
         &self.workdir
     }
 
-    /// bash 工具体（← af-bench tb.rs:186-222 原样，`ssh()` 换 `bridge.run()`）：
-    /// fix2 带内恢复语义（不改判分链）——exit=N 末行、超时教学反馈、桥接失败
-    /// 可重试文案、截断附换窄命令指引。
-    pub fn exec(&self, _bridge: &dyn HostBridge, _command: &str) -> String {
-        unimplemented!("P2 GREEN 落位：tb.rs:186-222 exec（RED 先行，tests/p2_bridge.rs）");
+    /// bash 工具体：容器内执行，fix2 带内恢复语义（不改判分链）：
+    ///   · exit=N 从输出首行移到**末行**——首行留给命令自身输出，完成判定
+    ///     「工具输出首行=信号词」才有因果可讲；分隔改真实换行（原字面 `\n` 疵点一并修）；
+    ///   · 超时（外层 timeout 杀桥接，无 __AF_RC 标记）→ mini-swe-agent timeout_template
+    ///     同源教学反馈，运行继续而非死文案；
+    ///   · 桥接失败 → 声明"基建瞬断、可重试"，同样不死；
+    ///   · 普通非零退出不教学（失败是常态信号，逐条指点只会加噪）；
+    ///   · 截断附「换窄命令」指引（mini observation_template 同源）。
+    /// （← af-bench tb.rs:178-222 原样，`ssh()` 换 `bridge.run()`。）
+    pub fn exec(&self, bridge: &dyn HostBridge, command: &str) -> String {
+        let script = format!(
+            "docker exec {} bash -lc {}; echo __AF_RC=$?",
+            self.container,
+            shell_quote(&format!("cd {} && {}", self.workdir, command))
+        );
+        let (mut text, rc) = match bridge.run(&self.host, &script, 180) {
+            Ok((_, raw)) => split_rc(&raw),
+            Err(err) => {
+                return format!(
+                    "[harness] The execution bridge failed before the command could produce output (transient infrastructure error: {}). This is not a task failure — retry the command.\nexit=127",
+                    err
+                );
+            }
+        };
+        if rc.is_none() {
+            text.push_str(
+                "\n[harness] The command was killed after exceeding the 180s timeout (no exit code was reported). Partial output (if any) is above. Re-run with a different approach: pipe input or use non-interactive flags (-y / -n / DEBIAN_FRONTEND=noninteractive), wrap long work in an explicit `timeout <secs> ...`, and avoid commands that never exit on their own (servers, watch loops, pagers).",
+            );
+        }
+        const CAP: usize = 12_000;
+        if text.len() > CAP {
+            let keep = CAP / 2;
+            text = format!(
+                "{}\n...[output truncated: {} bytes elided. Re-run with a narrower command: pipe through head/tail/sed -n, grep for specific patterns, or redirect output to a file and read it in parts.]\n{}",
+                &text[..keep],
+                text.len() - keep * 2,
+                &text[text.len() - keep..]
+            );
+        }
+        text.push_str(&format!(
+            "\nexit={}",
+            rc.map(|n| n.to_string())
+                .unwrap_or_else(|| "124".to_string())
+        ));
+        text
     }
 
     /// 清容器（← af-bench tb.rs:294-296 原样，`ssh()` 换 `bridge.run()`）。
-    pub fn cleanup(&self, _bridge: &dyn HostBridge) {
-        unimplemented!("P2 GREEN 落位：tb.rs:294-296 cleanup（RED 先行，tests/p2_bridge.rs）");
+    pub fn cleanup(&self, bridge: &dyn HostBridge) {
+        let _ = bridge.run(&self.host, &format!("docker rm -f {}", self.container), 60);
     }
 }
