@@ -51,6 +51,30 @@ impl RecordSink for PendingRecordSink {
     }
 }
 
+/// P5（方案 §5-P5"RecordSink 实现"）：文件实现——双文件 sink。legacy 行落
+/// `{{output_dir}}/results.jsonl`、v1 行落 `{{output_dir}}/records.jsonl`；
+/// 写入纪律 append + 每行 flush（af-bench main.rs:644-648 批级文件的逐行纪律，
+/// 单元化后随驱动逐单打开——append 语义保证跨单续写同文件）。
+pub struct FileRecordSink;
+
+impl FileRecordSink {
+    /// 打开（或创建）双文件；输出目录不存在则建。失败 fail-loud（String 文案
+    /// 进 EX3001，由驱动层入账后上抛）。
+    pub fn open(_output_dir: &Path) -> Result<Self, String> {
+        unimplemented!("P5 GREEN 落位：FileRecordSink::open")
+    }
+}
+
+impl RecordSink for FileRecordSink {
+    fn append_legacy(&self, _row: &str) -> Result<(), String> {
+        unimplemented!("P5 GREEN 落位：FileRecordSink::append_legacy")
+    }
+
+    fn append_v1(&self, _row: &str) -> Result<(), String> {
+        unimplemented!("P5 GREEN 落位：FileRecordSink::append_v1")
+    }
+}
+
 /// 单题执行事实——两轨行的同源（方案 §1.4"防漂移"）。
 /// 字段 = swe-v 18 键 legacy 行（af-bench main.rs:861-890）的并集。
 #[derive(Debug, Clone)]
@@ -195,4 +219,51 @@ pub fn swev_run_failed_row(
         "http_retries": http_retries,
         "verifier_note": clip300(note),
     })
+}
+
+// ---- TB 行（af-bench main.rs:938-946 / 1037-1046 / 1068-1085 原样，P5）----
+// TB 与 swe-v 行形状在 af-bench 即不同（12/7/8 键 vs 18/9/11 键：TB 行无
+// scaffold/reasoning_tier/run_dir/eval_sha256/gate/attempts）——迁移不合并，
+// 如实分行装配（方案 §1.1"12 键 tb 行原样搬"）。
+
+/// 单题执行事实（TB）——12 键 legacy 行的源（main.rs:1068-1085 字段并集）。
+#[derive(Debug, Clone)]
+pub struct TbExecutionFacts {
+    pub task_id: String,
+    pub profile: String,
+    pub trial: bool,
+    /// 判定（verify 容器链 reward.txt：1/0/缺件 None=infra）。
+    pub reward: Option<bool>,
+    /// RunStatus 六态映射（suite::status_label）。
+    pub status: String,
+    pub http_retries: u64,
+    pub turns: u32,
+    pub model_calls: u64,
+    pub tokens: TokenTotals,
+    pub agent_wall_ms: u64,
+    pub verifier_note: String,
+}
+
+/// TB 12 键 legacy 行（af-bench main.rs:1068-1085 原样装配）。
+pub fn tb_legacy_row(facts: &TbExecutionFacts) -> Value {
+    let _ = facts;
+    unimplemented!("P5 GREEN 落位：tb_legacy_row")
+}
+
+/// TB setup_failed 行（af-bench main.rs:938-946 原样：7 键）。
+pub fn tb_setup_failed_row(task_id: &str, profile: &str, trial: bool, note: &str) -> Value {
+    let _ = (task_id, profile, trial, note);
+    unimplemented!("P5 GREEN 落位：tb_setup_failed_row")
+}
+
+/// TB run_failed 行（af-bench main.rs:1037-1046 原样：8 键）。
+pub fn tb_run_failed_row(
+    task_id: &str,
+    profile: &str,
+    trial: bool,
+    http_retries: u64,
+    note: &str,
+) -> Value {
+    let _ = (task_id, profile, trial, http_retries, note);
+    unimplemented!("P5 GREEN 落位：tb_run_failed_row")
 }

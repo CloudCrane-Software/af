@@ -98,6 +98,11 @@ pub const SWEV_AGENT_CONTAINER_PIDS: &str = "512";
 pub const TB_CONTAINER_MEM: &str = "2g";
 pub const TB_CONTAINER_PIDS: &str = "256";
 
+/// TB system 提示（← af-bench main.rs:975 原样，一个字节不动——测量语义载荷）。
+/// fix2：完成协议随 harness 语义变更为"提交命令输出首行"——TB 提示同步；
+/// 与 swe-v 不同，TB 无 instance 纪律模板（main.rs:1015 user_message 即裸 prompt）。
+pub const TB_SYSTEM_PROMPT: &str = "You are an autonomous engineering agent working inside a Linux container. Complete the task using the bash tool. The working directory /app contains the task materials. When the task is fully done and verified, finish by running a bash command that prints TASK_COMPLETE as its FIRST output line (e.g. `echo TASK_COMPLETE`). Mentioning TASK_COMPLETE in plain text does not finish the run; after the token prints you cannot continue working.";
+
 /// ← af-bench tb.rs:299-305 原样（私有 → pub，体不动）。
 pub fn tail(text: &str, cap: usize) -> String {
     if text.len() <= cap {
@@ -249,6 +254,16 @@ impl TbEnv {
                 .unwrap_or_else(|| "124".to_string())
         ));
         text
+    }
+
+    /// 判分：/app 提取 → 验证器镜像 → 挂载跑 test.sh → reward.txt。
+    /// 返回 (reward, verifier_log_tail)。reward: Some(true)=pass Some(false)=fail
+    /// None=infra（无 reward.txt / 提取失败 / build 失败 / 读失败）。
+    /// （← af-bench tb.rs:224-292 原样搬入，P5：`ssh()` 换 `bridge.run()`，
+    /// 命令串与超时逐字节不变——TB 判分是容器链不是 swev-judge 子进程，
+    /// 判分三件套契约不适用本套件。）
+    pub fn verify(&self, _bridge: &dyn HostBridge) -> (Option<bool>, String) {
+        unimplemented!("P5 GREEN 落位：TbEnv::verify")
     }
 
     /// 清容器（← af-bench tb.rs:294-296 原样，`ssh()` 换 `bridge.run()`）。

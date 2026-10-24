@@ -46,7 +46,7 @@ pub use agent::{
     AgentLaunch, AgentRunFailure, AgentRunOutcome, AgentRunner, BashFn, HarnessRunner,
 };
 pub use clock::{Clock, FixedClock, SystemClock};
-pub use driver::{DriveReport, DriverConfig, OrderLifecycleDriver};
+pub use driver::{AttemptLayout, DriveReport, DriverConfig, OrderLifecycleDriver};
 pub use engine::{EngineAccept, EngineClient, EngineOutcome, EngineRejection};
 pub use error::ExeclineError;
 pub use exec::{ExecContext, ExecOutput, ExecuteUnit, StubExecuteUnit};
@@ -54,5 +54,6 @@ pub use hostbridge::{HostBridge, SshBridge};
 pub use judge::{invoke as judge_invoke, JudgeLocator};
 pub use ledger::{LedgerRecord, OrderLedger};
 pub use mes::MesFileWriter;
-pub use record::{ExecutionFacts, PendingRecordSink, RecordSink};
+pub use record::{ExecutionFacts, FileRecordSink, PendingRecordSink, RecordSink, TbExecutionFacts};
 pub use suite::swev_unit::{SwevExecuteUnit, SwevUnitSpec};
+pub use suite::tb_unit::{TbExecuteUnit, TbUnitSpec};

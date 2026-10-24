@@ -82,6 +82,9 @@ fn config(order_id: &str, out_dir: PathBuf) -> DriverConfig {
         data_root: PathBuf::new(),
         task_id: String::new(),
         trial: false,
+        // P5 扩展（方案 §5-P5 驱动层 attempt 分配）：桩单元不消费，占位即可。
+        profile: "stub".into(),
+        attempt_layout: af_execline::AttemptLayout::SwevIncrement,
     }
 }
 

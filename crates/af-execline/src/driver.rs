@@ -28,6 +28,8 @@ use crate::mes::MesFileWriter;
 const LEDGER_FILE: &str = "ledger.jsonl";
 const MES_FILE: &str = "mes-events.jsonl";
 const ARTIFACTS_DIR: &str = "artifacts";
+/// run 目录根名（P5：attempt 目录在其下按布局分配）。
+const RUNS_DIR: &str = "runs";
 
 /// MES 记账的生命周期事件类型。绑定/凭证/执行登记不单独发事件——
 /// 事件账本与订单 ledger 分工：ledger 记全部 op，MES 记产线关心的四类跃迁。
@@ -56,6 +58,39 @@ pub struct DriverConfig {
     pub task_id: String,
     /// 试验标记（--trial 行口径，不进决策）。
     pub trial: bool,
+    /// ---- P5（方案 §5-P5：attempt 目录由驱动层分配）----
+    /// profile 名——attempt 目录命名的组成部分（`swev-<task>-<profile>-a<N>` /
+    /// `tb-<task>-<profile>`）。与单元 spec 的 profile 双轨：组合根（P6 壳）
+    /// 从同一 CLI 参数构造两者，保持同源（偏差登记 RESULT-P5.md）。
+    pub profile: String,
+    /// attempt 目录布局（套件差异；R8 覆写不对称如实保留）。
+    pub attempt_layout: AttemptLayout,
+}
+
+/// attempt 目录布局（套件差异；方案 §5-P5 驱动层分配的命名策略）。
+///
+/// 两布局对照 af-bench 现状原样：
+/// - swev 已 D-20 递增不覆写（main.rs:760-766 + 594-610 `next_attempt_index`）；
+/// - TB 仍固定名 `remove_dir_all` 覆写（main.rs:1000-1002）——**R8 不对称如实
+///   保留**：迁移不修（修了就不是迁移），P5 后独立决定是否对齐（方案 §6 R8）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AttemptLayout {
+    /// `swev-<task>-<profile>-a<N>`，N = 既有同前缀目录最大序号 +1，绝不删旧目录。
+    SwevIncrement,
+    /// `tb-<task>-<profile>` 固定名，分配即 `remove_dir_all` 覆写（R8 保留）。
+    TbOverwrite,
+}
+
+/// 驱动层 attempt 目录分配（方案 §5-P5：分配进驱动层，单元只收
+/// `ctx.attempt_dir`；swev 单元的 run_id `-a<N>` 后缀即从该命名解析）。
+pub fn allocate_attempt_dir(
+    runs_root: &Path,
+    task_id: &str,
+    profile: &str,
+    layout: &AttemptLayout,
+) -> PathBuf {
+    let _ = (runs_root, task_id, profile, layout);
+    unimplemented!("P5 GREEN 落位：allocate_attempt_dir")
 }
 
 /// 一次 `drive` 的报告。

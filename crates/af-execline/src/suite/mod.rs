@@ -5,13 +5,14 @@
 //! - `next_attempt_index` ← af-bench main.rs:594-610（D-20 run 目录序号递增不覆写），
 //!   原样搬入（其单测 main.rs:48-73 随迁至 tests/p1_suite.rs）。
 //!
-//! 套件专属物在子模块 [`swev`] / [`tb`]；P4 起另有执行单元层 [`swev_unit`]
-//! （run_swev 结构重组落点；P5 将加 tb 单元）。本包不碰引擎、容器、网络、模型
+//! 套件专属物在子模块 [`swev`] / [`tb`]；执行单元层 [`swev_unit`]（P4）与
+//! [`tb_unit`]（P5）。本包不碰引擎、容器、网络、模型
 //! （`resolve_key` 的 bash 子进程仅密钥解析器调用，测试用 printf 假命令，零真实凭证）。
 
 pub mod swev;
 pub mod swev_unit;
 pub mod tb;
+pub mod tb_unit;
 
 use af_harness::RunStatus;
 use std::path::Path;
