@@ -255,6 +255,27 @@ fn llm_node_reads_store_is_e2303() {
 }
 
 #[test]
+fn llm_node_reads_unknown_store_is_e2001_only() {
+    // 抑制（承 M1 偏差⑨）：reads 全为未声明 store → E2001 已定罪，不重复报 E2303。
+    let src = llm("reads: [ghost_s]");
+    assert_eq!(check(&src), ["E2001"]);
+}
+
+#[test]
+fn llm_node_reads_mixed_stores_lists_declared_only_in_e2303() {
+    // 混合：未声明项归 E2001（refs 层先报），E2303 只列已声明项。
+    let src = llm("reads: [s, ghost_s]");
+    assert_eq!(check(&src), ["E2001", "E2303"]);
+    assert_eq!(
+        msgs(&src)[1],
+        (
+            "E2303",
+            "LLM-bound node 'n1' declares reads ['s']（store 只能经 context.sections 进入 agent 上下文）".to_string()
+        )
+    );
+}
+
+#[test]
 fn non_llm_node_reads_store_is_fine() {
     // 其余节点经 reads[] 读 store 是正道（提案 B §1.1 读侧裁决）。
     let src = doc(
