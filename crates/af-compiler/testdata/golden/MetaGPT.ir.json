@@ -1,0 +1,1333 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "metagpt_sop_pipeline",
+      "entry": "pm",
+      "nodes": [
+        {
+          "id": "architect",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "build",
+          "kind": "task",
+          "loop_spec": {
+            "body": "metagpt_sop_pipeline/build",
+            "max_iterations": 3,
+            "carried": [
+              {
+                "store": "engineer_memory",
+                "max_items": 64
+              },
+              {
+                "store": "qa_memory",
+                "max_items": 64
+              },
+              {
+                "store": "repo",
+                "max_items": 256
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "qa",
+                "kind": "check"
+              }
+            ],
+            "exit_when": {
+              "source": "attempt.passed == true",
+              "roots": [
+                "attempt"
+              ],
+              "digest": "b707e3923259e94f203a322ec06f7be5d99dfe98319a2cf2dc9796466dfff682"
+            },
+            "on_exhausted": "fail"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "pick_recipients",
+          "kind": "task",
+          "escape": {
+            "kind": "meta_loop",
+            "impl_ref": "packages/sweng@1.0.0/hatches/pick_recipients.py",
+            "reason": "收件人集合在运行时才确定（边在运行时才产生），等价于运行时改图；静态边只能近似其存在性，不能近似其目标集合",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "planner",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "pm",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "scope_inbox",
+          "kind": "task",
+          "escape": {
+            "kind": "runtime_context_mutation",
+            "impl_ref": "packages/sweng@1.0.0/hatches/scope_inbox.py",
+            "reason": "角色只应看到自己收件箱中与当前触发消息有因果链（cause_by）相关的历史：作用域化上下文装配在运行时完成，核心的 context.sections 只能表达来源与配额，不能表达因果链过滤",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "semantic_verdict",
+          "kind": "task",
+          "escape": {
+            "kind": "llm_predicate",
+            "impl_ref": "packages/sweng@1.0.0/hatches/semantic_verdict.py",
+            "reason": "MetaGPT 的『通过/不通过』由 QA 角色的 LLM 判断而非类型化信号：语义判定谓词只能以 llm_predicate 逃逸实现，不落 CEL",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "sop_rewrite",
+          "kind": "task",
+          "escape": {
+            "kind": "meta_loop",
+            "impl_ref": "packages/sweng@1.0.0/hatches/sop_rewrite.py",
+            "reason": "由 Action 的 required_previous 元数据在运行时推导/改写 SOP 图：静态拓扑声明无法保真，需运行时图重写逃逸舱（编译期 topology_selector 只覆盖预声明候选图）",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "terminate",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "user_channel",
+          "kind": "task",
+          "escape": {
+            "kind": "env_adapter",
+            "impl_ref": "packages/sweng@1.0.0/hatches/user_channel.py",
+            "reason": "send_to_user 通道需向用户提问/回传并挂起等待恢复值，跨进程中断续跑属有状态环境契约；词表无「人工介入」类，按最接近的环境契约类记账",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "watch_match",
+          "kind": "task",
+          "escape": {
+            "kind": "runtime_context_mutation",
+            "impl_ref": "packages/sweng@1.0.0/hatches/watch_match.py",
+            "reason": "角色由『消息类型是否命中 _watch 订阅表』决定是否响应，而非静态边唤醒；激活语义在运行时求值（静态边只是其编译期近似）",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "architect",
+          "output": "design",
+          "to": "planner",
+          "input": "design",
+          "checkpoint": true
+        },
+        {
+          "from": "build",
+          "output": "report",
+          "to": "semantic_verdict",
+          "input": "report",
+          "checkpoint": true
+        },
+        {
+          "from": "pick_recipients",
+          "output": "dispatch",
+          "to": "scope_inbox",
+          "input": "dispatch",
+          "checkpoint": false
+        },
+        {
+          "from": "planner",
+          "output": "tasks",
+          "to": "build",
+          "input": "tasks",
+          "checkpoint": true
+        },
+        {
+          "from": "pm",
+          "output": "prd",
+          "to": "architect",
+          "input": "prd",
+          "checkpoint": false
+        },
+        {
+          "from": "pm",
+          "output": "prd",
+          "to": "planner",
+          "input": "prd",
+          "checkpoint": false
+        },
+        {
+          "from": "pm",
+          "output": "prd",
+          "to": "sop_rewrite",
+          "input": "prd",
+          "checkpoint": false
+        },
+        {
+          "from": "pm",
+          "output": "prd",
+          "to": "watch_match",
+          "input": "prd",
+          "checkpoint": false
+        },
+        {
+          "from": "scope_inbox",
+          "output": "inbox",
+          "to": "architect",
+          "input": "inbox",
+          "checkpoint": false
+        },
+        {
+          "from": "semantic_verdict",
+          "output": "verdict",
+          "to": "terminate",
+          "input": "verdict",
+          "checkpoint": false,
+          "guard": {
+            "source": "!((semantic_verdict.verdict.needs_human == true))",
+            "roots": [
+              "semantic_verdict"
+            ],
+            "digest": "757c995cfaa22f83708f05c689dce1f45dae4722c16bacd63a3a427db2264757"
+          }
+        },
+        {
+          "from": "semantic_verdict",
+          "output": "verdict",
+          "to": "user_channel",
+          "input": "verdict",
+          "checkpoint": false,
+          "guard": {
+            "source": "(semantic_verdict.verdict.needs_human == true)",
+            "roots": [
+              "semantic_verdict"
+            ],
+            "digest": "ecfddfb19cd5ce4d198e52fdbfc0ae6ff13e51c6ffb13f96d83cda1279d1025d"
+          }
+        },
+        {
+          "from": "sop_rewrite",
+          "output": "sop",
+          "to": "planner",
+          "input": "sop",
+          "checkpoint": false
+        },
+        {
+          "from": "watch_match",
+          "output": "wake",
+          "to": "pick_recipients",
+          "input": "wake",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "metagpt_sop_pipeline/build": {
+          "graph_version": "1.0",
+          "entry": "engineer",
+          "nodes": [
+            {
+              "id": "apply",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "engineer",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "parse_exec_log",
+              "kind": "task",
+              "escape": {
+                "kind": "free_text_parser",
+                "impl_ref": "packages/sweng@1.0.0/hatches/parse_exec_log.py",
+                "reason": "执行 stderr 与测试输出的自由文本需解析为结构化失败项（kind/message）后才能回灌 prompt：自由文本双向解析不进核心",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "qa",
+              "kind": "check",
+              "capability_refs": []
+            },
+            {
+              "id": "role_retry",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/sweng@1.0.0/hatches/role_retry.py",
+                "reason": "角色 react 循环内嵌的异常捕获、重试次数上限与失败回灌时机由用户代码决定：静态 failures 预算只给兜底，不覆盖运行时策略改写",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "run_code",
+              "kind": "task",
+              "escape": {
+                "kind": "env_adapter",
+                "impl_ref": "packages/sweng@1.0.0/hatches/run_code.py",
+                "reason": "执行生成的代码与测试并捕获 stdout/stderr 是有状态环境契约：核心只允许调用包内注册的动作面；任意代码执行与副作用经逃逸并版本化登记",
+                "owner": "lang-team",
+                "share_budget_pct": 25
+              },
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "apply",
+              "output": "snapshot",
+              "to": "qa",
+              "input": "snapshot",
+              "checkpoint": false
+            },
+            {
+              "from": "engineer",
+              "output": "files",
+              "to": "apply",
+              "input": "files",
+              "checkpoint": false
+            },
+            {
+              "from": "engineer",
+              "output": "files",
+              "to": "run_code",
+              "input": "files",
+              "checkpoint": false
+            },
+            {
+              "from": "parse_exec_log",
+              "output": "failures",
+              "to": "role_retry",
+              "input": "failures",
+              "checkpoint": false
+            },
+            {
+              "from": "qa",
+              "output": "report",
+              "to": "engineer",
+              "input": "feedback",
+              "checkpoint": false,
+              "guard": {
+                "source": "(qa.passed == false)",
+                "roots": [
+                  "qa"
+                ],
+                "digest": "32ac4e3c72e8c7150811fea8ac8b9c33171d5ecf3e7fb6f7fbd38d7c43c8e19f"
+              }
+            },
+            {
+              "from": "role_retry",
+              "output": "retry",
+              "to": "engineer",
+              "input": "retry",
+              "checkpoint": false
+            },
+            {
+              "from": "run_code",
+              "output": "exec",
+              "to": "parse_exec_log",
+              "input": "exec",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "requirement_input",
+      "output_type": "signal",
+      "output_from": "terminate",
+      "intent": "MetaGPT 软件公司 SOP：PM→架构师→任务派发→工程师改-跑-验回环→QA 判定→TaskFinished；结构化工件 typed 交接 + envelope 血缘；运行时总线/动态收件人/代码执行等 9 项走 escape 逃逸舱"
+    },
+    "types": {
+      "code_file": {
+        "properties": {
+          "content_ref": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content_ref"
+        ],
+        "type": "object"
+      },
+      "design": {
+        "properties": {
+          "file_list": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "interfaces": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "modules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "modules",
+          "interfaces",
+          "file_list"
+        ],
+        "type": "object"
+      },
+      "dispatch_ticket": {
+        "properties": {
+          "mode": {
+            "type": "string"
+          },
+          "recipients": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "recipients"
+        ],
+        "type": "object"
+      },
+      "exec_report": {
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "stdout": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "type": "object"
+      },
+      "failure_item": {
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "type": "object"
+      },
+      "inbox_view": {
+        "properties": {
+          "artifact_excerpt": {
+            "type": "string"
+          },
+          "related_messages": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "artifact_excerpt",
+          "related_messages"
+        ],
+        "type": "object"
+      },
+      "prd": {
+        "properties": {
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "product_name": {
+            "type": "string"
+          },
+          "vision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "product_name",
+          "vision",
+          "features"
+        ],
+        "type": "object"
+      },
+      "qa_report": {
+        "properties": {
+          "failures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pass": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pass",
+          "failures"
+        ],
+        "type": "object"
+      },
+      "requirement_input": {
+        "properties": {
+          "requirement": {
+            "type": "string"
+          },
+          "sop_variant": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement"
+        ],
+        "type": "object"
+      },
+      "retry_ticket": {
+        "properties": {
+          "attempt": {
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt"
+        ],
+        "type": "object"
+      },
+      "sop_plan": {
+        "properties": {
+          "graph_ref": {
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "type": "object"
+      },
+      "task_item": {
+        "properties": {
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "instruction",
+          "target"
+        ],
+        "type": "object"
+      },
+      "test_case": {
+        "properties": {
+          "assertion": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "target",
+          "assertion"
+        ],
+        "type": "object"
+      },
+      "user_reply": {
+        "properties": {
+          "answer": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "answer"
+        ],
+        "type": "object"
+      },
+      "verdict": {
+        "properties": {
+          "needs_human": {
+            "type": "boolean"
+          },
+          "pass": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pass",
+          "needs_human"
+        ],
+        "type": "object"
+      },
+      "wake_ticket": {
+        "properties": {
+          "matched": {
+            "type": "boolean"
+          },
+          "subscriber": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "matched"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "architect_memory": {
+        "name": "architect_memory",
+        "kind": "message_log",
+        "writer": "architect",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "engineer_memory": {
+        "name": "engineer_memory",
+        "kind": "message_log",
+        "writer": "build.engineer",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "planner_memory": {
+        "name": "planner_memory",
+        "kind": "message_log",
+        "writer": "planner",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "pm_memory": {
+        "name": "pm_memory",
+        "kind": "message_log",
+        "writer": "pm",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "qa_memory": {
+        "name": "qa_memory",
+        "kind": "message_log",
+        "writer": "build.qa",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "repo": {
+        "name": "repo",
+        "kind": "collection",
+        "item": "code_file",
+        "writer": "build.apply",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 256
+        },
+        "eval_input": false
+      },
+      "tasks_board": {
+        "name": "tasks_board",
+        "kind": "collection",
+        "item": "task_item",
+        "writer": "planner",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "architect": {
+        "node_id": "architect",
+        "components": {
+          "model": "route.main@1"
+        },
+        "writes": [
+          "architect_memory"
+        ],
+        "consumes": {
+          "inbox": "inbox_view",
+          "prd": "envelope<prd>"
+        },
+        "artifacts": {
+          "design": {
+            "type": "envelope<design>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.sweng.architect_system"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 2000,
+            "fields": [
+              "vision",
+              "features"
+            ],
+            "port": "prd",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1500,
+            "port": "inbox",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1000,
+            "store": "architect_memory",
+            "policy": "latest_k",
+            "args": {
+              "k": 20
+            }
+          }
+        ]
+      },
+      "build": {
+        "node_id": "build",
+        "components": {},
+        "consumes": {
+          "tasks": "list<task_item>"
+        },
+        "artifacts": {
+          "report": {
+            "from_body": "qa.report",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "build.apply": {
+        "node_id": "apply",
+        "components": {},
+        "writes": [
+          "repo"
+        ],
+        "consumes": {
+          "files": "list<code_file>"
+        },
+        "artifacts": {
+          "snapshot": {
+            "type": "list<code_file>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "merge",
+            "ports": [
+              "files"
+            ],
+            "into": "snapshot"
+          }
+        ]
+      },
+      "build.engineer": {
+        "node_id": "engineer",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.sweng.edit": {
+              "effect_class": null
+            },
+            "pkg.sweng.locate": {
+              "effect_class": null
+            },
+            "pkg.sweng.view": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "engineer_memory"
+        ],
+        "consumes": {
+          "feedback": "qa_report",
+          "retry": "retry_ticket"
+        },
+        "artifacts": {
+          "files": {
+            "type": "list<code_file>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.sweng.engineer_system"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1800,
+            "store": "tasks_board",
+            "policy": "full"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 800,
+            "fields": [
+              "failures"
+            ],
+            "port": "feedback",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "port": "retry",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "engineer_memory",
+            "policy": "latest_k",
+            "args": {
+              "k": 20
+            }
+          }
+        ]
+      },
+      "build.parse_exec_log": {
+        "node_id": "parse_exec_log",
+        "components": {},
+        "consumes": {
+          "exec": "exec_report"
+        },
+        "artifacts": {
+          "failures": {
+            "type": "list<failure_item>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "build.qa": {
+        "node_id": "qa",
+        "components": {
+          "unit": "pkg.sweng.test_unit@1"
+        },
+        "writes": [
+          "qa_memory"
+        ],
+        "consumes": {
+          "snapshot": "list<code_file>"
+        },
+        "artifacts": {
+          "cases": {
+            "type": "list<test_case>",
+            "is_final": false,
+            "provenance": null
+          },
+          "report": {
+            "type": "qa_report",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "build.role_retry": {
+        "node_id": "role_retry",
+        "components": {},
+        "consumes": {
+          "failures": "list<failure_item>"
+        },
+        "artifacts": {
+          "retry": {
+            "type": "retry_ticket",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "build.run_code": {
+        "node_id": "run_code",
+        "components": {},
+        "consumes": {
+          "files": "list<code_file>"
+        },
+        "artifacts": {
+          "exec": {
+            "type": "exec_report",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "pick_recipients": {
+        "node_id": "pick_recipients",
+        "components": {},
+        "consumes": {
+          "wake": "wake_ticket"
+        },
+        "artifacts": {
+          "dispatch": {
+            "type": "dispatch_ticket",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "planner": {
+        "node_id": "planner",
+        "components": {
+          "model": "route.cheap@1"
+        },
+        "writes": [
+          "planner_memory",
+          "tasks_board"
+        ],
+        "consumes": {
+          "design": "envelope<design>",
+          "prd": "envelope<prd>",
+          "sop": "sop_plan"
+        },
+        "artifacts": {
+          "tasks": {
+            "type": "list<task_item>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.sweng.planner_system"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1200,
+            "fields": [
+              "vision",
+              "features"
+            ],
+            "port": "prd",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1500,
+            "fields": [
+              "modules",
+              "interfaces"
+            ],
+            "port": "design",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 600,
+            "fields": [
+              "steps"
+            ],
+            "port": "sop",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 800,
+            "store": "planner_memory",
+            "policy": "latest_k",
+            "args": {
+              "k": 20
+            }
+          }
+        ]
+      },
+      "pm": {
+        "node_id": "pm",
+        "components": {
+          "model": "route.main@1"
+        },
+        "writes": [
+          "pm_memory"
+        ],
+        "artifacts": {
+          "prd": {
+            "type": "envelope<prd>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.sweng.pm_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 600,
+            "fields": [
+              "requirement"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "pm_memory",
+            "policy": "latest_k",
+            "args": {
+              "k": 20
+            }
+          }
+        ]
+      },
+      "scope_inbox": {
+        "node_id": "scope_inbox",
+        "components": {},
+        "consumes": {
+          "dispatch": "dispatch_ticket",
+          "prd": "envelope<prd>"
+        },
+        "artifacts": {
+          "inbox": {
+            "type": "inbox_view",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "semantic_verdict": {
+        "node_id": "semantic_verdict",
+        "components": {},
+        "consumes": {
+          "report": "qa_report"
+        },
+        "artifacts": {
+          "verdict": {
+            "type": "verdict",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "sop_rewrite": {
+        "node_id": "sop_rewrite",
+        "components": {},
+        "consumes": {
+          "prd": "envelope<prd>"
+        },
+        "artifacts": {
+          "sop": {
+            "type": "sop_plan",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "terminate": {
+        "node_id": "terminate",
+        "components": {
+          "tools": {
+            "pkg.sweng.publish_task_finished": {
+              "effect_class": null
+            }
+          }
+        },
+        "consumes": {
+          "verdict": "verdict"
+        },
+        "artifacts": {
+          "done": {
+            "type": "signal",
+            "is_final": true,
+            "provenance": null
+          }
+        }
+      },
+      "user_channel": {
+        "node_id": "user_channel",
+        "components": {},
+        "consumes": {
+          "verdict": "verdict"
+        },
+        "artifacts": {
+          "reply": {
+            "type": "user_reply",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "watch_match": {
+        "node_id": "watch_match",
+        "components": {},
+        "consumes": {
+          "prd": "envelope<prd>"
+        },
+        "artifacts": {
+          "wake": {
+            "type": "wake_ticket",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "architect_turns",
+          "dimension": "turns",
+          "scope": "node:architect",
+          "cap": 12
+        },
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 600
+        },
+        {
+          "id": "fix_turns",
+          "dimension": "turns",
+          "scope": "loop:build",
+          "cap": 60
+        },
+        {
+          "id": "pm_turns",
+          "dimension": "turns",
+          "scope": "node:pm",
+          "cap": 12
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 400000
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "steps.turns >= 60",
+            "roots": [
+              "steps"
+            ],
+            "digest": "32588227be7b39f082c3ea150bde10c2ac7f1de663aa6d4618e5f9447b5b25a1"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "environment_failure",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 60000
+          }
+        },
+        {
+          "class": "gate_refused",
+          "route": "next_iteration"
+        },
+        {
+          "class": "timeout",
+          "retry": {
+            "max": 1,
+            "backoff_ms": 0
+          }
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {
+      "build.parse_exec_log": {
+        "kind": "free_text_parser",
+        "impl_ref": "packages/sweng@1.0.0/hatches/parse_exec_log.py",
+        "reason": "执行 stderr 与测试输出的自由文本需解析为结构化失败项（kind/message）后才能回灌 prompt：自由文本双向解析不进核心",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "build.role_retry": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/sweng@1.0.0/hatches/role_retry.py",
+        "reason": "角色 react 循环内嵌的异常捕获、重试次数上限与失败回灌时机由用户代码决定：静态 failures 预算只给兜底，不覆盖运行时策略改写",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "build.run_code": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/sweng@1.0.0/hatches/run_code.py",
+        "reason": "执行生成的代码与测试并捕获 stdout/stderr 是有状态环境契约：核心只允许调用包内注册的动作面；任意代码执行与副作用经逃逸并版本化登记",
+        "owner": "lang-team",
+        "share_budget_pct": 25
+      },
+      "pick_recipients": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/sweng@1.0.0/hatches/pick_recipients.py",
+        "reason": "收件人集合在运行时才确定（边在运行时才产生），等价于运行时改图；静态边只能近似其存在性，不能近似其目标集合",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "scope_inbox": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/sweng@1.0.0/hatches/scope_inbox.py",
+        "reason": "角色只应看到自己收件箱中与当前触发消息有因果链（cause_by）相关的历史：作用域化上下文装配在运行时完成，核心的 context.sections 只能表达来源与配额，不能表达因果链过滤",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "semantic_verdict": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/sweng@1.0.0/hatches/semantic_verdict.py",
+        "reason": "MetaGPT 的『通过/不通过』由 QA 角色的 LLM 判断而非类型化信号：语义判定谓词只能以 llm_predicate 逃逸实现，不落 CEL",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "sop_rewrite": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/sweng@1.0.0/hatches/sop_rewrite.py",
+        "reason": "由 Action 的 required_previous 元数据在运行时推导/改写 SOP 图：静态拓扑声明无法保真，需运行时图重写逃逸舱（编译期 topology_selector 只覆盖预声明候选图）",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "user_channel": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/sweng@1.0.0/hatches/user_channel.py",
+        "reason": "send_to_user 通道需向用户提问/回传并挂起等待恢复值，跨进程中断续跑属有状态环境契约；词表无「人工介入」类，按最接近的环境契约类记账",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "watch_match": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/sweng@1.0.0/hatches/watch_match.py",
+        "reason": "角色由『消息类型是否命中 _watch 订阅表』决定是否响应，而非静态边唤醒；激活语义在运行时求值（静态边只是其编译期近似）",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      }
+    },
+    "trust": {}
+  }
+}

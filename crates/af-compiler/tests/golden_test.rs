@@ -300,10 +300,15 @@ fn g3_golden_corpus_byte_exact() {
 }
 
 /// 清单闭集守卫：`testdata/src` 与 `testdata/golden` 的文件集合恰等于
-/// G3_CORPUS（src 一份不多不少，golden 一份不多不少）。防未登记文件混入。
+/// G3_CORPUS ∪ G3_SELECTOR_CORPUS（P2-L10 起共 21 份：src 一份不多不少，
+/// golden 一份不多不少）。防未登记文件混入。
 #[test]
 fn g3_golden_corpus_manifest_closed() {
-    let manifest: std::collections::BTreeSet<&str> = G3_CORPUS.into_iter().collect();
+    let manifest: std::collections::BTreeSet<&str> = G3_CORPUS
+        .iter()
+        .chain(G3_SELECTOR_CORPUS.iter())
+        .copied()
+        .collect();
 
     let src_files: std::collections::BTreeSet<String> =
         std::fs::read_dir(corpus_src_path(G3_CORPUS[0]).parent().unwrap())
@@ -360,4 +365,145 @@ fn g3_golden_tamper_detection() {
     // 恢复原字节并复核
     std::fs::write(&golden_path, &original).expect("恢复 golden 失败");
     assert_golden_byte_exact(TAMPER_TARGET);
+}
+
+// ---------------------------------------------------------------------------
+// P2-L10 selector 入库（G3 第二批，17 → 21）。以下全部为追加测试。
+//
+// 4 份 selector 转绿稿（ADAS / AutoGen-Team-JSON / GPTSwarm / MetaGPT，
+// 失败分类账 #1-4 经 registry 组件闭环）的 topology_selector 候选图
+// （pkg.<包>.<名>@<版本>）只在包图清单中声明，单文档不自带——必须经
+// `af-dsl::registry` 装载 `af/packages/<包>/manifest.json` 得
+// `declared_graphs`、注入 `validate_with` 后才过 M4 候选核对（不注入 =
+// 默认空集 = E2001 全拒，fail-closed）。核验口径与 CLI
+// `af-compiler-snapshot --registry af/packages <yaml>` 完全一致：
+// registry 装载 → 注入 → 全量校验 → lower → pretty 序列化 + 换行，
+// golden 文件即该 CLI stdout 的逐字节落盘。
+// ---------------------------------------------------------------------------
+
+/// P2-L10 入库清单（闭集第二批）：4 份 selector 转绿稿（源 YAML 与
+/// `计划/研究组/对齐草稿/` 正本逐字节一致，入库零修改）。
+const G3_SELECTOR_CORPUS: [&str; 4] = [
+    "ADAS.yaml",             // adaskit 3 图（discovered_maze/wordle + mas_search）
+    "AutoGen-Team-JSON.yaml", // autogen 5 图（team.* 五拓扑）
+    "GPTSwarm.yaml",         // swarmkit 3 图（plan_execute_review/fanout_vote/react_baseline）
+    "MetaGPT.yaml",          // sweng 3 图（sop_full/no_qa/minimal）
+];
+
+/// 篡改检测的第二目标（21 份中抽样 2 份复核：既有 TAMPER_TARGET =
+/// sample1 走无注入链；本份走 registry 注入链——两条链都要有牙齿）。
+const SELECTOR_TAMPER_TARGET: &str = "GPTSwarm.yaml";
+
+/// 仓库正本包根（与 af-dsl `registry_test.rs` 同口径：crates/<crate> 上
+/// 两级到仓根，再进 af/packages）。
+fn repo_packages_root() -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../af/packages")
+}
+
+/// 单份核验（registry 注入链，与 CLI `--registry` 同口径）：装载
+/// af/packages → `validate_with`（declared_graphs 注入）→ lower → pretty
+/// 序列化 + 换行，与 `testdata/golden/<stem>.ir.json` **逐字节**比对。
+fn assert_golden_byte_exact_with_registry(name: &str) {
+    let src_path = corpus_src_path(name);
+    let src = std::fs::read_to_string(&src_path)
+        .unwrap_or_else(|e| panic!("读取 {src_path:?}：{e}"));
+    let doc = af_dsl::load_str(&src).unwrap_or_else(|e| panic!("{name} 装载失败：{e}"));
+    let reg = af_dsl::registry::Registry::load(repo_packages_root())
+        .unwrap_or_else(|e| panic!("{name} registry 装载失败：{e}"));
+    let report = af_dsl::validate_with(&doc, &reg.options());
+    assert!(report.is_ok(), "{name} 应过注入 declared_graphs 的全量校验：{report}");
+    let json = af_compiler::snapshot_json_pretty(&doc)
+        .unwrap_or_else(|e| panic!("{name} lowering 失败：{e}"));
+    let expected: Vec<u8> = json.as_bytes().iter().copied().chain(std::iter::once(b'\n')).collect();
+
+    let golden_path = corpus_golden_path(name);
+    let actual = std::fs::read(&golden_path)
+        .unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
+
+    if expected != actual {
+        let (el, al) = (expected.len(), actual.len());
+        let pos = expected
+            .iter()
+            .zip(actual.iter())
+            .position(|(a, b)| a != b)
+            .unwrap_or(el.min(al));
+        let ctx = |v: &[u8]| {
+            let s = pos.saturating_sub(20);
+            String::from_utf8_lossy(&v[s..(pos + 20).min(v.len())]).escape_debug().to_string()
+        };
+        panic!(
+            "{name}: golden（registry 注入链）逐字节不一致——期望 {el} 字节 / 实际 {al} 字节，\
+             首个差异位 @{pos}（期望 …{}… / 实际 …{}…）",
+            ctx(&expected),
+            ctx(&actual)
+        );
+    }
+}
+
+/// 注入是承重墙（禁旁路）：不注入（默认空集）4 份必被 E2001 拒——候选图
+/// 引用只在包清单里声明，无注入面即无放行路径；装载仓库正本 af/packages
+/// （4 示例包）注入后全量校验零违例。golden 的合法性来源即此链，不是例外。
+#[test]
+fn g3p2_selector_injection_is_load_bearing() {
+    let reg = af_dsl::registry::Registry::load(repo_packages_root())
+        .expect("仓库正本 af/packages 应装载（4 示例包）");
+    assert_eq!(reg.package_count(), 4, "af/packages 应恰有 adaskit/autogen/swarmkit/sweng 四包");
+    for name in G3_SELECTOR_CORPUS {
+        let src = std::fs::read_to_string(corpus_src_path(name))
+            .unwrap_or_else(|e| panic!("读取 {name}：{e}"));
+        let doc = af_dsl::load_str(&src).unwrap_or_else(|e| panic!("{name} 装载失败：{e}"));
+
+        // 默认（不注入）：E2001 必拒——fail-closed 无隐式放行
+        let bare = af_dsl::validate(&doc);
+        assert!(
+            !bare.is_ok()
+                && bare
+                    .violations
+                    .iter()
+                    .any(|v| v.code == af_dsl::ErrorCode::DanglingReference),
+            "{name} 不注入 declared_graphs 时应被 E2001 拒（topology_selector 候选图未声明）"
+        );
+
+        // 注入仓库正本清单：全量校验零违例
+        let injected = af_dsl::validate_with(&doc, &reg.options());
+        assert!(injected.is_ok(), "{name} 注入 af/packages 声明集后应过全量校验：{injected}");
+    }
+}
+
+/// P2-L10 主回归：4 份 selector 稿沿 registry 注入全链重新
+/// lower+serialize，与 golden 逐字节相等。
+#[test]
+fn g3p2_selector_golden_byte_exact() {
+    for name in G3_SELECTOR_CORPUS {
+        assert_golden_byte_exact_with_registry(name);
+    }
+}
+
+/// 篡改检测第二目标（21 份抽样 2 份复核仍有效，本份走注入链）：临时篡改
+/// `SELECTOR_TAMPER_TARGET` 的 golden 首字符（'{' → ' '），断言注入链核验
+/// **失败**；随后恢复原字节并复核通过。
+#[test]
+fn g3p2_selector_tamper_detection() {
+    let golden_path = corpus_golden_path(SELECTOR_TAMPER_TARGET);
+    let original = std::fs::read(&golden_path)
+        .unwrap_or_else(|e| panic!("读取 {golden_path:?}：{e}"));
+    assert_eq!(original.first(), Some(&b'{'), "golden 应以 '{{' 开头，才有可篡改的字符");
+
+    let mut tampered = original.clone();
+    tampered[0] = b' ';
+    std::fs::write(&golden_path, &tampered).expect("写入篡改 golden 失败");
+
+    let prev_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let caught = std::panic::catch_unwind(|| {
+        assert_golden_byte_exact_with_registry(SELECTOR_TAMPER_TARGET)
+    });
+    std::panic::set_hook(prev_hook);
+    assert!(
+        caught.is_err(),
+        "篡改 golden 一个字符后注入链逐字节核验仍未失败——测试没有牙齿"
+    );
+
+    std::fs::write(&golden_path, &original).expect("恢复 golden 失败");
+    assert_golden_byte_exact_with_registry(SELECTOR_TAMPER_TARGET);
 }

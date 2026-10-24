@@ -1,0 +1,1333 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "adas_mas_search",
+      "entry": "loader",
+      "nodes": [
+        {
+          "id": "best_pick",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "boot_loop",
+          "kind": "task",
+          "loop_spec": {
+            "body": "adas_mas_search/boot_loop",
+            "max_iterations": 10,
+            "carried": [
+              {
+                "store": "boot_records",
+                "max_items": 32
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "verifier2",
+                "kind": "check"
+              }
+            ],
+            "args": {
+              "boot": "bootstrap_meta.boot_program"
+            },
+            "exit_when": {
+              "source": "scoreboard2.score.reward_milli >= 900",
+              "roots": [
+                "scoreboard2"
+              ],
+              "digest": "f59d78276706d910c8f212d6ceface379916dff32e882569651bad383e2ca0d6"
+            },
+            "on_exhausted": "keep_best"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "bootstrap_meta",
+          "kind": "task",
+          "escape": {
+            "kind": "meta_loop",
+            "impl_ref": "packages/adaskit@1.0.0/hatches/bootstrap_meta.py",
+            "reason": "自举把已发现的 agent 顶替原 meta agent 继续搜索：拓扑发生递归替换、可无限嵌套，核心只能承接包内给出的『发现物即新 meta agent』程序",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "code_compile",
+          "kind": "task",
+          "escape": {
+            "kind": "program_synthesis",
+            "impl_ref": "packages/adaskit@1.0.0/hatches/compile_discovery.py",
+            "reason": "发现物要落成 while/try/递归等嵌套控制流的任意代码并在新域实例化，DSL 只能表达图，必须提供『图 → 任意代码』的编译逃逸面",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "final_report",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "loader",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "mas_loop",
+          "kind": "task",
+          "loop_spec": {
+            "body": "adas_mas_search/mas_loop",
+            "max_iterations": 20,
+            "carried": [
+              {
+                "store": "candidates",
+                "max_items": 64
+              },
+              {
+                "store": "exec_logs",
+                "max_items": 64
+              },
+              {
+                "store": "records",
+                "max_items": 64
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "human_stop",
+                "kind": "human"
+              },
+              {
+                "node": "verifier",
+                "kind": "check"
+              }
+            ],
+            "exit_when": {
+              "source": "scoreboard.score.reward_milli >= 800 || human_stop.decision.stop == true",
+              "roots": [
+                "human_stop",
+                "scoreboard"
+              ],
+              "digest": "21f49070e438c56f0744199d3fdd6f11d77a64748bacf260868fa5f159047998"
+            },
+            "on_exhausted": "keep_best"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "selector",
+          "kind": "task",
+          "escape": {
+            "kind": "llm_predicate",
+            "impl_ref": "packages/adaskit@1.0.0/hatches/selector.py",
+            "reason": "候选选择在论文里是『各训练/验证任务多次运行准确率排序』的可编程聚合（多任务加权/成功率聚合），难以退化为静态边权与单字段排序",
+            "owner": "lang-team",
+            "share_budget_pct": 12
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "best_pick",
+          "output": "winner",
+          "to": "selector",
+          "input": "winner",
+          "checkpoint": false
+        },
+        {
+          "from": "boot_loop",
+          "output": "record",
+          "to": "final_report",
+          "input": "final",
+          "checkpoint": false
+        },
+        {
+          "from": "bootstrap_meta",
+          "output": "boot_program",
+          "to": "boot_loop",
+          "input": "boot_program",
+          "checkpoint": false
+        },
+        {
+          "from": "final_report",
+          "output": "final_doc",
+          "to": "code_compile",
+          "input": "final_doc",
+          "checkpoint": false
+        },
+        {
+          "from": "loader",
+          "output": "done",
+          "to": "mas_loop",
+          "input": "done",
+          "checkpoint": false
+        },
+        {
+          "from": "mas_loop",
+          "output": "done",
+          "to": "best_pick",
+          "input": "done",
+          "checkpoint": false
+        },
+        {
+          "from": "mas_loop",
+          "output": "record",
+          "to": "selector",
+          "input": "seed",
+          "checkpoint": false
+        },
+        {
+          "from": "selector",
+          "output": "final_best",
+          "to": "bootstrap_meta",
+          "input": "seed",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "adas_mas_search/boot_loop": {
+          "graph_version": "1.0",
+          "entry": "boot_meta_agent",
+          "nodes": [
+            {
+              "id": "boot_meta_agent",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "cand_run2",
+              "kind": "task",
+              "escape": {
+                "kind": "program_synthesis",
+                "impl_ref": "packages/adaskit@1.0.0/hatches/candidate_run.py",
+                "reason": "自举阶段的候选程序同样以运行时角色拓扑执行；与主搜索共用同一个执行面 impl_ref",
+                "owner": "lang-team",
+                "share_budget_pct": 20
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "sandbox2",
+              "kind": "task",
+              "escape": {
+                "kind": "env_adapter",
+                "impl_ref": "packages/adaskit@1.0.0/hatches/sandbox_env.py",
+                "reason": "自举阶段的沙箱边界：任意 Python 执行与日志归一，impl_ref 与主搜索共用",
+                "owner": "runtime-team",
+                "share_budget_pct": 5
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "scoreboard2",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "verifier2",
+              "kind": "check",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "boot_meta_agent",
+              "output": "candidate",
+              "to": "cand_run2",
+              "input": "candidate",
+              "checkpoint": false
+            },
+            {
+              "from": "cand_run2",
+              "output": "run",
+              "to": "sandbox2",
+              "input": "run",
+              "checkpoint": false
+            },
+            {
+              "from": "sandbox2",
+              "output": "logs",
+              "to": "verifier2",
+              "input": "logs",
+              "checkpoint": false
+            },
+            {
+              "from": "verifier2",
+              "output": "verdict",
+              "to": "scoreboard2",
+              "input": "verdict",
+              "checkpoint": false
+            }
+          ]
+        },
+        "adas_mas_search/mas_loop": {
+          "graph_version": "1.0",
+          "entry": "meta_agent",
+          "nodes": [
+            {
+              "id": "candidate_run",
+              "kind": "task",
+              "escape": {
+                "kind": "program_synthesis",
+                "impl_ref": "packages/adaskit@1.0.0/hatches/candidate_run.py",
+                "reason": "候选系统的角色调用关系与控制流写在生成的 Python 里，运行前不可静态枚举为节点/边；DSL 只能承载发现物的固定执行图",
+                "owner": "lang-team",
+                "share_budget_pct": 25
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "feedback_parse",
+              "kind": "task",
+              "escape": {
+                "kind": "free_text_parser",
+                "impl_ref": "packages/adaskit@1.0.0/hatches/feedback_parse.py",
+                "reason": "执行反馈是 traceback/工具日志/自由文本/数值的混合体，固定 schema 覆盖不了；解析与诊断摘要的生成在包内完成，核心只收结构化 note",
+                "owner": "lang-team",
+                "share_budget_pct": 8
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "human_stop",
+              "kind": "task",
+              "human": {
+                "station": "research-desk",
+                "role": "maintainer",
+                "quorum": 1,
+                "resume": {
+                  "schema": {
+                    "properties": {
+                      "note": {
+                        "type": "string"
+                      },
+                      "stop": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "stop"
+                    ],
+                    "type": "object"
+                  }
+                }
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "meta_agent",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "role_registry",
+              "kind": "task",
+              "escape": {
+                "kind": "dynamic_tool_registry",
+                "impl_ref": "packages/adaskit@1.0.0/hatches/role_registry.py",
+                "reason": "meta agent 生成的代码可 def 出模板预设之外的角色函数与工具；角色集合在运行前不可静态枚举，核心只能承接包内 registry 的枚举结果",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "sandbox_env",
+              "kind": "task",
+              "escape": {
+                "kind": "env_adapter",
+                "impl_ref": "packages/adaskit@1.0.0/hatches/sandbox_env.py",
+                "reason": "沙箱进程边界：候选代码的 import/文件读写/未列入工具表的库调用在包内执行器完成，stdout/stderr/traceback/退出码在边界处归一为工件",
+                "owner": "runtime-team",
+                "share_budget_pct": 15
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "scoreboard",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "verifier",
+              "kind": "check",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "candidate_run",
+              "output": "run",
+              "to": "sandbox_env",
+              "input": "run",
+              "checkpoint": false
+            },
+            {
+              "from": "feedback_parse",
+              "output": "note",
+              "to": "meta_agent",
+              "input": "note",
+              "checkpoint": false
+            },
+            {
+              "from": "human_stop",
+              "output": "decision",
+              "to": "meta_agent",
+              "input": "decision",
+              "checkpoint": false
+            },
+            {
+              "from": "meta_agent",
+              "output": "candidate",
+              "to": "candidate_run",
+              "input": "candidate",
+              "checkpoint": false
+            },
+            {
+              "from": "meta_agent",
+              "output": "candidate",
+              "to": "role_registry",
+              "input": "candidate",
+              "checkpoint": false
+            },
+            {
+              "from": "role_registry",
+              "output": "roles",
+              "to": "candidate_run",
+              "input": "roles",
+              "checkpoint": false
+            },
+            {
+              "from": "sandbox_env",
+              "output": "logs",
+              "to": "feedback_parse",
+              "input": "logs",
+              "checkpoint": false
+            },
+            {
+              "from": "sandbox_env",
+              "output": "logs",
+              "to": "verifier",
+              "input": "logs",
+              "checkpoint": false
+            },
+            {
+              "from": "scoreboard",
+              "output": "score",
+              "to": "human_stop",
+              "input": "score",
+              "checkpoint": false
+            },
+            {
+              "from": "scoreboard",
+              "output": "score",
+              "to": "meta_agent",
+              "input": "score",
+              "checkpoint": false
+            },
+            {
+              "from": "verifier",
+              "output": "verdict",
+              "to": "scoreboard",
+              "input": "verdict",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "adas_input",
+      "output_type": "meta_program",
+      "output_from": "code_compile",
+      "intent": "ADAS 的 Meta Agent Search 外壳：LLM meta agent 生成候选 agent 程序（源码工件）→ 沙箱执行 → 外部验证打分 → 结构化反馈回灌 → 迭代择优（取最优而非最后一版）；候选程序的运行时拓扑/新角色/自举/任意 Python/可编程选择在 L4 逃逸面记账，DSL 只承载『发现物的固定执行图』"
+    },
+    "types": {
+      "adas_input": {
+        "properties": {
+          "code_template_ref": {
+            "type": "string"
+          },
+          "domain": {
+            "type": "string"
+          },
+          "eval_task_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "task_description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "task_description",
+          "code_template_ref"
+        ],
+        "type": "object"
+      },
+      "candidate_code": {
+        "properties": {
+          "candidate_id": {
+            "type": "string"
+          },
+          "entry_point": {
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "source",
+          "entry_point"
+        ],
+        "type": "object"
+      },
+      "discovery_record": {
+        "properties": {
+          "candidate_id": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer"
+          },
+          "note": {
+            "type": "string"
+          },
+          "reward_milli": {
+            "type": "integer"
+          },
+          "source_ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "candidate_id",
+          "source_ref",
+          "reward_milli"
+        ],
+        "type": "object"
+      },
+      "feedback_note": {
+        "properties": {
+          "error_digest": {
+            "type": "string"
+          },
+          "hint": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "type": "object"
+      },
+      "meta_program": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "program_ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "program_ref",
+          "description"
+        ],
+        "type": "object"
+      },
+      "reference_answer": {
+        "properties": {
+          "expected": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "expected"
+        ],
+        "type": "object"
+      },
+      "role_table": {
+        "properties": {
+          "registry_ref": {
+            "type": "string"
+          },
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles"
+        ],
+        "type": "object"
+      },
+      "run_output": {
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "exit_code": {
+            "type": "integer"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "tool_calls": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "traceback": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "answer"
+        ],
+        "type": "object"
+      },
+      "stop_decision": {
+        "properties": {
+          "note": {
+            "type": "string"
+          },
+          "stop": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stop"
+        ],
+        "type": "object"
+      },
+      "verification": {
+        "properties": {
+          "pass": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reward_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pass",
+          "reward_milli"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "answers_ref": {
+        "name": "answers_ref",
+        "kind": "collection",
+        "item": "reference_answer",
+        "writer": "loader",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": true
+      },
+      "boot_records": {
+        "name": "boot_records",
+        "kind": "collection",
+        "item": "discovery_record",
+        "writer": "boot_loop.scoreboard2",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 32
+        },
+        "eval_input": false
+      },
+      "candidates": {
+        "name": "candidates",
+        "kind": "collection",
+        "item": "candidate_code",
+        "writer": "mas_loop.meta_agent",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "exec_logs": {
+        "name": "exec_logs",
+        "kind": "collection",
+        "item": "run_output",
+        "writer": "mas_loop.sandbox_env",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "records": {
+        "name": "records",
+        "kind": "collection",
+        "item": "discovery_record",
+        "writer": "mas_loop.scoreboard",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "best_pick": {
+        "node_id": "best_pick",
+        "components": {},
+        "reads": [
+          "records"
+        ],
+        "consumes": {
+          "done": "signal"
+        },
+        "artifacts": {
+          "winner": {
+            "type": "discovery_record",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "select_best",
+            "port": "records",
+            "into": "winner",
+            "by": "reward_milli",
+            "prefer": "max"
+          }
+        ]
+      },
+      "boot_loop": {
+        "node_id": "boot_loop",
+        "components": {},
+        "artifacts": {
+          "record": {
+            "from_body": "scoreboard2.score",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "boot_loop.boot_meta_agent": {
+        "node_id": "boot_meta_agent",
+        "components": {
+          "model": "route.main@1"
+        },
+        "artifacts": {
+          "candidate": {
+            "type": "candidate_code",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 800,
+            "template_ref": "pkg.adaskit.meta_system"
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 2500,
+            "name": "boot",
+            "policy": "project"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 600,
+            "fields": [
+              "domain",
+              "task_description"
+            ],
+            "policy": "project"
+          }
+        ]
+      },
+      "boot_loop.cand_run2": {
+        "node_id": "cand_run2",
+        "components": {},
+        "consumes": {
+          "candidate": "candidate_code"
+        },
+        "artifacts": {
+          "run": {
+            "type": "run_output",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "boot_loop.sandbox2": {
+        "node_id": "sandbox2",
+        "components": {},
+        "consumes": {
+          "run": "run_output"
+        },
+        "artifacts": {
+          "logs": {
+            "type": "run_output",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "boot_loop.scoreboard2": {
+        "node_id": "scoreboard2",
+        "components": {},
+        "writes": [
+          "boot_records"
+        ],
+        "consumes": {
+          "verdict": "verification"
+        },
+        "artifacts": {
+          "score": {
+            "type": "discovery_record",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "verdict",
+            "into": "score"
+          },
+          {
+            "op": "project",
+            "port": "score",
+            "into": "boot_records"
+          }
+        ]
+      },
+      "boot_loop.verifier2": {
+        "node_id": "verifier2",
+        "components": {
+          "unit": "pkg.adaskit.verifier@1"
+        },
+        "reads": [
+          "answers_ref"
+        ],
+        "consumes": {
+          "logs": "run_output"
+        },
+        "artifacts": {
+          "verdict": {
+            "type": "verification",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "bootstrap_meta": {
+        "node_id": "bootstrap_meta",
+        "components": {},
+        "consumes": {
+          "seed": "discovery_record"
+        },
+        "artifacts": {
+          "boot_program": {
+            "type": "meta_program",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "code_compile": {
+        "node_id": "code_compile",
+        "components": {},
+        "reads": [
+          "candidates",
+          "records"
+        ],
+        "consumes": {
+          "final_doc": "discovery_record"
+        },
+        "artifacts": {
+          "artifact": {
+            "type": "meta_program",
+            "is_final": true,
+            "provenance": null
+          }
+        }
+      },
+      "final_report": {
+        "node_id": "final_report",
+        "components": {},
+        "reads": [
+          "records"
+        ],
+        "consumes": {
+          "final": "discovery_record"
+        },
+        "artifacts": {
+          "archive": {
+            "type": "list<discovery_record>",
+            "is_final": false,
+            "provenance": null
+          },
+          "final_doc": {
+            "type": "discovery_record",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "records",
+            "into": "archive"
+          },
+          {
+            "op": "project",
+            "port": "final",
+            "into": "final_doc"
+          }
+        ]
+      },
+      "loader": {
+        "node_id": "loader",
+        "components": {
+          "tools": {
+            "pkg.adaskit.task_loader@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "answers_ref"
+        ],
+        "artifacts": {
+          "done": {
+            "type": "signal",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "mas_loop": {
+        "node_id": "mas_loop",
+        "components": {},
+        "artifacts": {
+          "record": {
+            "from_body": "scoreboard.score",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "mas_loop.candidate_run": {
+        "node_id": "candidate_run",
+        "components": {},
+        "consumes": {
+          "candidate": "candidate_code",
+          "roles": "role_table"
+        },
+        "artifacts": {
+          "run": {
+            "type": "run_output",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "mas_loop.feedback_parse": {
+        "node_id": "feedback_parse",
+        "components": {},
+        "consumes": {
+          "logs": "run_output"
+        },
+        "artifacts": {
+          "note": {
+            "type": "feedback_note",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "mas_loop.human_stop": {
+        "node_id": "human_stop",
+        "components": {},
+        "consumes": {
+          "score": "discovery_record"
+        },
+        "artifacts": {
+          "decision": {
+            "type": "stop_decision",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "mas_loop.meta_agent": {
+        "node_id": "meta_agent",
+        "components": {
+          "model": "route.main@1"
+        },
+        "writes": [
+          "candidates"
+        ],
+        "artifacts": {
+          "candidate": {
+            "type": "candidate_code",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 800,
+            "template_ref": "pkg.adaskit.meta_system"
+          },
+          {
+            "from": "template",
+            "quota_tokens": 1200,
+            "template_ref": "pkg.adaskit.code_template"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 800,
+            "fields": [
+              "domain",
+              "task_description",
+              "code_template_ref"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "fields": [
+              "reward_milli",
+              "note"
+            ],
+            "port": "score",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 600,
+            "fields": [
+              "summary",
+              "error_digest"
+            ],
+            "port": "note",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 200,
+            "fields": [
+              "note"
+            ],
+            "port": "decision",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 3000,
+            "store": "candidates",
+            "policy": "latest_k",
+            "args": {
+              "k": 3
+            }
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1500,
+            "store": "exec_logs",
+            "policy": "latest_k",
+            "args": {
+              "k": 2
+            }
+          }
+        ]
+      },
+      "mas_loop.role_registry": {
+        "node_id": "role_registry",
+        "components": {},
+        "consumes": {
+          "candidate": "candidate_code"
+        },
+        "artifacts": {
+          "roles": {
+            "type": "role_table",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "mas_loop.sandbox_env": {
+        "node_id": "sandbox_env",
+        "components": {},
+        "writes": [
+          "exec_logs"
+        ],
+        "consumes": {
+          "run": "run_output"
+        },
+        "artifacts": {
+          "logs": {
+            "type": "run_output",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "mas_loop.scoreboard": {
+        "node_id": "scoreboard",
+        "components": {},
+        "writes": [
+          "records"
+        ],
+        "consumes": {
+          "verdict": "verification"
+        },
+        "artifacts": {
+          "score": {
+            "type": "discovery_record",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "verdict",
+            "into": "score"
+          },
+          {
+            "op": "project",
+            "port": "score",
+            "into": "records"
+          }
+        ]
+      },
+      "mas_loop.verifier": {
+        "node_id": "verifier",
+        "components": {
+          "unit": "pkg.adaskit.verifier@1"
+        },
+        "reads": [
+          "answers_ref"
+        ],
+        "consumes": {
+          "logs": "run_output"
+        },
+        "artifacts": {
+          "verdict": {
+            "type": "verification",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "selector": {
+        "node_id": "selector",
+        "components": {},
+        "reads": [
+          "candidates",
+          "records"
+        ],
+        "consumes": {
+          "seed": "discovery_record",
+          "winner": "discovery_record"
+        },
+        "artifacts": {
+          "final_best": {
+            "type": "discovery_record",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "boot_turns",
+          "dimension": "turns",
+          "scope": "loop:boot_loop",
+          "cap": 60
+        },
+        {
+          "id": "iter_turns",
+          "dimension": "turns",
+          "scope": "loop:mas_loop",
+          "cap": 200
+        },
+        {
+          "id": "meta_tokens",
+          "dimension": "tokens_total",
+          "scope": "node:mas_loop.meta_agent",
+          "cap": 2000000
+        },
+        {
+          "id": "plan_cents",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 5000
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "steps.iterations >= 20",
+            "roots": [
+              "steps"
+            ],
+            "digest": "5e0d62e4bafda8e215fd8b38a92ad979e85c56f2a71f4e832e35b943fda8b70d"
+          },
+          "outcome": "completed"
+        },
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 1,
+            "backoff_ms": 0
+          },
+          "route": "next_iteration",
+          "feedback": "candidate"
+        },
+        {
+          "class": "tool_error",
+          "retry": {
+            "max": 1,
+            "backoff_ms": 0
+          },
+          "route": "next_iteration",
+          "feedback": "exec_log"
+        },
+        {
+          "class": "timeout",
+          "route": "next_iteration",
+          "feedback": "exec_log"
+        },
+        {
+          "class": "gate_refused",
+          "route": "next_iteration",
+          "feedback": "verdict"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "escapes": {
+      "boot_loop.cand_run2": {
+        "kind": "program_synthesis",
+        "impl_ref": "packages/adaskit@1.0.0/hatches/candidate_run.py",
+        "reason": "自举阶段的候选程序同样以运行时角色拓扑执行；与主搜索共用同一个执行面 impl_ref",
+        "owner": "lang-team",
+        "share_budget_pct": 20
+      },
+      "boot_loop.sandbox2": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/adaskit@1.0.0/hatches/sandbox_env.py",
+        "reason": "自举阶段的沙箱边界：任意 Python 执行与日志归一，impl_ref 与主搜索共用",
+        "owner": "runtime-team",
+        "share_budget_pct": 5
+      },
+      "bootstrap_meta": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/adaskit@1.0.0/hatches/bootstrap_meta.py",
+        "reason": "自举把已发现的 agent 顶替原 meta agent 继续搜索：拓扑发生递归替换、可无限嵌套，核心只能承接包内给出的『发现物即新 meta agent』程序",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "code_compile": {
+        "kind": "program_synthesis",
+        "impl_ref": "packages/adaskit@1.0.0/hatches/compile_discovery.py",
+        "reason": "发现物要落成 while/try/递归等嵌套控制流的任意代码并在新域实例化，DSL 只能表达图，必须提供『图 → 任意代码』的编译逃逸面",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "mas_loop.candidate_run": {
+        "kind": "program_synthesis",
+        "impl_ref": "packages/adaskit@1.0.0/hatches/candidate_run.py",
+        "reason": "候选系统的角色调用关系与控制流写在生成的 Python 里，运行前不可静态枚举为节点/边；DSL 只能承载发现物的固定执行图",
+        "owner": "lang-team",
+        "share_budget_pct": 25
+      },
+      "mas_loop.feedback_parse": {
+        "kind": "free_text_parser",
+        "impl_ref": "packages/adaskit@1.0.0/hatches/feedback_parse.py",
+        "reason": "执行反馈是 traceback/工具日志/自由文本/数值的混合体，固定 schema 覆盖不了；解析与诊断摘要的生成在包内完成，核心只收结构化 note",
+        "owner": "lang-team",
+        "share_budget_pct": 8
+      },
+      "mas_loop.role_registry": {
+        "kind": "dynamic_tool_registry",
+        "impl_ref": "packages/adaskit@1.0.0/hatches/role_registry.py",
+        "reason": "meta agent 生成的代码可 def 出模板预设之外的角色函数与工具；角色集合在运行前不可静态枚举，核心只能承接包内 registry 的枚举结果",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "mas_loop.sandbox_env": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/adaskit@1.0.0/hatches/sandbox_env.py",
+        "reason": "沙箱进程边界：候选代码的 import/文件读写/未列入工具表的库调用在包内执行器完成，stdout/stderr/traceback/退出码在边界处归一为工件",
+        "owner": "runtime-team",
+        "share_budget_pct": 15
+      },
+      "selector": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/adaskit@1.0.0/hatches/selector.py",
+        "reason": "候选选择在论文里是『各训练/验证任务多次运行准确率排序』的可编程聚合（多任务加权/成功率聚合），难以退化为静态边权与单字段排序",
+        "owner": "lang-team",
+        "share_budget_pct": 12
+      }
+    },
+    "trust": {}
+  }
+}
