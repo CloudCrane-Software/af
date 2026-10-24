@@ -1,31 +1,33 @@
 //! P1 对照测试：同输入同输出，证明搬运函数行为逐字节等价（吸收方案约束）。
 //!
 //! 对照路径一【活源对拍】：`#[path]` 把 af-bench 的 tb.rs / swev.rs **原文件**编译进
-//! 本测试二进制（只读引用，不修改 af-bench 本体——薄壳化是 P6 的事），af-bench 侧
-//! 即旧路行为基准，新旧实现同输入逐例比对。本工作树 af-bench 三文件与主仓
-//! 逐字节一致（本任务 `diff` 实测；方案 §0 基线事实同）。
+//! 本测试二进制。P6 薄壳化起，af-bench 本体不再承载这些载荷——对照基准定居
+//! `tests/fixtures/p6-frozen-bench/`（af-bench P5 完成点 1830371 三文件的字节级
+//! 冻结件，sha256 由 tests/p6_shadow.rs provenance 测试钉死）。**明示等价迁移**：
+//! 对照语义不变（同字节基准），只是基准从活源迁至冻结件。
 //! 注：af-bench 的 `shell_quote`/`split_rc`/`tail` 是模块**私有**函数，外部模块不可
 //! 见（且 `include!` 无法吃下其 `//!` 文件头，E0753 实测），故这三项不做活源对拍，
 //! 以 tests/p1_suite.rs 的黄金值断言固化（源码逐行推导）。
 //!
-//! 对照路径二【源文本比对】：af-bench main.rs 依赖面大（af-harness 全家桶 + CLI），
+//! 对照路径二【源文本比对】：main.rs 依赖面大（af-harness 全家桶 + CLI），
 //! 无法整体编译进本 crate。其纯函数载荷（profile 表 key_cmd/端点字段、未知档案报错
 //! 文案、两段提示词、反考古模式、status_label 六标签）改用字节级源文本比对：
-//! 从 af-execline 侧常量/返回值**重建源码字面量**（`{:?}`/原样拼 `r#"…"#`），
-//! 断言 main.rs 原文含该字面量——常量差一个字节即失配。
+//! 从 af-execline 侧常量/返回值**重建源码字面量**（`{:?}`/原样拼 `r#"…"`），
+//! 断言冻结 main.rs 原文含该字面量——常量差一个字节即失配。
 //!
-//! `next_attempt_index`/`resolve_key` 无可比对物（私有于 main.rs）：
+//! `next_attempt_index`/`resolve_key` 无可比对物（私有于 af-bench main.rs）：
 //! 行为对照 = 随迁单测（main.rs:48-73 原测试）+ 黄金值断言（p1_suite.rs）。
 
-// ---- 活源基准：af-bench 原文件（模块名固定 `tb`——swev.rs 的 `use crate::tb;` 要求
-// 本测试 crate 根上有 tb 模块）。dead_code 放行：原文件含 P2/P5 才搬的生命周期
-// 函数（TbEnv/ssh/setup/verify），此处只作对照基准，不作删除。----
+// ---- 活源基准：af-bench 冻结件（P5 完成点 1830371；模块名固定 `tb`——
+// swev.rs 的 `use crate::tb;` 要求本测试 crate 根上有 tb 模块）。dead_code 放行：
+// 原文件含 P2/P5 才搬的生命周期函数（TbEnv/ssh/setup/verify），此处只作对照基准，
+// 不作删除。----
 
-#[path = "../../af-bench/src/tb.rs"]
+#[path = "fixtures/p6-frozen-bench/tb.rs"]
 #[allow(dead_code)]
 mod tb;
 
-#[path = "../../af-bench/src/swev.rs"]
+#[path = "fixtures/p6-frozen-bench/swev.rs"]
 #[allow(dead_code)]
 mod swev;
 
@@ -36,9 +38,11 @@ use af_execline::suite::tb::{
 };
 use std::path::PathBuf;
 
-/// 读 af-bench main.rs 原文（源文本比对基准）。
+/// 读 af-bench main.rs 冻结件原文（源文本比对基准；= P5 完成点 1830371 字节，
+/// P6 薄壳化后 af-bench 活源不再含这些载荷——明示等价迁移）。
 fn bench_main_src() -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../af-bench/src/main.rs");
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/p6-frozen-bench/main.rs");
     std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("读 {} 失败: {err}", path.display()))
 }
 

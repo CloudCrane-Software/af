@@ -47,9 +47,11 @@ fn sha256_of(path: &Path) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-/// 读 af-bench 源原文（源文本比对基准；本工作树与主仓逐字节一致，开工 diff 实测）。
+/// 读 af-bench swev.rs 冻结件原文（源文本比对基准；= P5 完成点 1830371 字节，
+/// P6 薄壳化后 af-bench 活源不再含这些载荷——明示等价迁移，同 p1_comparison）。
 fn bench_swev_src() -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../af-bench/src/swev.rs");
+    let path =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/p6-frozen-bench/swev.rs");
     std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("读 {} 失败: {err}", path.display()))
 }
 

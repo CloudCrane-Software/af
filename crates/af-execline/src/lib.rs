@@ -40,6 +40,7 @@ pub mod ledger;
 pub mod mes;
 pub mod profile;
 pub mod record;
+pub mod shadow;
 pub mod suite;
 
 pub use agent::{
