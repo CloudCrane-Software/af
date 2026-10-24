@@ -7,13 +7,15 @@
 //! （提案 §8-4 开放问题，留后续——正例 `indirect_self_verification_not_
 //! flagged_v01` 钉住该边界）。
 //!
-//! E2322（loop.safety_points 每节点必须是验证面）不在 M3 范围：P2-L04 切分
-//! 仅列直接自环；实现 E2322 将使 M1 已交付夹具断言（恰 [E2312]）翻红——
-//! 见 RESULT-M3 遗留表。
+//! E2322（loop.safety_points 必须指向验证面节点）原不在 M3 范围（P2-L04
+//! 切分仅列直接自环），fix2（P2-L08）起实装：kind 三值承 af-graph
+//! `validate.rs` 三值语义原样——check→kind=check 节点、gate→kind=gate
+//! 节点、human→human 标记；路径不可解析不重复定罪（E2107 域）。实装使
+//! M1 夹具断言按 RESULT-M3 遗留表预案同步改为 [E2312, E2322]。
 
 use super::Index;
 use crate::error::{ErrorCode, Report};
-use crate::model::NodeDecl;
+use crate::model::{NodeDecl, SafetyPointKind};
 
 /// 是否验证面节点（§5：kind ∈ {check, gate} ∪ human 标记节点）。
 /// kind 是开放词表（M1 决策），check/gate 字面量判定与 mod.rs 内建
@@ -23,6 +25,11 @@ pub(crate) fn is_verifier(node: &NodeDecl) -> bool {
 }
 
 pub(crate) fn check(ix: &Index<'_>, report: &mut Report) {
+    check_self_verification(ix, report);
+    check_safety_points(ix, report);
+}
+
+fn check_self_verification(ix: &Index<'_>, report: &mut Report) {
     for nref in ix.nodes.values() {
         if !is_verifier(nref.node) {
             continue;
@@ -37,6 +44,43 @@ pub(crate) fn check(ix: &Index<'_>, report: &mut Report) {
                     format!(
                         "verifier node '{}' consumes port '{}' produced by itself（生成与验证必须不同节点）",
                         nref.path, e.input
+                    ),
+                );
+            }
+        }
+    }
+}
+
+/// E2322：安全点 kind 三值与指向节点的实际验证面必须原样对应
+/// （check→check 节点、gate→gate 节点、human→human 标记——承 af-graph
+/// `validate.rs` kind_ok 判定）。路径不可解析（E2107 域）跳过不定罪。
+fn check_safety_points(ix: &Index<'_>, report: &mut Report) {
+    for site in &ix.loops {
+        let Some(owner) = ix.nodes.get(&site.owner_path) else {
+            continue; // 重复 id（E2003 已报），首声明者胜
+        };
+        let body_scope = format!("{}.loop_body", site.owner_path);
+        for sp in &site.decl.safety_points {
+            let Some(target) = ix.resolve_path(&body_scope, &sp.node) else {
+                continue; // E2107 域（refs），不重复定罪
+            };
+            let matches = match sp.kind {
+                SafetyPointKind::Check => target.node.kind.as_str() == "check",
+                SafetyPointKind::Gate => target.node.kind.as_str() == "gate",
+                SafetyPointKind::Human => target.node.human.is_some(),
+            };
+            if !matches {
+                report.push(
+                    ErrorCode::SafetyPointNotVerifier,
+                    &owner.scope,
+                    format!(
+                        "loop {} 安全点 {:?}（kind={}）指向节点 {}（kind={:?}，human={}）非对应验证面——三值原样：check→check 节点、gate→gate 节点、human→human 标记",
+                        site.owner_path,
+                        sp.node,
+                        sp.kind.as_str(),
+                        target.path,
+                        target.node.kind,
+                        target.node.human.is_some()
                     ),
                 );
             }

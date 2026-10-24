@@ -1,0 +1,17 @@
+{
+  "components": [
+    {
+      "class": "tool",
+      "name": "pkg.adaskit.task_loader",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/adaskit@1.0.0/tools/task_loader.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.adaskit.verifier",
+      "version": "1",
+      "impl_ref": "packages/adaskit@1.0.0/units/verifier.py"
+    }
+  ]
+}

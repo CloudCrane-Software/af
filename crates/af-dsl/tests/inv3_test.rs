@@ -130,7 +130,7 @@ fn loop_body_check_self_loop_is_e2321() {
         "        edges:",
         "          - { from: verifier, output: answer, to: verifier, input: x }",
         "      max_iterations: 2",
-        "      safety_points: []",
+        "      safety_points: [ { node: verifier, kind: check } ]",
         "    emits: { answer: { from_body: verifier.answer } }",
         "edges: []",
     ]

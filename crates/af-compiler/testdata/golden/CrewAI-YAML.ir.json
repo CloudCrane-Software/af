@@ -1,0 +1,1526 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "crewai_yaml_crew",
+      "entry": "llm_transport",
+      "nodes": [
+        {
+          "id": "analyst",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "compose",
+          "kind": "task",
+          "loop_spec": {
+            "body": "crewai_yaml_crew/compose",
+            "max_iterations": 3,
+            "carried": [
+              {
+                "store": "draft_trace",
+                "max_items": 128
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "guardrail",
+                "kind": "check"
+              }
+            ],
+            "args": {
+              "analysis": "analyst.analysis",
+              "research": "researcher.research"
+            },
+            "exit_when": {
+              "source": "attempt.passed == true && review.decision.approved == true",
+              "roots": [
+                "attempt",
+                "review"
+              ],
+              "digest": "c344cbd845b7e062f9043459934eb28eb100a4fa303f15dd0e4d2bd4f6f0f325"
+            },
+            "on_exhausted": "fail"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "crew_report",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "dispatch",
+          "kind": "gate",
+          "capability_refs": []
+        },
+        {
+          "id": "intake",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "llm_transport",
+          "kind": "task",
+          "escape": {
+            "kind": "env_adapter",
+            "impl_ref": "packages/crewkit@1.0.0/hatches/llm_transport.py",
+            "reason": "卡片②的 LLM 资源（crew 默认 + agent 覆盖 + manager_llm/planning_llm）与卡片⑥b-9 的 LiteLLM 层重试/退避/多供应商 fallback 都在 DSL 之下的传输层，静态语法装不下（卡片④-3）",
+            "owner": "lang-team",
+            "share_budget_pct": 5
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "manager",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "manager_accept",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "manager_delegate",
+          "kind": "task",
+          "escape": {
+            "kind": "meta_loop",
+            "impl_ref": "packages/crewkit@1.0.0/hatches/manager_delegate.py",
+            "reason": "卡片⑥b-1：hierarchical 的委派边由 LLM 在运行时生成并可改写执行次序，静态 DSL 无法枚举该图",
+            "owner": "lang-team",
+            "share_budget_pct": 5
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "memory_append",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "merge_findings",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "parallel_scan",
+          "kind": "task",
+          "map_spec": {
+            "body": "crewai_yaml_crew/parallel_scan",
+            "over": "input.parallel_topics"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "planner",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "rate_limit_guard",
+          "kind": "task",
+          "escape": {
+            "kind": "env_adapter",
+            "impl_ref": "packages/crewkit@1.0.0/hatches/rate_limit_guard.py",
+            "reason": "卡片⑥b-7 的 max_rpm 节流是运行时资源策略（触发节流或报错），DSL 的 budgets 只能给上限不能给节流；成本侧的静态上限另见 policies.budgets",
+            "owner": "lang-team",
+            "share_budget_pct": 5
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "researcher",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "tool_registry",
+          "kind": "task",
+          "escape": {
+            "kind": "dynamic_tool_registry",
+            "impl_ref": "packages/crewkit@1.0.0/hatches/tool_registry.py",
+            "reason": "卡片⑥b-8：YAML 的 extra 字段透传与插件/MCP 工具的运行时注册使工具集合不可静态封闭枚举，装配期按声明注册运行期工具面",
+            "owner": "lang-team",
+            "share_budget_pct": 5
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "analyst",
+          "output": "analysis",
+          "to": "memory_append",
+          "input": "analysis",
+          "checkpoint": false
+        },
+        {
+          "from": "compose",
+          "output": "draft",
+          "to": "crew_report",
+          "input": "draft",
+          "checkpoint": false,
+          "guard": {
+            "source": "!((input.process == 'hierarchical'))",
+            "roots": [
+              "input"
+            ],
+            "digest": "721f9dcddb92c6612d7f44661732ff710d32eb6ceb23a2c8460917421e7d2d51"
+          }
+        },
+        {
+          "from": "compose",
+          "output": "draft",
+          "to": "manager_accept",
+          "input": "draft",
+          "checkpoint": false,
+          "guard": {
+            "source": "(input.process == 'hierarchical')",
+            "roots": [
+              "input"
+            ],
+            "digest": "e2a3de0d79951b9efa6eaaf6d127e90d507dc519c9adfc71fb038e8d311f666a"
+          }
+        },
+        {
+          "from": "dispatch",
+          "output": "brief",
+          "to": "manager",
+          "input": "brief",
+          "checkpoint": false,
+          "guard": {
+            "source": "(input.process == 'hierarchical')",
+            "roots": [
+              "input"
+            ],
+            "digest": "e2a3de0d79951b9efa6eaaf6d127e90d507dc519c9adfc71fb038e8d311f666a"
+          }
+        },
+        {
+          "from": "dispatch",
+          "output": "brief",
+          "to": "parallel_scan",
+          "input": "brief",
+          "checkpoint": false,
+          "guard": {
+            "source": "!((input.process == 'hierarchical') || (input.planning == true))",
+            "roots": [
+              "input"
+            ],
+            "digest": "a0c89d4e5e23210555c650387f074a3de738330f52e3e61389045575b0d9a328"
+          }
+        },
+        {
+          "from": "dispatch",
+          "output": "brief",
+          "to": "planner",
+          "input": "brief",
+          "checkpoint": false,
+          "guard": {
+            "source": "(input.planning == true) && !((input.process == 'hierarchical'))",
+            "roots": [
+              "input"
+            ],
+            "digest": "7a520e6205c802cb1317cf1c573f9c3d3d5704dbb2f3846c8c424267dfce431d"
+          }
+        },
+        {
+          "from": "intake",
+          "output": "brief",
+          "to": "dispatch",
+          "input": "brief",
+          "checkpoint": false
+        },
+        {
+          "from": "llm_transport",
+          "output": "ready",
+          "to": "rate_limit_guard",
+          "input": "ready",
+          "checkpoint": false
+        },
+        {
+          "from": "manager",
+          "output": "delegation",
+          "to": "manager_delegate",
+          "input": "delegation",
+          "checkpoint": false
+        },
+        {
+          "from": "manager_accept",
+          "output": "draft",
+          "to": "crew_report",
+          "input": "draft",
+          "checkpoint": false
+        },
+        {
+          "from": "manager_delegate",
+          "output": "delegation",
+          "to": "researcher",
+          "input": "delegation",
+          "checkpoint": false
+        },
+        {
+          "from": "merge_findings",
+          "output": "findings",
+          "to": "researcher",
+          "input": "findings",
+          "checkpoint": false
+        },
+        {
+          "from": "parallel_scan",
+          "output": "items",
+          "to": "merge_findings",
+          "input": "items",
+          "checkpoint": false
+        },
+        {
+          "from": "planner",
+          "output": "brief",
+          "to": "parallel_scan",
+          "input": "brief",
+          "checkpoint": false
+        },
+        {
+          "from": "planner",
+          "output": "plan",
+          "to": "researcher",
+          "input": "plan",
+          "checkpoint": false
+        },
+        {
+          "from": "planner",
+          "output": "plan",
+          "to": "researcher",
+          "input": "plan",
+          "checkpoint": false
+        },
+        {
+          "from": "rate_limit_guard",
+          "output": "ready",
+          "to": "tool_registry",
+          "input": "ready",
+          "checkpoint": false
+        },
+        {
+          "from": "researcher",
+          "output": "research",
+          "to": "analyst",
+          "input": "research",
+          "checkpoint": false
+        },
+        {
+          "from": "tool_registry",
+          "output": "tools_ready",
+          "to": "intake",
+          "input": "tools_ready",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "crewai_yaml_crew/compose": {
+          "graph_version": "1.0",
+          "entry": "writer",
+          "nodes": [
+            {
+              "id": "completion_decider",
+              "kind": "task",
+              "escape": {
+                "kind": "llm_predicate",
+                "impl_ref": "packages/crewkit@1.0.0/hatches/completion_decider.py",
+                "reason": "卡片⑥b-2：ReAct 内循环「是否已经完成」由 LLM 在运行时决定，DSL 只能给 max_iter 上限，无法声明完成判据",
+                "owner": "lang-team",
+                "share_budget_pct": 5
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "guardrail",
+              "kind": "check",
+              "capability_refs": []
+            },
+            {
+              "id": "output_judge",
+              "kind": "task",
+              "escape": {
+                "kind": "llm_predicate",
+                "impl_ref": "packages/crewkit@1.0.0/hatches/output_judge.py",
+                "reason": "卡片⑥b-3：expected_output 是自然语言期望，满意度无法编码为 DSL 断言，须由 LLM-as-judge 在运行时判定",
+                "owner": "lang-team",
+                "share_budget_pct": 5
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "review",
+              "kind": "task",
+              "human": {
+                "station": "crew-console",
+                "role": "task_reviewer",
+                "quorum": 1,
+                "resume": {
+                  "schema": {
+                    "properties": {
+                      "approved": {
+                        "type": "boolean"
+                      },
+                      "comments": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "approved"
+                    ],
+                    "type": "object"
+                  }
+                }
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "writer",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "completion_decider",
+              "output": "completion",
+              "to": "output_judge",
+              "input": "completion",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((completion_decider.completion.done == false))",
+                "roots": [
+                  "completion_decider"
+                ],
+                "digest": "21b2d9270b926d1b68cb8406327cbb442fdb2dbb8f245258046afdeed3ee1cd4"
+              }
+            },
+            {
+              "from": "completion_decider",
+              "output": "completion",
+              "to": "writer",
+              "input": "completion",
+              "checkpoint": false,
+              "guard": {
+                "source": "(completion_decider.completion.done == false)",
+                "roots": [
+                  "completion_decider"
+                ],
+                "digest": "b67fa02f07133cada2c9c0b6e0d8f063b7439456744a0255f5ca72ae0a018822"
+              }
+            },
+            {
+              "from": "guardrail",
+              "output": "verdict",
+              "to": "completion_decider",
+              "input": "verdict",
+              "checkpoint": false
+            },
+            {
+              "from": "output_judge",
+              "output": "judge",
+              "to": "review",
+              "input": "judge",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((output_judge.judge.pass == false))",
+                "roots": [
+                  "output_judge"
+                ],
+                "digest": "6eed4fa557d09e9f0a0286d64ebd9d263609143e9c4afe3967c645369c9cfcf0"
+              }
+            },
+            {
+              "from": "output_judge",
+              "output": "judge",
+              "to": "writer",
+              "input": "judge",
+              "checkpoint": false,
+              "guard": {
+                "source": "(output_judge.judge.pass == false)",
+                "roots": [
+                  "output_judge"
+                ],
+                "digest": "5f111fcf65b530a45440a007a7c143d3a062aac6e53282112d2d5928e5610583"
+              }
+            },
+            {
+              "from": "review",
+              "output": "decision",
+              "to": "writer",
+              "input": "decision",
+              "checkpoint": false,
+              "guard": {
+                "source": "(resume.approved == false)",
+                "roots": [
+                  "resume"
+                ],
+                "digest": "9afc16eb8a5b9e3f11de1e489e2b85e92a6a0a73b914a5fd313b2d69bbf421a1"
+              }
+            },
+            {
+              "from": "writer",
+              "output": "draft",
+              "to": "completion_decider",
+              "input": "draft",
+              "checkpoint": false
+            },
+            {
+              "from": "writer",
+              "output": "draft",
+              "to": "guardrail",
+              "input": "draft",
+              "checkpoint": false
+            },
+            {
+              "from": "writer",
+              "output": "draft",
+              "to": "output_judge",
+              "input": "draft",
+              "checkpoint": false
+            },
+            {
+              "from": "writer",
+              "output": "draft",
+              "to": "review",
+              "input": "draft",
+              "checkpoint": false
+            }
+          ]
+        },
+        "crewai_yaml_crew/parallel_scan": {
+          "graph_version": "1.0",
+          "entry": "scout",
+          "nodes": [
+            {
+              "id": "scout",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": []
+        }
+      }
+    },
+    "interface": {
+      "input_type": "crew_brief",
+      "output_type": "crew_output",
+      "output_from": "crew_report",
+      "intent": "CrewAI YAML 装配：agents.yaml 的角色三元组=节点模板变量（role/goal/backstory）；tasks.yaml 的任务契约=节点 I/O（description→输入提示，expected_output→输出类型，output_pydantic→types 表 schema）；Process=sequential=静态线性 DAG（TaskOutput→context 边），Process=hierarchical=Manager 节点+委派边的半静态图（运行时改次序走 escape）；planning=条件前置规划节点；ReAct 多轮=节点内迭代；guardrail=验证面（check）+LLM 判据逃逸；human_input=human 构造；Memory=状态槽+检索注入；async_execution=map 并发分支"
+    },
+    "types": {
+      "completion_state": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "done",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "crew_brief": {
+        "properties": {
+          "parallel_topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "planning": {
+            "type": "boolean"
+          },
+          "process": {
+            "type": "string"
+          },
+          "topic": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic",
+          "process"
+        ],
+        "type": "object"
+      },
+      "crew_output": {
+        "properties": {
+          "final": {
+            "type": "string"
+          },
+          "supports": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "final"
+        ],
+        "type": "object"
+      },
+      "delegation_plan": {
+        "properties": {
+          "assignees": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "order": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "assignees"
+        ],
+        "type": "object"
+      },
+      "judge_verdict": {
+        "properties": {
+          "pass": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pass",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "plan_brief": {
+        "properties": {
+          "steps": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "steps"
+        ],
+        "type": "object"
+      },
+      "review_feedback": {
+        "properties": {
+          "approved": {
+            "type": "boolean"
+          },
+          "comments": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "approved"
+        ],
+        "type": "object"
+      },
+      "task_output": {
+        "properties": {
+          "artifact_ref": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "crew_memory": {
+        "name": "crew_memory",
+        "kind": "collection",
+        "item": "task_output",
+        "writer": "memory_append",
+        "lifecycle": "persistent",
+        "retention": {
+          "policy": "rolling_window",
+          "max_items": 256,
+          "keep_system": true
+        },
+        "eval_input": false
+      },
+      "draft_trace": {
+        "name": "draft_trace",
+        "kind": "message_log",
+        "writer": "compose.writer",
+        "lifecycle": "iteration",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      },
+      "research_trace": {
+        "name": "research_trace",
+        "kind": "message_log",
+        "writer": "researcher",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "analyst": {
+        "node_id": "analyst",
+        "components": {
+          "model": "route.main@1",
+          "memory": [
+            "pkg.crewkit.mem.longterm@1"
+          ]
+        },
+        "consumes": {
+          "research": "task_output"
+        },
+        "artifacts": {
+          "analysis": {
+            "type": "task_output",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.crewkit.sys.analyst",
+            "vars": {
+              "backstory": "You prefer numbers over adjectives",
+              "goal": "Turn findings into insights",
+              "role": "Reporting Analyst"
+            }
+          },
+          {
+            "from": "input",
+            "quota_tokens": 200,
+            "fields": [
+              "topic"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 900,
+            "fields": [
+              "summary"
+            ],
+            "port": "research",
+            "policy": "project"
+          }
+        ]
+      },
+      "compose": {
+        "node_id": "compose",
+        "components": {},
+        "artifacts": {
+          "draft": {
+            "from_body": "writer.draft",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "compose.completion_decider": {
+        "node_id": "completion_decider",
+        "components": {},
+        "consumes": {
+          "draft": "task_output",
+          "verdict": "judge_verdict"
+        },
+        "artifacts": {
+          "completion": {
+            "type": "completion_state",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "compose.guardrail": {
+        "node_id": "guardrail",
+        "components": {
+          "unit": "pkg.crewkit.guardrail.structural@1"
+        },
+        "consumes": {
+          "draft": "task_output"
+        },
+        "artifacts": {
+          "verdict": {
+            "type": "judge_verdict",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "compose.output_judge": {
+        "node_id": "output_judge",
+        "components": {},
+        "consumes": {
+          "completion": "completion_state",
+          "draft": "task_output"
+        },
+        "artifacts": {
+          "judge": {
+            "type": "judge_verdict",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "compose.review": {
+        "node_id": "review",
+        "components": {},
+        "consumes": {
+          "draft": "task_output",
+          "judge": "judge_verdict"
+        },
+        "artifacts": {
+          "decision": {
+            "type": "review_feedback",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "compose.writer": {
+        "node_id": "writer",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.crewkit.tool.doc_render@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "draft_trace"
+        ],
+        "consumes": {
+          "completion": "completion_state",
+          "decision": "review_feedback",
+          "judge": "judge_verdict"
+        },
+        "artifacts": {
+          "draft": {
+            "type": "task_output",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.crewkit.sys.writer",
+            "vars": {
+              "backstory": "You write for a busy decision maker",
+              "goal": "Craft an engaging report",
+              "role": "Content Writer"
+            }
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 900,
+            "fields": [
+              "summary"
+            ],
+            "name": "research",
+            "policy": "project"
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 700,
+            "fields": [
+              "summary"
+            ],
+            "name": "analysis",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 200,
+            "fields": [
+              "reason"
+            ],
+            "port": "completion",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 300,
+            "fields": [
+              "reason"
+            ],
+            "port": "judge",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 300,
+            "fields": [
+              "comments"
+            ],
+            "port": "decision",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "store",
+            "quota_tokens": 4000,
+            "store": "draft_trace",
+            "policy": "full"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 600,
+            "store": "crew_memory",
+            "policy": "retrieve",
+            "args": {
+              "k": 5
+            },
+            "component": "pkg.crewkit.mem.similarity@1"
+          }
+        ]
+      },
+      "crew_report": {
+        "node_id": "crew_report",
+        "components": {},
+        "consumes": {
+          "draft": "task_output"
+        },
+        "artifacts": {
+          "report": {
+            "type": "crew_output",
+            "is_final": true,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "draft",
+            "into": "report"
+          }
+        ]
+      },
+      "dispatch": {
+        "node_id": "dispatch",
+        "components": {},
+        "consumes": {
+          "brief": "crew_brief"
+        },
+        "artifacts": {
+          "brief": {
+            "type": "crew_brief",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "assert": {
+          "source": "inputs.brief.topic != ''",
+          "roots": [
+            "inputs"
+          ],
+          "digest": "7ae90612374b41d9d056e239b48a55d7954b39370488bb9052f3cfcf748be822"
+        }
+      },
+      "intake": {
+        "node_id": "intake",
+        "components": {
+          "tools": {
+            "pkg.crewkit.kickoff_inputs@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "consumes": {
+          "tools_ready": "signal"
+        },
+        "artifacts": {
+          "brief": {
+            "type": "crew_brief",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "llm_transport": {
+        "node_id": "llm_transport",
+        "components": {},
+        "artifacts": {
+          "ready": {
+            "type": "signal",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "manager": {
+        "node_id": "manager",
+        "components": {
+          "model": "route.manager@1",
+          "memory": [
+            "pkg.crewkit.mem.longterm@1"
+          ]
+        },
+        "consumes": {
+          "brief": "crew_brief"
+        },
+        "artifacts": {
+          "delegation": {
+            "type": "delegation_plan",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.crewkit.sys.manager",
+            "vars": {
+              "backstory": "You assign tasks to the best-suited agent",
+              "goal": "Delegate work and verify deliverables",
+              "role": "Crew Manager"
+            }
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 300,
+            "fields": [
+              "topic"
+            ],
+            "port": "brief",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "crew_memory",
+            "policy": "full"
+          }
+        ]
+      },
+      "manager_accept": {
+        "node_id": "manager_accept",
+        "components": {
+          "model": "route.manager@1"
+        },
+        "consumes": {
+          "draft": "task_output"
+        },
+        "artifacts": {
+          "draft": {
+            "type": "task_output",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.crewkit.sys.manager_accept"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 900,
+            "fields": [
+              "summary"
+            ],
+            "port": "draft",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "crew_memory",
+            "policy": "full"
+          }
+        ]
+      },
+      "manager_delegate": {
+        "node_id": "manager_delegate",
+        "components": {},
+        "consumes": {
+          "delegation": "delegation_plan"
+        },
+        "artifacts": {
+          "delegation": {
+            "type": "delegation_plan",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "memory_append": {
+        "node_id": "memory_append",
+        "components": {},
+        "writes": [
+          "crew_memory"
+        ],
+        "consumes": {
+          "analysis": "task_output"
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "analysis",
+            "into": "crew_memory"
+          }
+        ]
+      },
+      "merge_findings": {
+        "node_id": "merge_findings",
+        "components": {},
+        "consumes": {
+          "items": "list<task_output>"
+        },
+        "artifacts": {
+          "findings": {
+            "type": "list<task_output>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "merge",
+            "ports": [
+              "items"
+            ],
+            "into": "findings"
+          }
+        ]
+      },
+      "parallel_scan": {
+        "node_id": "parallel_scan",
+        "components": {},
+        "consumes": {
+          "brief": "crew_brief"
+        },
+        "artifacts": {
+          "items": {
+            "from_body": "scout.finding",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "parallel_scan.scout": {
+        "node_id": "scout",
+        "components": {
+          "model": "route.cheap@1",
+          "tools": {
+            "pkg.crewkit.tool.web_search@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "artifacts": {
+          "finding": {
+            "type": "task_output",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.crewkit.sys.scout",
+            "vars": {
+              "backstory": "You are a fast, source-faithful gatherer",
+              "goal": "Collect evidence on one sub-topic",
+              "role": "Scout"
+            }
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 200,
+            "name": "item",
+            "policy": "project"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 200,
+            "fields": [
+              "topic"
+            ],
+            "policy": "project"
+          }
+        ]
+      },
+      "planner": {
+        "node_id": "planner",
+        "components": {
+          "model": "route.plan@1"
+        },
+        "consumes": {
+          "brief": "crew_brief"
+        },
+        "artifacts": {
+          "brief": {
+            "type": "crew_brief",
+            "is_final": false,
+            "provenance": null
+          },
+          "plan": {
+            "type": "plan_brief",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.crewkit.sys.planner"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 300,
+            "fields": [
+              "topic"
+            ],
+            "port": "brief",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 600,
+            "store": "crew_memory",
+            "policy": "retrieve",
+            "args": {
+              "k": 5
+            },
+            "component": "pkg.crewkit.mem.similarity@1"
+          }
+        ]
+      },
+      "rate_limit_guard": {
+        "node_id": "rate_limit_guard",
+        "components": {},
+        "consumes": {
+          "ready": "signal"
+        },
+        "artifacts": {
+          "ready": {
+            "type": "signal",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "researcher": {
+        "node_id": "researcher",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.crewkit.tool.fetch@1": {
+              "effect_class": null
+            },
+            "pkg.crewkit.tool.web_search@1": {
+              "effect_class": null
+            }
+          },
+          "memory": [
+            "pkg.crewkit.mem.entity@1"
+          ]
+        },
+        "writes": [
+          "research_trace"
+        ],
+        "consumes": {
+          "delegation": "delegation_plan",
+          "findings": "list<task_output>",
+          "plan": "plan_brief"
+        },
+        "artifacts": {
+          "research": {
+            "type": "task_output",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.crewkit.sys.researcher",
+            "vars": {
+              "backstory": "You are meticulous about sources",
+              "goal": "Uncover accurate, sourced data",
+              "role": "Senior Data Researcher"
+            }
+          },
+          {
+            "from": "input",
+            "quota_tokens": 300,
+            "fields": [
+              "topic"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1200,
+            "fields": [
+              "summary"
+            ],
+            "port": "findings",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "fields": [
+              "steps"
+            ],
+            "port": "plan",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 200,
+            "fields": [
+              "assignees"
+            ],
+            "port": "delegation",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "store",
+            "quota_tokens": 4000,
+            "store": "research_trace",
+            "policy": "full"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 600,
+            "store": "crew_memory",
+            "policy": "retrieve",
+            "args": {
+              "k": 5
+            },
+            "component": "pkg.crewkit.mem.similarity@1"
+          }
+        ]
+      },
+      "tool_registry": {
+        "node_id": "tool_registry",
+        "components": {},
+        "consumes": {
+          "ready": "signal"
+        },
+        "artifacts": {
+          "tools_ready": {
+            "type": "signal",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "compose_turns",
+          "dimension": "turns",
+          "scope": "loop:compose",
+          "cap": 45
+        },
+        {
+          "id": "crew_clock",
+          "dimension": "clock_ms",
+          "scope": "plan",
+          "cap": 1800000
+        },
+        {
+          "id": "crew_cost",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 1200
+        },
+        {
+          "id": "crew_tokens",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 2000000
+        },
+        {
+          "id": "crew_tool_calls",
+          "dimension": "tool_calls",
+          "scope": "plan",
+          "cap": 200
+        },
+        {
+          "id": "manager_turns",
+          "dimension": "turns",
+          "scope": "node:manager",
+          "cap": 15
+        },
+        {
+          "id": "researcher_turns",
+          "dimension": "turns",
+          "scope": "node:researcher",
+          "cap": 15
+        },
+        {
+          "id": "scout_turns",
+          "dimension": "turns",
+          "scope": "node:parallel_scan.scout",
+          "cap": 10
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "budget.clock_ms_spent >= budget.clock_ms_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "ea2ff1609b3b8a98de6949c1e43225dca9cf3af5b5714791bf828f33ec02493e"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "steps.iterations >= 3",
+            "roots": [
+              "steps"
+            ],
+            "digest": "7cbed31a95aa58ce14fd886d3b676e1ddf2112758d5cbecbe840a477ba839ef7"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 1000
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "gate_refused",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "environment_failure",
+          "retry": {
+            "max": 1,
+            "backoff_ms": 0
+          },
+          "route": "parallel_scan",
+          "feedback": "plan_degraded"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {
+      "compose.completion_decider": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/crewkit@1.0.0/hatches/completion_decider.py",
+        "reason": "卡片⑥b-2：ReAct 内循环「是否已经完成」由 LLM 在运行时决定，DSL 只能给 max_iter 上限，无法声明完成判据",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      },
+      "compose.output_judge": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/crewkit@1.0.0/hatches/output_judge.py",
+        "reason": "卡片⑥b-3：expected_output 是自然语言期望，满意度无法编码为 DSL 断言，须由 LLM-as-judge 在运行时判定",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      },
+      "llm_transport": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/crewkit@1.0.0/hatches/llm_transport.py",
+        "reason": "卡片②的 LLM 资源（crew 默认 + agent 覆盖 + manager_llm/planning_llm）与卡片⑥b-9 的 LiteLLM 层重试/退避/多供应商 fallback 都在 DSL 之下的传输层，静态语法装不下（卡片④-3）",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      },
+      "manager_delegate": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/crewkit@1.0.0/hatches/manager_delegate.py",
+        "reason": "卡片⑥b-1：hierarchical 的委派边由 LLM 在运行时生成并可改写执行次序，静态 DSL 无法枚举该图",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      },
+      "rate_limit_guard": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/crewkit@1.0.0/hatches/rate_limit_guard.py",
+        "reason": "卡片⑥b-7 的 max_rpm 节流是运行时资源策略（触发节流或报错），DSL 的 budgets 只能给上限不能给节流；成本侧的静态上限另见 policies.budgets",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      },
+      "tool_registry": {
+        "kind": "dynamic_tool_registry",
+        "impl_ref": "packages/crewkit@1.0.0/hatches/tool_registry.py",
+        "reason": "卡片⑥b-8：YAML 的 extra 字段透传与插件/MCP 工具的运行时注册使工具集合不可静态封闭枚举，装配期按声明注册运行期工具面",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      }
+    },
+    "trust": {}
+  }
+}

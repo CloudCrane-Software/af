@@ -29,12 +29,13 @@ fn six_golden_samples_pass_full_m1_validation() {
 // ---------- 提案 B §5 的 INV-2 违规样例（机器验证过的 golden 拒绝夹具） ----------
 
 #[test]
-fn spec_inv2_fixture_triggers_exactly_e2312() {
+fn spec_inv2_fixture_triggers_e2312_and_e2322() {
     // 提案 B §5 INV-2 样例：map 体 debater 写共享槽 transcript（writer 声明与之
-    // 一致，故无 E2311；carried 已覆盖，故无 E2211；safety_point 非验证面的
-    // E2322 属 INV-3/M3，M1 不触发）。
+    // 一致，故无 E2311；carried 已覆盖，故无 E2211）。安全点 debater（task）
+    // 非验证面 → E2322 自 fix2（P2-L08）起实装——按 RESULT-M3 遗留表预案，
+    // 断言由恰 [E2312] 同步改为 [E2312, E2322]（提案 §5 声明两码均触发）。
     let src = std::fs::read_to_string("testdata/reject/inv2_e2312_map_write.yaml").unwrap();
-    assert_eq!(check(&src), ["E2312"]);
+    assert_eq!(check(&src), ["E2312", "E2322"]);
 }
 
 // ---------- E2311 写者交叉核对 ----------
@@ -64,7 +65,7 @@ fn writer_declared_as_body_path_matches() {
     // 声明写者是点号路径（loop 体内节点）且交叉核对一致 → 干净。
     let src = doc_with_store(
         "l1.b1",
-        "  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: b1, kind: task, writes: [s], emits: { x: a } }\n        edges: []\n      max_iterations: 2\n      carried: [ { store: s, max_items: 4 } ]\n      safety_points: []\n    emits: { answer: { from_body: b1.x } }\n",
+        "  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: b1, kind: task, writes: [s], emits: { x: a } }\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      carried: [ { store: s, max_items: 4 } ]\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: { from_body: b1.x } }\n",
     );
     assert_eq!(check(&src), Vec::<&str>::new());
 }
@@ -75,7 +76,7 @@ fn writer_declared_as_body_path_matches() {
 fn uncovered_outer_store_written_in_body_is_e2211() {
     let src = doc_with_store(
         "l1.b1",
-        "  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: b1, kind: task, writes: [s], emits: { x: a } }\n        edges: []\n      max_iterations: 2\n      safety_points: []\n    emits: { answer: { from_body: b1.x } }\n",
+        "  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: b1, kind: task, writes: [s], emits: { x: a } }\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: { from_body: b1.x } }\n",
     );
     assert_eq!(check(&src), ["E2211"]);
 }
@@ -112,9 +113,10 @@ fn nested_body_write_requires_outer_carried_too() {
         "                  - { id: d, kind: task, writes: [s], emits: { x: a } }",
         "                edges: []",
         "          - { id: b2, kind: task, emits: { y: a } }",
+        "          - { id: g, kind: gate, assert: \"true\" }",
         "        edges: []",
         "      max_iterations: 2",
-        "      safety_points: []",
+        "      safety_points: [ { node: g, kind: gate } ]",
         "    emits: { answer: { from_body: b2.y } }",
         "edges: []",
         "policies:",
@@ -188,9 +190,10 @@ fn collect_all_doc() -> String {
         "                  - { id: d, kind: task, writes: [p], emits: { x: a } }",
         "                edges: []",
         "          - { id: b9, kind: task, writes: [c], emits: { z: a } }",
+        "          - { id: g, kind: gate, assert: \"true\" }",
         "        edges: []",
         "      max_iterations: 2",
-        "      safety_points: []",
+        "      safety_points: [ { node: g, kind: gate } ]",
         "    emits: { answer: { from_body: b9.z } }",
         "edges: []",
         "policies:",

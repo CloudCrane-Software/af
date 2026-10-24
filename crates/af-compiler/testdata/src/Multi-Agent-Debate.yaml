@@ -1,0 +1,425 @@
+version: 1
+
+meta:
+  name: multi_agent_debate
+  graph_version: "1.0"
+  entry: retrieve
+  input: debate_input
+  output: { ref: final_answer, from: finalize }
+  intent: "N 辩手 map 并行互不可见 → 全连接广播同伴解（匿名/乱序/截断）→ K 轮受控循环 → 多数票 + LLM 裁决 fallback；黑板单写者（INV-2）；语义共识判定/可见性矩阵/运行期改拓扑等 10 项走 L4 逃逸舱记账"
+
+types:
+  - name: debate_input
+    schema:
+      type: object
+      required: [question, personas, mode]
+      properties:
+        question: { type: string }
+        personas: { type: array, items: { type: string } }
+        mode: { type: string }              # majority（多数票收敛）| adversarial（偏好真值裁判）
+        evidence_queries: { type: array, items: { type: string } }
+  - name: persona_ref
+    schema: { type: string }
+  - name: prompt_text
+    schema: { type: string }
+  - name: verdict_text
+    schema: { type: string }
+  - name: milli_int
+    schema: { type: integer }
+  - name: position
+    schema:
+      type: object
+      required: [persona, claim, confidence_milli]
+      properties:
+        persona: { type: string }
+        claim: { type: string }
+        confidence_milli: { type: integer }
+  - name: turn_record
+    schema:
+      type: object
+      required: [persona, claim, confidence_milli]
+      properties:
+        persona: { type: string }
+        claim: { type: string }
+        confidence_milli: { type: integer }
+  - name: peer_message
+    schema:
+      type: object
+      required: [claim, confidence_milli]
+      properties:
+        claim: { type: string }
+        confidence_milli: { type: integer }
+  - name: evidence_item
+    schema:
+      type: object
+      required: [text, source]
+      properties:
+        text: { type: string }
+        source: { type: string }
+  - name: tally_result
+    schema:
+      type: object
+      required: [answers, top_count, top_share_milli]
+      properties:
+        answers: { type: integer }
+        top_count: { type: integer }
+        top_share_milli: { type: integer }
+  - name: consensus_verdict
+    schema:
+      type: object
+      required: [reached, rationale]
+      properties:
+        reached: { type: boolean }
+        rationale: { type: string }
+  - name: schedule_hint
+    schema:
+      type: object
+      required: [stop, next_max_iterations]
+      properties:
+        stop: { type: boolean }
+        next_max_iterations: { type: integer }
+  - name: visibility_plan
+    schema:
+      type: object
+      required: [rules]
+      properties:
+        rules:
+          type: array
+          items:
+            type: object
+            required: [persona, visible_peers]
+            properties:
+              persona: { type: string }
+              visible_peers: { type: array, items: { type: string } }
+  - name: weight_vector
+    schema:
+      type: object
+      required: [scores]
+      properties:
+        scores:
+          type: array
+          items:
+            type: object
+            required: [persona, weight_milli]
+            properties:
+              persona: { type: string }
+              weight_milli: { type: integer }
+  - name: final_answer
+    schema:
+      type: object
+      required: [claim, rationale, support]
+      properties:
+        claim: { type: string }
+        rationale: { type: string }
+        support: { type: string }
+
+stores:
+  - name: evidence
+    type: collection
+    item: evidence_item
+    writer: evidence_arbiter           # 检索结果回灌的运行期写权限仲裁者（逃逸节点）为唯一写者
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: transcript
+    type: collection
+    item: turn_record
+    writer: rounds.collector            # 具名黑板：供裁决器/审计读取；并行辩手不写（INV-2）
+    lifecycle: run
+    retention: { max_items: 128 }
+  - name: peer_board
+    type: collection
+    item: peer_message
+    writer: rounds.broadcast           # 匿名广播板：供同伴读取（去标识 + 乱序 + 限长）
+    lifecycle: run
+    retention: { max_items: 128 }
+  - name: visibility_matrix
+    type: collection
+    item: visibility_plan
+    writer: rounds.visibility          # 逐节点可见性矩阵（L4 产出，体外声明）
+    lifecycle: run
+    retention: { max_items: 64 }
+
+nodes:
+  - id: retrieve
+    kind: task
+    uses: { tool: pkg.debatekit.search@1 }        # 检索/工具节点（可选证据）
+    emits: { raw_evidence: "list<evidence_item>" }
+
+  - id: evidence_arbiter
+    kind: task
+    escape:                                     # ⑥b-8：工具结果回灌共享工件的运行期写权限仲裁
+      kind: runtime_context_mutation
+      impl_ref: packages/debatekit@1.0.0/hatches/evidence_arbiter.py
+      reason: "检索结果是否回灌共享证据槽、只回灌给哪些辩手，由运行期写权限仲裁决定；DSL 的 stores.writer 只约束静态写者集合，无运行期回灌范围声明"
+      owner: lang-team
+      share_budget_pct: 10
+    consumes: { raw_evidence: "list<evidence_item>" }
+    writes: [evidence]
+    emits: { evidence: "list<evidence_item>" }
+
+  - id: rounds
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: debate_map
+            kind: task
+            map:
+              over: input.personas              # 运行时定基数 = N 辩手；实例间无横向边（互不可见）
+              body:
+                nodes:
+                  - id: prompt_assembler
+                    kind: task
+                    escape:                       # ⑥b-6：针对性点名反驳与个性化提示的运行期拼装
+                      kind: runtime_context_mutation
+                      impl_ref: packages/debatekit@1.0.0/hatches/prompt_assembler.py
+                      reason: "按本实例 persona 与点名反驳对象运行期拼装提示；DSL 的 template.vars 只能对静态模板做参数化，无法运行期拼装 prompt 程序"
+                      owner: lang-team
+                      share_budget_pct: 10
+                    consumes: { item: { type: string } }
+                    reads: [peer_board]
+                    emits: { prompt: prompt_text }
+                  - id: debater
+                    kind: task
+                    uses:
+                      model: route.main@1
+                      memory: [pkg.debatekit.belief@1]   # 局部信念：每代理私有、逐轮覆盖写（组件契约注入）
+                    consumes: { prompt: prompt_text }
+                    emits: { position: position }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.debatekit.system, vars: { persona: arg.item }, quota_tokens: 500 }
+                        - { from: input, fields: [question], policy: project, quota_tokens: 400 }
+                        - { from: store, store: evidence, policy: full, quota_tokens: 1200 }
+                        - { from: store, store: peer_board, policy: retrieve, component: pkg.debatekit.per_peer_view@1, args: { k: 8 }, quota_tokens: 2400 }
+                        - { from: store, store: visibility_matrix, policy: full, quota_tokens: 200 }
+                        - { from: edge, port: prompt, policy: project, quota_tokens: 800 }
+                edges:
+                  - { from: prompt_assembler, output: prompt, to: debater, input: prompt }
+            emits: { items: { from_body: debater.position } }   # map 自动包 list<>
+
+          - id: peer_order
+            kind: task
+            escape:                           # ⑥b-2：同伴消息顺序的不可复现随机化
+              kind: runtime_context_mutation
+              impl_ref: packages/debatekit@1.0.0/hatches/peer_order.py
+              reason: "论文按不可复现随机序广播同伴解以抑制位置偏好；AFB 只有种子化 shuffle_seeded（可复现），运行期无种子置换无算子落点"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { items: "list<position>" }
+            emits: { ordered: "list<position>" }
+
+          - id: collector
+            kind: transform
+            writes: [transcript]             # 具名黑板追加写（黑板唯一写者）
+            consumes: { ordered: "list<position>" }
+            ops:
+              - { op: project, port: ordered, into: transcript }    # 末端落点 = store
+            emits: {}
+
+          - id: broadcast
+            kind: transform
+            writes: [peer_board]             # 匿名广播板追加写（去标识 + 种子化乱序 + 限长）
+            consumes: { ordered: "list<position>" }
+            ops:
+              - { op: anonymize, port: ordered, drop: [persona], into: anonymous }
+              - { op: shuffle_seeded, port: anonymous, seed_ref: input.question, into: shuffled }
+              - { op: truncate, port: shuffled, max_tokens_each: 200, into: peer_board }
+            emits: {}
+
+          - id: tally
+            kind: transform
+            consumes: { ordered: "list<position>" }
+            ops:
+              - { op: tally, port: ordered, by: claim, into: result }
+            emits: { result: tally_result }
+
+          - id: converge_gate
+            kind: gate                        # 安全点：聚合值合法性守卫
+            consumes: { result: tally_result }
+            assert: "inputs.result.top_share_milli >= 0 && inputs.result.top_share_milli <= 1000"
+
+          - id: consensus_pred
+            kind: task
+            escape:                           # ⑥b-1：语义级共识判定
+              kind: llm_predicate
+              impl_ref: packages/debatekit@1.0.0/hatches/consensus_pred.py
+              reason: "「是否已达成语义一致」是 LLM 判定的运行期谓词，停机条件无法静态声明；静态份额阈值只作近似"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { result: tally_result }
+            emits: { verdict: consensus_verdict }
+
+          - id: adaptive_rounds
+            kind: task
+            escape:                           # ⑥b-3：运行时自适应轮数与震荡退火
+              kind: meta_loop
+              impl_ref: packages/debatekit@1.0.0/hatches/adaptive_rounds.py
+              reason: "自适应轮数与震荡后改写提示的退火策略需运行期改写调度参数；DSL 的 loop.max_iterations 是编译期常量"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { result: tally_result }
+            emits: { advice: schedule_hint }
+
+          - id: weighting
+            kind: task
+            escape:                           # ⑥b-5：运行时按可信度加权裁决
+              kind: llm_predicate
+              impl_ref: packages/debatekit@1.0.0/hatches/weighting.py
+              reason: "裁决时按可信度加权的权重由 LLM 在运行期给出后注入数值；核心无运行期数值注入通道"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { result: tally_result }
+            emits: { weights: weight_vector }
+
+          - id: visibility
+            kind: task
+            escape:                           # ⑥b-7：逐节点可见性矩阵
+              kind: runtime_context_mutation
+              impl_ref: packages/debatekit@1.0.0/hatches/visibility.py
+              reason: "「同伴不可见对方系统提示与内部 CoT」的逐节点可见性矩阵需运行期裁剪上下文；DSL 无可见性裁剪声明位（context.sections 只做来源装配）"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { ordered: "list<position>" }
+            writes: [visibility_matrix]
+            emits: {}
+
+          - id: topology_mutator
+            kind: task
+            escape:                           # ⑥b-4：运行时修改辩论拓扑
+              kind: meta_loop
+              impl_ref: packages/debatekit@1.0.0/hatches/topology_mutator.py
+              reason: "代理掉线、临时增反驳者、锦标赛式配对属运行期图变异；DSL 的 map.over 只能静态解析到列表，改图只能经逃逸并版本化登记"
+              owner: lang-team
+              share_budget_pct: 15
+            consumes: { ordered: "list<position>" }
+            emits: { roster: "list<persona_ref>" }
+
+        edges:
+          - { from: debate_map, output: items, to: peer_order, input: items }
+          - { from: peer_order, output: ordered, to: collector, input: ordered }
+          - { from: peer_order, output: ordered, to: broadcast, input: ordered }
+          - { from: peer_order, output: ordered, to: tally, input: ordered }
+          - { from: peer_order, output: ordered, to: visibility, input: ordered }
+          - { from: peer_order, output: ordered, to: topology_mutator, input: ordered }
+          - { from: tally, output: result, to: converge_gate, input: result }
+          - { from: tally, output: result, to: consensus_pred, input: result }
+          - { from: tally, output: result, to: adaptive_rounds, input: result }
+          - { from: tally, output: result, to: weighting, input: result }
+      max_iterations: 4                       # K 轮上限（经验 3–5）
+      carried:
+        - { store: transcript, max_items: 128 }
+        - { store: peer_board, max_items: 128 }
+        - { store: visibility_matrix, max_items: 64 }
+      safety_points:
+        - { node: converge_gate, kind: gate }
+      exit_when: "tally.result.top_share_milli >= 700 || consensus_pred.verdict.reached == true || adaptive_rounds.advice.stop == true"
+      on_exhausted: continue                   # 轮次到顶即止，保留当前多数（卡④）
+    emits:
+      positions: { from_body: debate_map.items }
+      roster: { from_body: topology_mutator.roster }
+      weights: { from_body: weighting.weights }
+
+  - id: vote
+    kind: transform
+    consumes: { positions: "list<position>" }
+    ops:
+      - { op: tally, port: positions, by: claim, into: stats }
+      - { op: select_best, port: positions, by: confidence_milli, prefer: max, into: winner }
+    emits:
+      stats: tally_result
+      winner: position
+    route:                                     # 明确多数 → 直接定案；否则交裁决器（fallback）
+      default: adjudicate
+      rules:
+        - { when: "input.mode == 'majority' && vote.stats.top_count * 2 > vote.stats.answers", goto: finalize }
+
+  - id: adjudicate
+    kind: task
+    uses: { model: route.judge@1 }
+    consumes:
+      winner: position
+      roster: "list<persona_ref>"
+      weights: weight_vector
+    emits:
+      verdict_text: verdict_text
+      confidence_milli: milli_int
+    context:
+      sections:
+        - { from: template, template_ref: pkg.debatekit.judge_system, quota_tokens: 500 }
+        - { from: input, fields: [question, mode], policy: project, quota_tokens: 400 }
+        - { from: edge, port: winner, policy: project, quota_tokens: 400 }
+        - { from: edge, port: roster, policy: project, quota_tokens: 300 }
+        - { from: edge, port: weights, policy: project, quota_tokens: 300 }
+        - { from: store, store: transcript, policy: full, quota_tokens: 6000 }
+    route:                                     # 裁决置信足够 → 解析自由文本；否则进多级回退链
+      default: fallback_chain
+      rules:
+        - { when: "adjudicate.confidence_milli >= 300", goto: free_text_verdict }
+
+  - id: free_text_verdict
+    kind: task
+    escape:                                   # 卡④：裁决器自由文本判定 → 结构化 winner
+      kind: free_text_parser
+      impl_ref: packages/debatekit@1.0.0/hatches/free_text_verdict.py
+      reason: "裁决器输出为自由文本，需解析为结构化 winner；核心无自由文本解析算子（解析失败类已在 failures.schema_invalid 记账）"
+      owner: lang-team
+      share_budget_pct: 10
+    consumes: { verdict_text: verdict_text }
+    emits: { winner: position }
+
+  - id: fallback_chain
+    kind: task
+    escape:                                   # ⑥b-9：多级回退链
+      kind: meta_loop
+      impl_ref: packages/debatekit@1.0.0/hatches/fallback_chain.py
+      reason: "平票→裁判→截断→中止 的多级回退在运行期择路，非纯静态图；DSL 的 route 只能按静态 CEL 分派一次"
+      owner: lang-team
+      share_budget_pct: 15
+    consumes: { verdict_text: verdict_text }
+    reads: [transcript]
+    emits: { winner: position }
+
+  - id: finalize
+    kind: transform
+    consumes: { winner: position }
+    ops:
+      - { op: project, port: winner, into: answer }
+    emits: { answer: final_answer }
+
+edges:
+  - { from: retrieve, output: raw_evidence, to: evidence_arbiter, input: raw_evidence }
+  - { from: evidence_arbiter, output: evidence, to: rounds, input: evidence }
+  - { from: rounds, output: positions, to: vote, input: positions }
+  - { from: rounds, output: roster, to: adjudicate, input: roster }
+  - { from: rounds, output: weights, to: adjudicate, input: weights }
+  - { from: vote, output: winner, to: finalize, input: winner }              # route 规则命中
+  - { from: vote, output: winner, to: adjudicate, input: winner }            # route default 命中
+  - { from: adjudicate, output: verdict_text, to: free_text_verdict, input: verdict_text }
+  - { from: adjudicate, output: verdict_text, to: fallback_chain, input: verdict_text }
+  - { from: free_text_verdict, output: winner, to: finalize, input: winner }
+  - { from: fallback_chain, output: winner, to: finalize, input: winner }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+    - { id: turns_cap, dimension: turns, scope: loop:rounds, cap: 30 }
+    - { id: token_cap, dimension: tokens_total, scope: loop:rounds, cap: 600000 }
+  stop:
+    - { when: "steps.turns >= 24", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: tool_error
+      route: same_node
+      feedback: error_observation
+    - class: schema_invalid
+      retry: { max: 2, backoff_ms: 0 }
+      fallback_route: free_text_verdict          # 限次重解析仍败 → 裁决器自由文本判定
+    - class: gate_refused
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      route: vote                                 # 成本超限：中止并返回当前多数
+      terminal: true
+      outcome: completed

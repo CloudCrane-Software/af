@@ -1,0 +1,296 @@
+version: 1
+meta:
+  name: react_interleaved
+  graph_version: "1.0"
+  entry: react_loop
+  input: react_input
+  output: { ref: answer, from: react_loop }
+  intent: "ReAct 单体交错循环：policy 节点出边→动作切分→环境执行→观察回灌 policy（自环）；轨迹=唯一记忆；语义终止 + 步数硬上限 + 上下文窗口三重预算；卡片⑥(b) 八项以七类逃逸词表逐条记账"
+
+types:
+  - name: react_input
+    schema:
+      type: object
+      required: [question]
+      properties: { question: { type: string } }
+  - name: action_space                       # ⑥b-1：运行时才确定的动作词表（ALFWorld/WebShop）
+    schema:
+      type: object
+      required: [actions, signature]
+      properties:
+        actions: { type: array, items: { type: string } }
+        signature: { type: string }
+  - name: turn_text                          # LLM 一次生成的原始文本（Thought+Action 同批，未切分）
+    schema:
+      type: object
+      required: [raw]
+      properties: { raw: { type: string } }
+  - name: turn_record                        # 切分后的一轮：推理段 + 动作段
+    schema:
+      type: object
+      required: [thought, action_text]
+      properties:
+        thought: { type: string }
+        action_text: { type: string }
+  - name: action_call                        # ⑥a-2：工具名 + 位置参数（search_entity(entity)、click[button]）
+    schema:
+      type: object
+      required: [tool, args_text, matched]
+      properties:
+        tool: { type: string }
+        args_text: { type: string }
+        matched: { type: boolean }          # 动作是否落在运行时动作词表内
+  - name: decision                           # 终止/继续的机器可读判据（由动作串解析而来）
+    schema:
+      type: object
+      required: [kind, answer_text]
+      properties:
+        kind: { type: string }
+        answer_text: { type: string }
+  - name: completion                         # ⑥b-5：语义级终止判据的结果
+    schema:
+      type: object
+      required: [done, confidence_milli]
+      properties:
+        done: { type: boolean }
+        confidence_milli: { type: integer }
+  - name: observation                        # ③：观察是纯文本，无结构化 schema
+    schema:
+      type: object
+      required: [text]
+      properties: { text: { type: string } }
+  - name: belief_state                       # ⑥b-4：可被覆盖的断言/scratchpad 区（区别于只追加的轨迹）
+    schema:
+      type: object
+      required: [beliefs]
+      properties: { beliefs: { type: array, items: { type: string } } }
+  - name: context_bundle                     # ⑥b-7：运行时组装并裁剪/摘要后的上下文包
+    schema:
+      type: object
+      required: [text, window_items]
+      properties:
+        text: { type: string }
+        window_items: { type: integer }
+  - name: hint                               # ⑥b-6：运行时决定的恢复建议（换查询/回退）
+    schema:
+      type: object
+      required: [text]
+      properties: { text: { type: string } }
+  - name: answer                             # ⑤：HotpotQA 需答案与支撑句同时正确
+    schema:
+      type: object
+      required: [final, supports]
+      properties:
+        final: { type: string }
+        supports: { type: array, items: { type: string } }
+
+stores:
+  - name: trajectory                         # ⑥a-4：追加式工件 (Thought, Action, Observation)，唯一的记忆载体
+    type: message_log
+    writer: react_loop.reasoner              # INV-2：唯一写者 = policy 节点（观察回灌在节点运行时内串行追加）
+    lifecycle: run
+    retention: { max_items: 128 }
+  - name: beliefs                            # ⑥b-4：可覆盖的断言区（单写者 + 覆盖写，非追加）
+    type: collection
+    item: belief_state
+    writer: react_loop.beliefs
+    lifecycle: run
+    retention: { max_items: 8 }
+
+nodes:
+  - id: react_loop
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: registry
+            kind: task
+            escape:                                   # L4 记账：卡片⑥b-1（动作空间运行时才确定）
+              kind: dynamic_tool_registry
+              impl_ref: packages/reactkit@1.0.0/hatches/action_registry.py
+              reason: "动作词表由运行时环境决定（ALFWorld 的 look/inventory/goto/open/examine、WebShop 由页面 DOM 决定的 click 目标）；静态 uses.tools 只能声明已知动作面，故词表解析与注册逃逸；产出的 action_space 同时喂给 policy（可见动作集）与动作解析器（匹配校验）"
+              owner: lang-team
+              share_budget_pct: 5
+            emits: { action_space: action_space }
+
+          - id: reasoner
+            kind: task
+            uses:
+              model: route.main@1
+              tools: [pkg.reactkit.hopqa_api, pkg.reactkit.lookup]   # ⑥a-2：动作 schema 绑定（HotpotQA 侧的静态工具面）
+            writes: [trajectory]                     # ⑥a-4/⑥a-5：轨迹只写 policy 一处
+            consumes:
+              action_space: action_space
+              observation: observation
+              context_bundle: context_bundle
+              hint: hint
+            emits: { turn: turn_text }              # 一次生成 Thought+Action（同批，⑥b-3）
+            context:
+              sections:
+                # ⑥a-8：少样本轨迹 = 静态 prompt 常量；"推理先于动作"由边序表达
+                - { from: template, template_ref: pkg.reactkit.fewshot_react, quota_tokens: 900 }
+                - { from: input, fields: [question], policy: project, quota_tokens: 200 }
+                # ⑥a-5：记忆 = 上下文窗口，无外部记忆库；latest_k 为静态上界近似
+                - { from: store, store: trajectory, policy: latest_k, args: { k: 24 }, quota_tokens: 4000 }
+                # ⑥b-4：可覆盖的断言区（与只追加的轨迹分开）
+                - { from: store, store: beliefs, policy: full, quota_tokens: 400 }
+                # ⑥b-1：运行时动作词表进入上下文
+                - { from: edge, port: action_space, policy: project, quota_tokens: 300 }
+                # ⑥a-3：标准"工具→上下文"通道：观察原样回灌，不归一化不改写
+                - { from: edge, port: observation, policy: project, quota_tokens: 600, optional: true }
+                # ⑥b-7：运行时组装/裁剪后的上下文包（首轮无值，故 optional）
+                - { from: edge, port: context_bundle, policy: project, quota_tokens: 3000, optional: true }
+                # ⑥b-6：运行时恢复策略产出的建议
+                - { from: edge, port: hint, policy: project, quota_tokens: 200, optional: true }
+
+          - id: compose
+            kind: task
+            escape:                                   # L4 记账：卡片⑥b-3（一次生成多段 + 生成后再分派）
+              kind: program_synthesis
+              impl_ref: packages/reactkit@1.0.0/hatches/turn_composer.py
+              reason: "论文的 Policy 一次调用同时产出 Thought 与 Action 两段，核心节点每端口对应一件工件，无法表达『一次生成多产物』的复合发射与再分派；本节点把原始生成文本合成为 (thought, action_text) 复合工件后再交解析器"
+              owner: lang-team
+              share_budget_pct: 5
+            consumes: { turn: turn_text }
+            emits: { record: turn_record }
+
+          - id: parse
+            kind: task
+            escape:                                   # L4 记账：卡片⑥b-2（自由文本双向解析）
+              kind: free_text_parser
+              impl_ref: packages/reactkit@1.0.0/hatches/action_parser.py
+              reason: "Action/Thought 由同一段生成文本启发式切分（非固定 slot schema），观察侧也要求把纯文本观察解析为可用记录；解析结果与运行时动作词表比对得出 matched；静态边与 typed 端口只能承载已切好的动作，启发式切分必须逃逸"
+              owner: lang-team
+              share_budget_pct: 8
+            consumes:
+              record: turn_record
+              action_space: action_space
+            emits:
+              action: action_call
+              decision: decision
+
+          - id: judge
+            kind: task
+            escape:                                   # L4 记账：卡片⑥b-5（语义级终止判据）
+              kind: llm_predicate
+              impl_ref: packages/reactkit@1.0.0/hatches/completion_judge.py
+              reason: "『我认为已完成』由模型判定后需外部解析才能成为控制流信号；静态条件边只能表达 finish 动作串这一机器可见形式，语义级完成判定需 LLM 判定后回传 completion 工件；本节点同时透传待执行动作，未完成时继续走动作路径"
+              owner: lang-team
+              share_budget_pct: 8
+            consumes:
+              decision: decision
+              action: action_call
+            emits:
+              action: action_call
+              verdict: completion
+              answer: answer
+            route:
+              default: action_valid                  # 未完成 → 继续执行动作
+              rules:
+                - { when: "judge.verdict.done == true", goto: exit }   # ⑥a-6：finish → 结束
+
+          - id: action_valid
+            kind: gate                                # 验证面：动作必须落在运行时动作词表内（内建 passed 端口）
+            consumes: { action: action_call }
+            assert: "inputs.action.matched == true"
+            emits: { action: action_call }
+            route:
+              default: env                            # 合法动作 → 交环境执行
+              rules:
+                - { when: "action_valid.passed == false", goto: recovery }   # 非法动作 → 运行时恢复策略
+
+          - id: env
+            kind: task
+            escape:                                   # L4 记账：卡片⑥b-8（有状态交互环境契约）
+              kind: env_adapter
+              impl_ref: packages/reactkit@1.0.0/hatches/env_adapter.py
+              reason: "ALFWorld/WebShop 需环境适配器：会话状态保持、回合同步、非法动作反馈，语义远宽于无状态工具；执行后返回自然语言观察，核心侧只能承接一个已执行动作的结果端口"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { action: action_call }
+            emits: { observation: observation }
+
+          - id: recovery
+            kind: task
+            escape:                                   # L4 记账：卡片⑥b-6（错误恢复策略运行时决定）
+              kind: meta_loop
+              impl_ref: packages/reactkit@1.0.0/hatches/recovery_policy.py
+              reason: "动作非法/工具失败后是重试、换查询还是回退，由运行时依据失败原因与轨迹决定，而非预定义 error route；静态 failures.route 只能给出一条固定回退路径，策略选择本身需运行时元决策"
+              owner: lang-team
+              share_budget_pct: 5
+            consumes: { action: action_call }
+            emits: { hint: hint }
+
+          - id: beliefs
+            kind: task
+            escape:                                   # L4 记账：卡片⑥b-4（思考可被覆盖）
+              kind: runtime_context_mutation
+              impl_ref: packages/reactkit@1.0.0/hatches/belief_patch.py
+              reason: "模型可在后续 Thought 中显式改口（如『我错了…』），事实覆盖旧结论；不可变工件模型只能追加，需一个可写的断言/scratchpad 区；本节点以覆盖写方式更新 beliefs 槽（轨迹本身仍只追加，错误历史保持可见 —— 卡片④）"
+              owner: lang-team
+              share_budget_pct: 3
+            writes: [beliefs]
+            consumes:
+              observation: observation
+              record: turn_record
+            emits: { belief: belief_state }
+
+          - id: assembler
+            kind: task
+            escape:                                   # L4 记账：卡片⑥b-7（上下文全量回灌与裁剪）
+              kind: runtime_context_mutation
+              impl_ref: packages/reactkit@1.0.0/hatches/context_assembler.py
+              reason: "轨迹随步数线性膨胀，论文按全量回灌 + 运行时裁剪/摘要组织上下文；静态 context 段的 latest_k/summarize 策略只能给固定上界，自适应截断/摘要需运行时组装器；本节点产出 context_bundle 注入 policy"
+              owner: lang-team
+              share_budget_pct: 4
+            reads: [trajectory]
+            consumes: { belief: belief_state }
+            emits: { context_bundle: context_bundle }
+        edges:
+          - { from: registry, output: action_space, to: reasoner, input: action_space }
+          - { from: registry, output: action_space, to: parse, input: action_space }
+          - { from: reasoner, output: turn, to: compose, input: turn }
+          - { from: compose, output: record, to: parse, input: record }
+          - { from: compose, output: record, to: beliefs, input: record }
+          - { from: parse, output: decision, to: judge, input: decision }
+          - { from: parse, output: action, to: judge, input: action }
+          - { from: judge, output: action, to: action_valid, input: action }
+          - { from: action_valid, output: action, to: env, input: action }
+          - { from: action_valid, output: action, to: recovery, input: action }
+          - { from: env, output: observation, to: reasoner, input: observation }   # ⑥a-3：工具→上下文回边
+          - { from: env, output: observation, to: beliefs, input: observation }
+          - { from: beliefs, output: belief, to: assembler, input: belief }
+          - { from: assembler, output: context_bundle, to: reasoner, input: context_bundle }
+          - { from: recovery, output: hint, to: reasoner, input: hint }
+      max_iterations: 12                              # ⑥a-7：步数上限（论文未给确切数值，此处取 12，数值存疑）
+      carried:
+        - { store: trajectory, max_items: 128 }       # E2211：体内写、体外声明的 store 全部登记
+        - { store: beliefs, max_items: 8 }
+      safety_points:
+        - { node: action_valid, kind: gate }         # 每轮动作必须过验证面（动作合法性）
+      exit_when: "judge.verdict.done == true"         # 语义终止（⑥a-6）：模型宣告完成即收束
+      on_exhausted: fail                              # ④：达最大步数则截断，样本判失败
+    emits: { answer: { from_body: judge.answer } }
+
+edges: []                       # 根图只有 react_loop 一个节点：交错循环全部在受控循环体内
+
+policies:
+  budgets:
+    - { id: turn_cap, dimension: turns, scope: loop:react_loop, cap: 12 }          # ⑤：步数上限
+    - { id: token_cap, dimension: tokens_total, scope: loop:react_loop, cap: 60000 } # ⑤：上下文窗口预算
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 120 }                    # ⑤：成本预算
+  stop:
+    - { when: "last_tool.first_line in ['FINISH', 'FINAL ANSWER']", outcome: completed }  # ⑥a-6：终止动作哨兵
+    - { when: "steps.tool_free >= 2", outcome: failed }                                 # 无动作轮上限（守护性判据，非论文机制）
+  failures:
+    - class: tool_error                    # ④：工具/环境失败返回"无结果"，由下一轮 Thought 决定换查询或换动作
+      route: same_node
+      feedback: error_observation          # 论文实现无重试计数与回退表：故不写 retry
+    - class: gate_refused                  # 动作不在运行时词表内 → 交运行时恢复策略（⑥b-6）
+      route: same_node
+      feedback: invalid_action_observation
+    - class: transport_transient           # 传输层瞬态故障（宿主设施级，非论文机制）
+      retry: { max: 3, backoff_ms: 800 }
+    - class: budget_exhausted              # ④：步数/预算到顶 → 截断判失败
+      terminal: true
+      outcome: failed

@@ -1,0 +1,532 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "aflow_search",
+      "entry": "loader",
+      "nodes": [
+        {
+          "id": "best",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "loader",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "search",
+          "kind": "task",
+          "loop_spec": {
+            "body": "aflow_search/search",
+            "max_iterations": 20,
+            "carried": [
+              {
+                "store": "experience",
+                "max_items": 20
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "assess",
+                "kind": "check"
+              }
+            ],
+            "exit_when": {
+              "source": "budget.cents_spent >= budget.cents_cap * 9 / 10",
+              "roots": [
+                "budget"
+              ],
+              "digest": "3be1e182158bab26f6795b5974234a63c498ed5ca6b81c13be78e05453256197"
+            },
+            "on_exhausted": "continue"
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "loader",
+          "output": "done",
+          "to": "search",
+          "input": "done",
+          "checkpoint": false
+        },
+        {
+          "from": "search",
+          "output": "done",
+          "to": "best",
+          "input": "done",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "aflow_search/search": {
+          "graph_version": "1.0",
+          "entry": "synth",
+          "nodes": [
+            {
+              "id": "assess",
+              "kind": "check",
+              "capability_refs": []
+            },
+            {
+              "id": "run",
+              "kind": "task",
+              "map_spec": {
+                "body": "aflow_search/search/run",
+                "over": "synth.candidates"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "scoreboard",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "synth",
+              "kind": "task",
+              "escape": {
+                "impl_ref": "packages/searchkit@1.0.0/hatches/graph_synth.py",
+                "reason": "元智能体产出候选变体：核心只允许对已注册算子集做参数化组变；任意拓扑合成经逃逸并版本化登记后实例化",
+                "owner": "lang-team",
+                "share_budget_pct": 30
+              },
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "assess",
+              "output": "scores",
+              "to": "scoreboard",
+              "input": "scores",
+              "checkpoint": false
+            },
+            {
+              "from": "run",
+              "output": "items",
+              "to": "assess",
+              "input": "items",
+              "checkpoint": false
+            },
+            {
+              "from": "synth",
+              "output": "candidates",
+              "to": "run",
+              "input": "candidates",
+              "checkpoint": false
+            }
+          ]
+        },
+        "aflow_search/search/run": {
+          "graph_version": "1.0",
+          "entry": "gen_a",
+          "nodes": [
+            {
+              "id": "aggregate",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "gen_a",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "gen_b",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "gen_a",
+              "output": "draft",
+              "to": "aggregate",
+              "input": "draft_a",
+              "checkpoint": false
+            },
+            {
+              "from": "gen_b",
+              "output": "draft",
+              "to": "aggregate",
+              "input": "draft_b",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "search_input",
+      "output_type": "candidate",
+      "output_from": "best",
+      "intent": "搜索元循环=受控循环：合成（L4）→候选执行→外部评估→经验回灌；答案与分数对候选不可读"
+    },
+    "types": {
+      "answer": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "candidate": {
+        "properties": {
+          "parent": {
+            "type": "integer"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "parent"
+        ],
+        "type": "object"
+      },
+      "score_record": {
+        "properties": {
+          "candidate": {
+            "type": "integer"
+          },
+          "cost_milli": {
+            "type": "integer"
+          },
+          "quality_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate",
+          "quality_milli",
+          "cost_milli"
+        ],
+        "type": "object"
+      },
+      "search_input": {
+        "properties": {
+          "problem": {
+            "type": "string"
+          },
+          "validation_set": {
+            "items": {
+              "properties": {
+                "prompt": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "prompt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "problem",
+          "validation_set"
+        ],
+        "type": "object"
+      },
+      "tally_result": {
+        "properties": {
+          "answers": {
+            "type": "integer"
+          },
+          "top_count": {
+            "type": "integer"
+          },
+          "top_share_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "answers",
+          "top_count",
+          "top_share_milli"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "answers_ref": {
+        "name": "answers_ref",
+        "kind": "collection",
+        "item": "answer",
+        "writer": "loader",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": true
+      },
+      "experience": {
+        "name": "experience",
+        "kind": "collection",
+        "item": "score_record",
+        "writer": "search.scoreboard",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 20
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "best": {
+        "node_id": "best",
+        "components": {},
+        "reads": [
+          "experience"
+        ],
+        "artifacts": {
+          "winner": {
+            "type": "candidate",
+            "is_final": true,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "select_best",
+            "port": "experience",
+            "into": "winner",
+            "by": "quality_milli",
+            "prefer": "max"
+          }
+        ]
+      },
+      "loader": {
+        "node_id": "loader",
+        "components": {
+          "tools": {
+            "pkg.searchkit.corpus@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "answers_ref"
+        ],
+        "artifacts": {
+          "done": {
+            "type": "signal",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search": {
+        "node_id": "search",
+        "components": {}
+      },
+      "search.assess": {
+        "node_id": "assess",
+        "components": {
+          "unit": "pkg.searchkit.assess@1"
+        },
+        "reads": [
+          "answers_ref"
+        ],
+        "consumes": {
+          "items": "list<answer>"
+        },
+        "artifacts": {
+          "scores": {
+            "type": "list<score_record>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search.run": {
+        "node_id": "run",
+        "components": {},
+        "artifacts": {
+          "items": {
+            "from_body": "aggregate.answer",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search.run.aggregate": {
+        "node_id": "aggregate",
+        "components": {},
+        "consumes": {
+          "draft_a": "answer",
+          "draft_b": "answer"
+        },
+        "artifacts": {
+          "answer": {
+            "type": "answer",
+            "is_final": false,
+            "provenance": null
+          },
+          "votes": {
+            "type": "tally_result",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "tally",
+            "port": "draft_a",
+            "into": "votes",
+            "by": "text"
+          },
+          {
+            "op": "select_best",
+            "port": "draft_b",
+            "into": "answer",
+            "by": "text",
+            "prefer": "max"
+          }
+        ]
+      },
+      "search.run.gen_a": {
+        "node_id": "gen_a",
+        "components": {
+          "model": "route.main@1"
+        },
+        "artifacts": {
+          "draft": {
+            "type": "answer",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.searchkit.solver_system"
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 600,
+            "name": "item",
+            "policy": "project"
+          }
+        ]
+      },
+      "search.run.gen_b": {
+        "node_id": "gen_b",
+        "components": {
+          "model": "route.alt@1"
+        },
+        "artifacts": {
+          "draft": {
+            "type": "answer",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.searchkit.solver_system",
+            "vars": {
+              "variant": "b"
+            }
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 600,
+            "name": "item",
+            "policy": "project"
+          }
+        ]
+      },
+      "search.scoreboard": {
+        "node_id": "scoreboard",
+        "components": {},
+        "writes": [
+          "experience"
+        ],
+        "consumes": {
+          "scores": "list<score_record>"
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "scores",
+            "into": "experience"
+          }
+        ]
+      },
+      "search.synth": {
+        "node_id": "synth",
+        "components": {},
+        "reads": [
+          "experience"
+        ],
+        "artifacts": {
+          "candidates": {
+            "type": "list<candidate>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 5000
+        },
+        {
+          "id": "eval_tokens",
+          "dimension": "tokens_total",
+          "scope": "loop:search",
+          "cap": 2000000
+        }
+      ],
+      "stop": [],
+      "failures": [
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "next_iteration"
+        },
+        {
+          "class": "tool_error",
+          "route": "next_iteration"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "escapes": {
+      "search.synth": {
+        "impl_ref": "packages/searchkit@1.0.0/hatches/graph_synth.py",
+        "reason": "元智能体产出候选变体：核心只允许对已注册算子集做参数化组变；任意拓扑合成经逃逸并版本化登记后实例化",
+        "owner": "lang-team",
+        "share_budget_pct": 30
+      }
+    },
+    "trust": {}
+  }
+}

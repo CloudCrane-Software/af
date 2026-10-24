@@ -1,0 +1,10 @@
+{
+  "package": "autogen",
+  "graphs": [
+    { "name": "team.round_robin", "version": "1.0", "source": "packages/autogen/graphs/team/round_robin@1.0.afb" },
+    { "name": "team.selector", "version": "1.0", "source": "packages/autogen/graphs/team/selector@1.0.afb" },
+    { "name": "team.magentic_one", "version": "1.0", "source": "packages/autogen/graphs/team/magentic_one@1.0.afb" },
+    { "name": "team.swarm", "version": "1.0", "source": "packages/autogen/graphs/team/swarm@1.0.afb" },
+    { "name": "team.graph_flow", "version": "1.0", "source": "packages/autogen/graphs/team/graph_flow@1.0.afb" }
+  ]
+}

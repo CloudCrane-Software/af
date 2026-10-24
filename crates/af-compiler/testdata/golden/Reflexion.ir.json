@@ -1,0 +1,559 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "reflexion_episodic",
+      "entry": "attempts",
+      "nodes": [
+        {
+          "id": "attempts",
+          "kind": "task",
+          "loop_spec": {
+            "body": "reflexion_episodic/attempts",
+            "max_iterations": 4,
+            "carried": [
+              {
+                "store": "episodic_buffer",
+                "max_items": 64
+              },
+              {
+                "store": "trajectory",
+                "max_items": 128
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "verdict",
+                "kind": "check"
+              }
+            ],
+            "args": {
+              "task": "input.task"
+            },
+            "exit_when": {
+              "source": "attempt.passed == true",
+              "roots": [
+                "attempt"
+              ],
+              "digest": "b707e3923259e94f203a322ec06f7be5d99dfe98319a2cf2dc9796466dfff682"
+            },
+            "on_exhausted": "fail"
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [],
+      "subgraphs": {
+        "reflexion_episodic/attempts": {
+          "graph_version": "1.0",
+          "entry": "actor",
+          "nodes": [
+            {
+              "id": "actor",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "judge_inject",
+              "kind": "task",
+              "escape": {
+                "kind": "llm_predicate",
+                "impl_ref": "packages/reflexkit@1.0.0/hatches/judge_inject.py",
+                "reason": "判定单元只支持固定类型判定；卡片④要求的『任务层失败 vs 执行错误』区分与 LLM-as-judge 打分需运行时注入打分函数（卡片⑥b-6），其判定结果以 reflect_decision 工件回传",
+                "owner": "lang-team",
+                "share_budget_pct": 15
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "memorize",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "memorize_guard",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/reflexkit@1.0.0/hatches/memorize_guard.py",
+                "reason": "『反思为空/格式不可解析则跳过写入』与『成功后也反思』等变体由运行时条件决定（卡片⑥b-1、⑥b-7），静态路由只能近似；守卫以 writable 标志回写工件，随后由静态写入点落库",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "reflect",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "verdict",
+              "kind": "check",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "actor",
+              "output": "answer",
+              "to": "verdict",
+              "input": "answer",
+              "checkpoint": false
+            },
+            {
+              "from": "judge_inject",
+              "output": "decision",
+              "to": "reflect",
+              "input": "decision",
+              "checkpoint": false,
+              "guard": {
+                "source": "(judge_inject.decision.warranted == true)",
+                "roots": [
+                  "judge_inject"
+                ],
+                "digest": "ad7a43c0fdd3b34ad448b3d8515c2e1131250423547a71036556656fe6e95bf4"
+              }
+            },
+            {
+              "from": "memorize_guard",
+              "output": "entry",
+              "to": "memorize",
+              "input": "entry",
+              "checkpoint": false,
+              "guard": {
+                "source": "(memorize_guard.entry.writable == true)",
+                "roots": [
+                  "memorize_guard"
+                ],
+                "digest": "d15e66bd4b2de185da69da0bba360ffa70b52a79d26a99ae804272e2ebbda20d"
+              }
+            },
+            {
+              "from": "reflect",
+              "output": "entry",
+              "to": "memorize_guard",
+              "input": "entry",
+              "checkpoint": false
+            },
+            {
+              "from": "verdict",
+              "output": "verdict",
+              "to": "judge_inject",
+              "input": "verdict",
+              "checkpoint": false,
+              "guard": {
+                "source": "(verdict.passed == false)",
+                "roots": [
+                  "verdict"
+                ],
+                "digest": "a34d29889154993eaadda120e2a03d04a749d0d90d10667d7c424aa97e20db36"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "reflexion_input",
+      "output_type": "answer",
+      "output_from": "attempts",
+      "intent": "双层环：外层=多尝试重跑（≤4），内层=Actor 节点运行时内 ReAct 自环；失败→L4 仲裁→反思节点→条件写 Buffer；下一次尝试以 top-k 相似反思为先验注入 Actor 上下文"
+    },
+    "types": {
+      "answer": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "reflect_decision": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "strength": {
+            "type": "integer"
+          },
+          "warranted": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "warranted",
+          "strength",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "reflection_entry": {
+        "properties": {
+          "diagnosis": {
+            "type": "string"
+          },
+          "improvement": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "writable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "task_id",
+          "text",
+          "diagnosis",
+          "improvement",
+          "writable"
+        ],
+        "type": "object"
+      },
+      "reflexion_input": {
+        "properties": {
+          "task": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task",
+          "task_id"
+        ],
+        "type": "object"
+      },
+      "verdict_record": {
+        "properties": {
+          "reason": {
+            "type": "string"
+          },
+          "signal": {
+            "type": "integer"
+          },
+          "success": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "signal",
+          "reason"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "episodic_buffer": {
+        "name": "episodic_buffer",
+        "kind": "collection",
+        "item": "reflection_entry",
+        "writer": "attempts.memorize",
+        "lifecycle": "persistent",
+        "retention": {
+          "policy": "rolling_window",
+          "max_items": 64,
+          "keep_system": true
+        },
+        "eval_input": false
+      },
+      "trajectory": {
+        "name": "trajectory",
+        "kind": "message_log",
+        "writer": "attempts.actor",
+        "lifecycle": "iteration",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "attempts": {
+        "node_id": "attempts",
+        "components": {},
+        "artifacts": {
+          "answer": {
+            "from_body": "actor.answer",
+            "is_final": true,
+            "provenance": null
+          }
+        }
+      },
+      "attempts.actor": {
+        "node_id": "actor",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.reflexkit.env_exec@1": {
+              "effect_class": null
+            },
+            "pkg.reflexkit.search@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "trajectory"
+        ],
+        "artifacts": {
+          "answer": {
+            "type": "answer",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "store",
+            "quota_tokens": 600,
+            "store": "episodic_buffer",
+            "policy": "retrieve",
+            "args": {
+              "k": 2
+            },
+            "component": "pkg.reflexkit.similarity@1"
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 400,
+            "name": "task",
+            "policy": "project"
+          },
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.reflexkit.actor_system"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 4000,
+            "store": "trajectory",
+            "policy": "full"
+          }
+        ]
+      },
+      "attempts.judge_inject": {
+        "node_id": "judge_inject",
+        "components": {},
+        "reads": [
+          "trajectory"
+        ],
+        "consumes": {
+          "verdict": "verdict_record"
+        },
+        "artifacts": {
+          "decision": {
+            "type": "reflect_decision",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "attempts.memorize": {
+        "node_id": "memorize",
+        "components": {},
+        "writes": [
+          "episodic_buffer"
+        ],
+        "consumes": {
+          "entry": "reflection_entry"
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "entry",
+            "into": "episodic_buffer"
+          }
+        ]
+      },
+      "attempts.memorize_guard": {
+        "node_id": "memorize_guard",
+        "components": {},
+        "consumes": {
+          "entry": "reflection_entry"
+        },
+        "artifacts": {
+          "entry": {
+            "type": "reflection_entry",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "attempts.reflect": {
+        "node_id": "reflect",
+        "components": {
+          "model": "route.reflect@1"
+        },
+        "consumes": {
+          "decision": "reflect_decision"
+        },
+        "artifacts": {
+          "entry": {
+            "type": "reflection_entry",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.reflexkit.reflector_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 100,
+            "fields": [
+              "task_id"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 300,
+            "fields": [
+              "warranted",
+              "reason",
+              "strength"
+            ],
+            "port": "decision",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 4000,
+            "store": "trajectory",
+            "policy": "full"
+          }
+        ]
+      },
+      "attempts.verdict": {
+        "node_id": "verdict",
+        "components": {
+          "unit": "pkg.reflexkit.evaluator@1"
+        },
+        "reads": [
+          "trajectory"
+        ],
+        "consumes": {
+          "answer": "answer"
+        },
+        "artifacts": {
+          "verdict": {
+            "type": "verdict_record",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "attempt_turns",
+          "dimension": "turns",
+          "scope": "loop:attempts",
+          "cap": 40
+        },
+        {
+          "id": "plan_cost",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 300
+        },
+        {
+          "id": "plan_tokens",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 800000
+        },
+        {
+          "id": "reflect_calls",
+          "dimension": "model_calls",
+          "scope": "node:attempts.reflect",
+          "cap": 4
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "steps.iterations >= 4",
+            "roots": [
+              "steps"
+            ],
+            "digest": "b5ce6540925e6aa77c123405fd059bac6eb9a3eda5c4b9e64e505ca80b4ecf39"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "environment_failure",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 1000
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {
+      "attempts.judge_inject": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/reflexkit@1.0.0/hatches/judge_inject.py",
+        "reason": "判定单元只支持固定类型判定；卡片④要求的『任务层失败 vs 执行错误』区分与 LLM-as-judge 打分需运行时注入打分函数（卡片⑥b-6），其判定结果以 reflect_decision 工件回传",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "attempts.memorize_guard": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/reflexkit@1.0.0/hatches/memorize_guard.py",
+        "reason": "『反思为空/格式不可解析则跳过写入』与『成功后也反思』等变体由运行时条件决定（卡片⑥b-1、⑥b-7），静态路由只能近似；守卫以 writable 标志回写工件，随后由静态写入点落库",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      }
+    },
+    "trust": {}
+  }
+}

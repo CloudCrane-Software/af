@@ -1,0 +1,8 @@
+{
+  "package": "swarmkit",
+  "graphs": [
+    { "name": "graph.plan_execute_review", "version": "2.1", "source": "packages/swarmkit/graphs/plan_execute_review@2.1.afb" },
+    { "name": "graph.fanout_vote", "version": "1.4", "source": "packages/swarmkit/graphs/fanout_vote@1.4.afb" },
+    { "name": "graph.react_baseline", "version": "1.0", "source": "packages/swarmkit/graphs/react_baseline@1.0.afb" }
+  ]
+}

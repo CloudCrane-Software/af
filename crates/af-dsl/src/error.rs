@@ -44,8 +44,15 @@ pub enum ErrorCode {
     /// E2001 悬空引用（与 af-graph 共享码位）：节点 / store / 入口 / 写者路径 /
     /// carried.store / writes/reads。
     DanglingReference,
+    /// E2002 值域（与 af-graph 共享码位，M1 显式不触发、fix2 起实装）：
+    /// loop.max_iterations 非正 / loop.carried 条目无上界（提案 §1.3
+    /// 「迭代上限 >0（E2002）」「至少一个上界（E2002）」）。
+    ValueOutOfRange,
     /// E2003 重复 id（同作用域节点 id / 类型名 / store 名）。
     DuplicateId,
+    /// E2004 空集合（与 af-graph 共享码位，fix2 起实装）：受控循环未声明
+    /// 安全点（提案 §1.3「缺安全点=拒绝编译，承 E2004」）。
+    EmptyCollection,
     /// E2101 route 出边目标未被任何规则/default 覆盖。
     RouteUncovered,
     /// E2102 route 规则/default 的 goto 不是出边目标也不是 exit。
@@ -115,6 +122,10 @@ pub enum ErrorCode {
     /// E2321 自验证：验证面节点（kind ∈ {check, gate} ∪ human 标记）任一入边
     /// 的生产者是它自己（直接自环；间接自验证 v0.1 不查——提案 §8-4）。
     SelfVerification,
+    /// E2322 安全点非验证面（§6 已分配码位，fix2 起实装）：loop.safety_points
+    /// 的 kind 三值承 af-graph `validate.rs` 语义原样——check→kind=check 节点、
+    /// gate→kind=gate 节点、human→human 标记；不符即拒（提案 §5 inv2 夹具）。
+    SafetyPointNotVerifier,
     /// E2331 评估输入对候选可读：eval_input store 的读者（reads /
     /// context.sections from:store）∉ {writer, 绑定 uses.unit 的 check 节点}。
     EvalInputVisible,
@@ -136,7 +147,9 @@ impl ErrorCode {
             Self::CelNonSubset => "E1052",
             Self::CelNotBoolean => "E1053",
             Self::DanglingReference => "E2001",
+            Self::ValueOutOfRange => "E2002",
             Self::DuplicateId => "E2003",
+            Self::EmptyCollection => "E2004",
             Self::RouteUncovered => "E2101",
             Self::RouteGotoDangling => "E2102",
             Self::RouteUnreachable => "E2103",
@@ -162,6 +175,7 @@ impl ErrorCode {
             Self::StoreMultiWriter => "E2311",
             Self::MapSharedStoreWrite => "E2312",
             Self::SelfVerification => "E2321",
+            Self::SafetyPointNotVerifier => "E2322",
             Self::EvalInputVisible => "E2331",
         }
     }
@@ -181,7 +195,9 @@ impl ErrorCode {
             Self::CelNonSubset => "cel_non_subset",
             Self::CelNotBoolean => "cel_not_boolean",
             Self::DanglingReference => "dangling_reference",
+            Self::ValueOutOfRange => "value_out_of_range",
             Self::DuplicateId => "duplicate_id",
+            Self::EmptyCollection => "empty_collection",
             Self::RouteUncovered => "route_edge_uncovered",
             Self::RouteGotoDangling => "route_goto_dangling",
             Self::RouteUnreachable => "route_rule_unreachable",
@@ -207,6 +223,7 @@ impl ErrorCode {
             Self::StoreMultiWriter => "store_multi_writer",
             Self::MapSharedStoreWrite => "map_shared_store_write",
             Self::SelfVerification => "self_verification",
+            Self::SafetyPointNotVerifier => "safety_point_not_verifier",
             Self::EvalInputVisible => "eval_input_visible",
         }
     }

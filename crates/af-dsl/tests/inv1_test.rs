@@ -349,6 +349,20 @@ fn non_llm_node_in_edges_without_context_is_clean() {
     assert_eq!(check(&src), Vec::<&str>::new());
 }
 
+#[test]
+fn non_llm_node_with_context_in_port_not_sectioned_is_clean() {
+    // 提案 B §5 INV-1 主语 = LLM-bound task 节点；§1 节点表：context「仅
+    // LLM-bound task 可用（INV-1 判定对象）」。非 LLM 节点（check 判定单元）
+    // 带 context 时 E2304 不判——其入边端口是程序性数据载荷（被验证对象），
+    // 不是上下文装配面（G3 复核 2026-10-24：Agensh-DeLM verify/fail_scan）。
+    let src = doc(
+        "  - { id: prod, kind: task, emits: { out: a } }\n  - { id: n1, kind: check, uses: { unit: pkg.u.judge@1 }, consumes: { p: a }, emits: { report: a }, context: { sections: [\
+{ from: template, template_ref: pkg.t, quota_tokens: 100 }] } }\n",
+        "[{ from: prod, output: out, to: n1, input: p }]",
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}
+
 // ---------- E2401 store 视图策略域 ----------
 
 #[test]
@@ -547,9 +561,10 @@ fn arg_resolution_walks_scope_chain_outward() {
         "                  - { id: leaf, kind: task, uses: { model: route.main@1 }, emits: { v: a }, context: { sections: [",
         "                      { from: arg, name: item, policy: project, quota_tokens: 10 },",
         "                      { from: arg, name: x, policy: project, quota_tokens: 10 }] } }",
+        "                  - { id: g, kind: gate, assert: \"true\" }",
         "                edges: []",
         "              max_iterations: 2",
-        "              safety_points: []",
+        "              safety_points: [ { node: g, kind: gate } ]",
         "        edges: []",
         "edges: []",
     ]

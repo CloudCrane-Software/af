@@ -1,0 +1,1000 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "sweagent_aci",
+      "entry": "env_boot",
+      "nodes": [
+        {
+          "id": "agent_loop",
+          "kind": "task",
+          "loop_spec": {
+            "body": "sweagent_aci/agent_loop",
+            "max_iterations": 50,
+            "carried": [
+              {
+                "store": "agent_turns",
+                "max_items": 256
+              },
+              {
+                "store": "tool_turns",
+                "max_items": 256
+              },
+              {
+                "store": "workspace",
+                "max_items": 512
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "format_check",
+                "kind": "check"
+              }
+            ],
+            "args": {
+              "env": "env_boot.env"
+            },
+            "exit_when": {
+              "source": "format_check.verdict.submit == true",
+              "roots": [
+                "format_check"
+              ],
+              "digest": "a10d21a5aff1d030cfe92777ffcb6a23ab438c9338e60d369f05fc9902a8c1c3"
+            },
+            "on_exhausted": "fail"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "env_boot",
+          "kind": "task",
+          "escape": {
+            "kind": "env_adapter",
+            "impl_ref": "packages/sweagent@1.0.0/hatches/env_boot.py",
+            "reason": "per-instance 仓库 checkout / 依赖安装 / 测试命令生成脚本 + 容器沙箱与工作树快照副作用捕获：运行时基础设施与运行时生成脚本，静态拓扑无法穷举",
+            "owner": "swe-team",
+            "share_budget_pct": 6
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "evaluate",
+          "kind": "check",
+          "capability_refs": []
+        },
+        {
+          "id": "extract_patch",
+          "kind": "transform",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "agent_loop",
+          "output": "done",
+          "to": "extract_patch",
+          "input": "done",
+          "checkpoint": false
+        },
+        {
+          "from": "env_boot",
+          "output": "ready",
+          "to": "agent_loop",
+          "input": "ready",
+          "checkpoint": false
+        },
+        {
+          "from": "extract_patch",
+          "output": "patch",
+          "to": "evaluate",
+          "input": "patch",
+          "checkpoint": true
+        }
+      ],
+      "subgraphs": {
+        "sweagent_aci/agent_loop": {
+          "graph_version": "1.0",
+          "entry": "agent",
+          "nodes": [
+            {
+              "id": "agent",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "command_extract",
+              "kind": "task",
+              "escape": {
+                "kind": "free_text_parser",
+                "impl_ref": "packages/sweagent@1.0.0/hatches/command_extract.py",
+                "reason": "ACI 命令语法与文件编辑的『约定即语义』：行号/旧文本→新文本的软对齐编辑原语，以及自由文本到命令的启发式抽取（缩进、引号、&& 串联、shell 重定向的模糊子集），运行时动态解析，不可静态声明",
+                "owner": "swe-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "env_exec",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "format_check",
+              "kind": "check",
+              "route_exit_guard": {
+                "source": "(format_check.verdict.submit == true) && !((format_check.passed == false))",
+                "roots": [
+                  "format_check"
+                ],
+                "digest": "50f80bce99366f16aafb361be43e204be3e1589edcb74192938cb760f40a80a3"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "human_channel",
+              "kind": "task",
+              "escape": {
+                "kind": "dynamic_tool_registry",
+                "impl_ref": "packages/sweagent@1.0.0/hatches/human_channel.py",
+                "reason": "human-in-the-loop 通道的事件驱动部分：外部人类在轨迹中途注入消息/操作，属外部事件驱动的动态入边与运行时注册的动作面，静态拓扑无声明位",
+                "owner": "swe-team",
+                "share_budget_pct": 4
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "human_gate",
+              "kind": "check",
+              "capability_refs": []
+            },
+            {
+              "id": "human_help",
+              "kind": "task",
+              "human": {
+                "station": "research-console",
+                "role": "researcher",
+                "quorum": 1,
+                "resume": {
+                  "schema": {
+                    "properties": {
+                      "message": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "message"
+                    ],
+                    "type": "object"
+                  }
+                }
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "runtime_ctx",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/sweagent@1.0.0/hatches/runtime_context.py",
+                "reason": "输出截断与摘要的具体裁剪策略、diff 展示与噪声过滤、token 预算到步数的动态换算与历史压缩、以及变体相关的轮次间反思提示注入：均为运行时启发式（截断/压缩算法各版本有差异，卡片标注存疑）",
+                "owner": "swe-team",
+                "share_budget_pct": 8
+              },
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "agent",
+              "output": "action",
+              "to": "format_check",
+              "input": "action",
+              "checkpoint": true
+            },
+            {
+              "from": "command_extract",
+              "output": "command",
+              "to": "env_exec",
+              "input": "command",
+              "checkpoint": false
+            },
+            {
+              "from": "env_exec",
+              "output": "raw_obs",
+              "to": "runtime_ctx",
+              "input": "raw_obs",
+              "checkpoint": false
+            },
+            {
+              "from": "format_check",
+              "output": "action",
+              "to": "command_extract",
+              "input": "action",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((format_check.passed == false) || (format_check.verdict.submit == true))",
+                "roots": [
+                  "format_check"
+                ],
+                "digest": "ad7756787158b0774693623b67b47319aa47e2c73d15bb780eb834d349c753b0"
+              }
+            },
+            {
+              "from": "format_check",
+              "output": "feedback",
+              "to": "agent",
+              "input": "feedback",
+              "checkpoint": false,
+              "guard": {
+                "source": "(format_check.passed == false)",
+                "roots": [
+                  "format_check"
+                ],
+                "digest": "739a393dc814e6b89d8f3060983a77f52537d2b5bac3190b814175729c38cd39"
+              }
+            },
+            {
+              "from": "human_channel",
+              "output": "observation",
+              "to": "agent",
+              "input": "observation",
+              "checkpoint": false
+            },
+            {
+              "from": "human_gate",
+              "output": "observation",
+              "to": "human_channel",
+              "input": "observation",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((human_gate.decision.ask == true))",
+                "roots": [
+                  "human_gate"
+                ],
+                "digest": "06f70c4413983602b32a2ab0d7872c4a1ec0ec3309486607318838ac99d72e40"
+              }
+            },
+            {
+              "from": "human_gate",
+              "output": "observation",
+              "to": "human_help",
+              "input": "observation",
+              "checkpoint": false,
+              "guard": {
+                "source": "(human_gate.decision.ask == true)",
+                "roots": [
+                  "human_gate"
+                ],
+                "digest": "39453fac78b7d3a0d4a9ab7708ee512cebd8b43136697a286622271155ae98e8"
+              }
+            },
+            {
+              "from": "human_help",
+              "output": "hint",
+              "to": "agent",
+              "input": "hint",
+              "checkpoint": false
+            },
+            {
+              "from": "runtime_ctx",
+              "output": "observation",
+              "to": "human_gate",
+              "input": "observation",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "swe_input",
+      "output_type": "verdict",
+      "output_from": "evaluate",
+      "intent": "SWE-agent ACI：单 LLM 节点的串行 ReAct 环（无 map、无并发分支）；受限 ACI 命令工具面；system prompt + 滚动历史 + 最新 observation 的上下文装配；解析/执行/观察格式化分层；submit 终止；步数/token/成本/命令超时四维预算；官方测试评测器外部化（模型不可见金标准）"
+    },
+    "types": {
+      "agent_action": {
+        "properties": {
+          "command": {
+            "type": "string"
+          },
+          "submit": {
+            "type": "boolean"
+          },
+          "thought": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "thought",
+          "command",
+          "submit"
+        ],
+        "type": "object"
+      },
+      "env_handle": {
+        "properties": {
+          "container": {
+            "type": "string"
+          },
+          "repo_path": {
+            "type": "string"
+          },
+          "test_command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "container",
+          "repo_path",
+          "test_command"
+        ],
+        "type": "object"
+      },
+      "eval_ref": {
+        "properties": {
+          "fail_to_pass": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "test_patch": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "test_patch",
+          "fail_to_pass"
+        ],
+        "type": "object"
+      },
+      "format_verdict": {
+        "properties": {
+          "error": {
+            "type": "string"
+          },
+          "submit": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "error",
+          "submit"
+        ],
+        "type": "object"
+      },
+      "human_decision": {
+        "properties": {
+          "ask": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ask"
+        ],
+        "type": "object"
+      },
+      "human_hint": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "type": "object"
+      },
+      "observation": {
+        "properties": {
+          "exit_code": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "exit_code"
+        ],
+        "type": "object"
+      },
+      "parse_feedback": {
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "type": "object"
+      },
+      "parsed_command": {
+        "properties": {
+          "argv": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "argv"
+        ],
+        "type": "object"
+      },
+      "patch": {
+        "properties": {
+          "diff": {
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "seq": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seq",
+          "diff",
+          "files"
+        ],
+        "type": "object"
+      },
+      "raw_observation": {
+        "properties": {
+          "exit_code": {
+            "type": "integer"
+          },
+          "stderr": {
+            "type": "string"
+          },
+          "stdout": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "stdout",
+          "stderr",
+          "exit_code"
+        ],
+        "type": "object"
+      },
+      "swe_input": {
+        "properties": {
+          "base_commit": {
+            "type": "string"
+          },
+          "human_help_enabled": {
+            "type": "boolean"
+          },
+          "issue_text": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          },
+          "test_hint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo",
+          "base_commit",
+          "issue_text"
+        ],
+        "type": "object"
+      },
+      "verdict": {
+        "properties": {
+          "fail_to_pass_passed": {
+            "type": "integer"
+          },
+          "fail_to_pass_total": {
+            "type": "integer"
+          },
+          "resolved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "resolved",
+          "fail_to_pass_passed",
+          "fail_to_pass_total"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "agent_turns": {
+        "name": "agent_turns",
+        "kind": "message_log",
+        "writer": "agent_loop.agent",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 256
+        },
+        "eval_input": false
+      },
+      "eval_refs": {
+        "name": "eval_refs",
+        "kind": "collection",
+        "item": "eval_ref",
+        "writer": "env_boot",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": true
+      },
+      "tool_turns": {
+        "name": "tool_turns",
+        "kind": "message_log",
+        "writer": "agent_loop.runtime_ctx",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 256
+        },
+        "eval_input": false
+      },
+      "workspace": {
+        "name": "workspace",
+        "kind": "collection",
+        "item": "patch",
+        "writer": "agent_loop.env_exec",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 512
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "agent_loop": {
+        "node_id": "agent_loop",
+        "components": {}
+      },
+      "agent_loop.agent": {
+        "node_id": "agent",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.sweagent.aci.create@1": {
+              "effect_class": null
+            },
+            "pkg.sweagent.aci.edit@1": {
+              "effect_class": null
+            },
+            "pkg.sweagent.aci.open@1": {
+              "effect_class": null
+            },
+            "pkg.sweagent.aci.run_test@1": {
+              "effect_class": null
+            },
+            "pkg.sweagent.aci.search@1": {
+              "effect_class": null
+            },
+            "pkg.sweagent.aci.submit@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "agent_turns"
+        ],
+        "consumes": {
+          "feedback": "parse_feedback",
+          "hint": "human_hint",
+          "observation": "observation"
+        },
+        "artifacts": {
+          "action": {
+            "type": "agent_action",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 1200,
+            "template_ref": "pkg.sweagent.aci_system@1"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 600,
+            "fields": [
+              "issue_text",
+              "repo",
+              "base_commit"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 200,
+            "name": "env",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 6000,
+            "store": "agent_turns",
+            "policy": "latest_k",
+            "args": {
+              "k": 30
+            }
+          },
+          {
+            "from": "store",
+            "quota_tokens": 6000,
+            "store": "tool_turns",
+            "policy": "latest_k",
+            "args": {
+              "k": 30
+            }
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 4000,
+            "port": "observation",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 200,
+            "port": "feedback",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 200,
+            "port": "hint",
+            "policy": "project",
+            "optional": true
+          }
+        ]
+      },
+      "agent_loop.command_extract": {
+        "node_id": "command_extract",
+        "components": {},
+        "consumes": {
+          "action": "agent_action"
+        },
+        "artifacts": {
+          "command": {
+            "type": "parsed_command",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "agent_loop.env_exec": {
+        "node_id": "env_exec",
+        "components": {
+          "tools": {
+            "pkg.sweagent.env@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "workspace"
+        ],
+        "consumes": {
+          "command": "parsed_command"
+        },
+        "artifacts": {
+          "raw_obs": {
+            "type": "raw_observation",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "agent_loop.format_check": {
+        "node_id": "format_check",
+        "components": {
+          "unit": "pkg.sweagent.aci_schema@1"
+        },
+        "consumes": {
+          "action": "agent_action"
+        },
+        "artifacts": {
+          "action": {
+            "type": "agent_action",
+            "is_final": false,
+            "provenance": null
+          },
+          "feedback": {
+            "type": "parse_feedback",
+            "is_final": false,
+            "provenance": null
+          },
+          "verdict": {
+            "type": "format_verdict",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "agent_loop.human_channel": {
+        "node_id": "human_channel",
+        "components": {},
+        "consumes": {
+          "observation": "observation"
+        },
+        "artifacts": {
+          "observation": {
+            "type": "observation",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "agent_loop.human_gate": {
+        "node_id": "human_gate",
+        "components": {
+          "unit": "pkg.sweagent.human_gate@1"
+        },
+        "consumes": {
+          "observation": "observation"
+        },
+        "artifacts": {
+          "decision": {
+            "type": "human_decision",
+            "is_final": false,
+            "provenance": null
+          },
+          "observation": {
+            "type": "observation",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "agent_loop.human_help": {
+        "node_id": "human_help",
+        "components": {},
+        "consumes": {
+          "observation": "observation"
+        },
+        "artifacts": {
+          "hint": {
+            "type": "human_hint",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "agent_loop.runtime_ctx": {
+        "node_id": "runtime_ctx",
+        "components": {},
+        "reads": [
+          "agent_turns",
+          "tool_turns"
+        ],
+        "writes": [
+          "tool_turns"
+        ],
+        "consumes": {
+          "raw_obs": "raw_observation"
+        },
+        "artifacts": {
+          "observation": {
+            "type": "observation",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "env_boot": {
+        "node_id": "env_boot",
+        "components": {},
+        "writes": [
+          "eval_refs"
+        ],
+        "artifacts": {
+          "env": {
+            "type": "env_handle",
+            "is_final": false,
+            "provenance": null
+          },
+          "ready": {
+            "type": "signal",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "evaluate": {
+        "node_id": "evaluate",
+        "components": {
+          "unit": "pkg.sweagent.swebench_eval@1"
+        },
+        "reads": [
+          "eval_refs"
+        ],
+        "consumes": {
+          "patch": "patch"
+        },
+        "artifacts": {
+          "verdict": {
+            "type": "verdict",
+            "is_final": true,
+            "provenance": null
+          }
+        }
+      },
+      "extract_patch": {
+        "node_id": "extract_patch",
+        "components": {},
+        "reads": [
+          "workspace"
+        ],
+        "consumes": {
+          "done": "signal"
+        },
+        "artifacts": {
+          "patch": {
+            "type": "patch",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "select_best",
+            "port": "workspace",
+            "into": "patch",
+            "by": "seq",
+            "prefer": "max"
+          }
+        ]
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cmd_timeout",
+          "dimension": "clock_ms",
+          "scope": "node:agent_loop.env_exec",
+          "cap": 60000
+        },
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 120
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 200000
+        },
+        {
+          "id": "turn_cap",
+          "dimension": "turns",
+          "scope": "loop:agent_loop",
+          "cap": 50
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "budget.turns_spent >= budget.turns_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "10f4c6ca758bb7ba3da221ef69e947b7c09056aca0e1ada1c41ddbd898f740e2"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "budget.tokens_total_spent >= budget.tokens_total_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "70fc800d63924039be763e414b70215bfac5f63998c49a1eb0fde4972ab5b1bd"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "schema_invalid",
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "timeout",
+          "route": "same_node",
+          "feedback": "timeout_observation"
+        },
+        {
+          "class": "unauthorized",
+          "route": "same_node",
+          "feedback": "policy_notice"
+        },
+        {
+          "class": "environment_failure",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {
+      "agent_loop.command_extract": {
+        "kind": "free_text_parser",
+        "impl_ref": "packages/sweagent@1.0.0/hatches/command_extract.py",
+        "reason": "ACI 命令语法与文件编辑的『约定即语义』：行号/旧文本→新文本的软对齐编辑原语，以及自由文本到命令的启发式抽取（缩进、引号、&& 串联、shell 重定向的模糊子集），运行时动态解析，不可静态声明",
+        "owner": "swe-team",
+        "share_budget_pct": 10
+      },
+      "agent_loop.human_channel": {
+        "kind": "dynamic_tool_registry",
+        "impl_ref": "packages/sweagent@1.0.0/hatches/human_channel.py",
+        "reason": "human-in-the-loop 通道的事件驱动部分：外部人类在轨迹中途注入消息/操作，属外部事件驱动的动态入边与运行时注册的动作面，静态拓扑无声明位",
+        "owner": "swe-team",
+        "share_budget_pct": 4
+      },
+      "agent_loop.runtime_ctx": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/sweagent@1.0.0/hatches/runtime_context.py",
+        "reason": "输出截断与摘要的具体裁剪策略、diff 展示与噪声过滤、token 预算到步数的动态换算与历史压缩、以及变体相关的轮次间反思提示注入：均为运行时启发式（截断/压缩算法各版本有差异，卡片标注存疑）",
+        "owner": "swe-team",
+        "share_budget_pct": 8
+      },
+      "env_boot": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/sweagent@1.0.0/hatches/env_boot.py",
+        "reason": "per-instance 仓库 checkout / 依赖安装 / 测试命令生成脚本 + 容器沙箱与工作树快照副作用捕获：运行时基础设施与运行时生成脚本，静态拓扑无法穷举",
+        "owner": "swe-team",
+        "share_budget_pct": 6
+      }
+    },
+    "trust": {}
+  }
+}

@@ -1,0 +1,63 @@
+version: 1
+meta:
+  name: react_mono
+  graph_version: "1.0"
+  entry: solver
+  input: react_input
+  output: { ref: answer, from: solver }
+  intent: "单 agent 节点：工具回灌在节点运行时内串行落账；语义终止 + 三重预算"
+
+types:
+  - name: react_input
+    schema:
+      type: object
+      required: [question]
+      properties: { question: { type: string } }
+  - name: answer
+    schema:
+      type: object
+      required: [final, supports]
+      properties:
+        final: { type: string }
+        supports: { type: array, items: { type: string } }
+
+stores:
+  - name: trajectory
+    type: message_log
+    writer: solver                 # INV-2：唯一写者；观察回灌由 solver 运行时串行追加
+    lifecycle: run
+    retention: { max_items: 128 }
+
+nodes:
+  - id: solver
+    kind: task
+    uses:
+      model: route.main@1
+      tools: [pkg.hopqa.search, pkg.hopqa.lookup]
+    writes: [trajectory]
+    emits: { answer: answer }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.hopqa.fewshot, quota_tokens: 900 }
+        - { from: input, fields: [question], policy: project, quota_tokens: 200 }
+        - { from: store, store: trajectory, policy: full, quota_tokens: 6000 }
+
+edges: []                          # 单节点：工具回灌在节点运行时内部完成，不经图边
+
+policies:
+  budgets:
+    - { id: turn_cap, dimension: turns, scope: node:solver, cap: 12 }
+    - { id: token_cap, dimension: tokens_total, scope: node:solver, cap: 60000 }
+    - { id: cost_cap, dimension: cents, scope: node:solver, cap: 120 }
+  stop:
+    - { when: "last_tool.first_line in ['FINISH', 'FINAL ANSWER']", outcome: completed }
+    - { when: "steps.tool_free >= 2", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: tool_error
+      route: same_node
+      feedback: error_observation   # "无结果"类观察回灌，节点内继续
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

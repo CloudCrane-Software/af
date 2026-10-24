@@ -1,0 +1,8 @@
+{
+  "package": "adaskit",
+  "graphs": [
+    { "name": "discovered_maze", "version": "1", "source": "packages/adaskit/graphs/discovered_maze@1.afb" },
+    { "name": "discovered_wordle", "version": "1", "source": "packages/adaskit/graphs/discovered_wordle@1.afb" },
+    { "name": "mas_search", "version": "1", "source": "packages/adaskit/graphs/mas_search@1.afb" }
+  ]
+}

@@ -49,7 +49,7 @@ fn same_id_in_different_scopes_is_ok() {
         DEF_META,
         DEF_TYPES,
         "",
-        "  - id: n1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: inner, kind: task, emits: { x: a } }\n        edges: []\n      max_iterations: 2\n      safety_points: []\n    emits: { answer: { from_body: inner.x } }\n  - id: inner\n    kind: task\n    emits: { y: a }\n",
+        "  - id: n1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: inner, kind: task, emits: { x: a } }\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: { from_body: inner.x } }\n  - id: inner\n    kind: task\n    emits: { y: a }\n",
         "",
         DEF_POLICIES,
     );
@@ -63,7 +63,7 @@ fn loop_node_builtin_done_port_feeds_edge() {
         DEF_META,
         DEF_TYPES,
         "",
-        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body: { nodes: [], edges: [] }\n      max_iterations: 2\n      safety_points: []\n  - id: n2\n    kind: transform\n    ops: [ { op: project, port: p, into: q } ]\n",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n  - id: n2\n    kind: transform\n    ops: [ { op: project, port: p, into: q } ]\n",
         "  - { from: l1, output: done, to: n2, input: done }\n",
         DEF_POLICIES,
     );
@@ -109,7 +109,7 @@ fn reads_unknown_store_is_e2001() {
 fn carried_unknown_store_is_e2001() {
     let src = base().replace(
         "    emits: { answer: a }",
-        "    loop:\n      body: { nodes: [], edges: [] }\n      max_iterations: 2\n      carried: [ { store: ghost_s, max_items: 4 } ]\n      safety_points: []\n    emits: { answer: a }",
+        "    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      carried: [ { store: ghost_s, max_items: 4 } ]\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: a }",
     );
     assert_eq!(check(&src), ["E2001"]);
 }
@@ -245,7 +245,7 @@ fn edge_type_mismatch_is_e2201() {
 fn from_body_node_dangling_is_e2106() {
     let src = base().replace(
         "    emits: { answer: a }",
-        "    loop:\n      body: { nodes: [], edges: [] }\n      max_iterations: 2\n      safety_points: []\n    emits: { answer: { from_body: ghost.port } }",
+        "    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: { from_body: ghost.port } }",
     );
     assert_eq!(check(&src), ["E2106"]);
 }
@@ -254,7 +254,7 @@ fn from_body_node_dangling_is_e2106() {
 fn from_body_port_dangling_is_e2106() {
     let src = base().replace(
         "    emits: { answer: a }",
-        "    loop:\n      body:\n        nodes:\n          - { id: inner, kind: task, emits: { x: a } }\n        edges: []\n      max_iterations: 2\n      safety_points: []\n    emits: { answer: { from_body: inner.nope } }",
+        "    loop:\n      body:\n        nodes:\n          - { id: inner, kind: task, emits: { x: a } }\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: { from_body: inner.nope } }",
     );
     assert_eq!(check(&src), ["E2106"]);
 }
@@ -294,7 +294,7 @@ fn map_over_input_field_dangling_is_e2105() {
 fn loop_args_ref_dangling_is_e2105() {
     let src = base().replace(
         "    emits: { answer: a }",
-        "    loop:\n      args: { g: ghost.port }\n      body:\n        nodes:\n          - { id: inner, kind: task, emits: { x: a } }\n        edges: []\n      max_iterations: 2\n      safety_points: []\n    emits: { answer: { from_body: inner.x } }",
+        "    loop:\n      args: { g: ghost.port }\n      body:\n        nodes:\n          - { id: inner, kind: task, emits: { x: a } }\n          - { id: sg, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: sg, kind: gate } ]\n    emits: { answer: { from_body: inner.x } }",
     );
     assert_eq!(check(&src), ["E2105"]);
 }

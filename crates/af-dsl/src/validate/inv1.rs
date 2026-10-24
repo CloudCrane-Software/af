@@ -15,7 +15,8 @@
 //! ⑤ template vars 引用：input.字段 / arg.名 可解析（字面量不判）→ E2403。
 //! ⑥ INV-1：LLM-bound 节点（uses.model 在场）禁 reads[] → E2303；入边端口恰被
 //!    一个 from:edge 段引用（零引用 = 实际消费未声明；多引用违「恰一个」）→ E2304，
-//!    判定对象 = 带 context 的节点 ∪ LLM-bound 节点。
+//!    判定对象 = 仅 LLM-bound 节点（提案 B §5 主语；非 LLM 节点入边是程序性
+//!    数据载荷，不作上下文装配核对——G3 复核 2026-10-24 收窄）。
 //!
 //! 抑制规则（承 RESULT-M1 偏差⑨纪律）：from 不在五词表内时 M1 check_vocab 已报
 //! E1004，本层整段跳过（不产噪声级联）；meta.input schema 无 properties 时
@@ -131,9 +132,14 @@ fn check_node(
         }
     }
 
-    // INV-1：入边端口恰被一个 section 引用。判定对象 = 带 context ∪ LLM-bound
-    //（LLM-bound 且无 context 时，入边即「实际消费但未声明」）。
-    if llm_bound || node.context.is_some() {
+    // INV-1：入边端口恰被一个 section 引用。判定对象 = 仅 LLM-bound 节点
+    //（LLM-bound 且无 context 时，入边即「实际消费但未声明」）。提案 B §5
+    // 规则主语 = LLM-bound task 节点；§1 节点表 context「仅 LLM-bound task
+    // 可用（INV-1 判定对象）」。非 LLM 节点（check/gate/transform 等）的
+    // 入边端口是程序性数据载荷，不是上下文装配面，不判 E2304（G3 复核
+    // 2026-10-24 收窄，原「带 context ∪ LLM-bound」过宽——见 RESULT-M2
+    // 偏差 5 修订）。
+    if llm_bound {
         for (port, refs) in &port_refs {
             if *refs == 0 {
                 report.push(

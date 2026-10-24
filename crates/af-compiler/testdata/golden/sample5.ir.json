@@ -1,0 +1,425 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "langgraph_subset",
+      "entry": "react_ring",
+      "nodes": [
+        {
+          "id": "react_ring",
+          "kind": "task",
+          "loop_spec": {
+            "body": "langgraph_subset/react_ring",
+            "max_iterations": 25,
+            "carried": [
+              {
+                "store": "agent_turns",
+                "max_items": 64
+              },
+              {
+                "store": "tool_turns",
+                "max_items": 64
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "format_check",
+                "kind": "gate"
+              }
+            ],
+            "exit_when": {
+              "source": "resume.approved == true",
+              "roots": [
+                "resume"
+              ],
+              "digest": "34aa893afe4aee69468c19178ef8050b94d9c79b692d402ce0a40a460f311dd6"
+            },
+            "on_exhausted": "fail"
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [],
+      "subgraphs": {
+        "langgraph_subset/react_ring": {
+          "graph_version": "1.0",
+          "entry": "agent",
+          "nodes": [
+            {
+              "id": "agent",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "approve",
+              "kind": "task",
+              "human": {
+                "station": "review-desk",
+                "role": "reviewer",
+                "quorum": 1,
+                "resume": {
+                  "schema": {
+                    "properties": {
+                      "approved": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "approved"
+                    ],
+                    "type": "object"
+                  }
+                }
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "format_check",
+              "kind": "gate",
+              "route_exit_guard": {
+                "source": "(format_check.passed == false)",
+                "roots": [
+                  "format_check"
+                ],
+                "digest": "739a393dc814e6b89d8f3060983a77f52537d2b5bac3190b814175729c38cd39"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "tools",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "agent",
+              "output": "action",
+              "to": "tools",
+              "input": "action",
+              "checkpoint": true
+            },
+            {
+              "from": "agent",
+              "output": "answer",
+              "to": "approve",
+              "input": "answer",
+              "checkpoint": false
+            },
+            {
+              "from": "approve",
+              "output": "decision",
+              "to": "agent",
+              "input": "decision",
+              "checkpoint": false,
+              "guard": {
+                "source": "(resume.approved == false)",
+                "roots": [
+                  "resume"
+                ],
+                "digest": "9afc16eb8a5b9e3f11de1e489e2b85e92a6a0a73b914a5fd313b2d69bbf421a1"
+              }
+            },
+            {
+              "from": "format_check",
+              "output": "checked",
+              "to": "agent",
+              "input": "checked",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((format_check.passed == false))",
+                "roots": [
+                  "format_check"
+                ],
+                "digest": "743bc3b66131cc46d7e314b9067bbe5511c7def4eb0fc894a509b1bf9de2a7d6"
+              }
+            },
+            {
+              "from": "tools",
+              "output": "observation",
+              "to": "format_check",
+              "input": "observation",
+              "checkpoint": true
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "lg_input",
+      "output_type": "answer",
+      "output_from": "react_ring",
+      "intent": "通道单写化+读侧交错替代 reducer；条件边=route；recursion_limit=循环上限；interrupt=人工节点；checkpointer=边检查点"
+    },
+    "types": {
+      "action_call": {
+        "properties": {
+          "args": {
+            "type": "object"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "args"
+        ],
+        "type": "object"
+      },
+      "answer": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "approval": {
+        "properties": {
+          "approved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "approved"
+        ],
+        "type": "object"
+      },
+      "lg_input": {
+        "properties": {
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "type": "object"
+      },
+      "observation": {
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "text"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "agent_turns": {
+        "name": "agent_turns",
+        "kind": "message_log",
+        "writer": "react_ring.agent",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "tool_turns": {
+        "name": "tool_turns",
+        "kind": "message_log",
+        "writer": "react_ring.tools",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "react_ring": {
+        "node_id": "react_ring",
+        "components": {},
+        "artifacts": {
+          "answer": {
+            "from_body": "agent.answer",
+            "is_final": true,
+            "provenance": null
+          }
+        }
+      },
+      "react_ring.agent": {
+        "node_id": "agent",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.hopqa.lookup": {
+              "effect_class": null
+            },
+            "pkg.hopqa.search": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "agent_turns"
+        ],
+        "consumes": {
+          "checked": "observation",
+          "decision": "approval"
+        },
+        "artifacts": {
+          "action": {
+            "type": "action_call",
+            "is_final": false,
+            "provenance": null
+          },
+          "answer": {
+            "type": "answer",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.hopqa.react_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 200,
+            "fields": [
+              "question"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 3000,
+            "store": "agent_turns",
+            "policy": "full"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 3000,
+            "store": "tool_turns",
+            "policy": "full"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "port": "checked",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 100,
+            "fields": [
+              "approved"
+            ],
+            "port": "decision",
+            "policy": "project",
+            "optional": true
+          }
+        ]
+      },
+      "react_ring.approve": {
+        "node_id": "approve",
+        "components": {},
+        "consumes": {
+          "answer": "answer"
+        },
+        "artifacts": {
+          "decision": {
+            "type": "approval",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "react_ring.format_check": {
+        "node_id": "format_check",
+        "components": {},
+        "consumes": {
+          "observation": "observation"
+        },
+        "artifacts": {
+          "checked": {
+            "type": "observation",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "assert": {
+          "source": "inputs.observation.ok == true",
+          "roots": [
+            "inputs"
+          ],
+          "digest": "32b2ae3ac7b5e5236e0c7c728471581945ec8614bcf8a00f45a7fb4b2ba6c29e"
+        }
+      },
+      "react_ring.tools": {
+        "node_id": "tools",
+        "components": {
+          "tools": {
+            "pkg.hopqa.toolbench@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "tool_turns"
+        ],
+        "consumes": {
+          "action": "action_call"
+        },
+        "artifacts": {
+          "observation": {
+            "type": "observation",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "turns_cap",
+          "dimension": "turns",
+          "scope": "loop:react_ring",
+          "cap": 50
+        }
+      ],
+      "stop": [],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "environment_failure",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 60000
+          }
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {},
+    "trust": {}
+  }
+}
