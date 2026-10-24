@@ -13,8 +13,7 @@ use std::sync::Arc;
 
 use af_execline::{
     AttemptLayout, DriverConfig, EngineClient, HarnessRunner, MesChSink, MesChTarget,
-    MesFileWriter, MesSink, OrderLifecycleDriver, SshBridge, StubExecuteUnit, SwevExecuteUnit,
-    SystemClock,
+    MesFileWriter, OrderLifecycleDriver, SshBridge, StubExecuteUnit, SwevExecuteUnit, SystemClock,
 };
 use af_workorder::{Priority, Sla, StableId};
 use serde_json::{json, Value};
