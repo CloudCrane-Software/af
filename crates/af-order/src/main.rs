@@ -9,7 +9,7 @@ fn main() {
         Ok(stdout) => println!("{stdout}"),
         Err(err) => {
             eprintln!("af-order: {err}");
-            std::process::exit(1);
+            std::process::exit(err.exit_code());
         }
     }
 }

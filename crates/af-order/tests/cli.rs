@@ -145,7 +145,10 @@ fn submit_full_lifecycle_lands_ledger_mes_voucher_and_artifact() {
         );
     }
     assert_eq!(
-        records.iter().filter(|record| record.op == "close" && record.ok).count(),
+        records
+            .iter()
+            .filter(|record| record.op == "close" && record.ok)
+            .count(),
         1,
         "close 成功记录唯一"
     );
@@ -174,11 +177,14 @@ fn submit_full_lifecycle_lands_ledger_mes_voucher_and_artifact() {
     assert_eq!(voucher["amount"], 42);
     assert_eq!(voucher["algorithm"], "ed25519");
     let key_id = voucher["key_id"].as_str().expect("key_id 字段");
-    let signature_hex = voucher["signature_hex"].as_str().expect("signature_hex 字段");
+    let signature_hex = voucher["signature_hex"]
+        .as_str()
+        .expect("signature_hex 字段");
     assert_eq!(key_id.len(), 64, "公钥 32 字节小写十六进制");
     assert_eq!(signature_hex.len(), 128, "签名 64 字节小写十六进制");
-    let public = Ed25519PublicKey::from_bytes(&hex_decode(key_id).try_into().expect("公钥 32 字节"))
-        .expect("公钥在曲线上");
+    let public =
+        Ed25519PublicKey::from_bytes(&hex_decode(key_id).try_into().expect("公钥 32 字节"))
+            .expect("公钥在曲线上");
     let signature = Signature {
         algorithm: "ed25519".into(),
         key_id: key_id.to_string(),
@@ -186,7 +192,10 @@ fn submit_full_lifecycle_lands_ledger_mes_voucher_and_artifact() {
     };
     public
         .verify(
-            voucher["payload"].as_str().expect("payload 字段").as_bytes(),
+            voucher["payload"]
+                .as_str()
+                .expect("payload 字段")
+                .as_bytes(),
             &signature,
         )
         .expect("凭证 ed25519 签名必须可独立验签");
@@ -220,7 +229,11 @@ fn list_and_show_read_back_orders() {
     );
 
     for (order_id, budget) in [("wo-cli-a", 10), ("wo-cli-b", 20)] {
-        let spec = write_spec(&state, &format!("{order_id}.json"), &spec_text(order_id, budget));
+        let spec = write_spec(
+            &state,
+            &format!("{order_id}.json"),
+            &spec_text(order_id, budget),
+        );
         let out = submit(&spec, &state);
         assert!(
             out.status.success(),
@@ -261,10 +274,7 @@ fn list_and_show_read_back_orders() {
     );
     let shown = stdout_json(&out);
     assert_eq!(shown["order_id"], "wo-cli-a");
-    assert_eq!(
-        shown["stable_id"],
-        StableId::generate("wo-cli-a").as_str()
-    );
+    assert_eq!(shown["stable_id"], StableId::generate("wo-cli-a").as_str());
     assert_eq!(shown["state"], "Closed");
     let ops = shown["ledger"]["ops"].as_array().expect("ops 数组");
     assert_eq!(
@@ -329,7 +339,10 @@ fn resubmit_same_order_id_is_idempotent() {
     let records = OrderLedger::load(&dir.join("ledger.jsonl")).expect("ledger 可重载");
     assert_contiguous(&records, "重放后");
     assert_eq!(
-        records.iter().filter(|record| record.op == "close" && record.ok).count(),
+        records
+            .iter()
+            .filter(|record| record.op == "close" && record.ok)
+            .count(),
         1,
         "不产生第二份终态"
     );
@@ -356,7 +369,6 @@ fn resubmit_same_order_id_is_idempotent() {
 #[test]
 fn bad_spec_is_rejected_with_reason() {
     let state = scratch("bad-spec");
-    let state_str = state.to_str().expect("state 路径可转 str");
 
     let cases: &[(&str, &str)] = &[
         // 缺必填字段：点名 budget
@@ -390,10 +402,7 @@ fn bad_spec_is_rejected_with_reason() {
     for (index, (text, needle)) in cases.iter().enumerate() {
         let spec = write_spec(&state, &format!("bad-{index}.json"), text);
         let out = submit(&spec, &state);
-        assert!(
-            !out.status.success(),
-            "坏 spec #{index} 必须非零退出"
-        );
+        assert!(!out.status.success(), "坏 spec #{index} 必须非零退出");
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(
             stderr.contains(needle),
@@ -403,10 +412,7 @@ fn bad_spec_is_rejected_with_reason() {
     }
 
     // 坏 spec 不得产生任何订单目录（校验先于建目录）
-    assert!(
-        !state.join("orders").exists(),
-        "spec 被拒不得创建订单目录"
-    );
+    assert!(!state.join("orders").exists(), "spec 被拒不得创建订单目录");
 
     // spec 文件不存在：OR2001 + 路径
     let out = submit(&state.join("nope.json"), &state);

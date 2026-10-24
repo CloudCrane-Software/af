@@ -16,11 +16,23 @@
 //! af-execline（`OrderLifecycleDriver` / `OrderLedger` / `MesFileWriter`），
 //! 门控判定一律走真 af-engine 子进程——本 crate 不重造这些轮子。
 //!
-//! 当前状态：RED（验收测试已落，实现未落）。
+//! 状态目录布局（[`state`]）：
+//!
+//! ```text
+//! <state>/orders/<order_id>/{ledger.jsonl, mes-events.jsonl, artifacts/,
+//!                           voucher.json, voucher-key.seed(0600)}
+//! ```
+//!
+//! 错误码契约（ADR-007 §3）：OR1xxx（用法）/ OR2xxx（spec / 凭证 / 状态）；
+//! 引擎与账本失败透传 af-execline 的 EX 稳定码，见 [`error`]。
 
 pub mod cli;
 pub mod error;
 pub mod spec;
+pub mod state;
+pub mod voucher;
 
 pub use error::OrderError;
 pub use spec::{parse_spec, OrderSpec, SpecError, SPEC_FIELDS};
+pub use state::{OrderSummary, StateDir};
+pub use voucher::{issue_or_load, VoucherRecord};

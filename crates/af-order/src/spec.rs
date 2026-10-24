@@ -3,14 +3,16 @@
 //! 拒绝式解析（对齐 af-workorder 老载荷门禁的风格）：缺字段点名、未知字段
 //! 名单列全、类型不合预检、`order_id` 必须是安全路径成分——它同时是
 //! `state/orders/` 下的目录名，放行 `../` 等于放行目录穿越。
-//!
-//! RED 桩：类型与错误契约已定，`parse_spec` 尚未实现（转绿时落地）。
 
 use af_workorder::LineBinding;
 use serde::Deserialize;
+use serde_json::{Map, Value};
 
 /// spec 认识的字段（字典序，供未知字段名单对拍）。
 pub const SPEC_FIELDS: &[&str] = &["budget", "line", "note", "order_id"];
+
+/// line 对象认识的子字段。
+const LINE_FIELDS: &[&str] = &["line_id", "line_version"];
 
 /// 极简下单 spec。
 #[derive(Debug, Clone, Deserialize)]
@@ -39,9 +41,140 @@ pub enum SpecError {
     Invalid { field: &'static str, reason: String },
 }
 
-/// 解析 spec 文本。RED 桩：一律拒绝。
-pub fn parse_spec(_text: &str) -> Result<OrderSpec, SpecError> {
-    Err(SpecError::Malformed("未实现：spec 解析（RED 桩）".into()))
+/// 解析 spec 文本：JSON → 未知字段 → 必填字段 → 类型预检 → 反序列化 → 语义校验。
+pub fn parse_spec(text: &str) -> Result<OrderSpec, SpecError> {
+    let value: Value =
+        serde_json::from_str(text).map_err(|err| SpecError::Malformed(err.to_string()))?;
+    let obj = value
+        .as_object()
+        .ok_or_else(|| SpecError::Malformed("spec 必须是 JSON 对象".into()))?;
+
+    reject_unknown_fields(obj)?;
+
+    for field in ["order_id", "line", "budget"] {
+        if !obj.contains_key(field) {
+            return Err(SpecError::MissingField(field.to_string()));
+        }
+    }
+    check_order_id_type(obj)?;
+    check_budget_type(obj)?;
+    check_line(obj)?;
+    if let Some(note) = obj.get("note") {
+        if !note.is_string() {
+            return Err(SpecError::Invalid {
+                field: "note",
+                reason: format!("必须是字符串，实际是 {note}"),
+            });
+        }
+    }
+
+    let spec: OrderSpec =
+        serde_json::from_value(value).map_err(|err| SpecError::Malformed(err.to_string()))?;
+    validate_order_id(&spec.order_id)?;
+    if spec.budget == 0 {
+        return Err(SpecError::Invalid {
+            field: "budget",
+            reason: "预算必须大于 0（u64）".into(),
+        });
+    }
+    Ok(spec)
+}
+
+/// 未知字段全列（字典序），不静默丢弃。
+fn reject_unknown_fields(obj: &Map<String, Value>) -> Result<(), SpecError> {
+    let mut unknown: Vec<&str> = obj
+        .keys()
+        .map(String::as_str)
+        .filter(|key| !SPEC_FIELDS.contains(key))
+        .collect();
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    unknown.sort_unstable();
+    Err(SpecError::UnknownFields(unknown.join(", ")))
+}
+
+fn check_order_id_type(obj: &Map<String, Value>) -> Result<(), SpecError> {
+    match obj.get("order_id") {
+        Some(Value::String(_)) => Ok(()),
+        Some(other) => Err(SpecError::Invalid {
+            field: "order_id",
+            reason: format!("必须是字符串，实际是 {other}"),
+        }),
+        None => Ok(()), // 缺字段已由 MissingField 点名
+    }
+}
+
+fn check_budget_type(obj: &Map<String, Value>) -> Result<(), SpecError> {
+    match obj.get("budget") {
+        Some(value) if value.is_u64() => Ok(()),
+        Some(other) => Err(SpecError::Invalid {
+            field: "budget",
+            reason: format!("预算必须是正整数（u64），实际是 {other}"),
+        }),
+        None => Ok(()),
+    }
+}
+
+/// line：对象、两个非空字符串子字段、无多余子字段。
+fn check_line(obj: &Map<String, Value>) -> Result<(), SpecError> {
+    let Some(line) = obj.get("line").and_then(Value::as_object) else {
+        return Err(SpecError::Invalid {
+            field: "line",
+            reason: "必须是对象 {\"line_id\": …, \"line_version\": …}".into(),
+        });
+    };
+    for key in LINE_FIELDS {
+        match line.get(*key) {
+            Some(Value::String(text)) if !text.trim().is_empty() => {}
+            Some(other) => {
+                return Err(SpecError::Invalid {
+                    field: "line",
+                    reason: format!("line.{key} 必须是非空字符串，实际是 {other}"),
+                })
+            }
+            None => {
+                return Err(SpecError::Invalid {
+                    field: "line",
+                    reason: format!("缺少 line.{key}"),
+                })
+            }
+        }
+    }
+    let mut extra: Vec<&str> = line
+        .keys()
+        .map(String::as_str)
+        .filter(|key| !LINE_FIELDS.contains(key))
+        .collect();
+    if !extra.is_empty() {
+        extra.sort_unstable();
+        return Err(SpecError::Invalid {
+            field: "line",
+            reason: format!("不认识的子字段 {}", extra.join(", ")),
+        });
+    }
+    Ok(())
+}
+
+/// order_id 要当 state/orders/ 的目录名：非空、非 `.`/`..`、无路径分隔符、无空白。
+fn validate_order_id(order_id: &str) -> Result<(), SpecError> {
+    let invalid = |reason: &str| SpecError::Invalid {
+        field: "order_id",
+        reason: reason.into(),
+    };
+    if order_id.is_empty() {
+        Err(invalid("不能为空"))
+    } else if order_id == "." || order_id == ".." {
+        Err(invalid("不得是 . 或 ..（它要作 state/orders/ 的目录名）"))
+    } else if order_id.chars().any(|c| c == '/' || c == '\\' || c == '\0') {
+        Err(invalid(
+            "不得包含路径分隔符（它要作 state/orders/ 的目录名）",
+        ))
+    } else if order_id.chars().any(char::is_whitespace) {
+        Err(invalid("不得包含空白字符"))
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -101,9 +234,10 @@ mod tests {
     }
 
     /// order_id 要当目录名：路径不安全/空白/空串一律拒。
+    /// （反斜杠检查在实现里保留；JSON 文本里 `\b` 是退格转义，不入本表。）
     #[test]
     fn path_unsafe_order_id_is_rejected() {
-        for bad in ["../escape", "a/b", "a\\b", ".", "..", "", "has space"] {
+        for bad in ["../escape", "a/b", ".", "..", "", "has space"] {
             match parse_spec(&minimal(bad)).unwrap_err() {
                 SpecError::Invalid { field, .. } => assert_eq!(field, "order_id"),
                 other => panic!("order_id={bad:?} 应被拒为 Invalid(order_id)，实际 {other:?}"),
@@ -143,6 +277,40 @@ mod tests {
                 "解析错误应含位置（原因），实际 {detail}"
             ),
             other => panic!("坏 JSON 应为 Malformed，实际 {other:?}"),
+        }
+    }
+
+    /// line 的子字段校验：缺子字段 / 非字符串 / 多余子字段 / line 非对象。
+    #[test]
+    fn line_shape_is_strictly_checked() {
+        let cases = [
+            (
+                r#"{"order_id":"wo-1","line":"line-poc","budget":5}"#,
+                "对象",
+            ),
+            (
+                r#"{"order_id":"wo-1","line":{"line_id":"l"},"budget":5}"#,
+                "line.line_version",
+            ),
+            (
+                r#"{"order_id":"wo-1","line":{"line_id":"l","line_version":7},"budget":5}"#,
+                "line.line_version",
+            ),
+            (
+                r#"{"order_id":"wo-1","line":{"line_id":"l","line_version":"v","extra":1},"budget":5}"#,
+                "extra",
+            ),
+        ];
+        for (text, needle) in cases {
+            match parse_spec(text).unwrap_err() {
+                SpecError::Invalid {
+                    field: "line",
+                    reason,
+                } => {
+                    assert!(reason.contains(needle), "{reason} 应含 {needle}");
+                }
+                other => panic!("line 形状 {text} 应被拒为 Invalid(line)，实际 {other:?}"),
+            }
         }
     }
 }
