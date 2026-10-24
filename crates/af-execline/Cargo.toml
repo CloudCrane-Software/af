@@ -1,0 +1,24 @@
+[package]
+name = "af-execline"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+description = "统一执行面 PoC：订单生命周期驱动（af-engine 门控 + 订单 ledger + MES 事件）"
+
+# af-workorder：订单模型与门控错误类型（本 crate 不重定义）。
+# af-engine 只以子进程方式调用（9-op 单行 JSON 协议），不作为库依赖——真引擎不打桩。
+# af-mes：只用 MesEvent 类型 + 自有文件 stub writer，不连 ClickHouse（ADR-004 过渡态）。
+[dependencies]
+af-mes = { path = "../af-mes" }
+af-workorder = { path = "../af-workorder" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# 集成测试构造 WorkOrder 快照与断言门控错误。版本随 workspace，不另引。
+af-mes = { path = "../af-mes" }
+af-workorder = { path = "../af-workorder" }
+
+[lints]
+workspace = true

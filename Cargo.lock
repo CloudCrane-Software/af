@@ -82,6 +82,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "af-execline"
+version = "0.1.0"
+dependencies = [
+ "af-mes",
+ "af-workorder",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "af-graph"
 version = "0.1.0"
 dependencies = [
