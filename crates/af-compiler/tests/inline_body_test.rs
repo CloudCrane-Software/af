@@ -172,7 +172,7 @@ fn sample6_nested_loops_and_cross_layer_safety_points() {
     assert_eq!(esc.impl_ref, "packages/openworld@1.0.0/hatches/code_exec.py");
     assert_eq!(esc.owner, "lang-team");
     assert_eq!(esc.share_budget_pct, 25);
-    assert_eq!(p.body.escapes["explore.code_exec"], *esc);
+    assert_eq!(p.body.escapes["explore.acquire.code_exec"], *esc);
 }
 
 /// 样例 4：loop 内嵌 map（synth→run）；样例 2：单层 loop 体。

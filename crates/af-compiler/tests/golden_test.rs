@@ -110,7 +110,7 @@ fn sample1_projection_facts() {
     assert_eq!(ex.components.unit, None);
     assert!(ex.components.memory.is_empty());
     let tool_names: Vec<&str> = ex.components.tools.keys().map(String::as_str).collect();
-    assert_eq!(tool_names, ["pkg.hopqa.search", "pkg.hopqa.lookup"]);
+    assert_eq!(tool_names, ["pkg.hopqa.lookup", "pkg.hopqa.search"]);
     assert!(ex.components.tools.values().all(|t| t.effect_class.is_none()));
     assert_eq!(ex.writes, strset(&["trajectory"]));
     assert!(ex.reads.is_empty());
@@ -133,7 +133,7 @@ fn sample1_projection_facts() {
     let budget_ids: Vec<&str> = pol.budgets.iter().map(|x| x.id.as_str()).collect();
     assert_eq!(budget_ids, ["cost_cap", "token_cap", "turn_cap"]);
     assert_eq!(pol.budgets[0].dimension, BudgetDimension::Cents);
-    assert_eq!(pol.budgets[0].scope, "plan");
+    assert_eq!(pol.budgets[0].scope, "node:solver"); // 样例 1 三预算均为节点级
     assert_eq!(pol.budgets[0].cap, 120);
     assert_eq!(pol.budgets[1].scope, "node:solver");
     assert_eq!(pol.budgets[2].cap, 12);

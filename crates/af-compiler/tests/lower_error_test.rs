@@ -1,8 +1,7 @@
 //! lowering 错误路径：输入违反「已过全量校验」前提时返回 [`LowerError`]
 //! （绝不 panic）——route 归一化违例（E2102 面）与空构造体（E1007 面，
-//! af-dsl M1 不查、lowering 兜底）。
-
-mod common;
+//! af-dsl M1 不查、lowering 兜底）。夹具为内联 YAML（非 golden 样例），
+//! 不经 common 模块。
 
 use af_compiler::LowerError;
 
