@@ -349,7 +349,7 @@ fn apply_schema_sends_ddl_constants() {
 }
 
 #[test]
-fn reader_sends_select_final_and_decodes_rowbinary() {
+fn reader_sends_select_and_decodes_rowbinary() {
     let mock = MockClickHouse::start();
     let dir = Scratch(scratch("read"));
     let clock = Arc::new(ManualClock::new(0));
@@ -372,7 +372,10 @@ fn reader_sends_select_final_and_decodes_rowbinary() {
 
     let queries = mock.queries();
     let sql = queries.last().expect("select");
-    assert!(sql.contains("FROM mes_event FINAL"), "{sql}");
+    // MergeTree 不带 FINAL：mingda CH 26.7.34.3 实测 ILLEGAL_FINAL
+    // （2026-10-25 消债 B③ 真实例验证暴露，mock 无 SQL 引擎测不出）
+    assert!(sql.contains("FROM mes_event"), "{sql}");
+    assert!(!sql.contains("FINAL"), "MergeTree 读不带 FINAL: {sql}");
     assert!(sql.contains("work_order_id = 'WO\\'1'"), "{sql}");
     assert!(!sql.to_ascii_lowercase().contains("optimize"));
     assert!(!sql.to_ascii_lowercase().contains("rand64"));

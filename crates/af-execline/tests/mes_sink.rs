@@ -155,7 +155,8 @@ fn ch_sink_reconciles_by_event_id_and_ships_only_missing() {
     let queries = mock.queries();
     let sql = queries.last().expect("SELECT 应已发出");
     assert!(sql.contains("work_order_id"), "对账查询按工单过滤: {sql}");
-    assert!(sql.contains("FINAL"), "读包装器口径: {sql}");
+    // MergeTree 不带 FINAL（mingda CH 26.7 ILLEGAL_FINAL 实测，见 af-mes reader 文档）
+    assert!(!sql.contains("FINAL"), "MergeTree 读不带 FINAL: {sql}");
 }
 
 /// 全量重叠：CH 已有全部事件 → 零送批、零插入（幂等上限形态）。
