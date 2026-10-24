@@ -1,9 +1,12 @@
-//! 语义层校验编排（M1+M2）：手写词表（E1004）→ 重复 id（E2003，建索引时收）
-//! → 引用闭包（refs）→ context.sections 装配 + INV-1（inv1）→ INV-2（inv2），
-//! 一次收齐。顺序固定以保证违例输出确定性。
+//! 语义层校验编排（M1-M3）：手写词表（E1004）→ 重复 id（E2003，建索引时收）
+//! → 引用闭包（refs）→ context.sections 装配 + INV-1（inv1）→ INV-2（inv2）
+//! → INV-3 自验证（inv3）→ INV-4 评估输入（inv4），一次收齐。顺序固定以
+//! 保证违例输出确定性。
 
 mod inv1;
 mod inv2;
+mod inv3;
+mod inv4;
 mod refs;
 
 use crate::error::{ErrorCode, Report};
@@ -64,6 +67,8 @@ pub fn validate_with(doc: &Document, opts: &ValidateOptions) -> Report {
     refs::check(doc, &index, &mut report);
     inv1::check(doc, &index, opts, &mut report);
     inv2::check(&index, &mut report);
+    inv3::check(&index, &mut report);
+    inv4::check(&index, &mut report);
     report
 }
 

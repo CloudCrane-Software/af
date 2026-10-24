@@ -91,6 +91,14 @@ pub enum ErrorCode {
     StoreMultiWriter,
     /// E2312 map 体节点写体外声明的 store（N 并行实例 = N 写者）。
     MapSharedStoreWrite,
+
+    // ---- E2xxx 语义：L0 不变量 INV-3/INV-4（M3）----
+    /// E2321 自验证：验证面节点（kind ∈ {check, gate} ∪ human 标记）任一入边
+    /// 的生产者是它自己（直接自环；间接自验证 v0.1 不查——提案 §8-4）。
+    SelfVerification,
+    /// E2331 评估输入对候选可读：eval_input store 的读者（reads /
+    /// context.sections from:store）∉ {writer, 绑定 uses.unit 的 check 节点}。
+    EvalInputVisible,
 }
 
 impl ErrorCode {
@@ -127,6 +135,8 @@ impl ErrorCode {
             Self::TemplateVarsDangling => "E2403",
             Self::StoreMultiWriter => "E2311",
             Self::MapSharedStoreWrite => "E2312",
+            Self::SelfVerification => "E2321",
+            Self::EvalInputVisible => "E2331",
         }
     }
 
@@ -163,6 +173,8 @@ impl ErrorCode {
             Self::TemplateVarsDangling => "template_vars_dangling",
             Self::StoreMultiWriter => "store_multi_writer",
             Self::MapSharedStoreWrite => "map_shared_store_write",
+            Self::SelfVerification => "self_verification",
+            Self::EvalInputVisible => "eval_input_visible",
         }
     }
 }
