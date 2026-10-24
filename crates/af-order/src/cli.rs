@@ -233,9 +233,7 @@ fn run_submit(
         host_alias: exec
             .map(|e| e.host.clone())
             .unwrap_or_else(|| DEFAULT_HOST.into()),
-        data_root: exec
-            .map(|e| e.data_root.clone())
-            .unwrap_or_else(PathBuf::new),
+        data_root: exec.map(|e| e.data_root.clone()).unwrap_or_default(),
         task_id: exec.map(|e| e.task.clone()).unwrap_or_default(),
         trial: false,
         profile: exec
