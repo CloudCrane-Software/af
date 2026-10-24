@@ -675,12 +675,6 @@ warning[duplicate]: found 3 duplicate entries for crate 'itertools'
       │       └── cedar-policy v4.14.0 (*)
       └── cedar-policy-formatter v4.14.0 (*)
 
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/deny.toml:25:4
-   │
-25 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
-
 warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
     ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/Cargo.lock:212:1
     │  
@@ -1209,6 +1203,12 @@ warning[duplicate]: found 2 duplicate entries for crate 'spki'
           │       └── p256 v0.13.2 (*)
           └── sec1 v0.7.3
               └── elliptic-curve v0.13.8 (*)
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/deny.toml:25:4
+   │
+25 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 3 duplicate entries for crate 'syn'
     ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/Cargo.lock:300:1

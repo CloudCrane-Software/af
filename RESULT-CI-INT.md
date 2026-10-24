@@ -1,16 +1,32 @@
-# RESULT-CI-INT —— CI 七门首跑（phase2 主线，任务二）
+# RESULT-CI-INT —— CI 七门首跑（phase2 主线，任务二）+ 复核轮处置
 
 - 工作树：`/home/pan-ding/workspace/af-wt-phase2-execline`（分支 phase2）
 - 管道：`CARGO_TARGET_DIR=~/afbuild-phase2i bash ci/run.sh`（run.sh：七步硬门，产物落 `ci/out/`）
-- 结论：**6 绿 1 红**。step7 `cargo deny --offline check` 红 = 依赖类发现
-  RUSTSEC-2024-0449（unsafe-libyaml unmaintained），按纪律不改依赖、不加豁免，
-  登记 blocker 交编排者；其余六门全绿。无未决破坏性改动，已 push。
+- 结论：**6 绿 1 红**（首跑/复跑/复核轮三跑门级结果一致）。step7
+  `cargo deny --offline check` 红 = 依赖类发现 RUSTSEC-2024-0449（unsafe-libyaml
+  unmaintained），按纪律不改依赖、不加豁免，登记 blocker 交编排者；其余六门全绿。
 
-## 提交图（本任务收尾时）
+## 复核差异处置（复核轮，2026-10-25）
+
+复核员判红依据两条，处置如下：
+
+1. **未跟踪 `proofs/`（kani/、verus/，mtime 2026-10-24 19:32–21:41）**：
+   该目录是另一在飞自动化（FV-1 证明战役）的在制工件，任务一交接明令
+   「禁止触碰（不 add、不删、不移）」——**保留原样不清理**，本文件在此
+   显式登记其存在与归属，消除「未提及」缺口。它非本任务产物、非代码/
+   依赖/配置改动，不构成破坏性残留；其最终处置权在 FV-1 战役与编排者。
+2. **`ci/out/SUMMARY.txt` 等 5 个 ci/out 文件被覆写（git M）**：复核员亲跑
+   管道的副作用（复核差异登记自述「非执行员证据缺陷」），门级结果逐字
+   相同、仅耗时数字漂移。本轮已按红门处置纪律重跑七门（见下表），覆写
+   后的 ci/out 产物连同本文件一并收编提交，push 后 git status 除 `proofs/`
+   外 clean。
+
+## 提交图（复核轮收尾时）
 
 ```
+<复核轮收编提交：本文件更新 + ci/out 复核轮产物>
+86636b5 ci: 七门首跑证据——6 绿 1 红（deny advisories RUSTSEC-2024-0449 登记 blocker）
 9d3a62a fix(af-compiler): 消 clippy 新增警告 doc_lazy_continuation——golden_test 注释行首 + 改词
-<本文件与 ci/out 证据提交>
 2fe80c1 style: rustfmt 全仓归零——19 文件纯重排（含 registry_decl_test.rs 在制重排）
 1bb14df fix(af-compiler): 透传 Value 键序规范化——cedar preserve_order 特性渗漏修复
 e64c39f fix(af-order): 补齐 DriverConfig P4/P5 扩展字段——合并语义残留
@@ -35,17 +51,17 @@ e64c39f fix(af-order): 补齐 DriverConfig P4/P5 扩展字段——合并语义�
   （任务一期间篡改测试触碰过 sample1/GPTSwarm 两 golden 的 mtime，内容经
   git 核实与提交态一致）。
 
-## 七门逐门证据（第二轮全量跑，`ci/out/SUMMARY.txt`）
+## 七门逐门证据（复核轮全量跑，`ci/out/SUMMARY.txt`；首跑/复跑门级一致）
 
 | # | 门 | 结果 | 命令 | 关键输出 |
 | --- | --- | --- | --- | --- |
-| 1 | fmt | **PASS** 568ms | `cargo fmt --check --all` | 零输出退出 0 |
-| 2 | clippy | **PASS** 390ms | `cargo clippy --workspace --all-targets -j4 --message-format=json` + `ci/clippy_gate.py` | `CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）` |
-| 3 | test | **PASS** 9718ms | `cargo test -j4 --workspace` | 118 suites, passed=1089 failed=0 |
+| 1 | fmt | **PASS** 549ms | `cargo fmt --check --all` | 零输出退出 0 |
+| 2 | clippy | **PASS** 302ms | `cargo clippy --workspace --all-targets -j4 --message-format=json` + `ci/clippy_gate.py` | `CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）` |
+| 3 | test | **PASS** 9504ms | `cargo test -j4 --workspace` | 118 suites, passed=1089 failed=0 |
 | 4 | cue | **PASS** 33ms | cue vet/export + 结构断言 + 反例拒 | `recipe-merged.json 结构断言: 9 值全中，键集闭合`；反例 bad-override 被 vet 拒 |
-| 5 | scrub | **PASS** 240ms | `ci/parse_scrub.py` × 7 真实日志 | 2 正例 exit=0、5 反例 exit=1，`PASS-EXPECTED×2 / FAIL-EXPECTED×5` 全中 |
-| 6 | cosign | **PASS** 65ms | `sudo unshare -n bin/cosign verify-blob --trusted-root …`（断网 netns） | `正例: Verified OK；篡改例: 已拒绝（exit 1）；netns: sudo unshare -n` |
-| 7 | deny | **FAIL** 601ms | `cargo deny --offline check` | `error[unmaintained]: unsafe-libyaml is unmaintained`（RUSTSEC-2024-0449）→ `advisories FAILED, bans ok, licenses ok, sources ok` |
+| 5 | scrub | **PASS** 242ms | `ci/parse_scrub.py` × 7 真实日志 | 2 正例 exit=0、5 反例 exit=1，`PASS-EXPECTED×2 / FAIL-EXPECTED×5` 全中 |
+| 6 | cosign | **PASS** 57ms | `sudo unshare -n bin/cosign verify-blob --trusted-root …`（断网 netns） | `正例: Verified OK；篡改例: 已拒绝（exit 1）；netns: sudo unshare -n` |
+| 7 | deny | **FAIL** 595ms | `cargo deny --offline check` | `error[unmaintained]: unsafe-libyaml is unmaintained`（ID: RUSTSEC-2024-0449）→ `advisories FAILED, bans ok, licenses ok, sources ok` |
 
 step7 红项归因（依赖类，非环境性）：
 - 唯一 error：**RUSTSEC-2024-0449**，链路 `unsafe-libyaml 0.2.11 ← serde_yaml
@@ -79,12 +95,15 @@ step7 红项归因（依赖类，非环境性）：
 
 ## df 前后
 
-- 开工：`/dev/nvme0n1p2 468G 217G 227G 49% /`
-- 收工：`/dev/nvme0n1p2 468G 219G 226G 50% /`（全程 ≥15G 红线之上）
+- 任务二开工：`/dev/nvme0n1p2 468G 217G 227G 49% /`
+- 任务二收工：`/dev/nvme0n1p2 468G 219G 226G 50% /`
+- 复核轮：`468G 219G 226G 50%`（复核亲跑+本轮重跑后无显著变化，全程 ≥15G 红线之上）
 
-## 首跑 → 复跑差异
+## 首跑 → 复跑 → 复核轮差异
 
 - 首跑：step1/3/4/5/6 绿，step2 红（1 条 doc_lazy_continuation 新增警告）、
-  step7 红（同上 RUSTSEC-2024-0449）。
-- 修 step2（纯注释改词）后全量复跑：step2 转绿，其余不变。两轮完整日志：
-  `/tmp/af-ci-run1.log`、`/tmp/af-ci-run2.log`；门级产物 `ci/out/`。
+  step7 红（RUSTSEC-2024-0449）。
+- 修 step2（纯注释改词，commit 9d3a62a）后复跑：step2 转绿，其余不变。
+- 复核轮（本节）：门级结果与复跑逐字一致（6 绿 1 红），仅耗时数字属运行间
+  噪声。完整日志：`/tmp/af-ci-run1.log`、`/tmp/af-ci-run2.log`、
+  `/tmp/af-ci-run3.log`；门级产物 `ci/out/`（已随本文件提交收编）。
