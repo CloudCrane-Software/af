@@ -26,6 +26,13 @@
       "name": "pkg.sweng.test_unit",
       "version": "1",
       "impl_ref": "packages/sweng@1.0.0/units/test_unit.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.publish_task_finished",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "packages/sweng@1.0.0/tools/publish_task_finished.py"
     }
   ]
 }

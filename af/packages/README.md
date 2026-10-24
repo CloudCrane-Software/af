@@ -60,3 +60,40 @@
 首批声明 = golden 源 sample2 / sample3 / GPTSwarm 三稿 `uses.*` 引用闭包：
 `route.main@1`、`route.cheap@1`（根级）；`pkg.sweng.locate/view/edit`、
 `pkg.sweng.test_unit@1`（sweng）；`pkg.swarmkit.tools@1`（swarmkit）。
+
+## P2-L12 扩容（G2G3 放行裁决 §三.1 缺组件处置，2026-10-24）
+
+G3 全链闸门 L1-L4 首轮 13 稿败于 L4 绑定（E9001 ×57，去重 50 名——闸门
+§⑤ 覆盖清单）。本扩容**声明式注册**这 50 名：条目语义 = 该组件名已被
+注册表承认、绑定层可解析；**非实现**——`impl_ref` 指向预留包路径（承
+sweng 首批先例：装载期只登记引用，实现本体归 G4/执行面）。
+
+- 扩容量：model_route 5（route.plan/manager/alt/judge/reflect，根级，
+  与 route.main/cheap 同端点面——plan/manager/judge/reflect 主力档
+  GLM-5.3、alt 备档 GLM-5.3-Flash）+ tool 28 + unit 13 + memory 4
+  = 50；总计 7 + 50 = **57 条声明**。
+- 落位：**已有包**补包级清单——adaskit（task_loader/verifier）、
+  autogen（tool.search/calc、team.stall/term_unit、mem.list）、sweng
+  （publish_task_finished）；**未建包**（aflowkit/agensh/camelkit/
+  crewkit/debatekit/reactkit/reflexkit/sweagent/langgraph/openworld 十
+  包，尚无图清单）的 35 件暂驻**根级** components.json 的 `pkg.*` 命名
+  空间段。不新建空包目录：`af-dsl::registry` 规则「包目录必须有
+  manifest.json 且 graphs 至少一项」（registry.rs:230-234/:152）——十包
+  无图可声明（selector 闭包 14 图属 adaskit/autogen/swarmkit/sweng 四包），
+  建 dir 即造空清单或伪图，两皆不可。G4 建包时将 35 件迁包级。
+- 版本：版本化引用对齐稿内 `@1`；未版本化引用的 7 名
+  （pkg.agensh.inspect/local_edit/local_run/publish_update、
+  pkg.reactkit.hopqa_api/lookup、pkg.sweng.publish_task_finished）恰好
+  单版本声明 `"1"`（bind 未版本化解析须唯一，否则 E9002 歧义拒）。
+- effect_class 判例（tool 28）：执行面/环境/网络类 external_once
+  （task_loader×2、local_run、web_search/fetch、debatekit.search、
+  hopqa_api/lookup、env_exec/search、aci.run_test、sweagent.env、
+  openworld.env）；落盘类 persist（local_edit、publish_update、
+  board_append、workspace_commit、aci.edit/create/submit、
+  publish_task_finished）；只读/计算类 pure（inspect、kickoff_inputs、
+  doc_render、tool.calc、aci.search/open）。承闸门 §⑤ 效果面建议
+  （env_exec/env/run_test/submit → persist 或 external_once；
+  web_search/fetch → external_once）。
+- 测试：`crates/af-compiler/tests/registry_decl_test.rs`（50 名可解析/
+  版本+类逐名、57 总量、7 名单版本消歧、真实声明 E9003 类不匹配拒）。
+
