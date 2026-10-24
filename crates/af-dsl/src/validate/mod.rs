@@ -1,8 +1,9 @@
-//! 语义层校验编排（M1-M4）：手写词表（E1004）→ 重复 id（E2003，建索引时收）
-//! → 引用闭包（refs）→ context.sections 装配 + INV-1（inv1）→ INV-2（inv2）
-//! → INV-3 自验证（inv3）→ INV-4 评估输入（inv4）→ M4 收口（CEL 位点判定 →
-//! route 归一化 → topology_selector 候选核对），一次收齐。顺序固定以
-//! 保证违例输出确定性。
+//! 语义层校验编排（M1-M4 + fix2）：手写词表（E1004）→ 重复 id（E2003，建
+//! 索引时收）→ 引用闭包（refs）→ 受控循环守卫（loop_guard，fix2）→
+//! context.sections 装配 + INV-1（inv1）→ INV-2（inv2）→ INV-3 自验证
+//! （inv3，含安全点验证面 E2322）→ INV-4 评估输入（inv4）→ M4 收口（CEL
+//! 位点判定 → route 归一化 → topology_selector 候选核对），一次收齐。
+//! 顺序固定以保证违例输出确定性。
 //!
 //! 与 §3.1 草图序的偏差：草图把「CEL 编译」排在引用闭包前，但 M4 的 CEL
 //! 判定需要按**位置词表**（作用域链 + schema）建合成绑定，依赖索引——故
@@ -12,6 +13,7 @@ mod inv1;
 mod inv2;
 mod inv3;
 mod inv4;
+mod loop_guard;
 mod m4;
 mod refs;
 
@@ -75,6 +77,7 @@ pub fn validate_with(doc: &Document, opts: &ValidateOptions) -> Report {
     report.violations.extend(crate::shape::check_vocab(doc));
     let index = Index::build(doc, &mut report);
     refs::check(doc, &index, &mut report);
+    loop_guard::check(&index, &mut report);
     inv1::check(doc, &index, opts, &mut report);
     inv2::check(&index, &mut report);
     inv3::check(&index, &mut report);

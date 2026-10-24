@@ -561,9 +561,10 @@ fn arg_resolution_walks_scope_chain_outward() {
         "                  - { id: leaf, kind: task, uses: { model: route.main@1 }, emits: { v: a }, context: { sections: [",
         "                      { from: arg, name: item, policy: project, quota_tokens: 10 },",
         "                      { from: arg, name: x, policy: project, quota_tokens: 10 }] } }",
+        "                  - { id: g, kind: gate, assert: \"true\" }",
         "                edges: []",
         "              max_iterations: 2",
-        "              safety_points: []",
+        "              safety_points: [ { node: g, kind: gate } ]",
         "        edges: []",
         "edges: []",
     ]
