@@ -17,6 +17,7 @@
 //! 命令构造由 tests/p2_bridge.rs FakeBridge 断言钉死。
 
 use crate::hostbridge::HostBridge;
+use crate::judge::JudgeLocator;
 use crate::suite::tb::{self, TbEnv};
 use serde::Deserialize;
 use std::path::Path;
@@ -174,4 +175,39 @@ pub fn setup(
         )),
         Err(err) => Err(err),
     }
+}
+
+/// 取证 agent diff（完成度门禁与判分共用）：写 work_dir/agent.diff 并返回文本。
+/// （P3 目标 ← af-bench swev.rs:102-117 原样搬入，`tb_ssh()` 换 `bridge.run()`；
+/// RED 桩，tests/p3_verify.rs。）
+pub fn capture_diff(
+    bridge: &dyn HostBridge,
+    host: &str,
+    env: &TbEnv,
+    work_dir: &Path,
+) -> Result<String, String> {
+    let _ = (bridge, host, env, work_dir);
+    unimplemented!(
+        "P3 GREEN 落位：swev.rs:102-117 原样搬入接 bridge（RED 先行，tests/p3_verify.rs）"
+    );
+}
+
+/// 判分：指纹门 → 取证 diff → 写入 eval 脚本 → 容器内执行 → 本地官方判分。
+/// `task_json_path` 是 swev-prep 产出的原始任务包（判分器全字段来源）。
+/// 返回 (resolved, note, eval_sha256)——eval_sha256 是判分日志的字节指纹
+/// （D-20 项 2：判分可追溯；桥接/判分早期失败时为 None）。
+/// （P3 目标 ← af-bench swev.rs:145-258 原样搬入：`tb_ssh()` 换 `bridge.run()`、
+/// judge 直造 Command 换 [`crate::judge::invoke`]（argv 契约收敛点，路径来自
+/// locator）、新增指纹门前置（方案 §3.2-2）；RED 桩，tests/p3_verify.rs。）
+pub fn verify(
+    bridge: &dyn HostBridge,
+    judge: &JudgeLocator,
+    host: &str,
+    env: &TbEnv,
+    task: &SwevTask,
+    work_dir: &Path,
+    task_json_path: &Path,
+) -> (Option<bool>, String, Option<String>) {
+    let _ = (bridge, judge, host, env, task, work_dir, task_json_path);
+    unimplemented!("P3 GREEN 落位：swev.rs:145-258 原样搬入（RED 先行，tests/p3_verify.rs）");
 }

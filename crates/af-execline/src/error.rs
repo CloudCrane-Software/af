@@ -26,6 +26,9 @@ pub enum ErrorCode {
     LedgerCorrupt,
     /// 执行单元失败。
     UnitFailed,
+    /// 判分脚本指纹门失败：脚本 sha256 ≠ 声明锚，或脚本不可读（无法验真）。
+    /// 吸收方案 §3.2-2 fail-loud——拒跑、不降级、不跳判、不静默换脚本。
+    JudgeFingerprintMismatch,
 }
 
 impl ErrorCode {
@@ -41,6 +44,7 @@ impl ErrorCode {
             Self::LedgerIo => "EX2001",
             Self::LedgerCorrupt => "EX2002",
             Self::UnitFailed => "EX3001",
+            Self::JudgeFingerprintMismatch => "EX3002",
         }
     }
 
@@ -56,6 +60,7 @@ impl ErrorCode {
             Self::LedgerIo => "LEDGER_IO",
             Self::LedgerCorrupt => "LEDGER_CORRUPT",
             Self::UnitFailed => "UNIT_FAILED",
+            Self::JudgeFingerprintMismatch => "JUDGE_FINGERPRINT_MISMATCH",
         }
     }
 }
@@ -91,6 +96,12 @@ pub enum ExeclineError {
     LedgerCorrupt { detail: String },
     #[error("EX3001: 执行单元失败: {detail}")]
     UnitFailed { detail: String },
+    #[error("EX3002: 判分脚本指纹不匹配: {script} 实测 {actual} ≠ 声明锚 {expected}（fail-loud：拒跑、不降级、不跳判、不静默换脚本；吸收方案 §3.2-2）")]
+    JudgeFingerprintMismatch {
+        script: String,
+        expected: String,
+        actual: String,
+    },
 }
 
 impl ExeclineError {
@@ -106,6 +117,7 @@ impl ExeclineError {
             Self::LedgerIo { .. } => ErrorCode::LedgerIo,
             Self::LedgerCorrupt { .. } => ErrorCode::LedgerCorrupt,
             Self::UnitFailed { .. } => ErrorCode::UnitFailed,
+            Self::JudgeFingerprintMismatch { .. } => ErrorCode::JudgeFingerprintMismatch,
         }
     }
 }
@@ -130,10 +142,15 @@ mod tests {
         assert_eq!(ErrorCode::LedgerIo.as_str(), "EX2001");
         assert_eq!(ErrorCode::LedgerCorrupt.as_str(), "EX2002");
         assert_eq!(ErrorCode::UnitFailed.as_str(), "EX3001");
+        assert_eq!(ErrorCode::JudgeFingerprintMismatch.as_str(), "EX3002");
         assert_eq!(
             ErrorCode::EngineRejected.name(),
             "ENGINE_REJECTED",
             "name 与码一一对应"
+        );
+        assert_eq!(
+            ErrorCode::JudgeFingerprintMismatch.name(),
+            "JUDGE_FINGERPRINT_MISMATCH"
         );
     }
 
