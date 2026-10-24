@@ -260,9 +260,11 @@ fn edge_without_from_is_e1002() {
 }
 
 #[test]
-fn body_without_edges_is_e1002() {
+fn body_without_nodes_is_e1002() {
+    // 注意：body.edges 可缺省（golden 样例 6 的 explore 体无 edges 键），
+    // 缺 nodes 才是 E1002。
     let src = doc(
-        "  - id: n1\n    kind: task\n    map:\n      over: input.q\n      body: { nodes: [] }\n    emits: { answer: a }",
+        "  - id: n1\n    kind: task\n    map:\n      over: input.q\n      body: { edges: [] }\n    emits: { answer: a }",
         "",
     );
     assert_eq!(shape_codes(&src), ["E1002"]);

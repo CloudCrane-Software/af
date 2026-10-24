@@ -181,8 +181,10 @@ pub struct UsesDecl {
 }
 
 /// emits 端口规格：直接类型，或从体转发（map 的 from_body 自动包 list<>）。
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(untagged)]
+/// 自定义反序列化：serde untagged 变体内的 deny_unknown_fields 不生效
+/// （实测 from_body+多余键被静默吞），改为显式收键，保住「全文
+/// deny_unknown_fields」硬边界——多余键/对象 schema → E1003。
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EmitSpec {
     FromBody {
         from_body: String,
@@ -190,13 +192,109 @@ pub enum EmitSpec {
     Type(PortType),
 }
 
+impl<'de> Deserialize<'de> for EmitSpec {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let v = serde_yaml::Value::deserialize(d)?;
+        match v {
+            serde_yaml::Value::Mapping(m) => {
+                let key = serde_yaml::Value::String("from_body".into());
+                if m.len() == 1 && m.contains_key(&key) {
+                    let path = match m.get(&key) {
+                        Some(serde_yaml::Value::String(s)) => s,
+                        _ => return Err(serde::de::Error::custom(
+                            "invalid type: from_body 的值必须是字符串路径（节点.端口）",
+                        )),
+                    };
+                    Ok(EmitSpec::FromBody {
+                        from_body: path.clone(),
+                    })
+                } else {
+                    Err(serde::de::Error::custom(
+                        "invalid type: emits 端口映射值只允许 {from_body: 节点.端口}",
+                    ))
+                }
+            }
+            other => PortType::try_from_value(other)
+                .map(EmitSpec::Type)
+                .map_err(serde::de::Error::custom),
+        }
+    }
+}
+
 /// 端口/store 元素类型：类型名 | list<·> | envelope<·> | 内联原始类型 | signal。
-/// 内联只收原始四型——对象 schema 必须住 types 表（untagged 失配 → E1003）。
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(untagged)]
+/// 内联只收原始四型——对象 schema 必须住 types 表（E1003）。
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PortType {
     Named(TypeRef),
     Inline(InlinePrimitive),
+}
+
+impl PortType {
+    /// 从已解析的 YAML 值构造；错误信息以 `invalid type:` 起头（→ E1003）。
+    fn try_from_value(v: serde_yaml::Value) -> Result<Self, String> {
+        match v {
+            serde_yaml::Value::String(s) => parse_type_expr(&s)
+                .map(|e| PortType::Named(TypeRef(e)))
+                .ok_or_else(|| {
+                    format!(
+                        "invalid type: 类型表达式 {s:?} 不合法（合法形：name | list<name> | envelope<name> | signal）"
+                    )
+                }),
+            serde_yaml::Value::Mapping(m) => {
+                let type_key = serde_yaml::Value::String("type".into());
+                if m.len() == 1 && m.contains_key(&type_key) {
+                    match m.get(&type_key) {
+                        Some(serde_yaml::Value::String(t)) => match t.as_str() {
+                            "string" => Ok(PortType::Inline(InlinePrimitive {
+                                r#type: PrimitiveKind::String,
+                            })),
+                            "integer" => Ok(PortType::Inline(InlinePrimitive {
+                                r#type: PrimitiveKind::Integer,
+                            })),
+                            "boolean" => Ok(PortType::Inline(InlinePrimitive {
+                                r#type: PrimitiveKind::Boolean,
+                            })),
+                            "number" => Ok(PortType::Inline(InlinePrimitive {
+                                r#type: PrimitiveKind::Number,
+                            })),
+                            other => Err(format!(
+                                "invalid type: 端口内联类型 {other:?} 不在原始四型 string|integer|boolean|number（对象 schema 必须住 types 表）"
+                            )),
+                        },
+                        _ => Err("invalid type: 端口内联 {type: ·} 的值必须是字符串".to_string()),
+                    }
+                } else {
+                    Err(
+                        "invalid type: 端口映射值只允许 {type: string|integer|boolean|number}（对象 schema 必须住 types 表）"
+                            .to_string(),
+                    )
+                }
+            }
+            other => Err(format!(
+                "invalid type: 端口类型必须是字符串或 {{type: 原始四型}}，实为 {}",
+                yaml_kind_name(&other)
+            )),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for PortType {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let v = serde_yaml::Value::deserialize(d)?;
+        PortType::try_from_value(v).map_err(serde::de::Error::custom)
+    }
+}
+
+fn yaml_kind_name(v: &serde_yaml::Value) -> &'static str {
+    match v {
+        serde_yaml::Value::Null => "null",
+        serde_yaml::Value::Bool(_) => "布尔",
+        serde_yaml::Value::Number(_) => "数字",
+        serde_yaml::Value::String(_) => "字符串",
+        serde_yaml::Value::Sequence(_) => "序列",
+        serde_yaml::Value::Mapping(_) => "映射",
+        serde_yaml::Value::Tagged(_) => "带标签值",
+    }
 }
 
 impl PortType {
@@ -239,17 +337,6 @@ impl TypeRef {
     }
 }
 
-impl<'de> Deserialize<'de> for TypeRef {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let s = String::deserialize(d)?;
-        parse_type_expr(&s).map(TypeRef).ok_or_else(|| {
-            serde::de::Error::custom(format!(
-                "类型表达式语法不合法：{s:?}（合法形：name | list<name> | envelope<name> | signal）"
-            ))
-        })
-    }
-}
-
 /// 类型表达式文法：一层泛型、载荷为名或 signal。返回 None = 语法不合法。
 fn parse_type_expr(s: &str) -> Option<TypeExpr> {
     if s == "signal" {
@@ -289,14 +376,13 @@ fn is_type_name(s: &str) -> bool {
 }
 
 /// 内联原始类型：{type: string|integer|boolean|number}（对象 schema 不收 → E1003）。
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
+/// 由 `PortType::try_from_value` 显式构造（不经 derive，见该处说明）。
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InlinePrimitive {
     pub r#type: PrimitiveKind,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PrimitiveKind {
     String,
     Integer,
@@ -344,11 +430,13 @@ pub struct LoopDecl {
     pub on_exhausted: Option<OnExhausted>,
 }
 
-/// 内联体：entry = nodes 首元素。M1 不做空体检查（E1007 留待构造形状模块）。
+/// 内联体：entry = nodes 首元素。edges 可缺省（golden 样例 6 的 explore 体）。
+/// M1 不做空体检查（E1007 留待构造形状模块）。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Body {
     pub nodes: Vec<NodeDecl>,
+    #[serde(default)]
     pub edges: Vec<EdgeDecl>,
 }
 
