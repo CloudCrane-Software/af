@@ -1,0 +1,526 @@
+version: 1
+
+# ============================================================================
+# 目标：LangGraph-StateGraph
+# 来源：计划/研究组/对齐机制卡/LangGraph-StateGraph.md（卡 ⑥(a) 12 条 / ⑥(b) 12 条）
+# 语法：《DSL-语法提案-B》正本（AFB v0.1）+ 择优裁决 20261024 §二
+#        （escape.kind 七类词表；meta.topology_selector 的语义与本目标的关系见 notes.md）
+# 编制：翻译草稿（输入，非验收）；机制→语法映射表见同名 .notes.md
+# ============================================================================
+
+meta:
+  name: langgraph_stategraph
+  graph_version: "1.0"
+  entry: orchestrate
+  input: lg_input
+  output: { ref: answer, from: finalize }
+  intent: >-
+    LangGraph StateGraph 的 AFB 转写：共享 State 通道拆为单写者 store（reducer 写侧归并
+    → 读侧交错），条件边=route 构造，图内环=受控循环（recursion_limit→max_iterations），
+    interrupt=human 节点（resume.schema=类型化恢复值），checkpointer=边 checkpoint，
+    子图=loop/map 内联体（降维为版本化子图），Send 的静态子集=map；11 项运行时语义
+    （运行时改图 / Send 动态基数 / LLM 路由 / 任意挂起 / 任意副作用 / 跨线程 Store /
+    节点内并发流式 / 并行写冲突 / 子图可见性 / 时间旅行 / 跨图编排）以 escape 构造记账，
+    按裁决 §二-2 七类词表归类。
+
+types:
+  # 整图输入契约：LangGraph 的 START 输入（TypedDict 初始 state）
+  - name: lg_input
+    schema:
+      type: object
+      required: [task, worker_pool]
+      properties:
+        task: { type: string }
+        worker_pool:
+          type: array
+          items: { type: string }
+
+  # State 通道 "decision"：条件边路由函数（add_conditional_edges）的返回载荷
+  - name: decision
+    schema:
+      type: object
+      required: [next_worker, done]
+      properties:
+        next_worker: { type: string }
+        done: { type: boolean }
+        rationale: { type: string }
+
+  # State 通道 "findings"：worker 节点返回的状态增量
+  - name: finding
+    schema:
+      type: object
+      required: [worker, content, score]
+      properties:
+        worker: { type: string }
+        content: { type: string }
+        score: { type: integer }
+
+  # State 通道 "verdict"：check 节点的判定输出（对应 LangGraph 的结构化校验结果）
+  - name: verdict
+    schema:
+      type: object
+      required: [pass, issues, hazard]
+      properties:
+        pass: { type: boolean }
+        issues: { type: array, items: { type: string } }
+        hazard: { type: string }
+
+  # interrupt() 的外部回填值（对应 Command(resume=...)）：类型化恢复值
+  - name: approval
+    schema:
+      type: object
+      required: [approved]
+      properties:
+        approved: { type: boolean }
+        note: { type: string }
+
+  # 记忆节点产出的摘要工件（"记忆 = 状态通道 + 一个函数"）
+  - name: digest
+    schema:
+      type: object
+      required: [text, source]
+      properties:
+        text: { type: string }
+        source: { type: string }
+
+  # 运行时语义探针输出 + escape 节点回执（共用同一形状）
+  - name: hazard
+    schema:
+      type: object
+      required: [kind, detail]
+      properties:
+        kind: { type: string }
+        detail: { type: string }
+
+  # 逃逸台账汇总（tally 算子产物）
+  - name: hazard_report
+    schema:
+      type: object
+      required: [count, kinds]
+      properties:
+        count: { type: integer }
+        kinds: { type: array, items: { type: string } }
+
+  # 整图终态工件
+  - name: answer
+    schema:
+      type: object
+      required: [final, supports]
+      properties:
+        final: { type: string }
+        supports: { type: array, items: { type: string } }
+
+# ============================================================================
+# stores：LangGraph 的 State 通道 → AFB 状态槽
+# 关键映射：LangGraph 允许多写者通道（Annotated[list, add] reducer）→ AFB INV-2
+# 要求单写者，故拆为多个单写槽；reducer 的"写侧按 step 归并"改为"读侧按 step 交错"
+# （context.sections 中多个 message_log 段的内建交错规则，见提案 B §1.2）。
+# ============================================================================
+stores:
+  - name: supervisor_turns
+    type: message_log
+    writer: orchestrate.supervisor        # 状态通道 messages 的 supervisor 侧写入（单写者）
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: worker_turns
+    type: message_log
+    writer: orchestrate.log_turns         # reducer 的 AFB 对应物：汇聚侧串行追加
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: findings
+    type: collection
+    item: finding
+    writer: orchestrate.persist            # 并行 worker 的增量在此合并（列表 reducer 的静态化）
+    lifecycle: run
+    retention: { max_items: 128 }
+  - name: long_term
+    type: collection
+    item: digest
+    writer: orchestrate.compact           # 显式记忆节点写入的长期摘要
+    lifecycle: persistent                 # 跨会话保留（LangGraph Store 的静态近似部分）
+    retention: { max_items: 128 }
+
+nodes:
+  # --------------------------------------------------------------------------
+  # orchestrate：LangGraph 的主图（条件边构成的环）→ AFB 受控循环。
+  # 内联体 = 嵌入式子图（卡 ⑥a-10「子图嵌套 → 图作为节点」）；降维后为版本化子图。
+  # max_iterations=25 = recursion_limit 默认 25（卡 ⑥a-12）。
+  # --------------------------------------------------------------------------
+  - id: orchestrate
+    kind: task
+    loop:
+      body:
+        nodes:
+          # supervisor = 条件边的路由函数宿主（LLM 决策 → 结构化 decision → route 求值）
+          - id: supervisor
+            kind: task
+            uses: { model: route.main@1 }
+            writes: [supervisor_turns]
+            consumes: { feedback: approval }
+            emits: { decision: decision }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.langgraph.supervisor_system, quota_tokens: 500 }
+                - { from: input, fields: [task], policy: project, quota_tokens: 200 }
+                # 两个 message_log 段由内建规则按 step 序交错 = add_messages reducer 的读侧对应物
+                - { from: store, store: supervisor_turns, policy: full, quota_tokens: 2000 }
+                - { from: store, store: worker_turns, policy: full, quota_tokens: 2000 }
+                - { from: store, store: long_term, policy: latest_k, args: { k: 8 }, quota_tokens: 1200 }
+                - { from: edge, port: feedback, policy: project, quota_tokens: 300, optional: true }
+            route:
+              default: dispatch
+              rules:
+                # 条件边返回 END 的静态化：done==true → 跳出本构造体
+                - { when: "supervisor.decision.done == true", goto: exit }
+
+          # dispatch = Send 的静态子集：基数由输入列表决定（map.over 运行时定基数）
+          - id: dispatch
+            kind: task
+            consumes: { decision: decision }
+            map:
+              over: input.worker_pool
+              body:
+                nodes:
+                  - id: worker
+                    kind: task
+                    uses: { model: route.alt@1 }
+                    emits: { finding: finding }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.langgraph.worker_system, vars: { worker: arg.item }, quota_tokens: 400 }
+                        - { from: input, fields: [task], policy: project, quota_tokens: 300 }
+                edges: []
+            emits: { items: { from_body: worker.finding } }
+
+          # aggregate = reducer 的静态对应物：并行写者的增量在此合并（单一合并点）
+          - id: aggregate
+            kind: transform
+            consumes: { items: "list<finding>" }
+            ops:
+              - { op: merge, ports: [items], into: merged }
+            emits: { merged: "list<finding>" }
+
+          # persist = 并行增量落槽（findings 槽的唯一写者；追加语义 = list reducer）
+          - id: persist
+            kind: transform
+            consumes: { merged: "list<finding>" }
+            writes: [findings]
+            ops:
+              - { op: project, port: merged, into: findings }
+            emits: {}
+
+          # log_turns = 把并行写者的增量追加到消息通道（读侧交错的另一半）
+          - id: log_turns
+            kind: transform
+            consumes: { merged: "list<finding>" }
+            writes: [worker_turns]
+            ops:
+              - { op: truncate, port: merged, max_tokens_each: 300, into: worker_turns }
+            emits: {}
+
+          # compact = 显式记忆节点（读 findings 槽 → 写长期摘要槽）
+          - id: compact
+            kind: transform
+            consumes: { merged: "list<finding>" }
+            reads: [findings]
+            writes: [long_term]
+            ops:
+              - { op: slice, port: findings, k: 20, into: recent }
+              - { op: merge, ports: [merged, recent], into: digest }
+              - { op: project, port: digest, into: long_term }
+            emits: {}
+
+          # verify = 验证面（check 单元外置）：LangGraph 的"检查-修正"由节点+边显式表达
+          - id: verify
+            kind: check
+            uses: { unit: pkg.langgraph.verify@1 }
+            consumes: { merged: "list<finding>" }
+            emits: { verdict: verdict }
+
+          # approve = interrupt() 人在回路：类型化恢复值 = resume.schema
+          - id: approve
+            kind: task
+            human:
+              station: review-desk
+              role: reviewer
+              quorum: 1
+              resume:
+                schema:
+                  type: object
+                  required: [approved]
+                  properties:
+                    approved: { type: boolean }
+                    note: { type: string }
+            consumes: { verdict: verdict }
+            emits: { decision: approval }
+            route:
+              default: exit                    # 批准 → 结束本构造体（等价 LangGraph 的 END）
+              rules:
+                # 打回 → 回到 supervisor 重规划（Command(goto=...) 的声明式对应）
+                - { when: "resume.approved == false", goto: supervisor }
+        edges:
+          - { from: supervisor, output: decision, to: dispatch, input: decision }
+          - { from: dispatch, output: items, to: aggregate, input: items }
+          - { from: aggregate, output: merged, to: persist, input: merged }
+          - { from: aggregate, output: merged, to: log_turns, input: merged }
+          - { from: aggregate, output: merged, to: compact, input: merged }
+          - { from: aggregate, output: merged, to: verify, input: merged }
+          - { from: verify, output: verdict, to: approve, input: verdict }
+          - { from: approve, output: decision, to: supervisor, input: feedback }
+      max_iterations: 25                     # recursion_limit=25（硬性停止条件）
+      carried:
+        - { store: supervisor_turns, max_items: 64 }
+        - { store: worker_turns, max_items: 64 }
+        - { store: findings, max_items: 128 }
+        - { store: long_term, max_items: 128 }
+      safety_points:
+        - { node: verify, kind: check }     # 每轮必须过外部判定面
+      exit_when: "resume.approved == true"
+      on_exhausted: fail                    # GraphRecursionError → 终态 failed
+    emits:
+      verdict: { from_body: verify.verdict }
+      merged: { from_body: aggregate.merged }
+
+  # --------------------------------------------------------------------------
+  # runtime_probe：把「运行时才可决定的语义」显式暴露为一个状态驱动的分派点。
+  # 它是翻译脚手架：LangGraph 中这些行为散落在各节点内部，AFB 只能静态声明其入口。
+  # --------------------------------------------------------------------------
+  - id: runtime_probe
+    kind: task
+    uses: { model: route.main@1 }
+    consumes: { verdict: verdict }
+    emits: { note: hazard }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.langgraph.probe_system, quota_tokens: 400 }
+        - { from: input, fields: [task], policy: project, quota_tokens: 200 }
+        - { from: edge, port: verdict, policy: project, quota_tokens: 400 }
+    route:
+      default: hazard_log                   # 未命中具体 hazard → 直接进入逃逸台账
+      rules:
+        - { when: "runtime_probe.note.kind == 'graph_rewrite'", goto: runtime_rewrite }
+        - { when: "runtime_probe.note.kind == 'send_fanout'", goto: dynamic_dispatch }
+        - { when: "runtime_probe.note.kind == 'llm_route'", goto: llm_route }
+        - { when: "runtime_probe.note.kind == 'suspend_resume'", goto: suspend_resume }
+        - { when: "runtime_probe.note.kind == 'side_effects'", goto: side_effects }
+        - { when: "runtime_probe.note.kind == 'thread_store'", goto: thread_store }
+        - { when: "runtime_probe.note.kind == 'stream_exec'", goto: stream_exec }
+        - { when: "runtime_probe.note.kind == 'conflict_merge'", goto: conflict_merge }
+        - { when: "runtime_probe.note.kind == 'visibility_scope'", goto: visibility_scope }
+        - { when: "runtime_probe.note.kind == 'time_travel'", goto: time_travel }
+        - { when: "runtime_probe.note.kind == 'cross_graph'", goto: cross_graph }
+
+  # ==========================================================================
+  # 逃逸舱区（L4）：卡 ⑥(b) 的 12 项中，11 项在 L0–L3 无静态落点。
+  # 每节点 = 一条逃逸记账（escape.kind 为裁决 §二-2 七类闭环词表）。
+  # ==========================================================================
+
+  # ⑥b-1 运行时动态改写图结构（临时插删边 / 运行时决定下一节点集合）
+  - id: runtime_rewrite
+    kind: task
+    escape:
+      kind: meta_loop
+      impl_ref: packages/langgraph@1.0.0/hatches/runtime_rewrite.py
+      reason: "运行时自举改写图结构（临时插入/删除边、运行时决定节点集合）；AFB 拓扑必须静态声明，改图只能退化为状态驱动路由"
+      owner: lang-team
+      share_budget_pct: 20
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-2 Send 的运行时动态扇出基数（静态子集已由 dispatch 的 map 表达）
+  - id: dynamic_dispatch
+    kind: task
+    escape:
+      kind: meta_loop
+      impl_ref: packages/langgraph@1.0.0/hatches/send_dispatch.py
+      reason: "Send 在运行时生成 N 个并行任务实例，N 由运行期数据决定，超出静态 map 节点/边数量"
+      owner: lang-team
+      share_budget_pct: 20
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-3 条件边在运行时返回多目标 / 依赖运行期数据决定拓扑（不可静态求值）
+  - id: llm_route
+    kind: task
+    escape:
+      kind: llm_predicate
+      impl_ref: packages/langgraph@1.0.0/hatches/llm_route.py
+      reason: "以 LLM 自由文本输出直接决定下一节点（多目标返回）；AFB 的 route 只能是静态可校验的 CEL 谓词"
+      owner: lang-team
+      share_budget_pct: 15
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-4 真正的 interrupt：任意节点内部挂起、等待外部输入、从挂起点续跑且副作用不回滚
+  - id: suspend_resume
+    kind: task
+    escape:
+      kind: runtime_context_mutation
+      impl_ref: packages/langgraph@1.0.0/hatches/suspend_resume.py
+      reason: "节点内部任意位置挂起并在运行中注入外部输入续跑，过程语义与副作用不回滚无法由边界暂停表达"
+      owner: lang-team
+      share_budget_pct: 15
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-5 节点内任意 Python 副作用与状态事务（框架不提供节点级事务/回滚）
+  - id: side_effects
+    kind: task
+    escape:
+      kind: env_adapter
+      impl_ref: packages/langgraph@1.0.0/hatches/side_effects.py
+      reason: "节点内任意副作用与外部交互；AFB 不承诺节点级事务/回滚，DSL 若承诺事务性即越界"
+      owner: lang-team
+      share_budget_pct: 15
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-6 跨线程长期记忆（Store）与任意键值访问
+  - id: thread_store
+    kind: task
+    escape:
+      kind: env_adapter
+      impl_ref: packages/langgraph@1.0.0/hatches/thread_store.py
+      reason: "跨执行线共享的任意键值存取（动态键、跨 thread_id 可见性）；AFB store 的静态槽只覆盖其类型化部分"
+      owner: lang-team
+      share_budget_pct: 10
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-8 节点内并发调用 / 流式返回（token 级 streaming、async 取消）
+  - id: stream_exec
+    kind: task
+    escape:
+      kind: env_adapter
+      impl_ref: packages/langgraph@1.0.0/hatches/stream_exec.py
+      reason: "节点内部并发与流式/取消语义；AFB 执行模型为 super-step 级同步，节点内并发需宿主语言支持"
+      owner: lang-team
+      share_budget_pct: 10
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-9 超级步内并行节点的写冲突消解（多写者非确定性合并顺序）
+  - id: conflict_merge
+    kind: task
+    escape:
+      kind: runtime_context_mutation
+      impl_ref: packages/langgraph@1.0.0/hatches/conflict_merge.py
+      reason: "同一超级步内多写者写同一通道的非确定性合并顺序与冲突处理；AFB 以 INV-2 编译期拒绝多写者，合并语义下沉到本逃逸实现"
+      owner: lang-team
+      share_budget_pct: 10
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-10 子图与父图的状态可见性/隔离边界（通道级可见性声明）
+  - id: visibility_scope
+    kind: task
+    escape:
+      kind: runtime_context_mutation
+      impl_ref: packages/langgraph@1.0.0/hatches/visibility_scope.py
+      reason: "子图向上暴露/隐藏哪些状态通道需运行时声明；AFB 的作用域只有体外声明 + carried 覆盖，无通道级可见性字段"
+      owner: lang-team
+      share_budget_pct: 10
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-11 时间旅行（回到任意历史检查点并从该点分支）
+  - id: time_travel
+    kind: task
+    escape:
+      kind: runtime_context_mutation
+      impl_ref: packages/langgraph@1.0.0/hatches/time_travel.py
+      reason: "回到任意历史检查点并分支属于运行历史操作而非图结构声明；AFB 的 checkpoint 只声明快照点，不提供历史寻址"
+      owner: lang-team
+      share_budget_pct: 10
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # ⑥b-12 跨图/跨运行的编排与调度器语义（多图并行、外部队列驱动）
+  - id: cross_graph
+    kind: task
+    escape:
+      kind: meta_loop
+      impl_ref: packages/langgraph@1.0.0/hatches/cross_graph.py
+      reason: "多图并行与外部队列驱动的跨运行调度，超出单图执行模型；meta.topology_selector 只做编译期选图，不提供运行时调度"
+      owner: lang-team
+      share_budget_pct: 15
+    consumes: { note: hazard }
+    emits: { note: hazard }
+
+  # hazard_log：逃逸台账汇总（单一 op，落点 = emits 端口）
+  - id: hazard_log
+    kind: transform
+    consumes: { note: hazard }
+    ops:
+      - { op: tally, port: note, by: kind, into: stats }
+    emits: { stats: hazard_report }
+
+  # finalize：整图终态（把发现与逃逸台账合成为答案）
+  - id: finalize
+    kind: task
+    uses: { model: route.main@1 }
+    consumes: { merged: "list<finding>", stats: hazard_report }
+    emits: { answer: answer }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.langgraph.finalize_system, quota_tokens: 400 }
+        - { from: input, fields: [task], policy: project, quota_tokens: 200 }
+        - { from: edge, port: merged, policy: project, quota_tokens: 1500 }
+        - { from: edge, port: stats, policy: project, quota_tokens: 400 }
+        - { from: store, store: findings, policy: full, quota_tokens: 2000 }
+
+edges:
+  # 固定边（START→orchestrate 由 meta.entry 承担）；END 由 route 的 goto: exit 承担
+  - { from: orchestrate, output: verdict, to: runtime_probe, input: verdict, checkpoint: true }
+  - { from: orchestrate, output: merged, to: finalize, input: merged, checkpoint: true }
+  - { from: runtime_probe, output: note, to: runtime_rewrite, input: note }
+  - { from: runtime_probe, output: note, to: dynamic_dispatch, input: note }
+  - { from: runtime_probe, output: note, to: llm_route, input: note }
+  - { from: runtime_probe, output: note, to: suspend_resume, input: note }
+  - { from: runtime_probe, output: note, to: side_effects, input: note }
+  - { from: runtime_probe, output: note, to: thread_store, input: note }
+  - { from: runtime_probe, output: note, to: stream_exec, input: note }
+  - { from: runtime_probe, output: note, to: conflict_merge, input: note }
+  - { from: runtime_probe, output: note, to: visibility_scope, input: note }
+  - { from: runtime_probe, output: note, to: time_travel, input: note }
+  - { from: runtime_probe, output: note, to: cross_graph, input: note }
+  - { from: runtime_probe, output: note, to: hazard_log, input: note }
+  - { from: runtime_rewrite, output: note, to: hazard_log, input: note }
+  - { from: dynamic_dispatch, output: note, to: hazard_log, input: note }
+  - { from: llm_route, output: note, to: hazard_log, input: note }
+  - { from: suspend_resume, output: note, to: hazard_log, input: note }
+  - { from: side_effects, output: note, to: hazard_log, input: note }
+  - { from: thread_store, output: note, to: hazard_log, input: note }
+  - { from: stream_exec, output: note, to: hazard_log, input: note }
+  - { from: conflict_merge, output: note, to: hazard_log, input: note }
+  - { from: visibility_scope, output: note, to: hazard_log, input: note }
+  - { from: time_travel, output: note, to: hazard_log, input: note }
+  - { from: cross_graph, output: note, to: hazard_log, input: note }
+  - { from: hazard_log, output: stats, to: finalize, input: stats }
+
+policies:
+  budgets:
+    - { id: rounds_cap, dimension: turns, scope: loop:orchestrate, cap: 25 }
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 900 }
+    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 600000 }
+    - { id: tool_cap, dimension: tool_calls, scope: plan, cap: 40 }
+  stop:
+    - { when: "steps.turns >= 24", outcome: failed }
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: failed }
+  failures:
+    - class: transport_transient               # RetryPolicy 对应物（分类维度=语义类别）
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      retry: { max: 3, backoff_ms: 60000 }
+    - class: schema_invalid                   # 状态增量不合 schema → 同节点重试
+      route: same_node
+      feedback: format_reminder
+      retry: { max: 2, backoff_ms: 0 }
+    - class: timeout
+      route: same_node
+      retry: { max: 2, backoff_ms: 5000 }
+    - class: gate_refused                     # 验证面不通过 → 下一轮迭代（由人打回或重规划）
+      route: next_iteration
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

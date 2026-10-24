@@ -1,0 +1,528 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "metagpt_sop",
+      "entry": "pm",
+      "nodes": [
+        {
+          "id": "architect",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "build",
+          "kind": "task",
+          "loop_spec": {
+            "body": "metagpt_sop/build",
+            "max_iterations": 3,
+            "carried": [
+              {
+                "store": "repo",
+                "max_items": 256
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "qa",
+                "kind": "check"
+              }
+            ],
+            "exit_when": {
+              "source": "attempt.passed == true",
+              "roots": [
+                "attempt"
+              ],
+              "digest": "b707e3923259e94f203a322ec06f7be5d99dfe98319a2cf2dc9796466dfff682"
+            },
+            "on_exhausted": "fail"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "planner",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "pm",
+          "kind": "task",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "architect",
+          "output": "design",
+          "to": "planner",
+          "input": "design",
+          "checkpoint": false
+        },
+        {
+          "from": "planner",
+          "output": "tasks",
+          "to": "build",
+          "input": "tasks",
+          "checkpoint": false
+        },
+        {
+          "from": "pm",
+          "output": "prd",
+          "to": "architect",
+          "input": "prd",
+          "checkpoint": false
+        },
+        {
+          "from": "pm",
+          "output": "prd",
+          "to": "planner",
+          "input": "prd",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "metagpt_sop/build": {
+          "graph_version": "1.0",
+          "entry": "engineer",
+          "nodes": [
+            {
+              "id": "apply",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "engineer",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "qa",
+              "kind": "check",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "apply",
+              "output": "snapshot",
+              "to": "qa",
+              "input": "snapshot",
+              "checkpoint": false
+            },
+            {
+              "from": "engineer",
+              "output": "files",
+              "to": "apply",
+              "input": "files",
+              "checkpoint": false
+            },
+            {
+              "from": "qa",
+              "output": "report",
+              "to": "engineer",
+              "input": "feedback",
+              "checkpoint": false,
+              "guard": {
+                "source": "(qa.passed == false)",
+                "roots": [
+                  "qa"
+                ],
+                "digest": "32ac4e3c72e8c7150811fea8ac8b9c33171d5ecf3e7fb6f7fbd38d7c43c8e19f"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "requirement_input",
+      "output_type": "qa_report",
+      "output_from": "build",
+      "intent": "SOP 流水线 + 信封血缘；repo 单写者；QA 回环=受控循环，安全点=外部评估"
+    },
+    "types": {
+      "code_file": {
+        "properties": {
+          "content_ref": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content_ref"
+        ],
+        "type": "object"
+      },
+      "design": {
+        "properties": {
+          "interfaces": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "modules": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "modules",
+          "interfaces"
+        ],
+        "type": "object"
+      },
+      "prd": {
+        "properties": {
+          "features": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "vision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "vision",
+          "features"
+        ],
+        "type": "object"
+      },
+      "qa_report": {
+        "properties": {
+          "failures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pass": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pass",
+          "failures"
+        ],
+        "type": "object"
+      },
+      "requirement_input": {
+        "properties": {
+          "requirement": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "requirement"
+        ],
+        "type": "object"
+      },
+      "task_item": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "instruction",
+          "target"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "repo": {
+        "name": "repo",
+        "kind": "collection",
+        "item": "code_file",
+        "writer": "build.apply",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 256
+        },
+        "eval_input": false
+      },
+      "tasks_board": {
+        "name": "tasks_board",
+        "kind": "collection",
+        "item": "task_item",
+        "writer": "planner",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "architect": {
+        "node_id": "architect",
+        "components": {
+          "model": "route.main@1"
+        },
+        "consumes": {
+          "prd": "envelope<prd>"
+        },
+        "artifacts": {
+          "design": {
+            "type": "envelope<design>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.sweng.architect_system"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 2000,
+            "fields": [
+              "vision",
+              "features"
+            ],
+            "port": "prd",
+            "policy": "project"
+          }
+        ]
+      },
+      "build": {
+        "node_id": "build",
+        "components": {},
+        "artifacts": {
+          "report": {
+            "from_body": "qa.report",
+            "is_final": true,
+            "provenance": null
+          }
+        }
+      },
+      "build.apply": {
+        "node_id": "apply",
+        "components": {},
+        "writes": [
+          "repo"
+        ],
+        "consumes": {
+          "files": "list<code_file>"
+        },
+        "artifacts": {
+          "snapshot": {
+            "type": "list<code_file>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "merge",
+            "ports": [
+              "files"
+            ],
+            "into": "snapshot"
+          }
+        ]
+      },
+      "build.engineer": {
+        "node_id": "engineer",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.sweng.edit": {
+              "effect_class": null
+            },
+            "pkg.sweng.locate": {
+              "effect_class": null
+            },
+            "pkg.sweng.view": {
+              "effect_class": null
+            }
+          }
+        },
+        "consumes": {
+          "feedback": "qa_report"
+        },
+        "artifacts": {
+          "files": {
+            "type": "list<code_file>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.sweng.engineer_system"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1800,
+            "store": "tasks_board",
+            "policy": "full"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 800,
+            "fields": [
+              "failures"
+            ],
+            "port": "feedback",
+            "policy": "project",
+            "optional": true
+          }
+        ]
+      },
+      "build.qa": {
+        "node_id": "qa",
+        "components": {
+          "unit": "pkg.sweng.test_unit@1"
+        },
+        "consumes": {
+          "snapshot": "list<code_file>"
+        },
+        "artifacts": {
+          "report": {
+            "type": "qa_report",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "planner": {
+        "node_id": "planner",
+        "components": {
+          "model": "route.cheap@1"
+        },
+        "writes": [
+          "tasks_board"
+        ],
+        "consumes": {
+          "design": "envelope<design>",
+          "prd": "envelope<prd>"
+        },
+        "artifacts": {
+          "tasks": {
+            "type": "list<task_item>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.sweng.planner_system"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1500,
+            "fields": [
+              "vision",
+              "features"
+            ],
+            "port": "prd",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1500,
+            "fields": [
+              "modules",
+              "interfaces"
+            ],
+            "port": "design",
+            "policy": "project"
+          }
+        ]
+      },
+      "pm": {
+        "node_id": "pm",
+        "components": {
+          "model": "route.main@1"
+        },
+        "artifacts": {
+          "prd": {
+            "type": "envelope<prd>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.sweng.pm_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 600,
+            "fields": [
+              "requirement"
+            ],
+            "policy": "project"
+          }
+        ]
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 600
+        },
+        {
+          "id": "fix_turns",
+          "dimension": "turns",
+          "scope": "loop:build",
+          "cap": 60
+        }
+      ],
+      "stop": [],
+      "failures": [
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "environment_failure",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 60000
+          }
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {},
+    "trust": {}
+  }
+}

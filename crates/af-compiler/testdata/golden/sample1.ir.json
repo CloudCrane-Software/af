@@ -1,0 +1,180 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "react_mono",
+      "entry": "solver",
+      "nodes": [
+        {
+          "id": "solver",
+          "kind": "task",
+          "capability_refs": []
+        }
+      ],
+      "edges": [],
+      "subgraphs": {}
+    },
+    "interface": {
+      "input_type": "react_input",
+      "output_type": "answer",
+      "output_from": "solver",
+      "intent": "单 agent 节点：工具回灌在节点运行时内串行落账；语义终止 + 三重预算"
+    },
+    "types": {
+      "answer": {
+        "properties": {
+          "final": {
+            "type": "string"
+          },
+          "supports": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "final",
+          "supports"
+        ],
+        "type": "object"
+      },
+      "react_input": {
+        "properties": {
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "trajectory": {
+        "name": "trajectory",
+        "kind": "message_log",
+        "writer": "solver",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "solver": {
+        "node_id": "solver",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.hopqa.lookup": {
+              "effect_class": null
+            },
+            "pkg.hopqa.search": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "trajectory"
+        ],
+        "artifacts": {
+          "answer": {
+            "type": "answer",
+            "is_final": true,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 900,
+            "template_ref": "pkg.hopqa.fewshot"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 200,
+            "fields": [
+              "question"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 6000,
+            "store": "trajectory",
+            "policy": "full"
+          }
+        ]
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "node:solver",
+          "cap": 120
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "node:solver",
+          "cap": 60000
+        },
+        {
+          "id": "turn_cap",
+          "dimension": "turns",
+          "scope": "node:solver",
+          "cap": 12
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "last_tool.first_line in ['FINISH', 'FINAL ANSWER']",
+            "roots": [
+              "last_tool"
+            ],
+            "digest": "c18921ffcd4626537a604ae6d643f1bcf96d203db47ef6743f458fb089df54cc"
+          },
+          "outcome": "completed"
+        },
+        {
+          "when": {
+            "source": "steps.tool_free >= 2",
+            "roots": [
+              "steps"
+            ],
+            "digest": "6837f0ac7e61206172fca8887db9e3b50beb0533ae21b6546845e0400d911dfa"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {},
+    "trust": {}
+  }
+}

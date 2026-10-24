@@ -201,3 +201,163 @@ fn sample4_sample5_projection_facts() {
     assert_eq!(ring.artifacts["answer"].from_body.as_deref(), Some("agent.answer"));
     assert!(ring.artifacts["answer"].is_final);
 }
+
+// ---------------------------------------------------------------------------
+// G3 golden 入库回归（宪法 C10 基线）。以下全部为追加测试，不改上文任何
+// 既有测试的语义。
+//
+// 语料 = 11 份对齐草稿 + af-dsl 六样例，共 17 份，源 YAML 入
+// `testdata/src/`、IR 快照入 `testdata/golden/`。核验口径与 CLI
+// `af-compiler-snapshot` 完全一致：load → 全量校验 → lower → pretty 序列化
+// + 换行（writeln 的产物），golden 文件即 CLI stdout 的逐字节落盘。
+// ---------------------------------------------------------------------------
+
+/// G3 入库清单（闭集）：文件名与 `testdata/src/` 一致。C10 变更纪律——
+/// 快照或清单的任何变化只允许两种解释：有意识演进（ADR + 此处登记）或
+/// 回归（修复）。新增/移除条目必须改这里，不允许静默漂移。
+const G3_CORPUS: [&str; 17] = [
+    // 11 份编译干净的对齐草稿（selector 拒绝稿不入库）
+    "ReAct.yaml",
+    "Reflexion.yaml",
+    "Voyager.yaml",
+    "SWE-agent.yaml",
+    "MemGPT.yaml",
+    "CAMEL.yaml",
+    "Multi-Agent-Debate.yaml",
+    "AFlow.yaml",
+    "LangGraph-StateGraph.yaml",
+    "CrewAI-YAML.yaml",
+    "Agensh-DeLM.yaml", // 已修订版
+    // af-dsl 提案 B §4 六样例
+    "sample1.yaml",
+    "sample2.yaml",
+    "sample3.yaml",
+    "sample4.yaml",
+    "sample5.yaml",
+    "sample6.yaml",
+];
+
+/// 篡改检测的目标样例（清单中最小的一份，加速测试）。
+const TAMPER_TARGET: &str = "sample1.yaml";
+
+fn corpus_src_path(name: &str) -> std::path::PathBuf {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/src").join(name)
+}
+
+fn corpus_golden_path(name: &str) -> std::path::PathBuf {
+    let stem = name.strip_suffix(".yaml").expect("语料文件名应以 .yaml 结尾");
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("testdata/golden")
+        .join(format!("{stem}.ir.json"))
+}
+
+/// 单份核验（与 CLI 同口径）：重新 load + 全量校验 + lower + pretty 序列化
+/// + 换行，与 `testdata/golden/<stem>.ir.json` **逐字节**比对。任何一位
+/// 不同即 panic——这是篡改检测测试借用的同一把牙齿。
+fn assert_golden_byte_exact(name: &str) {
+    let src_path = corpus_src_path(name);
+    let src = std::fs::read_to_string(&src_path)
+        .unwrap_or_else(|e| panic!("读取 {src_path:?}：{e}"));
+    let doc = af_dsl::load_str(&src).unwrap_or_else(|e| panic!("{name} 装载失败：{e}"));
+    let report = af_dsl::validate(&doc);
+    assert!(report.is_ok(), "{name} 应过 af-dsl 全量校验：{report}");
+    let json = af_compiler::snapshot_json_pretty(&doc)
+        .unwrap_or_else(|e| panic!("{name} lowering 失败：{e}"));
+    // CLI 末尾 writeln! 一个换行——golden 即 CLI stdout 逐字节落盘
+    let expected: Vec<u8> = json.as_bytes().iter().copied().chain(std::iter::once(b'\n')).collect();
+
+    let golden_path = corpus_golden_path(name);
+    let actual = std::fs::read(&golden_path)
+        .unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
+
+    if expected != actual {
+        // 报告首个差异位与上下文，避免整个文件倾倒进断言消息
+        let (el, al) = (expected.len(), actual.len());
+        let pos = expected
+            .iter()
+            .zip(actual.iter())
+            .position(|(a, b)| a != b)
+            .unwrap_or(el.min(al));
+        let ctx = |v: &[u8]| {
+            let s = pos.saturating_sub(20);
+            String::from_utf8_lossy(&v[s..(pos + 20).min(v.len())]).escape_debug().to_string()
+        };
+        panic!(
+            "{name}: golden 逐字节不一致——期望 {el} 字节 / 实际 {al} 字节，\
+             首个差异位 @{pos}（期望 …{}… / 实际 …{}…）",
+            ctx(&expected),
+            ctx(&actual)
+        );
+    }
+}
+
+/// G3 主回归：17 份语料全部重新 lower+serialize，与 golden 逐字节相等。
+#[test]
+fn g3_golden_corpus_byte_exact() {
+    for name in G3_CORPUS {
+        assert_golden_byte_exact(name);
+    }
+}
+
+/// 清单闭集守卫：`testdata/src` 与 `testdata/golden` 的文件集合恰等于
+/// G3_CORPUS（src 一份不多不少，golden 一份不多不少）。防未登记文件混入。
+#[test]
+fn g3_golden_corpus_manifest_closed() {
+    let manifest: std::collections::BTreeSet<&str> = G3_CORPUS.into_iter().collect();
+
+    let src_files: std::collections::BTreeSet<String> =
+        std::fs::read_dir(corpus_src_path(G3_CORPUS[0]).parent().unwrap())
+            .expect("读 testdata/src 失败")
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".yaml"))
+            .collect();
+    let expected_src: std::collections::BTreeSet<String> =
+        manifest.iter().map(|n| n.to_string()).collect();
+    assert_eq!(src_files, expected_src, "testdata/src 与 G3 清单不一致（C10：须登记后变更）");
+
+    let golden_files: std::collections::BTreeSet<String> =
+        std::fs::read_dir(corpus_golden_path(G3_CORPUS[0]).parent().unwrap())
+            .expect("读 testdata/golden 失败")
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".ir.json"))
+            .collect();
+    let expected_golden: std::collections::BTreeSet<String> = manifest
+        .iter()
+        .map(|n| format!("{}.ir.json", n.strip_suffix(".yaml").unwrap()))
+        .collect();
+    assert_eq!(
+        golden_files, expected_golden,
+        "testdata/golden 与 G3 清单不一致（C10：须登记后变更）"
+    );
+}
+
+/// 篡改检测（证明测试有牙齿）：临时篡改 `TAMPER_TARGET` 的 golden 一个
+/// 字符（首字节 '{' → ' '），断言逐字节核验**失败**；随后恢复原字节并
+/// 复核通过。任何一步异常都会留下失败测试或（被恢复的）原样文件。
+#[test]
+fn g3_golden_tamper_detection() {
+    let golden_path = corpus_golden_path(TAMPER_TARGET);
+    let original = std::fs::read(&golden_path)
+        .unwrap_or_else(|e| panic!("读取 {golden_path:?}：{e}"));
+    assert_eq!(original.first(), Some(&b'{'), "golden 应以 '{{' 开头，才有可篡改的字符");
+
+    // 篡改一个字符并落盘
+    let mut tampered = original.clone();
+    tampered[0] = b' ';
+    std::fs::write(&golden_path, &tampered).expect("写入篡改 golden 失败");
+
+    // 核验必须失败（panic 被捕获）；临时静音 panic 钩子避免噪音
+    let prev_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let caught =
+        std::panic::catch_unwind(|| assert_golden_byte_exact(TAMPER_TARGET));
+    std::panic::set_hook(prev_hook);
+    assert!(
+        caught.is_err(),
+        "篡改 golden 一个字符后逐字节核验仍未失败——测试没有牙齿"
+    );
+
+    // 恢复原字节并复核
+    std::fs::write(&golden_path, &original).expect("恢复 golden 失败");
+    assert_golden_byte_exact(TAMPER_TARGET);
+}

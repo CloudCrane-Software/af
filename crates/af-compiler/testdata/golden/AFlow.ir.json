@@ -1,0 +1,921 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "aflow_search",
+      "entry": "loader",
+      "nodes": [
+        {
+          "id": "best",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "loader",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "materialize",
+          "kind": "task",
+          "escape": {
+            "kind": "program_synthesis",
+            "impl_ref": "packages/aflowkit@1.0.0/hatches/materialize_workflow.py",
+            "reason": "把价值最高的候选代码物化为最终可执行流水线（算子实例化 + 节点体装载 + 入口绑定）。产物本体是 Python 代码，静态拓扑 DSL 只能给接口签名（卡⑥a-7、卡⑥b-3）。",
+            "owner": "lang-team",
+            "share_budget_pct": 5
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "search",
+          "kind": "task",
+          "loop_spec": {
+            "body": "aflow_search/search",
+            "max_iterations": 20,
+            "carried": [
+              {
+                "store": "codes",
+                "max_items": 64
+              },
+              {
+                "store": "tree",
+                "max_items": 64
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "assess",
+                "kind": "check"
+              }
+            ],
+            "exit_when": {
+              "source": "attempt.passed == true || budget.cents_spent >= budget.cents_cap * 9 / 10",
+              "roots": [
+                "attempt",
+                "budget"
+              ],
+              "digest": "1008018fdca0a87ae31a712128fe03e931fd37c1fa1c9a94ca2b4334aa652d02"
+            },
+            "on_exhausted": "continue"
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "best",
+          "output": "winner",
+          "to": "materialize",
+          "input": "winner",
+          "checkpoint": false
+        },
+        {
+          "from": "loader",
+          "output": "done",
+          "to": "search",
+          "input": "done",
+          "checkpoint": false
+        },
+        {
+          "from": "search",
+          "output": "done",
+          "to": "best",
+          "input": "done",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "aflow_search/search": {
+          "graph_version": "1.0",
+          "entry": "select",
+          "nodes": [
+            {
+              "id": "assess",
+              "kind": "check",
+              "capability_refs": []
+            },
+            {
+              "id": "cost_probe",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/aflowkit@1.0.0/hatches/cost_probe.py",
+                "reason": "token 用量与成本分依赖运行期调用日志并按对数归一化成惩罚项，静态声明无法计算（卡⑥b-4）；成本遥测与可变状态回灌同属运行期面（逃逸词表七类中无 telemetry 类，暂记 runtime_context_mutation，见 notes 语法不确定点①）。",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "exec_map",
+              "kind": "task",
+              "map_spec": {
+                "body": "aflow_search/search/exec_map",
+                "over": "opguard.candidates",
+                "max_fanout": 8
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "mcts",
+              "kind": "task",
+              "escape": {
+                "kind": "meta_loop",
+                "impl_ref": "packages/aflowkit@1.0.0/hatches/mcts_controller.py",
+                "reason": "MCTS 元层搜索本体：UCB 选择（价值+成本+探索项合并）、节点访问计数、价值回传、分支隔离。标准 DSL 只能描述一次执行，无法描述『搜索多个拓扑并按价值选择』（卡⑥b-2），评估结果回灌搜索状态（价值更新/UCB 计数）亦无可变状态位（卡⑥b-5）。DSL 侧仅提供价值最大父节点作基线选择。",
+                "owner": "lang-team",
+                "share_budget_pct": 20
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "mutator",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "opguard",
+              "kind": "task",
+              "escape": {
+                "kind": "dynamic_tool_registry",
+                "impl_ref": "packages/aflowkit@1.0.0/hatches/code_space_guard.py",
+                "reason": "代码空间约束的完整性校验：拓扑合法性（无环）、算子白名单与类型匹配、上下文键匹配、导入检查——跨候选的约束需按算子注册表在运行期执行，非法拓扑一律拒绝进入搜索树（卡④-2、卡⑥b-6）。",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "register",
+              "kind": "task",
+              "escape": {
+                "kind": "program_synthesis",
+                "impl_ref": "packages/aflowkit@1.0.0/hatches/candidate_register.py",
+                "reason": "把元智能体产出的代码登记为可运行的候选工作流（算子实例化、上下文键绑定、生成候选描述符）。运行时生成/改写工作流图本身在静态拓扑 DSL 中不可表达（卡⑥b-1）；节点体是任意 Python 函数体，静态 DSL 只能给接口签名（卡⑥b-3）。",
+                "owner": "lang-team",
+                "share_budget_pct": 25
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "scoreboard",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "select",
+              "kind": "transform",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "assess",
+              "output": "scores",
+              "to": "scoreboard",
+              "input": "scores",
+              "checkpoint": false
+            },
+            {
+              "from": "cost_probe",
+              "output": "cost",
+              "to": "assess",
+              "input": "cost",
+              "checkpoint": false
+            },
+            {
+              "from": "exec_map",
+              "output": "results",
+              "to": "assess",
+              "input": "results",
+              "checkpoint": false
+            },
+            {
+              "from": "exec_map",
+              "output": "usage",
+              "to": "cost_probe",
+              "input": "usage",
+              "checkpoint": false
+            },
+            {
+              "from": "mcts",
+              "output": "branch",
+              "to": "mutator",
+              "input": "branch",
+              "checkpoint": false
+            },
+            {
+              "from": "mutator",
+              "output": "codes",
+              "to": "register",
+              "input": "codes",
+              "checkpoint": false
+            },
+            {
+              "from": "opguard",
+              "output": "candidates",
+              "to": "exec_map",
+              "input": "candidates",
+              "checkpoint": false
+            },
+            {
+              "from": "register",
+              "output": "candidates",
+              "to": "opguard",
+              "input": "candidates",
+              "checkpoint": false
+            },
+            {
+              "from": "select",
+              "output": "parent",
+              "to": "mcts",
+              "input": "parent",
+              "checkpoint": false
+            }
+          ]
+        },
+        "aflow_search/search/exec_map": {
+          "graph_version": "1.0",
+          "entry": "exec_one",
+          "nodes": [
+            {
+              "id": "exec_one",
+              "kind": "task",
+              "escape": {
+                "kind": "program_synthesis",
+                "impl_ref": "packages/aflowkit@1.0.0/hatches/candidate_exec.py",
+                "reason": "候选工作流的节点体是任意 Python 函数体（动态控制流、闭包、局部逻辑），静态拓扑 DSL 只能表达接口签名，无法表达函数体；候选代码在本逃逸内被解释执行（卡⑥b-3）。",
+                "owner": "lang-team",
+                "share_budget_pct": 25
+              },
+              "capability_refs": []
+            }
+          ],
+          "edges": []
+        }
+      }
+    },
+    "interface": {
+      "input_type": "aflow_input",
+      "output_type": "pipeline_bundle",
+      "output_from": "materialize",
+      "intent": "AFlow：agent 工作流写成可执行代码=搜索空间一点；搜索外壳用受控循环表达（MCTS 轮次预算）；元智能体变异/候选实例化/候选执行/成本遥测/算子白名单校验/最终物化走 L4 逃逸舱（卡⑥b 1-6）；评估器外部化且参考答案对候选不可读"
+    },
+    "types": {
+      "aflow_input": {
+        "properties": {
+          "metric": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          },
+          "task_set": {
+            "items": {
+              "properties": {
+                "prompt": {
+                  "type": "string"
+                },
+                "task_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "task_id",
+                "prompt"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "problem",
+          "metric",
+          "task_set"
+        ],
+        "type": "object"
+      },
+      "branch_spec": {
+        "properties": {
+          "feedback_ref": {
+            "type": "string"
+          },
+          "instruction": {
+            "type": "string"
+          },
+          "parent_code_ref": {
+            "type": "string"
+          },
+          "ucb_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "parent_code_ref",
+          "ucb_milli",
+          "instruction",
+          "feedback_ref"
+        ],
+        "type": "object"
+      },
+      "code_artifact": {
+        "properties": {
+          "code_ref": {
+            "type": "string"
+          },
+          "op_signature": {
+            "type": "string"
+          },
+          "parent_ref": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code_ref",
+          "parent_ref",
+          "op_signature",
+          "source"
+        ],
+        "type": "object"
+      },
+      "cost_record": {
+        "properties": {
+          "candidate_ref": {
+            "type": "string"
+          },
+          "cost_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate_ref",
+          "cost_milli"
+        ],
+        "type": "object"
+      },
+      "eval_result": {
+        "properties": {
+          "candidate_ref": {
+            "type": "string"
+          },
+          "task_results": {
+            "items": {
+              "properties": {
+                "ok": {
+                  "type": "boolean"
+                },
+                "task_id": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "task_id",
+                "text",
+                "ok"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "candidate_ref",
+          "task_results"
+        ],
+        "type": "object"
+      },
+      "pipeline_bundle": {
+        "properties": {
+          "code_ref": {
+            "type": "string"
+          },
+          "entry_op": {
+            "type": "string"
+          },
+          "op_signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code_ref",
+          "entry_op",
+          "op_signature"
+        ],
+        "type": "object"
+      },
+      "reference": {
+        "properties": {
+          "reference_text": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "reference_text"
+        ],
+        "type": "object"
+      },
+      "score_record": {
+        "properties": {
+          "candidate_ref": {
+            "type": "string"
+          },
+          "cost_milli": {
+            "type": "integer"
+          },
+          "quality_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate_ref",
+          "quality_milli",
+          "cost_milli"
+        ],
+        "type": "object"
+      },
+      "task_item": {
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "task_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "task_id",
+          "prompt"
+        ],
+        "type": "object"
+      },
+      "usage_report": {
+        "properties": {
+          "candidate_ref": {
+            "type": "string"
+          },
+          "cents_milli": {
+            "type": "integer"
+          },
+          "tokens_in": {
+            "type": "integer"
+          },
+          "tokens_out": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "candidate_ref",
+          "tokens_in",
+          "tokens_out",
+          "cents_milli"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "answers_ref": {
+        "name": "answers_ref",
+        "kind": "collection",
+        "item": "reference",
+        "writer": "loader",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": true
+      },
+      "codes": {
+        "name": "codes",
+        "kind": "collection",
+        "item": "code_artifact",
+        "writer": "search.mutator",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "task_set": {
+        "name": "task_set",
+        "kind": "collection",
+        "item": "task_item",
+        "writer": "loader",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      },
+      "tree": {
+        "name": "tree",
+        "kind": "collection",
+        "item": "score_record",
+        "writer": "search.scoreboard",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "best": {
+        "node_id": "best",
+        "components": {},
+        "reads": [
+          "tree"
+        ],
+        "consumes": {
+          "done": "signal"
+        },
+        "artifacts": {
+          "winner": {
+            "type": "score_record",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "select_best",
+            "port": "tree",
+            "into": "winner",
+            "by": "quality_milli",
+            "prefer": "max"
+          }
+        ]
+      },
+      "loader": {
+        "node_id": "loader",
+        "components": {
+          "tools": {
+            "pkg.aflowkit.task_loader@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "answers_ref",
+          "task_set"
+        ],
+        "artifacts": {
+          "done": {
+            "type": "signal",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "materialize": {
+        "node_id": "materialize",
+        "components": {},
+        "reads": [
+          "codes"
+        ],
+        "consumes": {
+          "winner": "score_record"
+        },
+        "artifacts": {
+          "bundle": {
+            "type": "pipeline_bundle",
+            "is_final": true,
+            "provenance": null
+          }
+        }
+      },
+      "search": {
+        "node_id": "search",
+        "components": {}
+      },
+      "search.assess": {
+        "node_id": "assess",
+        "components": {
+          "unit": "pkg.aflowkit.evaluate@1"
+        },
+        "reads": [
+          "answers_ref"
+        ],
+        "consumes": {
+          "cost": "list<cost_record>",
+          "results": "list<eval_result>"
+        },
+        "artifacts": {
+          "scores": {
+            "type": "list<score_record>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search.cost_probe": {
+        "node_id": "cost_probe",
+        "components": {},
+        "consumes": {
+          "usage": "list<usage_report>"
+        },
+        "artifacts": {
+          "cost": {
+            "type": "list<cost_record>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search.exec_map": {
+        "node_id": "exec_map",
+        "components": {},
+        "artifacts": {
+          "results": {
+            "from_body": "exec_one.result",
+            "is_final": false,
+            "provenance": null
+          },
+          "usage": {
+            "from_body": "exec_one.usage",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search.exec_map.exec_one": {
+        "node_id": "exec_one",
+        "components": {},
+        "reads": [
+          "task_set"
+        ],
+        "consumes": {
+          "item": "code_artifact"
+        },
+        "artifacts": {
+          "result": {
+            "type": "eval_result",
+            "is_final": false,
+            "provenance": null
+          },
+          "usage": {
+            "type": "usage_report",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search.mcts": {
+        "node_id": "mcts",
+        "components": {},
+        "reads": [
+          "tree"
+        ],
+        "consumes": {
+          "parent": "score_record"
+        },
+        "artifacts": {
+          "branch": {
+            "type": "branch_spec",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search.mutator": {
+        "node_id": "mutator",
+        "components": {
+          "model": "route.main@1"
+        },
+        "writes": [
+          "codes"
+        ],
+        "consumes": {
+          "branch": "branch_spec"
+        },
+        "artifacts": {
+          "codes": {
+            "type": "list<code_artifact>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.aflowkit.mutator_system"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1200,
+            "fields": [
+              "parent_code_ref",
+              "instruction"
+            ],
+            "port": "branch",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 2400,
+            "store": "tree",
+            "policy": "latest_k",
+            "args": {
+              "k": 8
+            }
+          },
+          {
+            "from": "store",
+            "quota_tokens": 6000,
+            "store": "codes",
+            "policy": "latest_k",
+            "args": {
+              "k": 4
+            }
+          }
+        ]
+      },
+      "search.opguard": {
+        "node_id": "opguard",
+        "components": {},
+        "consumes": {
+          "candidates": "list<code_artifact>"
+        },
+        "artifacts": {
+          "candidates": {
+            "type": "list<code_artifact>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search.register": {
+        "node_id": "register",
+        "components": {},
+        "consumes": {
+          "codes": "list<code_artifact>"
+        },
+        "artifacts": {
+          "candidates": {
+            "type": "list<code_artifact>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "search.scoreboard": {
+        "node_id": "scoreboard",
+        "components": {},
+        "writes": [
+          "tree"
+        ],
+        "consumes": {
+          "scores": "list<score_record>"
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "scores",
+            "into": "tree"
+          }
+        ]
+      },
+      "search.select": {
+        "node_id": "select",
+        "components": {},
+        "reads": [
+          "tree"
+        ],
+        "artifacts": {
+          "parent": {
+            "type": "score_record",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "select_best",
+            "port": "tree",
+            "into": "parent",
+            "by": "quality_milli",
+            "prefer": "max"
+          }
+        ]
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 5000
+        },
+        {
+          "id": "eval_tokens",
+          "dimension": "tokens_total",
+          "scope": "loop:search",
+          "cap": 4000000
+        },
+        {
+          "id": "iter_turns",
+          "dimension": "turns",
+          "scope": "loop:search",
+          "cap": 60
+        },
+        {
+          "id": "sample_calls",
+          "dimension": "model_calls",
+          "scope": "map:search.exec_map",
+          "cap": 64
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "completed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "tool_error",
+          "route": "next_iteration"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "escapes": {
+      "materialize": {
+        "kind": "program_synthesis",
+        "impl_ref": "packages/aflowkit@1.0.0/hatches/materialize_workflow.py",
+        "reason": "把价值最高的候选代码物化为最终可执行流水线（算子实例化 + 节点体装载 + 入口绑定）。产物本体是 Python 代码，静态拓扑 DSL 只能给接口签名（卡⑥a-7、卡⑥b-3）。",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      },
+      "search.cost_probe": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/aflowkit@1.0.0/hatches/cost_probe.py",
+        "reason": "token 用量与成本分依赖运行期调用日志并按对数归一化成惩罚项，静态声明无法计算（卡⑥b-4）；成本遥测与可变状态回灌同属运行期面（逃逸词表七类中无 telemetry 类，暂记 runtime_context_mutation，见 notes 语法不确定点①）。",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "search.exec_map.exec_one": {
+        "kind": "program_synthesis",
+        "impl_ref": "packages/aflowkit@1.0.0/hatches/candidate_exec.py",
+        "reason": "候选工作流的节点体是任意 Python 函数体（动态控制流、闭包、局部逻辑），静态拓扑 DSL 只能表达接口签名，无法表达函数体；候选代码在本逃逸内被解释执行（卡⑥b-3）。",
+        "owner": "lang-team",
+        "share_budget_pct": 25
+      },
+      "search.mcts": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/aflowkit@1.0.0/hatches/mcts_controller.py",
+        "reason": "MCTS 元层搜索本体：UCB 选择（价值+成本+探索项合并）、节点访问计数、价值回传、分支隔离。标准 DSL 只能描述一次执行，无法描述『搜索多个拓扑并按价值选择』（卡⑥b-2），评估结果回灌搜索状态（价值更新/UCB 计数）亦无可变状态位（卡⑥b-5）。DSL 侧仅提供价值最大父节点作基线选择。",
+        "owner": "lang-team",
+        "share_budget_pct": 20
+      },
+      "search.opguard": {
+        "kind": "dynamic_tool_registry",
+        "impl_ref": "packages/aflowkit@1.0.0/hatches/code_space_guard.py",
+        "reason": "代码空间约束的完整性校验：拓扑合法性（无环）、算子白名单与类型匹配、上下文键匹配、导入检查——跨候选的约束需按算子注册表在运行期执行，非法拓扑一律拒绝进入搜索树（卡④-2、卡⑥b-6）。",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "search.register": {
+        "kind": "program_synthesis",
+        "impl_ref": "packages/aflowkit@1.0.0/hatches/candidate_register.py",
+        "reason": "把元智能体产出的代码登记为可运行的候选工作流（算子实例化、上下文键绑定、生成候选描述符）。运行时生成/改写工作流图本身在静态拓扑 DSL 中不可表达（卡⑥b-1）；节点体是任意 Python 函数体，静态 DSL 只能给接口签名（卡⑥b-3）。",
+        "owner": "lang-team",
+        "share_budget_pct": 25
+      }
+    },
+    "trust": {}
+  }
+}

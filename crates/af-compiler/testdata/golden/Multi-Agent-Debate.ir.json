@@ -1,0 +1,1318 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "multi_agent_debate",
+      "entry": "retrieve",
+      "nodes": [
+        {
+          "id": "adjudicate",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "evidence_arbiter",
+          "kind": "task",
+          "escape": {
+            "kind": "runtime_context_mutation",
+            "impl_ref": "packages/debatekit@1.0.0/hatches/evidence_arbiter.py",
+            "reason": "检索结果是否回灌共享证据槽、只回灌给哪些辩手，由运行期写权限仲裁决定；DSL 的 stores.writer 只约束静态写者集合，无运行期回灌范围声明",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "fallback_chain",
+          "kind": "task",
+          "escape": {
+            "kind": "meta_loop",
+            "impl_ref": "packages/debatekit@1.0.0/hatches/fallback_chain.py",
+            "reason": "平票→裁判→截断→中止 的多级回退在运行期择路，非纯静态图；DSL 的 route 只能按静态 CEL 分派一次",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "finalize",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "free_text_verdict",
+          "kind": "task",
+          "escape": {
+            "kind": "free_text_parser",
+            "impl_ref": "packages/debatekit@1.0.0/hatches/free_text_verdict.py",
+            "reason": "裁决器输出为自由文本，需解析为结构化 winner；核心无自由文本解析算子（解析失败类已在 failures.schema_invalid 记账）",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "retrieve",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "rounds",
+          "kind": "task",
+          "loop_spec": {
+            "body": "multi_agent_debate/rounds",
+            "max_iterations": 4,
+            "carried": [
+              {
+                "store": "peer_board",
+                "max_items": 128
+              },
+              {
+                "store": "transcript",
+                "max_items": 128
+              },
+              {
+                "store": "visibility_matrix",
+                "max_items": 64
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "converge_gate",
+                "kind": "gate"
+              }
+            ],
+            "exit_when": {
+              "source": "tally.result.top_share_milli >= 700 || consensus_pred.verdict.reached == true || adaptive_rounds.advice.stop == true",
+              "roots": [
+                "adaptive_rounds",
+                "consensus_pred",
+                "tally"
+              ],
+              "digest": "d6e3f8eddc0504494140e6a69fd16cdfde2687f310ba4dc41812e67b66c06d2c"
+            },
+            "on_exhausted": "continue"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "vote",
+          "kind": "transform",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "adjudicate",
+          "output": "verdict_text",
+          "to": "fallback_chain",
+          "input": "verdict_text",
+          "checkpoint": false,
+          "guard": {
+            "source": "!((adjudicate.confidence_milli >= 300))",
+            "roots": [
+              "adjudicate"
+            ],
+            "digest": "9c338d1fff5bbf1cfdd3b174d78e7c221bfdee619c3141e9da22ec0607545b97"
+          }
+        },
+        {
+          "from": "adjudicate",
+          "output": "verdict_text",
+          "to": "free_text_verdict",
+          "input": "verdict_text",
+          "checkpoint": false,
+          "guard": {
+            "source": "(adjudicate.confidence_milli >= 300)",
+            "roots": [
+              "adjudicate"
+            ],
+            "digest": "d51d6cb66ec1008f381046e6561dba567766cecb1c67478e76072482a6805392"
+          }
+        },
+        {
+          "from": "evidence_arbiter",
+          "output": "evidence",
+          "to": "rounds",
+          "input": "evidence",
+          "checkpoint": false
+        },
+        {
+          "from": "fallback_chain",
+          "output": "winner",
+          "to": "finalize",
+          "input": "winner",
+          "checkpoint": false
+        },
+        {
+          "from": "free_text_verdict",
+          "output": "winner",
+          "to": "finalize",
+          "input": "winner",
+          "checkpoint": false
+        },
+        {
+          "from": "retrieve",
+          "output": "raw_evidence",
+          "to": "evidence_arbiter",
+          "input": "raw_evidence",
+          "checkpoint": false
+        },
+        {
+          "from": "rounds",
+          "output": "positions",
+          "to": "vote",
+          "input": "positions",
+          "checkpoint": false
+        },
+        {
+          "from": "rounds",
+          "output": "roster",
+          "to": "adjudicate",
+          "input": "roster",
+          "checkpoint": false
+        },
+        {
+          "from": "rounds",
+          "output": "weights",
+          "to": "adjudicate",
+          "input": "weights",
+          "checkpoint": false
+        },
+        {
+          "from": "vote",
+          "output": "winner",
+          "to": "adjudicate",
+          "input": "winner",
+          "checkpoint": false,
+          "guard": {
+            "source": "!((input.mode == 'majority' && vote.stats.top_count * 2 > vote.stats.answers))",
+            "roots": [
+              "input",
+              "vote"
+            ],
+            "digest": "0e9cc5f8e28313b3c8342e1d0cc3c6524a8bcc804798c9285aa8c5b70ed4f533"
+          }
+        },
+        {
+          "from": "vote",
+          "output": "winner",
+          "to": "finalize",
+          "input": "winner",
+          "checkpoint": false,
+          "guard": {
+            "source": "(input.mode == 'majority' && vote.stats.top_count * 2 > vote.stats.answers)",
+            "roots": [
+              "input",
+              "vote"
+            ],
+            "digest": "613e6d4a73714a553074d2d78658200aed1c93fb716477b55437aa871b73e7cd"
+          }
+        }
+      ],
+      "subgraphs": {
+        "multi_agent_debate/rounds": {
+          "graph_version": "1.0",
+          "entry": "debate_map",
+          "nodes": [
+            {
+              "id": "adaptive_rounds",
+              "kind": "task",
+              "escape": {
+                "kind": "meta_loop",
+                "impl_ref": "packages/debatekit@1.0.0/hatches/adaptive_rounds.py",
+                "reason": "自适应轮数与震荡后改写提示的退火策略需运行期改写调度参数；DSL 的 loop.max_iterations 是编译期常量",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "broadcast",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "collector",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "consensus_pred",
+              "kind": "task",
+              "escape": {
+                "kind": "llm_predicate",
+                "impl_ref": "packages/debatekit@1.0.0/hatches/consensus_pred.py",
+                "reason": "「是否已达成语义一致」是 LLM 判定的运行期谓词，停机条件无法静态声明；静态份额阈值只作近似",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "converge_gate",
+              "kind": "gate",
+              "capability_refs": []
+            },
+            {
+              "id": "debate_map",
+              "kind": "task",
+              "map_spec": {
+                "body": "multi_agent_debate/rounds/debate_map",
+                "over": "input.personas"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "peer_order",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/debatekit@1.0.0/hatches/peer_order.py",
+                "reason": "论文按不可复现随机序广播同伴解以抑制位置偏好；AFB 只有种子化 shuffle_seeded（可复现），运行期无种子置换无算子落点",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "tally",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "topology_mutator",
+              "kind": "task",
+              "escape": {
+                "kind": "meta_loop",
+                "impl_ref": "packages/debatekit@1.0.0/hatches/topology_mutator.py",
+                "reason": "代理掉线、临时增反驳者、锦标赛式配对属运行期图变异；DSL 的 map.over 只能静态解析到列表，改图只能经逃逸并版本化登记",
+                "owner": "lang-team",
+                "share_budget_pct": 15
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "visibility",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/debatekit@1.0.0/hatches/visibility.py",
+                "reason": "「同伴不可见对方系统提示与内部 CoT」的逐节点可见性矩阵需运行期裁剪上下文；DSL 无可见性裁剪声明位（context.sections 只做来源装配）",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "weighting",
+              "kind": "task",
+              "escape": {
+                "kind": "llm_predicate",
+                "impl_ref": "packages/debatekit@1.0.0/hatches/weighting.py",
+                "reason": "裁决时按可信度加权的权重由 LLM 在运行期给出后注入数值；核心无运行期数值注入通道",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "debate_map",
+              "output": "items",
+              "to": "peer_order",
+              "input": "items",
+              "checkpoint": false
+            },
+            {
+              "from": "peer_order",
+              "output": "ordered",
+              "to": "broadcast",
+              "input": "ordered",
+              "checkpoint": false
+            },
+            {
+              "from": "peer_order",
+              "output": "ordered",
+              "to": "collector",
+              "input": "ordered",
+              "checkpoint": false
+            },
+            {
+              "from": "peer_order",
+              "output": "ordered",
+              "to": "tally",
+              "input": "ordered",
+              "checkpoint": false
+            },
+            {
+              "from": "peer_order",
+              "output": "ordered",
+              "to": "topology_mutator",
+              "input": "ordered",
+              "checkpoint": false
+            },
+            {
+              "from": "peer_order",
+              "output": "ordered",
+              "to": "visibility",
+              "input": "ordered",
+              "checkpoint": false
+            },
+            {
+              "from": "tally",
+              "output": "result",
+              "to": "adaptive_rounds",
+              "input": "result",
+              "checkpoint": false
+            },
+            {
+              "from": "tally",
+              "output": "result",
+              "to": "consensus_pred",
+              "input": "result",
+              "checkpoint": false
+            },
+            {
+              "from": "tally",
+              "output": "result",
+              "to": "converge_gate",
+              "input": "result",
+              "checkpoint": false
+            },
+            {
+              "from": "tally",
+              "output": "result",
+              "to": "weighting",
+              "input": "result",
+              "checkpoint": false
+            }
+          ]
+        },
+        "multi_agent_debate/rounds/debate_map": {
+          "graph_version": "1.0",
+          "entry": "prompt_assembler",
+          "nodes": [
+            {
+              "id": "debater",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "prompt_assembler",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/debatekit@1.0.0/hatches/prompt_assembler.py",
+                "reason": "按本实例 persona 与点名反驳对象运行期拼装提示；DSL 的 template.vars 只能对静态模板做参数化，无法运行期拼装 prompt 程序",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "prompt_assembler",
+              "output": "prompt",
+              "to": "debater",
+              "input": "prompt",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "debate_input",
+      "output_type": "final_answer",
+      "output_from": "finalize",
+      "intent": "N 辩手 map 并行互不可见 → 全连接广播同伴解（匿名/乱序/截断）→ K 轮受控循环 → 多数票 + LLM 裁决 fallback；黑板单写者（INV-2）；语义共识判定/可见性矩阵/运行期改拓扑等 10 项走 L4 逃逸舱记账"
+    },
+    "types": {
+      "consensus_verdict": {
+        "properties": {
+          "rationale": {
+            "type": "string"
+          },
+          "reached": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reached",
+          "rationale"
+        ],
+        "type": "object"
+      },
+      "debate_input": {
+        "properties": {
+          "evidence_queries": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "personas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "personas",
+          "mode"
+        ],
+        "type": "object"
+      },
+      "evidence_item": {
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "source"
+        ],
+        "type": "object"
+      },
+      "final_answer": {
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "support": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "claim",
+          "rationale",
+          "support"
+        ],
+        "type": "object"
+      },
+      "milli_int": {
+        "type": "integer"
+      },
+      "peer_message": {
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "confidence_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claim",
+          "confidence_milli"
+        ],
+        "type": "object"
+      },
+      "persona_ref": {
+        "type": "string"
+      },
+      "position": {
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "confidence_milli": {
+            "type": "integer"
+          },
+          "persona": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "persona",
+          "claim",
+          "confidence_milli"
+        ],
+        "type": "object"
+      },
+      "prompt_text": {
+        "type": "string"
+      },
+      "schedule_hint": {
+        "properties": {
+          "next_max_iterations": {
+            "type": "integer"
+          },
+          "stop": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stop",
+          "next_max_iterations"
+        ],
+        "type": "object"
+      },
+      "tally_result": {
+        "properties": {
+          "answers": {
+            "type": "integer"
+          },
+          "top_count": {
+            "type": "integer"
+          },
+          "top_share_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "answers",
+          "top_count",
+          "top_share_milli"
+        ],
+        "type": "object"
+      },
+      "turn_record": {
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "confidence_milli": {
+            "type": "integer"
+          },
+          "persona": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "persona",
+          "claim",
+          "confidence_milli"
+        ],
+        "type": "object"
+      },
+      "verdict_text": {
+        "type": "string"
+      },
+      "visibility_plan": {
+        "properties": {
+          "rules": {
+            "items": {
+              "properties": {
+                "persona": {
+                  "type": "string"
+                },
+                "visible_peers": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              },
+              "required": [
+                "persona",
+                "visible_peers"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules"
+        ],
+        "type": "object"
+      },
+      "weight_vector": {
+        "properties": {
+          "scores": {
+            "items": {
+              "properties": {
+                "persona": {
+                  "type": "string"
+                },
+                "weight_milli": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "persona",
+                "weight_milli"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "scores"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "evidence": {
+        "name": "evidence",
+        "kind": "collection",
+        "item": "evidence_item",
+        "writer": "evidence_arbiter",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "peer_board": {
+        "name": "peer_board",
+        "kind": "collection",
+        "item": "peer_message",
+        "writer": "rounds.broadcast",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      },
+      "transcript": {
+        "name": "transcript",
+        "kind": "collection",
+        "item": "turn_record",
+        "writer": "rounds.collector",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      },
+      "visibility_matrix": {
+        "name": "visibility_matrix",
+        "kind": "collection",
+        "item": "visibility_plan",
+        "writer": "rounds.visibility",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "adjudicate": {
+        "node_id": "adjudicate",
+        "components": {
+          "model": "route.judge@1"
+        },
+        "consumes": {
+          "roster": "list<persona_ref>",
+          "weights": "weight_vector",
+          "winner": "position"
+        },
+        "artifacts": {
+          "confidence_milli": {
+            "type": "milli_int",
+            "is_final": false,
+            "provenance": null
+          },
+          "verdict_text": {
+            "type": "verdict_text",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.debatekit.judge_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 400,
+            "fields": [
+              "question",
+              "mode"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "port": "winner",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 300,
+            "port": "roster",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 300,
+            "port": "weights",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 6000,
+            "store": "transcript",
+            "policy": "full"
+          }
+        ]
+      },
+      "evidence_arbiter": {
+        "node_id": "evidence_arbiter",
+        "components": {},
+        "writes": [
+          "evidence"
+        ],
+        "consumes": {
+          "raw_evidence": "list<evidence_item>"
+        },
+        "artifacts": {
+          "evidence": {
+            "type": "list<evidence_item>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "fallback_chain": {
+        "node_id": "fallback_chain",
+        "components": {},
+        "reads": [
+          "transcript"
+        ],
+        "consumes": {
+          "verdict_text": "verdict_text"
+        },
+        "artifacts": {
+          "winner": {
+            "type": "position",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "finalize": {
+        "node_id": "finalize",
+        "components": {},
+        "consumes": {
+          "winner": "position"
+        },
+        "artifacts": {
+          "answer": {
+            "type": "final_answer",
+            "is_final": true,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "winner",
+            "into": "answer"
+          }
+        ]
+      },
+      "free_text_verdict": {
+        "node_id": "free_text_verdict",
+        "components": {},
+        "consumes": {
+          "verdict_text": "verdict_text"
+        },
+        "artifacts": {
+          "winner": {
+            "type": "position",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "retrieve": {
+        "node_id": "retrieve",
+        "components": {
+          "tools": {
+            "pkg.debatekit.search@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "artifacts": {
+          "raw_evidence": {
+            "type": "list<evidence_item>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds": {
+        "node_id": "rounds",
+        "components": {},
+        "artifacts": {
+          "positions": {
+            "from_body": "debate_map.items",
+            "is_final": false,
+            "provenance": null
+          },
+          "roster": {
+            "from_body": "topology_mutator.roster",
+            "is_final": false,
+            "provenance": null
+          },
+          "weights": {
+            "from_body": "weighting.weights",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds.adaptive_rounds": {
+        "node_id": "adaptive_rounds",
+        "components": {},
+        "consumes": {
+          "result": "tally_result"
+        },
+        "artifacts": {
+          "advice": {
+            "type": "schedule_hint",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds.broadcast": {
+        "node_id": "broadcast",
+        "components": {},
+        "writes": [
+          "peer_board"
+        ],
+        "consumes": {
+          "ordered": "list<position>"
+        },
+        "ops": [
+          {
+            "op": "anonymize",
+            "port": "ordered",
+            "into": "anonymous",
+            "drop": [
+              "persona"
+            ]
+          },
+          {
+            "op": "shuffle_seeded",
+            "port": "anonymous",
+            "into": "shuffled",
+            "seed_ref": "input.question"
+          },
+          {
+            "op": "truncate",
+            "port": "shuffled",
+            "into": "peer_board",
+            "max_tokens_each": 200
+          }
+        ]
+      },
+      "rounds.collector": {
+        "node_id": "collector",
+        "components": {},
+        "writes": [
+          "transcript"
+        ],
+        "consumes": {
+          "ordered": "list<position>"
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "ordered",
+            "into": "transcript"
+          }
+        ]
+      },
+      "rounds.consensus_pred": {
+        "node_id": "consensus_pred",
+        "components": {},
+        "consumes": {
+          "result": "tally_result"
+        },
+        "artifacts": {
+          "verdict": {
+            "type": "consensus_verdict",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds.converge_gate": {
+        "node_id": "converge_gate",
+        "components": {},
+        "consumes": {
+          "result": "tally_result"
+        },
+        "assert": {
+          "source": "inputs.result.top_share_milli >= 0 && inputs.result.top_share_milli <= 1000",
+          "roots": [
+            "inputs"
+          ],
+          "digest": "e95d0436ae4075ef397d5616ffc39d08a242ff2aca05e0771f11d50229ce2d97"
+        }
+      },
+      "rounds.debate_map": {
+        "node_id": "debate_map",
+        "components": {},
+        "artifacts": {
+          "items": {
+            "from_body": "debater.position",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds.debate_map.debater": {
+        "node_id": "debater",
+        "components": {
+          "model": "route.main@1",
+          "memory": [
+            "pkg.debatekit.belief@1"
+          ]
+        },
+        "consumes": {
+          "prompt": "prompt_text"
+        },
+        "artifacts": {
+          "position": {
+            "type": "position",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.debatekit.system",
+            "vars": {
+              "persona": "arg.item"
+            }
+          },
+          {
+            "from": "input",
+            "quota_tokens": 400,
+            "fields": [
+              "question"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "evidence",
+            "policy": "full"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 2400,
+            "store": "peer_board",
+            "policy": "retrieve",
+            "args": {
+              "k": 8
+            },
+            "component": "pkg.debatekit.per_peer_view@1"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 200,
+            "store": "visibility_matrix",
+            "policy": "full"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 800,
+            "port": "prompt",
+            "policy": "project"
+          }
+        ]
+      },
+      "rounds.debate_map.prompt_assembler": {
+        "node_id": "prompt_assembler",
+        "components": {},
+        "reads": [
+          "peer_board"
+        ],
+        "consumes": {
+          "item": "{type:string}"
+        },
+        "artifacts": {
+          "prompt": {
+            "type": "prompt_text",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds.peer_order": {
+        "node_id": "peer_order",
+        "components": {},
+        "consumes": {
+          "items": "list<position>"
+        },
+        "artifacts": {
+          "ordered": {
+            "type": "list<position>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds.tally": {
+        "node_id": "tally",
+        "components": {},
+        "consumes": {
+          "ordered": "list<position>"
+        },
+        "artifacts": {
+          "result": {
+            "type": "tally_result",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "tally",
+            "port": "ordered",
+            "into": "result",
+            "by": "claim"
+          }
+        ]
+      },
+      "rounds.topology_mutator": {
+        "node_id": "topology_mutator",
+        "components": {},
+        "consumes": {
+          "ordered": "list<position>"
+        },
+        "artifacts": {
+          "roster": {
+            "type": "list<persona_ref>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds.visibility": {
+        "node_id": "visibility",
+        "components": {},
+        "writes": [
+          "visibility_matrix"
+        ],
+        "consumes": {
+          "ordered": "list<position>"
+        }
+      },
+      "rounds.weighting": {
+        "node_id": "weighting",
+        "components": {},
+        "consumes": {
+          "result": "tally_result"
+        },
+        "artifacts": {
+          "weights": {
+            "type": "weight_vector",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "vote": {
+        "node_id": "vote",
+        "components": {},
+        "consumes": {
+          "positions": "list<position>"
+        },
+        "artifacts": {
+          "stats": {
+            "type": "tally_result",
+            "is_final": false,
+            "provenance": null
+          },
+          "winner": {
+            "type": "position",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "tally",
+            "port": "positions",
+            "into": "stats",
+            "by": "claim"
+          },
+          {
+            "op": "select_best",
+            "port": "positions",
+            "into": "winner",
+            "by": "confidence_milli",
+            "prefer": "max"
+          }
+        ]
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 400
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "loop:rounds",
+          "cap": 600000
+        },
+        {
+          "id": "turns_cap",
+          "dimension": "turns",
+          "scope": "loop:rounds",
+          "cap": 30
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "steps.turns >= 24",
+            "roots": [
+              "steps"
+            ],
+            "digest": "b8ab41c1c73752cb5a5bc540bdbe88ff89c44cd14766bee6db07b566bb128fe5"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "fallback_route": "free_text_verdict"
+        },
+        {
+          "class": "gate_refused",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "route": "vote",
+          "terminal": true,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "escapes": {
+      "evidence_arbiter": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/evidence_arbiter.py",
+        "reason": "检索结果是否回灌共享证据槽、只回灌给哪些辩手，由运行期写权限仲裁决定；DSL 的 stores.writer 只约束静态写者集合，无运行期回灌范围声明",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "fallback_chain": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/fallback_chain.py",
+        "reason": "平票→裁判→截断→中止 的多级回退在运行期择路，非纯静态图；DSL 的 route 只能按静态 CEL 分派一次",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "free_text_verdict": {
+        "kind": "free_text_parser",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/free_text_verdict.py",
+        "reason": "裁决器输出为自由文本，需解析为结构化 winner；核心无自由文本解析算子（解析失败类已在 failures.schema_invalid 记账）",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "rounds.adaptive_rounds": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/adaptive_rounds.py",
+        "reason": "自适应轮数与震荡后改写提示的退火策略需运行期改写调度参数；DSL 的 loop.max_iterations 是编译期常量",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "rounds.consensus_pred": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/consensus_pred.py",
+        "reason": "「是否已达成语义一致」是 LLM 判定的运行期谓词，停机条件无法静态声明；静态份额阈值只作近似",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "rounds.debate_map.prompt_assembler": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/prompt_assembler.py",
+        "reason": "按本实例 persona 与点名反驳对象运行期拼装提示；DSL 的 template.vars 只能对静态模板做参数化，无法运行期拼装 prompt 程序",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "rounds.peer_order": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/peer_order.py",
+        "reason": "论文按不可复现随机序广播同伴解以抑制位置偏好；AFB 只有种子化 shuffle_seeded（可复现），运行期无种子置换无算子落点",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "rounds.topology_mutator": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/topology_mutator.py",
+        "reason": "代理掉线、临时增反驳者、锦标赛式配对属运行期图变异；DSL 的 map.over 只能静态解析到列表，改图只能经逃逸并版本化登记",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "rounds.visibility": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/visibility.py",
+        "reason": "「同伴不可见对方系统提示与内部 CoT」的逐节点可见性矩阵需运行期裁剪上下文；DSL 无可见性裁剪声明位（context.sections 只做来源装配）",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "rounds.weighting": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/debatekit@1.0.0/hatches/weighting.py",
+        "reason": "裁决时按可信度加权的权重由 LLM 在运行期给出后注入数值；核心无运行期数值注入通道",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      }
+    },
+    "trust": {}
+  }
+}

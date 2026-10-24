@@ -1,0 +1,326 @@
+version: 1
+
+# AFB 草稿 · AFlow（Zhang et al. 2024，工作流自动搜索：代码表示 + MCTS）
+# 依据：对齐机制卡 AFlow.md ⑥(a)/⑥(b)；语法正本 DSL-语法提案-B §1/§2；
+#       择优裁决 20261024 §二（escape.kind 七类词表；meta.topology_selector 编译期语义）
+# 诚实边界：卡⑥(b) 的 6 项定义性机制（MCTS 元搜索 / 运行时生成拓扑 / 任意 Python 节点体 /
+#       成本遥测 / 评估闭环回灌 / 代码空间约束校验）全部走 escape 逃逸舱记账，不编造语法。
+
+meta:
+  name: aflow_search
+  graph_version: "1.0"
+  entry: loader
+  input: aflow_input
+  output: { ref: pipeline_bundle, from: materialize }
+  intent: "AFlow：agent 工作流写成可执行代码=搜索空间一点；搜索外壳用受控循环表达（MCTS 轮次预算）；元智能体变异/候选实例化/候选执行/成本遥测/算子白名单校验/最终物化走 L4 逃逸舱（卡⑥b 1-6）；评估器外部化且参考答案对候选不可读"
+
+types:
+  - name: aflow_input
+    schema:
+      type: object
+      required: [problem, metric, task_set]
+      properties:
+        problem: { type: string }          # 待搜索工作流要解决的问题域
+        metric: { type: string }           # 质量指标名：pass@1 / accuracy / F1（卡⑤）
+        task_set:
+          type: array
+          items:
+            type: object
+            required: [task_id, prompt]
+            properties:
+              task_id: { type: string }
+              prompt: { type: string }
+  - name: task_item
+    schema:
+      type: object
+      required: [task_id, prompt]
+      properties:
+        task_id: { type: string }
+        prompt: { type: string }
+  - name: reference
+    schema:
+      type: object
+      required: [task_id, reference_text]
+      properties:
+        task_id: { type: string }
+        reference_text: { type: string }   # 评估用参考答案（对候选不可见）
+  - name: code_artifact
+    schema:
+      type: object
+      required: [code_ref, parent_ref, op_signature, source]
+      properties:
+        code_ref: { type: string }         # 候选工作流代码引用（= 搜索树节点标识）
+        parent_ref: { type: string }       # 父节点 code_ref（根节点为空串）
+        op_signature: { type: string }     # 该候选用到的算子序列（须在白名单内）
+        source: { type: string }           # 候选工作流的 Python 源码（节点体=函数体）
+  - name: branch_spec
+    schema:
+      type: object
+      required: [parent_code_ref, ucb_milli, instruction, feedback_ref]
+      properties:
+        parent_code_ref: { type: string }  # 被扩展的父节点
+        ucb_milli: { type: integer }       # UCB 合并分（价值+成本+探索项）
+        instruction: { type: string }      # 变异指令（增删节点 / 改写节点体与提示词 / 合并）
+        feedback_ref: { type: string }     # 该节点的已有评估反馈（质量/成本）
+  - name: eval_result
+    schema:
+      type: object
+      required: [candidate_ref, task_results]
+      properties:
+        candidate_ref: { type: string }
+        task_results:
+          type: array
+          items:
+            type: object
+            required: [task_id, text, ok]
+            properties:
+              task_id: { type: string }
+              text: { type: string }
+              ok: { type: boolean }        # 单样本失败按失败计入质量分（卡④-3）
+  - name: usage_report
+    schema:
+      type: object
+      required: [candidate_ref, tokens_in, tokens_out, cents_milli]
+      properties:
+        candidate_ref: { type: string }
+        tokens_in: { type: integer }
+        tokens_out: { type: integer }
+        cents_milli: { type: integer }
+  - name: cost_record
+    schema:
+      type: object
+      required: [candidate_ref, cost_milli]
+      properties:
+        candidate_ref: { type: string }
+        cost_milli: { type: integer }      # 对数归一化后的成本惩罚分
+  - name: score_record
+    schema:
+      type: object
+      required: [candidate_ref, quality_milli, cost_milli]
+      properties:
+        candidate_ref: { type: string }
+        quality_milli: { type: integer }   # 质量分（pass@1 / accuracy / F1）
+        cost_milli: { type: integer }      # 成本分（惩罚项）
+  - name: pipeline_bundle
+    schema:
+      type: object
+      required: [code_ref, entry_op, op_signature]
+      properties:
+        code_ref: { type: string }         # 最终导出的最优工作流代码引用
+        entry_op: { type: string }         # 入口算子
+        op_signature: { type: string }     # 算子序列（可描述的搜索空间属性）
+
+stores:
+  - name: task_set
+    type: collection
+    item: task_item
+    writer: loader                       # 任务实例装载器唯一写者
+    lifecycle: run
+    retention: { max_items: 128 }
+  - name: answers_ref
+    type: collection
+    item: reference
+    writer: loader
+    lifecycle: run
+    retention: { max_items: 128 }
+    eval_input: true                     # INV-4：参考答案只对评估器可读，候选工作流读不到
+  - name: codes
+    type: collection
+    item: code_artifact
+    writer: search.mutator               # 元智能体（节点内）唯一写者：候选工作流代码库
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: tree
+    type: collection
+    item: score_record
+    writer: search.scoreboard            # 记分板唯一串行写入：搜索树节点的质量/成本分账
+    lifecycle: run
+    retention: { max_items: 64 }         # 有界经验池（= 搜索树的可审计快照）
+
+nodes:
+  - id: loader
+    kind: task
+    uses: { tool: pkg.aflowkit.task_loader@1 }   # 装载任务实例 + 评估参考答案
+    writes: [task_set, answers_ref]
+    emits: { done: signal }
+
+  - id: search
+    kind: task
+    loop:
+      body:
+        nodes:
+          # —— 选择阶段（可表达部分：价值最大父节点）——
+          - id: select
+            kind: transform
+            reads: [tree]
+            ops:
+              - { op: select_best, port: tree, by: quality_milli, prefer: max, into: parent }
+            emits: { parent: score_record }
+
+          # —— MCTS 控制器（卡⑥b-2/⑥b-5 逃逸）——
+          - id: mcts
+            kind: task
+            escape:
+              kind: meta_loop
+              impl_ref: packages/aflowkit@1.0.0/hatches/mcts_controller.py
+              reason: "MCTS 元层搜索本体：UCB 选择（价值+成本+探索项合并）、节点访问计数、价值回传、分支隔离。标准 DSL 只能描述一次执行，无法描述『搜索多个拓扑并按价值选择』（卡⑥b-2），评估结果回灌搜索状态（价值更新/UCB 计数）亦无可变状态位（卡⑥b-5）。DSL 侧仅提供价值最大父节点作基线选择。"
+              owner: lang-team
+              share_budget_pct: 20
+            consumes: { parent: score_record }
+            reads: [tree]
+            emits: { branch: branch_spec }
+
+          # —— 元智能体（Agent 算子：role/profile + 输出格式 + 内部对话历史）——
+          - id: mutator
+            kind: task
+            uses: { model: route.main@1 }
+            writes: [codes]
+            consumes: { branch: branch_spec }
+            emits: { codes: "list<code_artifact>" }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.aflowkit.mutator_system, quota_tokens: 600 }
+                - { from: edge, port: branch, fields: [parent_code_ref, instruction], policy: project, quota_tokens: 1200 }
+                - { from: store, store: tree, policy: latest_k, args: { k: 8 }, quota_tokens: 2400 }   # 该节点的已有评估反馈
+                - { from: store, store: codes, policy: latest_k, args: { k: 4 }, quota_tokens: 6000 }   # 父工作流代码
+
+          # —— 扩展阶段：候选实例化（卡⑥b-1/⑥b-3 逃逸）——
+          - id: register
+            kind: task
+            escape:
+              kind: program_synthesis
+              impl_ref: packages/aflowkit@1.0.0/hatches/candidate_register.py
+              reason: "把元智能体产出的代码登记为可运行的候选工作流（算子实例化、上下文键绑定、生成候选描述符）。运行时生成/改写工作流图本身在静态拓扑 DSL 中不可表达（卡⑥b-1）；节点体是任意 Python 函数体，静态 DSL 只能给接口签名（卡⑥b-3）。"
+              owner: lang-team
+              share_budget_pct: 25
+            consumes: { codes: "list<code_artifact>" }
+            emits: { candidates: "list<code_artifact>" }
+
+          # —— 代码空间约束过滤（卡④-2 / 卡⑥b-6 逃逸）——
+          - id: opguard
+            kind: task
+            escape:
+              kind: dynamic_tool_registry
+              impl_ref: packages/aflowkit@1.0.0/hatches/code_space_guard.py
+              reason: "代码空间约束的完整性校验：拓扑合法性（无环）、算子白名单与类型匹配、上下文键匹配、导入检查——跨候选的约束需按算子注册表在运行期执行，非法拓扑一律拒绝进入搜索树（卡④-2、卡⑥b-6）。"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { candidates: "list<code_artifact>" }
+            emits: { candidates: "list<code_artifact>" }
+
+          # —— 评估阶段：候选工作流在任务子集上真实执行（卡⑥b-3 逃逸）——
+          - id: exec_map
+            kind: task
+            map:
+              over: opguard.candidates          # 候选并行评估（运行时定基数）
+              max_fanout: 8
+              body:
+                nodes:
+                  - id: exec_one
+                    kind: task
+                    escape:
+                      kind: program_synthesis
+                      impl_ref: packages/aflowkit@1.0.0/hatches/candidate_exec.py
+                      reason: "候选工作流的节点体是任意 Python 函数体（动态控制流、闭包、局部逻辑），静态拓扑 DSL 只能表达接口签名，无法表达函数体；候选代码在本逃逸内被解释执行（卡⑥b-3）。"
+                      owner: lang-team
+                      share_budget_pct: 25
+                    consumes: { item: code_artifact }   # map 隐式形参 item = 该候选
+                    reads: [task_set]                   # 只读题面，读不到参考答案
+                    emits: { result: eval_result, usage: usage_report }
+                edges: []
+            emits:
+              results: { from_body: exec_one.result }  # map 自动包 list<>
+              usage: { from_body: exec_one.usage }
+
+          # —— 成本遥测（卡⑥b-4 逃逸）——
+          - id: cost_probe
+            kind: task
+            escape:
+              kind: runtime_context_mutation
+              impl_ref: packages/aflowkit@1.0.0/hatches/cost_probe.py
+              reason: "token 用量与成本分依赖运行期调用日志并按对数归一化成惩罚项，静态声明无法计算（卡⑥b-4）；成本遥测与可变状态回灌同属运行期面（逃逸词表七类中无 telemetry 类，暂记 runtime_context_mutation，见 notes 语法不确定点①）。"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { usage: "list<usage_report>" }
+            emits: { cost: "list<cost_record>" }
+
+          # —— 评估器外部化（质量指标 = 外部判定单元）——
+          - id: assess
+            kind: check
+            uses: { unit: pkg.aflowkit.evaluate@1 }     # pass@1 / accuracy / F1 指标 + 质量阈值判定
+            consumes: { results: "list<eval_result>", cost: "list<cost_record>" }
+            reads: [answers_ref]                        # INV-4：唯一合法读者（候选读不到）
+            emits: { scores: "list<score_record>" }
+
+          # —— 记分板：质量分/成本分落账（单写者）——
+          - id: scoreboard
+            kind: transform
+            writes: [tree]
+            consumes: { scores: "list<score_record>" }
+            ops:
+              - { op: project, port: scores, into: tree }   # 末端落点 = store
+            emits: {}
+        edges:
+          - { from: select, output: parent, to: mcts, input: parent }
+          - { from: mcts, output: branch, to: mutator, input: branch }
+          - { from: mutator, output: codes, to: register, input: codes }
+          - { from: register, output: candidates, to: opguard, input: candidates }
+          - { from: opguard, output: candidates, to: exec_map, input: candidates }
+          - { from: exec_map, output: results, to: assess, input: results }
+          - { from: exec_map, output: usage, to: cost_probe, input: usage }
+          - { from: cost_probe, output: cost, to: assess, input: cost }
+          - { from: assess, output: scores, to: scoreboard, input: scores }
+      max_iterations: 20                     # MCTS 迭代轮数上限（论文常引 20 轮，卡④-4 数值存疑）
+      carried:
+        - { store: codes, max_items: 64 }     # 体内写、体外声明 → 必登记（E2211）
+        - { store: tree, max_items: 64 }
+      safety_points:
+        - { node: assess, kind: check }      # 每轮必须过外部评估（反馈环的安全点）
+      exit_when: "attempt.passed == true || budget.cents_spent >= budget.cents_cap * 9 / 10"
+      on_exhausted: continue                 # 跑满预算不失败，继续到导出最优（卡④-4/④-6）
+
+  # —— 终止判据：搜索树中价值最高的工作流即为最终解（卡④-6）——
+  - id: best
+    kind: transform
+    consumes: { done: signal }
+    reads: [tree]
+    ops:
+      - { op: select_best, port: tree, by: quality_milli, prefer: max, into: winner }
+    emits: { winner: score_record }
+
+  # —— 导出：最优候选代码物化为可独立运行的流水线（卡⑥a-7；代码载荷见卡⑥b-3）——
+  - id: materialize
+    kind: task
+    escape:
+      kind: program_synthesis
+      impl_ref: packages/aflowkit@1.0.0/hatches/materialize_workflow.py
+      reason: "把价值最高的候选代码物化为最终可执行流水线（算子实例化 + 节点体装载 + 入口绑定）。产物本体是 Python 代码，静态拓扑 DSL 只能给接口签名（卡⑥a-7、卡⑥b-3）。"
+      owner: lang-team
+      share_budget_pct: 5
+    consumes: { winner: score_record }
+    reads: [codes]
+    emits: { bundle: pipeline_bundle }
+
+edges:
+  - { from: loader, output: done, to: search, input: done }
+  - { from: search, output: done, to: best, input: done }
+  - { from: best, output: winner, to: materialize, input: winner }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 5000 }              # LLM token/成本上限（卡⑤）
+    - { id: eval_tokens, dimension: tokens_total, scope: loop:search, cap: 4000000 }
+    - { id: iter_turns, dimension: turns, scope: loop:search, cap: 60 }        # MCTS 轮次预算（配合 max_iterations: 20）
+    - { id: sample_calls, dimension: model_calls, scope: map:search.exec_map, cap: 64 } # 每候选评估的任务样本数上限（小子集采样，卡⑤）
+  stop:
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: completed }   # 迭代预算耗尽即停 → 取最优
+  failures:
+    - class: schema_invalid        # 候选代码语法错误/导入不到算子/运行即抛异常 → 判无效丢弃，重新生成（卡④-1）
+      retry: { max: 2, backoff_ms: 0 }
+      route: same_node
+      feedback: format_reminder
+    - class: tool_error            # 单个任务实例上模型或工具调用失败 → 该样本计失败，不中止整轮（卡④-3）
+      route: next_iteration
+    - class: budget_exhausted      # 跑满预算取最优（AFlow 主设置）
+      terminal: true
+      outcome: completed

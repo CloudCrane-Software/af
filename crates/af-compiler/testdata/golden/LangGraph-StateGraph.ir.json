@@ -1,0 +1,1523 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "langgraph_stategraph",
+      "entry": "orchestrate",
+      "nodes": [
+        {
+          "id": "conflict_merge",
+          "kind": "task",
+          "escape": {
+            "kind": "runtime_context_mutation",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/conflict_merge.py",
+            "reason": "同一超级步内多写者写同一通道的非确定性合并顺序与冲突处理；AFB 以 INV-2 编译期拒绝多写者，合并语义下沉到本逃逸实现",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "cross_graph",
+          "kind": "task",
+          "escape": {
+            "kind": "meta_loop",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/cross_graph.py",
+            "reason": "多图并行与外部队列驱动的跨运行调度，超出单图执行模型；meta.topology_selector 只做编译期选图，不提供运行时调度",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "dynamic_dispatch",
+          "kind": "task",
+          "escape": {
+            "kind": "meta_loop",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/send_dispatch.py",
+            "reason": "Send 在运行时生成 N 个并行任务实例，N 由运行期数据决定，超出静态 map 节点/边数量",
+            "owner": "lang-team",
+            "share_budget_pct": 20
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "finalize",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "hazard_log",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "llm_route",
+          "kind": "task",
+          "escape": {
+            "kind": "llm_predicate",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/llm_route.py",
+            "reason": "以 LLM 自由文本输出直接决定下一节点（多目标返回）；AFB 的 route 只能是静态可校验的 CEL 谓词",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "orchestrate",
+          "kind": "task",
+          "loop_spec": {
+            "body": "langgraph_stategraph/orchestrate",
+            "max_iterations": 25,
+            "carried": [
+              {
+                "store": "findings",
+                "max_items": 128
+              },
+              {
+                "store": "long_term",
+                "max_items": 128
+              },
+              {
+                "store": "supervisor_turns",
+                "max_items": 64
+              },
+              {
+                "store": "worker_turns",
+                "max_items": 64
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "verify",
+                "kind": "check"
+              }
+            ],
+            "exit_when": {
+              "source": "resume.approved == true",
+              "roots": [
+                "resume"
+              ],
+              "digest": "34aa893afe4aee69468c19178ef8050b94d9c79b692d402ce0a40a460f311dd6"
+            },
+            "on_exhausted": "fail"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "runtime_probe",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "runtime_rewrite",
+          "kind": "task",
+          "escape": {
+            "kind": "meta_loop",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/runtime_rewrite.py",
+            "reason": "运行时自举改写图结构（临时插入/删除边、运行时决定节点集合）；AFB 拓扑必须静态声明，改图只能退化为状态驱动路由",
+            "owner": "lang-team",
+            "share_budget_pct": 20
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "side_effects",
+          "kind": "task",
+          "escape": {
+            "kind": "env_adapter",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/side_effects.py",
+            "reason": "节点内任意副作用与外部交互；AFB 不承诺节点级事务/回滚，DSL 若承诺事务性即越界",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "stream_exec",
+          "kind": "task",
+          "escape": {
+            "kind": "env_adapter",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/stream_exec.py",
+            "reason": "节点内部并发与流式/取消语义；AFB 执行模型为 super-step 级同步，节点内并发需宿主语言支持",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "suspend_resume",
+          "kind": "task",
+          "escape": {
+            "kind": "runtime_context_mutation",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/suspend_resume.py",
+            "reason": "节点内部任意位置挂起并在运行中注入外部输入续跑，过程语义与副作用不回滚无法由边界暂停表达",
+            "owner": "lang-team",
+            "share_budget_pct": 15
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "thread_store",
+          "kind": "task",
+          "escape": {
+            "kind": "env_adapter",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/thread_store.py",
+            "reason": "跨执行线共享的任意键值存取（动态键、跨 thread_id 可见性）；AFB store 的静态槽只覆盖其类型化部分",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "time_travel",
+          "kind": "task",
+          "escape": {
+            "kind": "runtime_context_mutation",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/time_travel.py",
+            "reason": "回到任意历史检查点并分支属于运行历史操作而非图结构声明；AFB 的 checkpoint 只声明快照点，不提供历史寻址",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "visibility_scope",
+          "kind": "task",
+          "escape": {
+            "kind": "runtime_context_mutation",
+            "impl_ref": "packages/langgraph@1.0.0/hatches/visibility_scope.py",
+            "reason": "子图向上暴露/隐藏哪些状态通道需运行时声明；AFB 的作用域只有体外声明 + carried 覆盖，无通道级可见性字段",
+            "owner": "lang-team",
+            "share_budget_pct": 10
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "conflict_merge",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "cross_graph",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "dynamic_dispatch",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "hazard_log",
+          "output": "stats",
+          "to": "finalize",
+          "input": "stats",
+          "checkpoint": false
+        },
+        {
+          "from": "llm_route",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "orchestrate",
+          "output": "merged",
+          "to": "finalize",
+          "input": "merged",
+          "checkpoint": true
+        },
+        {
+          "from": "orchestrate",
+          "output": "verdict",
+          "to": "runtime_probe",
+          "input": "verdict",
+          "checkpoint": true
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "conflict_merge",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'conflict_merge') && !((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout') || (runtime_probe.note.kind == 'llm_route') || (runtime_probe.note.kind == 'suspend_resume') || (runtime_probe.note.kind == 'side_effects') || (runtime_probe.note.kind == 'thread_store') || (runtime_probe.note.kind == 'stream_exec'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "867e523c0e8e10138d97b952f41dc521ca023782872f07121a891c3a14b5eba6"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "cross_graph",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'cross_graph') && !((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout') || (runtime_probe.note.kind == 'llm_route') || (runtime_probe.note.kind == 'suspend_resume') || (runtime_probe.note.kind == 'side_effects') || (runtime_probe.note.kind == 'thread_store') || (runtime_probe.note.kind == 'stream_exec') || (runtime_probe.note.kind == 'conflict_merge') || (runtime_probe.note.kind == 'visibility_scope') || (runtime_probe.note.kind == 'time_travel'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "ce77e11b1a739665c3efff5858080031088bf3baf735143465aa7cf811fe13c9"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "dynamic_dispatch",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'send_fanout') && !((runtime_probe.note.kind == 'graph_rewrite'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "093166f8b7f6b7d4288db5d5d25f522d502ceac1e5933d6c0d683c5df698ad89"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "!((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout') || (runtime_probe.note.kind == 'llm_route') || (runtime_probe.note.kind == 'suspend_resume') || (runtime_probe.note.kind == 'side_effects') || (runtime_probe.note.kind == 'thread_store') || (runtime_probe.note.kind == 'stream_exec') || (runtime_probe.note.kind == 'conflict_merge') || (runtime_probe.note.kind == 'visibility_scope') || (runtime_probe.note.kind == 'time_travel') || (runtime_probe.note.kind == 'cross_graph'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "de11fbefeb16ffd703aaadcc0169b071b13d6a59234510f88e0fc6490c864d0e"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "llm_route",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'llm_route') && !((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "862f0881850bc4b89935848d11d37dcad6fc60423a83aba97f973304384c0862"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "runtime_rewrite",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'graph_rewrite')",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "07a1a99b5f663a3344cbe71a8ade7970fefb903a46354746edd54809d83f9f89"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "side_effects",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'side_effects') && !((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout') || (runtime_probe.note.kind == 'llm_route') || (runtime_probe.note.kind == 'suspend_resume'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "fec9c22dd82b3f8e11cdf262100dfe40340cce988d151ac747041f61d7188f7e"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "stream_exec",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'stream_exec') && !((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout') || (runtime_probe.note.kind == 'llm_route') || (runtime_probe.note.kind == 'suspend_resume') || (runtime_probe.note.kind == 'side_effects') || (runtime_probe.note.kind == 'thread_store'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "becb84c8ea7448e472df6f2b4b280c4115ccf09a1c63b3fd4c8150fc8b9c0b96"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "suspend_resume",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'suspend_resume') && !((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout') || (runtime_probe.note.kind == 'llm_route'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "de01e35fa41806577b62e3adfb76a64c2f1e5418a3113a1d7ec58844f85486b3"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "thread_store",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'thread_store') && !((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout') || (runtime_probe.note.kind == 'llm_route') || (runtime_probe.note.kind == 'suspend_resume') || (runtime_probe.note.kind == 'side_effects'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "11a211f5c50e30bca3d49dbae540ff84faf235643f845690761acd4b9f720dd5"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "time_travel",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'time_travel') && !((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout') || (runtime_probe.note.kind == 'llm_route') || (runtime_probe.note.kind == 'suspend_resume') || (runtime_probe.note.kind == 'side_effects') || (runtime_probe.note.kind == 'thread_store') || (runtime_probe.note.kind == 'stream_exec') || (runtime_probe.note.kind == 'conflict_merge') || (runtime_probe.note.kind == 'visibility_scope'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "be67f78ac926b75dc1fd560ebe04cb4500f101250b235cd4fd5b953def962cc3"
+          }
+        },
+        {
+          "from": "runtime_probe",
+          "output": "note",
+          "to": "visibility_scope",
+          "input": "note",
+          "checkpoint": false,
+          "guard": {
+            "source": "(runtime_probe.note.kind == 'visibility_scope') && !((runtime_probe.note.kind == 'graph_rewrite') || (runtime_probe.note.kind == 'send_fanout') || (runtime_probe.note.kind == 'llm_route') || (runtime_probe.note.kind == 'suspend_resume') || (runtime_probe.note.kind == 'side_effects') || (runtime_probe.note.kind == 'thread_store') || (runtime_probe.note.kind == 'stream_exec') || (runtime_probe.note.kind == 'conflict_merge'))",
+            "roots": [
+              "runtime_probe"
+            ],
+            "digest": "b92f560d8ffc33af7141e7a5cf0f0ac93424648a683fe962e343c2eb2d923ea4"
+          }
+        },
+        {
+          "from": "runtime_rewrite",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "side_effects",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "stream_exec",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "suspend_resume",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "thread_store",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "time_travel",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        },
+        {
+          "from": "visibility_scope",
+          "output": "note",
+          "to": "hazard_log",
+          "input": "note",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "langgraph_stategraph/orchestrate": {
+          "graph_version": "1.0",
+          "entry": "supervisor",
+          "nodes": [
+            {
+              "id": "aggregate",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "approve",
+              "kind": "task",
+              "human": {
+                "station": "review-desk",
+                "role": "reviewer",
+                "quorum": 1,
+                "resume": {
+                  "schema": {
+                    "properties": {
+                      "approved": {
+                        "type": "boolean"
+                      },
+                      "note": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "approved"
+                    ],
+                    "type": "object"
+                  }
+                }
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "compact",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "dispatch",
+              "kind": "task",
+              "map_spec": {
+                "body": "langgraph_stategraph/orchestrate/dispatch",
+                "over": "input.worker_pool"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "log_turns",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "persist",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "supervisor",
+              "kind": "task",
+              "route_exit_guard": {
+                "source": "(supervisor.decision.done == true)",
+                "roots": [
+                  "supervisor"
+                ],
+                "digest": "848a870532ced0f2b1f1f8976f6bd83adbe46cf3aa15fa7ab0c8423375fcdff3"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "verify",
+              "kind": "check",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "aggregate",
+              "output": "merged",
+              "to": "compact",
+              "input": "merged",
+              "checkpoint": false
+            },
+            {
+              "from": "aggregate",
+              "output": "merged",
+              "to": "log_turns",
+              "input": "merged",
+              "checkpoint": false
+            },
+            {
+              "from": "aggregate",
+              "output": "merged",
+              "to": "persist",
+              "input": "merged",
+              "checkpoint": false
+            },
+            {
+              "from": "aggregate",
+              "output": "merged",
+              "to": "verify",
+              "input": "merged",
+              "checkpoint": false
+            },
+            {
+              "from": "approve",
+              "output": "decision",
+              "to": "supervisor",
+              "input": "feedback",
+              "checkpoint": false,
+              "guard": {
+                "source": "(resume.approved == false)",
+                "roots": [
+                  "resume"
+                ],
+                "digest": "9afc16eb8a5b9e3f11de1e489e2b85e92a6a0a73b914a5fd313b2d69bbf421a1"
+              }
+            },
+            {
+              "from": "dispatch",
+              "output": "items",
+              "to": "aggregate",
+              "input": "items",
+              "checkpoint": false
+            },
+            {
+              "from": "supervisor",
+              "output": "decision",
+              "to": "dispatch",
+              "input": "decision",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((supervisor.decision.done == true))",
+                "roots": [
+                  "supervisor"
+                ],
+                "digest": "84756caa97212b7fd5e00a67a6cf3ef99eeae58c5d067de58cb4e0c4da2226cc"
+              }
+            },
+            {
+              "from": "verify",
+              "output": "verdict",
+              "to": "approve",
+              "input": "verdict",
+              "checkpoint": false
+            }
+          ]
+        },
+        "langgraph_stategraph/orchestrate/dispatch": {
+          "graph_version": "1.0",
+          "entry": "worker",
+          "nodes": [
+            {
+              "id": "worker",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": []
+        }
+      }
+    },
+    "interface": {
+      "input_type": "lg_input",
+      "output_type": "answer",
+      "output_from": "finalize",
+      "intent": "LangGraph StateGraph 的 AFB 转写：共享 State 通道拆为单写者 store（reducer 写侧归并 → 读侧交错），条件边=route 构造，图内环=受控循环（recursion_limit→max_iterations）， interrupt=human 节点（resume.schema=类型化恢复值），checkpointer=边 checkpoint， 子图=loop/map 内联体（降维为版本化子图），Send 的静态子集=map；11 项运行时语义 （运行时改图 / Send 动态基数 / LLM 路由 / 任意挂起 / 任意副作用 / 跨线程 Store / 节点内并发流式 / 并行写冲突 / 子图可见性 / 时间旅行 / 跨图编排）以 escape 构造记账， 按裁决 §二-2 七类词表归类。"
+    },
+    "types": {
+      "answer": {
+        "properties": {
+          "final": {
+            "type": "string"
+          },
+          "supports": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "final",
+          "supports"
+        ],
+        "type": "object"
+      },
+      "approval": {
+        "properties": {
+          "approved": {
+            "type": "boolean"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "approved"
+        ],
+        "type": "object"
+      },
+      "decision": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "next_worker": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "next_worker",
+          "done"
+        ],
+        "type": "object"
+      },
+      "digest": {
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "source"
+        ],
+        "type": "object"
+      },
+      "finding": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer"
+          },
+          "worker": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "worker",
+          "content",
+          "score"
+        ],
+        "type": "object"
+      },
+      "hazard": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "hazard_report": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "count",
+          "kinds"
+        ],
+        "type": "object"
+      },
+      "lg_input": {
+        "properties": {
+          "task": {
+            "type": "string"
+          },
+          "worker_pool": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "task",
+          "worker_pool"
+        ],
+        "type": "object"
+      },
+      "verdict": {
+        "properties": {
+          "hazard": {
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pass": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pass",
+          "issues",
+          "hazard"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "findings": {
+        "name": "findings",
+        "kind": "collection",
+        "item": "finding",
+        "writer": "orchestrate.persist",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      },
+      "long_term": {
+        "name": "long_term",
+        "kind": "collection",
+        "item": "digest",
+        "writer": "orchestrate.compact",
+        "lifecycle": "persistent",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      },
+      "supervisor_turns": {
+        "name": "supervisor_turns",
+        "kind": "message_log",
+        "writer": "orchestrate.supervisor",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "worker_turns": {
+        "name": "worker_turns",
+        "kind": "message_log",
+        "writer": "orchestrate.log_turns",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "conflict_merge": {
+        "node_id": "conflict_merge",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "cross_graph": {
+        "node_id": "cross_graph",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "dynamic_dispatch": {
+        "node_id": "dynamic_dispatch",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "finalize": {
+        "node_id": "finalize",
+        "components": {
+          "model": "route.main@1"
+        },
+        "consumes": {
+          "merged": "list<finding>",
+          "stats": "hazard_report"
+        },
+        "artifacts": {
+          "answer": {
+            "type": "answer",
+            "is_final": true,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.langgraph.finalize_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 200,
+            "fields": [
+              "task"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1500,
+            "port": "merged",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "port": "stats",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 2000,
+            "store": "findings",
+            "policy": "full"
+          }
+        ]
+      },
+      "hazard_log": {
+        "node_id": "hazard_log",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "stats": {
+            "type": "hazard_report",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "tally",
+            "port": "note",
+            "into": "stats",
+            "by": "kind"
+          }
+        ]
+      },
+      "llm_route": {
+        "node_id": "llm_route",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "orchestrate": {
+        "node_id": "orchestrate",
+        "components": {},
+        "artifacts": {
+          "merged": {
+            "from_body": "aggregate.merged",
+            "is_final": false,
+            "provenance": null
+          },
+          "verdict": {
+            "from_body": "verify.verdict",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "orchestrate.aggregate": {
+        "node_id": "aggregate",
+        "components": {},
+        "consumes": {
+          "items": "list<finding>"
+        },
+        "artifacts": {
+          "merged": {
+            "type": "list<finding>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "merge",
+            "ports": [
+              "items"
+            ],
+            "into": "merged"
+          }
+        ]
+      },
+      "orchestrate.approve": {
+        "node_id": "approve",
+        "components": {},
+        "consumes": {
+          "verdict": "verdict"
+        },
+        "artifacts": {
+          "decision": {
+            "type": "approval",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "orchestrate.compact": {
+        "node_id": "compact",
+        "components": {},
+        "reads": [
+          "findings"
+        ],
+        "writes": [
+          "long_term"
+        ],
+        "consumes": {
+          "merged": "list<finding>"
+        },
+        "ops": [
+          {
+            "op": "slice",
+            "port": "findings",
+            "into": "recent",
+            "k": 20
+          },
+          {
+            "op": "merge",
+            "ports": [
+              "merged",
+              "recent"
+            ],
+            "into": "digest"
+          },
+          {
+            "op": "project",
+            "port": "digest",
+            "into": "long_term"
+          }
+        ]
+      },
+      "orchestrate.dispatch": {
+        "node_id": "dispatch",
+        "components": {},
+        "consumes": {
+          "decision": "decision"
+        },
+        "artifacts": {
+          "items": {
+            "from_body": "worker.finding",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "orchestrate.dispatch.worker": {
+        "node_id": "worker",
+        "components": {
+          "model": "route.alt@1"
+        },
+        "artifacts": {
+          "finding": {
+            "type": "finding",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.langgraph.worker_system",
+            "vars": {
+              "worker": "arg.item"
+            }
+          },
+          {
+            "from": "input",
+            "quota_tokens": 300,
+            "fields": [
+              "task"
+            ],
+            "policy": "project"
+          }
+        ]
+      },
+      "orchestrate.log_turns": {
+        "node_id": "log_turns",
+        "components": {},
+        "writes": [
+          "worker_turns"
+        ],
+        "consumes": {
+          "merged": "list<finding>"
+        },
+        "ops": [
+          {
+            "op": "truncate",
+            "port": "merged",
+            "into": "worker_turns",
+            "max_tokens_each": 300
+          }
+        ]
+      },
+      "orchestrate.persist": {
+        "node_id": "persist",
+        "components": {},
+        "writes": [
+          "findings"
+        ],
+        "consumes": {
+          "merged": "list<finding>"
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "merged",
+            "into": "findings"
+          }
+        ]
+      },
+      "orchestrate.supervisor": {
+        "node_id": "supervisor",
+        "components": {
+          "model": "route.main@1"
+        },
+        "writes": [
+          "supervisor_turns"
+        ],
+        "consumes": {
+          "feedback": "approval"
+        },
+        "artifacts": {
+          "decision": {
+            "type": "decision",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.langgraph.supervisor_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 200,
+            "fields": [
+              "task"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 2000,
+            "store": "supervisor_turns",
+            "policy": "full"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 2000,
+            "store": "worker_turns",
+            "policy": "full"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "long_term",
+            "policy": "latest_k",
+            "args": {
+              "k": 8
+            }
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 300,
+            "port": "feedback",
+            "policy": "project",
+            "optional": true
+          }
+        ]
+      },
+      "orchestrate.verify": {
+        "node_id": "verify",
+        "components": {
+          "unit": "pkg.langgraph.verify@1"
+        },
+        "consumes": {
+          "merged": "list<finding>"
+        },
+        "artifacts": {
+          "verdict": {
+            "type": "verdict",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "runtime_probe": {
+        "node_id": "runtime_probe",
+        "components": {
+          "model": "route.main@1"
+        },
+        "consumes": {
+          "verdict": "verdict"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.langgraph.probe_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 200,
+            "fields": [
+              "task"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "port": "verdict",
+            "policy": "project"
+          }
+        ]
+      },
+      "runtime_rewrite": {
+        "node_id": "runtime_rewrite",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "side_effects": {
+        "node_id": "side_effects",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "stream_exec": {
+        "node_id": "stream_exec",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "suspend_resume": {
+        "node_id": "suspend_resume",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "thread_store": {
+        "node_id": "thread_store",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "time_travel": {
+        "node_id": "time_travel",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "visibility_scope": {
+        "node_id": "visibility_scope",
+        "components": {},
+        "consumes": {
+          "note": "hazard"
+        },
+        "artifacts": {
+          "note": {
+            "type": "hazard",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 900
+        },
+        {
+          "id": "rounds_cap",
+          "dimension": "turns",
+          "scope": "loop:orchestrate",
+          "cap": 25
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 600000
+        },
+        {
+          "id": "tool_cap",
+          "dimension": "tool_calls",
+          "scope": "plan",
+          "cap": 40
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "steps.turns >= 24",
+            "roots": [
+              "steps"
+            ],
+            "digest": "b8ab41c1c73752cb5a5bc540bdbe88ff89c44cd14766bee6db07b566bb128fe5"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "environment_failure",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 60000
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "timeout",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 5000
+          },
+          "route": "same_node"
+        },
+        {
+          "class": "gate_refused",
+          "route": "next_iteration"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {
+      "conflict_merge": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/conflict_merge.py",
+        "reason": "同一超级步内多写者写同一通道的非确定性合并顺序与冲突处理；AFB 以 INV-2 编译期拒绝多写者，合并语义下沉到本逃逸实现",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "cross_graph": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/cross_graph.py",
+        "reason": "多图并行与外部队列驱动的跨运行调度，超出单图执行模型；meta.topology_selector 只做编译期选图，不提供运行时调度",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "dynamic_dispatch": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/send_dispatch.py",
+        "reason": "Send 在运行时生成 N 个并行任务实例，N 由运行期数据决定，超出静态 map 节点/边数量",
+        "owner": "lang-team",
+        "share_budget_pct": 20
+      },
+      "llm_route": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/llm_route.py",
+        "reason": "以 LLM 自由文本输出直接决定下一节点（多目标返回）；AFB 的 route 只能是静态可校验的 CEL 谓词",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "runtime_rewrite": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/runtime_rewrite.py",
+        "reason": "运行时自举改写图结构（临时插入/删除边、运行时决定节点集合）；AFB 拓扑必须静态声明，改图只能退化为状态驱动路由",
+        "owner": "lang-team",
+        "share_budget_pct": 20
+      },
+      "side_effects": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/side_effects.py",
+        "reason": "节点内任意副作用与外部交互；AFB 不承诺节点级事务/回滚，DSL 若承诺事务性即越界",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "stream_exec": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/stream_exec.py",
+        "reason": "节点内部并发与流式/取消语义；AFB 执行模型为 super-step 级同步，节点内并发需宿主语言支持",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "suspend_resume": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/suspend_resume.py",
+        "reason": "节点内部任意位置挂起并在运行中注入外部输入续跑，过程语义与副作用不回滚无法由边界暂停表达",
+        "owner": "lang-team",
+        "share_budget_pct": 15
+      },
+      "thread_store": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/thread_store.py",
+        "reason": "跨执行线共享的任意键值存取（动态键、跨 thread_id 可见性）；AFB store 的静态槽只覆盖其类型化部分",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "time_travel": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/time_travel.py",
+        "reason": "回到任意历史检查点并分支属于运行历史操作而非图结构声明；AFB 的 checkpoint 只声明快照点，不提供历史寻址",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "visibility_scope": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/langgraph@1.0.0/hatches/visibility_scope.py",
+        "reason": "子图向上暴露/隐藏哪些状态通道需运行时声明；AFB 的作用域只有体外声明 + carried 覆盖，无通道级可见性字段",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      }
+    },
+    "trust": {}
+  }
+}

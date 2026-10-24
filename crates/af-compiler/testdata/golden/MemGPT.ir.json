@@ -1,0 +1,856 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "memgpt_layered",
+      "entry": "session",
+      "nodes": [
+        {
+          "id": "session",
+          "kind": "task",
+          "loop_spec": {
+            "body": "memgpt_layered/session",
+            "max_iterations": 12,
+            "carried": [
+              {
+                "store": "archival_memory",
+                "max_items": 4096
+              },
+              {
+                "store": "core_memory",
+                "max_items": 32
+              },
+              {
+                "store": "inbox",
+                "max_items": 64
+              },
+              {
+                "store": "message_buffer",
+                "max_items": 20
+              },
+              {
+                "store": "recall_history",
+                "max_items": 2048
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "step.mem_guard",
+                "kind": "gate"
+              }
+            ],
+            "exit_when": {
+              "source": "budget.cents_spent >= budget.cents_cap * 9 / 10",
+              "roots": [
+                "budget"
+              ],
+              "digest": "3be1e182158bab26f6795b5974234a63c498ed5ca6b81c13be78e05453256197"
+            },
+            "on_exhausted": "continue"
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [],
+      "subgraphs": {
+        "memgpt_layered/session": {
+          "graph_version": "1.0",
+          "entry": "intake",
+          "nodes": [
+            {
+              "id": "intake",
+              "kind": "task",
+              "escape": {
+                "kind": "env_adapter",
+                "impl_ref": "packages/memgpt@1.0.0/hatches/event_intake.py",
+                "reason": "用户消息/定时任务可抢占正在进行的生成并改变步边界；宿主事件队列与抢占语义由事件适配器承担（卡⑥b-6）。静态拓扑只能表达步边界处的取事件，生成中途抢占在该实现内完成",
+                "owner": "lang-team",
+                "share_budget_pct": 4
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "step",
+              "kind": "task",
+              "loop_spec": {
+                "body": "memgpt_layered/session/step",
+                "max_iterations": 4,
+                "carried": [
+                  {
+                    "store": "archival_memory",
+                    "max_items": 4096
+                  },
+                  {
+                    "store": "core_memory",
+                    "max_items": 32
+                  },
+                  {
+                    "store": "message_buffer",
+                    "max_items": 20
+                  },
+                  {
+                    "store": "recall_history",
+                    "max_items": 2048
+                  }
+                ],
+                "safety_points": [
+                  {
+                    "node": "mem_guard",
+                    "kind": "gate"
+                  }
+                ],
+                "args": {
+                  "event": "intake.event"
+                },
+                "exit_when": {
+                  "source": "last_message.has_tool_calls == false",
+                  "roots": [
+                    "last_message"
+                  ],
+                  "digest": "e02db5d1f85007679a88af959d2358c15ba3f5285e66141047f2bd3b2b3aee11"
+                },
+                "on_exhausted": "continue"
+              },
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "intake",
+              "output": "event",
+              "to": "step",
+              "input": "event",
+              "checkpoint": false
+            }
+          ]
+        },
+        "memgpt_layered/session/step": {
+          "graph_version": "1.0",
+          "entry": "agent",
+          "nodes": [
+            {
+              "id": "agent",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "archive_store",
+              "kind": "task",
+              "escape": {
+                "kind": "env_adapter",
+                "impl_ref": "packages/memgpt@1.0.0/hatches/archive_store.py",
+                "reason": "归档记忆与会话召回存于跨会话持久外部存储，其写入与后续会话读取的一致性语义超出单次拓扑声明范围（卡⑥b-7）；该适配器是归档库的唯一写者",
+                "owner": "lang-team",
+                "share_budget_pct": 5
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "host_mem",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/memgpt@1.0.0/hatches/host_mem.py",
+                "reason": "宿主执行层：执行模型自编辑指令对核心记忆的写回副作用（append/replace 双算子，卡⑥b-1）、追加消息缓冲与跨会话历史；并在主上下文超预算时按语义条件『先写外部再驱逐主上下文条目』（卡⑥b-5），以及运行时决定回注量与预算分配（卡⑥b-4）——三者均不可静态表达",
+                "owner": "lang-team",
+                "share_budget_pct": 9
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "mem_dispatch",
+              "kind": "task",
+              "escape": {
+                "kind": "dynamic_tool_registry",
+                "impl_ref": "packages/memgpt@1.0.0/hatches/mem_dispatch.py",
+                "reason": "记忆管理函数的可调用集合与调用序列由模型在运行时决定、不可静态枚举（卡⑥b-2）：本节点是运行时函数注册表的分派面，产出函数响应 observation 与写回请求 core_edit",
+                "owner": "lang-team",
+                "share_budget_pct": 8
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "mem_guard",
+              "kind": "gate",
+              "capability_refs": []
+            },
+            {
+              "id": "semantic_done",
+              "kind": "task",
+              "escape": {
+                "kind": "llm_predicate",
+                "impl_ref": "packages/memgpt@1.0.0/hatches/semantic_done.py",
+                "reason": "『直到模型不再发出函数调用』在主路径由结构判据（last_message.has_tool_calls）承担；若改用语义完成判定（模型以自然语言自述已完成），需非确定性谓词注入（卡⑥b-3），本节点为该变体的落点，当前不在关键路径上",
+                "owner": "lang-team",
+                "share_budget_pct": 3
+              },
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "agent",
+              "output": "plans",
+              "to": "mem_dispatch",
+              "input": "plans",
+              "checkpoint": false
+            },
+            {
+              "from": "agent",
+              "output": "reply",
+              "to": "host_mem",
+              "input": "reply",
+              "checkpoint": false
+            },
+            {
+              "from": "agent",
+              "output": "reply",
+              "to": "semantic_done",
+              "input": "reply",
+              "checkpoint": false
+            },
+            {
+              "from": "archive_store",
+              "output": "archived",
+              "to": "host_mem",
+              "input": "archived",
+              "checkpoint": false
+            },
+            {
+              "from": "host_mem",
+              "output": "report",
+              "to": "mem_guard",
+              "input": "report",
+              "checkpoint": false
+            },
+            {
+              "from": "mem_dispatch",
+              "output": "archive",
+              "to": "archive_store",
+              "input": "archive",
+              "checkpoint": false
+            },
+            {
+              "from": "mem_dispatch",
+              "output": "edit",
+              "to": "host_mem",
+              "input": "edit",
+              "checkpoint": false
+            },
+            {
+              "from": "mem_dispatch",
+              "output": "observation",
+              "to": "host_mem",
+              "input": "observation",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "memgpt_input",
+      "output_type": "reply",
+      "output_from": "session",
+      "intent": "MemGPT（Packer et al. 2023）中断驱动式分层记忆：外层=步循环（每步一条中断），内层=步内函数调用轮次（≤N）；常驻区=核心记忆+滚动消息缓冲（全量注入主上下文），分页区=归档向量库+全会话历史（按需检索）；记忆管理函数=带写回副作用的自编辑调用（append/replace 双算子）；步内调用上限+主上下文上限=受控循环上限+预算守卫；运行时函数面/语义分页驱逐/动态注入量/跨会话外部存储/异步抢占走 L4 逃逸记账"
+    },
+    "types": {
+      "archival_record": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "content"
+        ],
+        "type": "object"
+      },
+      "archive_write": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "content"
+        ],
+        "type": "object"
+      },
+      "completion_verdict": {
+        "properties": {
+          "done": {
+            "type": "boolean"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "done",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "context_report": {
+        "properties": {
+          "injected": {
+            "type": "integer"
+          },
+          "tokens": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "tokens",
+          "injected"
+        ],
+        "type": "object"
+      },
+      "core_edit": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "section",
+          "content"
+        ],
+        "type": "object"
+      },
+      "core_record": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "section": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "section",
+          "content"
+        ],
+        "type": "object"
+      },
+      "interrupt_event": {
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "message"
+        ],
+        "type": "object"
+      },
+      "memgpt_input": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "message"
+        ],
+        "type": "object"
+      },
+      "memory_plan": {
+        "properties": {
+          "op": {
+            "type": "string"
+          },
+          "payload": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "op",
+          "target",
+          "payload"
+        ],
+        "type": "object"
+      },
+      "observation": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "op": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ok",
+          "op",
+          "content"
+        ],
+        "type": "object"
+      },
+      "reply": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "turn_record": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "archival_memory": {
+        "name": "archival_memory",
+        "kind": "vector_index",
+        "item": "archival_record",
+        "writer": "session.step.archive_store",
+        "lifecycle": "persistent",
+        "retention": {
+          "max_items": 4096
+        },
+        "eval_input": false
+      },
+      "core_memory": {
+        "name": "core_memory",
+        "kind": "kv",
+        "value": "core_record",
+        "writer": "session.step.host_mem",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 32
+        },
+        "eval_input": false
+      },
+      "inbox": {
+        "name": "inbox",
+        "kind": "message_log",
+        "writer": "session.intake",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "message_buffer": {
+        "name": "message_buffer",
+        "kind": "message_log",
+        "writer": "session.step.host_mem",
+        "lifecycle": "run",
+        "retention": {
+          "policy": "rolling_window",
+          "max_items": 20,
+          "keep_system": true
+        },
+        "eval_input": false
+      },
+      "recall_history": {
+        "name": "recall_history",
+        "kind": "collection",
+        "item": "turn_record",
+        "writer": "session.step.host_mem",
+        "lifecycle": "persistent",
+        "retention": {
+          "max_items": 2048
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "session": {
+        "node_id": "session",
+        "components": {},
+        "artifacts": {
+          "reply": {
+            "from_body": "step.reply",
+            "is_final": true,
+            "provenance": null
+          }
+        }
+      },
+      "session.intake": {
+        "node_id": "intake",
+        "components": {},
+        "writes": [
+          "inbox"
+        ],
+        "artifacts": {
+          "event": {
+            "type": "interrupt_event",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "session.step": {
+        "node_id": "step",
+        "components": {},
+        "artifacts": {
+          "reply": {
+            "from_body": "agent.reply",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "session.step.agent": {
+        "node_id": "agent",
+        "components": {
+          "model": "route.main@1"
+        },
+        "artifacts": {
+          "plans": {
+            "type": "list<memory_plan>",
+            "is_final": false,
+            "provenance": null
+          },
+          "reply": {
+            "type": "reply",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.memgpt.system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 100,
+            "fields": [
+              "session_id"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "core_memory",
+            "policy": "full"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 2500,
+            "store": "message_buffer",
+            "policy": "full"
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 400,
+            "name": "event",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "archival_memory",
+            "policy": "retrieve",
+            "args": {
+              "k": 5
+            },
+            "component": "pkg.memgpt.similarity@1"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 800,
+            "store": "recall_history",
+            "policy": "retrieve",
+            "args": {
+              "k": 5
+            },
+            "component": "pkg.memgpt.similarity@1"
+          }
+        ]
+      },
+      "session.step.archive_store": {
+        "node_id": "archive_store",
+        "components": {},
+        "writes": [
+          "archival_memory"
+        ],
+        "consumes": {
+          "archive": "list<archive_write>"
+        },
+        "artifacts": {
+          "archived": {
+            "type": "list<archive_write>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "session.step.host_mem": {
+        "node_id": "host_mem",
+        "components": {},
+        "reads": [
+          "core_memory",
+          "inbox",
+          "message_buffer"
+        ],
+        "writes": [
+          "core_memory",
+          "message_buffer",
+          "recall_history"
+        ],
+        "consumes": {
+          "archived": "list<archive_write>",
+          "edit": "list<core_edit>",
+          "observation": "list<observation>",
+          "reply": "reply"
+        },
+        "artifacts": {
+          "report": {
+            "type": "context_report",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "session.step.mem_dispatch": {
+        "node_id": "mem_dispatch",
+        "components": {},
+        "reads": [
+          "archival_memory",
+          "core_memory",
+          "recall_history"
+        ],
+        "consumes": {
+          "plans": "list<memory_plan>"
+        },
+        "artifacts": {
+          "archive": {
+            "type": "list<archive_write>",
+            "is_final": false,
+            "provenance": null
+          },
+          "edit": {
+            "type": "list<core_edit>",
+            "is_final": false,
+            "provenance": null
+          },
+          "observation": {
+            "type": "list<observation>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "session.step.mem_guard": {
+        "node_id": "mem_guard",
+        "components": {},
+        "consumes": {
+          "report": "context_report"
+        },
+        "artifacts": {
+          "report": {
+            "type": "context_report",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "assert": {
+          "source": "inputs.report.tokens <= 4000",
+          "roots": [
+            "inputs"
+          ],
+          "digest": "514de086b6d9ed89f8334d183181805292c67d00f377bdc26de15dffb966e559"
+        }
+      },
+      "session.step.semantic_done": {
+        "node_id": "semantic_done",
+        "components": {},
+        "consumes": {
+          "reply": "reply"
+        },
+        "artifacts": {
+          "verdict": {
+            "type": "completion_verdict",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "ctx_tokens",
+          "dimension": "tokens_total",
+          "scope": "node:session.step",
+          "cap": 4000
+        },
+        {
+          "id": "plan_calls",
+          "dimension": "model_calls",
+          "scope": "plan",
+          "cap": 60
+        },
+        {
+          "id": "plan_cost",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 600
+        },
+        {
+          "id": "plan_tokens",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 240000
+        },
+        {
+          "id": "session_turns",
+          "dimension": "turns",
+          "scope": "plan",
+          "cap": 96
+        },
+        {
+          "id": "step_calls",
+          "dimension": "tool_calls",
+          "scope": "loop:session",
+          "cap": 48
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "budget.tool_calls_spent >= budget.tool_calls_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "ad86c2578e142bac5747d071c2f5d72a7498cf88a27d8422e8d84f29be7c29ca"
+          },
+          "outcome": "completed"
+        },
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "environment_failure",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 1000
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "gate_refused",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {
+      "session.intake": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/memgpt@1.0.0/hatches/event_intake.py",
+        "reason": "用户消息/定时任务可抢占正在进行的生成并改变步边界；宿主事件队列与抢占语义由事件适配器承担（卡⑥b-6）。静态拓扑只能表达步边界处的取事件，生成中途抢占在该实现内完成",
+        "owner": "lang-team",
+        "share_budget_pct": 4
+      },
+      "session.step.archive_store": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/memgpt@1.0.0/hatches/archive_store.py",
+        "reason": "归档记忆与会话召回存于跨会话持久外部存储，其写入与后续会话读取的一致性语义超出单次拓扑声明范围（卡⑥b-7）；该适配器是归档库的唯一写者",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      },
+      "session.step.host_mem": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/memgpt@1.0.0/hatches/host_mem.py",
+        "reason": "宿主执行层：执行模型自编辑指令对核心记忆的写回副作用（append/replace 双算子，卡⑥b-1）、追加消息缓冲与跨会话历史；并在主上下文超预算时按语义条件『先写外部再驱逐主上下文条目』（卡⑥b-5），以及运行时决定回注量与预算分配（卡⑥b-4）——三者均不可静态表达",
+        "owner": "lang-team",
+        "share_budget_pct": 9
+      },
+      "session.step.mem_dispatch": {
+        "kind": "dynamic_tool_registry",
+        "impl_ref": "packages/memgpt@1.0.0/hatches/mem_dispatch.py",
+        "reason": "记忆管理函数的可调用集合与调用序列由模型在运行时决定、不可静态枚举（卡⑥b-2）：本节点是运行时函数注册表的分派面，产出函数响应 observation 与写回请求 core_edit",
+        "owner": "lang-team",
+        "share_budget_pct": 8
+      },
+      "session.step.semantic_done": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/memgpt@1.0.0/hatches/semantic_done.py",
+        "reason": "『直到模型不再发出函数调用』在主路径由结构判据（last_message.has_tool_calls）承担；若改用语义完成判定（模型以自然语言自述已完成），需非确定性谓词注入（卡⑥b-3），本节点为该变体的落点，当前不在关键路径上",
+        "owner": "lang-team",
+        "share_budget_pct": 3
+      }
+    },
+    "trust": {}
+  }
+}
