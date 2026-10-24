@@ -40,7 +40,7 @@ use crate::hostbridge::HostBridge;
 use crate::judge::JudgeLocator;
 use crate::record::ExecutionFacts;
 use crate::suite::swev::{self, ARCHAEOLOGY_PATTERNS};
-use crate::suite::tb::{self, TbEnv};
+use crate::suite::tb::{self, ContainerGuard, TbEnv};
 
 /// swe-v 单元静态声明（方案 §2.2"换一档实验要改代码的东西进这里"，
 /// 随 unit_version 版本化，对齐契约 §1.2 unit.json）。缺省值 = fix2 代际
@@ -444,20 +444,8 @@ fn attempt_from_dir(attempt_dir: &std::path::Path) -> u32 {
         .unwrap_or(1)
 }
 
-/// 容器清理 RAII guard（§2.4"cleanup 必达"：Drop → tb.rs:294-296 的 docker rm -f，
-/// 防新增早退路径漏清容器）。
-struct ContainerGuard {
-    bridge: Arc<dyn HostBridge + Send + Sync>,
-    env: Option<Arc<TbEnv>>,
-}
-
-impl Drop for ContainerGuard {
-    fn drop(&mut self) {
-        if let Some(env) = self.env.take() {
-            env.cleanup(self.bridge.as_ref());
-        }
-    }
-}
+/// 容器清理 RAII guard：P5 起定居 [`crate::suite::tb::ContainerGuard`]
+/// （swev/tb 两单元共用），本模块仅按上文体注引用。
 
 #[cfg(test)]
 mod tests {

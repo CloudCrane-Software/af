@@ -15,6 +15,7 @@
 //! 方案 §1.4 映射表面向完整执行事实，失败行无 v1 投影（登记 RESULT-P4.md）。
 
 use std::path::Path;
+use std::sync::Mutex;
 
 use af_harness::TokenTotals;
 use serde_json::{json, Value};
@@ -55,24 +56,53 @@ impl RecordSink for PendingRecordSink {
 /// `{{output_dir}}/results.jsonl`、v1 行落 `{{output_dir}}/records.jsonl`；
 /// 写入纪律 append + 每行 flush（af-bench main.rs:644-648 批级文件的逐行纪律，
 /// 单元化后随驱动逐单打开——append 语义保证跨单续写同文件）。
-pub struct FileRecordSink;
+pub struct FileRecordSink {
+    legacy: Mutex<std::fs::File>,
+    v1: Mutex<std::fs::File>,
+}
 
 impl FileRecordSink {
     /// 打开（或创建）双文件；输出目录不存在则建。失败 fail-loud（String 文案
     /// 进 EX3001，由驱动层入账后上抛）。
-    pub fn open(_output_dir: &Path) -> Result<Self, String> {
-        unimplemented!("P5 GREEN 落位：FileRecordSink::open")
+    pub fn open(output_dir: &Path) -> Result<Self, String> {
+        std::fs::create_dir_all(output_dir)
+            .map_err(|err| format!("建输出目录 {} 失败: {err}", output_dir.display()))?;
+        let legacy = open_append(&output_dir.join("results.jsonl"))?;
+        let v1 = open_append(&output_dir.join("records.jsonl"))?;
+        Ok(Self {
+            legacy: Mutex::new(legacy),
+            v1: Mutex::new(v1),
+        })
     }
 }
 
 impl RecordSink for FileRecordSink {
-    fn append_legacy(&self, _row: &str) -> Result<(), String> {
-        unimplemented!("P5 GREEN 落位：FileRecordSink::append_legacy")
+    fn append_legacy(&self, row: &str) -> Result<(), String> {
+        let mut file = self.legacy.lock().unwrap_or_else(|e| e.into_inner());
+        writeln_flush(&mut file, row, "results")
     }
 
-    fn append_v1(&self, _row: &str) -> Result<(), String> {
-        unimplemented!("P5 GREEN 落位：FileRecordSink::append_v1")
+    fn append_v1(&self, row: &str) -> Result<(), String> {
+        let mut file = self.v1.lock().unwrap_or_else(|e| e.into_inner());
+        writeln_flush(&mut file, row, "records")
     }
+}
+
+/// append 模式打开（不存在则建，存在不截断——main.rs:642-648 OpenOptions 面）。
+fn open_append(path: &Path) -> Result<std::fs::File, String> {
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|err| format!("开 {} 失败: {err}", path.display()))
+}
+
+/// writeln + flush（main.rs:644-648 逐行纪律：每行立即刷盘，崩溃不留半行）。
+fn writeln_flush(file: &mut std::fs::File, row: &str, what: &str) -> Result<(), String> {
+    use std::io::Write as _;
+    writeln!(file, "{row}").map_err(|err| format!("写 {what} 失败: {err}"))?;
+    file.flush()
+        .map_err(|err| format!("flush {what} 失败: {err}"))
 }
 
 /// 单题执行事实——两轨行的同源（方案 §1.4"防漂移"）。
@@ -246,14 +276,38 @@ pub struct TbExecutionFacts {
 
 /// TB 12 键 legacy 行（af-bench main.rs:1068-1085 原样装配）。
 pub fn tb_legacy_row(facts: &TbExecutionFacts) -> Value {
-    let _ = facts;
-    unimplemented!("P5 GREEN 落位：tb_legacy_row")
+    json!({
+        "suite": "terminal-bench",
+        "task_id": facts.task_id,
+        "profile": facts.profile,
+        "trial": facts.trial,
+        "reward": facts.reward,
+        "status": facts.status,
+        "http_retries": facts.http_retries,
+        "turns": facts.turns,
+        "model_calls": facts.model_calls,
+        "tokens": {
+            "input": facts.tokens.input,
+            "output": facts.tokens.output,
+            "cache_read": facts.tokens.cache_read,
+        },
+        "agent_wall_ms": facts.agent_wall_ms,
+        "verifier_note": clip300(&facts.verifier_note),
+    })
 }
 
-/// TB setup_failed 行（af-bench main.rs:938-946 原样：7 键）。
+/// TB setup_failed 行（af-bench main.rs:938-946 原样：7 键——单题供给失败记
+/// infra 行，不占分母）。
 pub fn tb_setup_failed_row(task_id: &str, profile: &str, trial: bool, note: &str) -> Value {
-    let _ = (task_id, profile, trial, note);
-    unimplemented!("P5 GREEN 落位：tb_setup_failed_row")
+    json!({
+        "suite": "terminal-bench",
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "setup_failed",
+        "verifier_note": clip300(note),
+    })
 }
 
 /// TB run_failed 行（af-bench main.rs:1037-1046 原样：8 键）。
@@ -264,6 +318,14 @@ pub fn tb_run_failed_row(
     http_retries: u64,
     note: &str,
 ) -> Value {
-    let _ = (task_id, profile, trial, http_retries, note);
-    unimplemented!("P5 GREEN 落位：tb_run_failed_row")
+    json!({
+        "suite": "terminal-bench",
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "run_failed",
+        "http_retries": http_retries,
+        "verifier_note": clip300(note),
+    })
 }

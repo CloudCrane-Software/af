@@ -19,7 +19,7 @@ use af_execline::agent::{AgentLaunch, AgentRunFailure, AgentRunOutcome, AgentRun
 use af_execline::error::ErrorCode;
 use af_execline::exec::{ExecContext, ExecuteUnit};
 use af_execline::hostbridge::HostBridge;
-use af_execline::record::{TbExecutionFacts, RecordSink};
+use af_execline::record::{RecordSink, TbExecutionFacts};
 use af_execline::suite::tb::TB_SYSTEM_PROMPT;
 use af_execline::suite::tb_unit::{TbExecuteUnit, TbUnitSpec};
 use af_execline::ExecOutput;
@@ -36,8 +36,7 @@ const VERIFY_LOG: &str = "verifier stdout line";
 // ---- 公共助手 ----
 
 fn temp_root(tag: &str) -> PathBuf {
-    let root =
-        std::env::temp_dir().join(format!("af-execline-p5tb-{tag}-{}", std::process::id()));
+    let root = std::env::temp_dir().join(format!("af-execline-p5tb-{tag}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
     root
@@ -51,8 +50,16 @@ fn tb_data_root(root: &Path) -> PathBuf {
     std::fs::create_dir_all(dir.join("environment")).unwrap();
     std::fs::create_dir_all(dir.join("tests")).unwrap();
     std::fs::write(dir.join("instruction.md"), INSTRUCTION).unwrap();
-    std::fs::write(dir.join("environment").join("Dockerfile"), "FROM python:3.12-slim\n").unwrap();
-    std::fs::write(dir.join("tests").join("test.sh"), "#!/bin/bash\necho verify\n").unwrap();
+    std::fs::write(
+        dir.join("environment").join("Dockerfile"),
+        "FROM python:3.12-slim\n",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("tests").join("test.sh"),
+        "#!/bin/bash\necho verify\n",
+    )
+    .unwrap();
     data
 }
 
@@ -192,7 +199,10 @@ impl FakeRunner {
     }
 
     fn launches(&self) -> usize {
-        self.launches.lock().unwrap_or_else(|e| e.into_inner()).len()
+        self.launches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     fn launch(&self) -> CapturedLaunch {
@@ -292,7 +302,14 @@ fn tb_scenario<R>(
     tag: &str,
     bridge: FakeBridge,
     runner: FakeRunner,
-    check: impl FnOnce(&Path, &Path, &FakeSink, &FakeBridge, &FakeRunner, Result<ExecOutput, af_execline::ExeclineError>) -> R,
+    check: impl FnOnce(
+        &Path,
+        &Path,
+        &FakeSink,
+        &FakeBridge,
+        &FakeRunner,
+        Result<ExecOutput, af_execline::ExeclineError>,
+    ) -> R,
 ) -> R {
     let root = temp_root(tag);
     let data_root = tb_data_root(&root);
@@ -301,8 +318,8 @@ fn tb_scenario<R>(
     let spec = TbUnitSpec::fix2(TB_PROFILE);
     let bridge = Arc::new(bridge);
     let runner = Arc::new(runner);
-    let unit = TbExecuteUnit::new(spec, bridge.clone(), runner.clone())
-        .expect("单元装载（profile 检查）");
+    let unit =
+        TbExecuteUnit::new(spec, bridge.clone(), runner.clone()).expect("单元装载（profile 检查）");
     let ctx = ExecContext {
         order_id: "wo-p5-tb",
         stable_id: "sid-p5-tb",
@@ -387,14 +404,20 @@ fn tb_full_flow_row_launch_shape_and_verify_chain() {
             assert_eq!(launch.system, TB_SYSTEM_PROMPT);
             // 无采样覆写（main.rs:628-631"只作用于 swe-v 线；TB 不动"）：
             // glm-cp 档案基底三者皆 None（profile.rs:59-74）。
-            assert_eq!(launch.endpoint.base_url, "https://open.bigmodel.cn/api/anthropic");
+            assert_eq!(
+                launch.endpoint.base_url,
+                "https://open.bigmodel.cn/api/anthropic"
+            );
             assert_eq!(launch.endpoint.model, "GLM-5.3-Flash");
             assert_eq!(launch.endpoint.temperature_milli, None, "TB 不覆写温度");
             assert_eq!(launch.endpoint.top_p_milli, None, "TB 不覆写 top_p");
             assert_eq!(launch.endpoint.max_tokens, None, "TB 不覆写 max_tokens");
             assert_eq!(launch.max_turns, 40, "main.rs:981 TB 40 步");
             assert_eq!(launch.tool_free_turn_limit, 3);
-            assert!(launch.tool_workdir_in_description.contains("/app"), "workdir /app 进描述");
+            assert!(
+                launch.tool_workdir_in_description.contains("/app"),
+                "workdir /app 进描述"
+            );
             // 预算（main.rs:1021-1027：$1 上限、工具 1 分、账本 100）。
             assert_eq!(launch.spend_cap_cents, 100);
             assert_eq!(launch.tool_spend_cents, 1);
@@ -414,13 +437,13 @@ fn tb_full_flow_row_launch_shape_and_verify_chain() {
             assert!(hosts.iter().all(|h| *h == "local"));
             // 0: setup 建任务镜像（tb.rs:146-169）。
             assert!(scripts[0].contains("docker build -q --network host"));
-            assert!(scripts[0].contains("-t afbench-tbenv-{TB_TASK}"));
-            assert!(scripts[0].ends_with("/data/bench/tb/{TB_TASK}/environment"));
+            assert!(scripts[0].contains(&format!("-t afbench-tbenv-{TB_TASK}")));
+            assert!(scripts[0].ends_with(&format!("/data/bench/tb/{TB_TASK}/environment")));
             assert_eq!(timeouts[0], 1800);
             // 1: setup 前置 rm；2: setup 起容器（2g/256 护栏，tb.rs:174-189）。
             assert_eq!(scripts[1], format!("docker rm -f {TB_CONTAINER}"));
             assert_eq!(timeouts[1], 30);
-            assert!(scripts[2].starts_with("docker run -d --name {TB_CONTAINER}"));
+            assert!(scripts[2].starts_with(&format!("docker run -d --name {TB_CONTAINER}")));
             assert!(scripts[2].contains("--memory 2g"));
             assert!(scripts[2].contains("--pids-limit 256"));
             assert!(scripts[2].contains("sleep infinity"));
@@ -439,7 +462,7 @@ fn tb_full_flow_row_launch_shape_and_verify_chain() {
             // 5: verify 建验证器镜像（tb.rs:248-266：afbench-tbver-<task>，tests 目录）。
             assert!(scripts[5].contains("docker build -q --network host"));
             assert!(scripts[5].contains(&format!("-t afbench-tbver-{TB_TASK}")));
-            assert!(scripts[5].ends_with("/data/bench/tb/{TB_TASK}/tests"));
+            assert!(scripts[5].ends_with(&format!("/data/bench/tb/{TB_TASK}/tests")));
             assert_eq!(timeouts[5], 1800);
             // 6: verify 跑 test.sh（tb.rs:267-276：挂 app/logs，2g/256）。
             assert_eq!(
@@ -474,21 +497,29 @@ fn tb_verify_missing_reward_is_infra_row() {
         FakeBridge::with_reward("missing"),
         FakeRunner::ok(),
         |_data_root, _attempt_dir, sink, _bridge, _runner, outcome| {
-            let output = outcome.expect("infra 不是错误：行照落、执行 Ok（订单侧自然进不了 close 门）");
+            let output =
+                outcome.expect("infra 不是错误：行照落、执行 Ok（订单侧自然进不了 close 门）");
             assert_eq!(output.verdict, None, "reward.txt 缺 → 无判定");
             assert!(!output.artifacts[0].qualified, "infra → 非合格终态工件");
 
             let rows = sink.legacy_rows();
             assert_eq!(rows.len(), 1);
             let row = &rows[0];
-            assert_eq!(row["reward"], json!(null), "infra 行 reward=null（不占分母）");
+            assert_eq!(
+                row["reward"],
+                json!(null),
+                "infra 行 reward=null（不占分母）"
+            );
             assert_eq!(row["status"], json!("completed"), "status 仍是 runner 终态");
             let note = row["verifier_note"].as_str().unwrap();
             assert!(
                 note.starts_with("无 reward.txt；验证器输出:"),
                 "tb.rs:284-288 文案: {note}"
             );
-            assert!(note.contains("verifier stdout line"), "验证器输出随行: {note}");
+            assert!(
+                note.contains("verifier stdout line"),
+                "验证器输出随行: {note}"
+            );
         },
     )
 }
@@ -542,7 +573,10 @@ fn tb_setup_failure_row() {
             );
             assert!(sink.v1_rows().is_empty());
             assert_eq!(runner.launches(), 0, "runner 未被调用");
-            assert!(!attempt_dir.exists(), "run 目录未建（setup 相在 run 相之前）");
+            assert!(
+                !attempt_dir.exists(),
+                "run 目录未建（setup 相在 run 相之前）"
+            );
         },
     )
 }
@@ -577,10 +611,13 @@ fn tb_task_load_failure_is_setup_failed_row() {
     assert_eq!(err.code(), ErrorCode::UnitFailed);
     let row = &sink.legacy_rows()[0];
     assert_eq!(row["status"], json!("setup_failed"));
-    assert!(row["verifier_note"]
-        .as_str()
-        .unwrap()
-        .contains("instruction.md"), "装载失败文案透传");
+    assert!(
+        row["verifier_note"]
+            .as_str()
+            .unwrap()
+            .contains("instruction.md"),
+        "装载失败文案透传"
+    );
 }
 
 // ---------- runner 失败 → 8 键 run_failed 行 + cleanup（main.rs:1034-1057）----------
@@ -625,7 +662,9 @@ fn tb_run_failure_row_and_container_cleanup() {
                 "容器清理已调（Drop 断言）"
             );
             assert!(
-                !calls.iter().any(|(_, s, _)| s.contains("bash /tests/test.sh")),
+                !calls
+                    .iter()
+                    .any(|(_, s, _)| s.contains("bash /tests/test.sh")),
                 "判分链未启动（run 失败短路在 verify 之前）"
             );
         },
@@ -640,11 +679,14 @@ fn tb_row_key_sets_and_note_truncation() {
 
     let setup = af_execline::record::tb_setup_failed_row(TB_TASK, TB_PROFILE, false, &long_note);
     assert_eq!(setup.as_object().unwrap().len(), 7);
-    assert_eq!(setup["verifier_note"].as_str().unwrap().len(), 300, "截断至 300");
+    assert_eq!(
+        setup["verifier_note"].as_str().unwrap().len(),
+        300,
+        "截断至 300"
+    );
     assert_eq!(setup["reward"], json!(null));
 
-    let failed =
-        af_execline::record::tb_run_failed_row(TB_TASK, TB_PROFILE, true, 7, &long_note);
+    let failed = af_execline::record::tb_run_failed_row(TB_TASK, TB_PROFILE, true, 7, &long_note);
     assert_eq!(failed.as_object().unwrap().len(), 8);
     assert_eq!(failed["verifier_note"].as_str().unwrap().len(), 300);
     assert_eq!(failed["http_retries"], json!(7));

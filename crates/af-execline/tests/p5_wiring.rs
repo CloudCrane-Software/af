@@ -22,8 +22,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use af_execline::suite::swev_unit::{SwevExecuteUnit, SwevUnitSpec};
 use af_execline::{
-    judge::JudgeLocator, AttemptLayout, DriverConfig, EngineClient, FileRecordSink,
-    OrderLedger, OrderLifecycleDriver, FixedClock, MesFileWriter, RecordSink,
+    judge::JudgeLocator, AttemptLayout, DriverConfig, EngineClient, FileRecordSink, FixedClock,
+    MesFileWriter, OrderLedger, OrderLifecycleDriver, RecordSink,
 };
 use af_mes::MesEvent;
 use af_workorder::{BudgetVoucher, LineBinding, Priority, Sla};
@@ -159,12 +159,7 @@ impl FakeBridge {
 }
 
 impl af_execline::HostBridge for FakeBridge {
-    fn run(
-        &self,
-        host: &str,
-        script: &str,
-        timeout_sec: u32,
-    ) -> Result<(bool, String), String> {
+    fn run(&self, host: &str, script: &str, timeout_sec: u32) -> Result<(bool, String), String> {
         self.calls.lock().unwrap_or_else(|e| e.into_inner()).push((
             host.to_string(),
             script.to_string(),
@@ -175,8 +170,7 @@ impl af_execline::HostBridge for FakeBridge {
         } else if script.contains("git -c core.fileMode=false diff") {
             Ok((
                 true,
-                "diff --git a/astropy/sampler.py b/astropy/sampler.py\n--- a/a\n+++ b/b\n"
-                    .into(),
+                "diff --git a/astropy/sampler.py b/astropy/sampler.py\n--- a/a\n+++ b/b\n".into(),
             ))
         } else if script.starts_with("docker exec") {
             Ok((true, "exec-output\n__AF_RC=0".to_string()))
@@ -282,7 +276,8 @@ fn mes_events(out: &Path) -> Vec<MesEvent> {
 }
 
 fn jsonl_lines(path: &Path) -> Vec<serde_json::Value> {
-    let text = fs::read_to_string(path).unwrap_or_else(|err| panic!("读 {}: {err}", path.display()));
+    let text =
+        fs::read_to_string(path).unwrap_or_else(|err| panic!("读 {}: {err}", path.display()));
     text.lines()
         .filter(|line| !line.is_empty())
         .map(|line| serde_json::from_str(line).unwrap())
@@ -355,7 +350,11 @@ fn full_lifecycle_with_swev_unit_ledger_mes_rows_and_trio() {
 
         // attempt 目录：驱动层分配（D-20 命名），三件套落盘其中。
         let attempt_dir = out.join("runs").join(format!("swev-{TASK}-{PROFILE}-a1"));
-        assert!(attempt_dir.is_dir(), "驱动层分配 attempt 目录: {}", attempt_dir.display());
+        assert!(
+            attempt_dir.is_dir(),
+            "驱动层分配 attempt 目录: {}",
+            attempt_dir.display()
+        );
         assert_eq!(
             std::fs::read_to_string(attempt_dir.join("eval.log")).unwrap(),
             "+ fake eval output line\n",
@@ -439,7 +438,11 @@ fn second_drive_replays_real_unit_without_rerun_or_duplicate_rows() {
             "单元不重跑：runner 调用数仍为首驱的 1"
         );
         assert_eq!(
-            bridge.calls().iter().filter(|(_, s, _)| s.starts_with("docker run")).count(),
+            bridge
+                .calls()
+                .iter()
+                .filter(|(_, s, _)| s.starts_with("docker run"))
+                .count(),
             1,
             "容器不重起：docker run 仍恰一次"
         );
@@ -452,12 +455,23 @@ fn second_drive_replays_real_unit_without_rerun_or_duplicate_rows() {
             1,
             "close 成功记录唯一"
         );
-        assert!(records.iter().any(|r| r.op == "replay_skip"), "重放审计行在账");
+        assert!(
+            records.iter().any(|r| r.op == "replay_skip"),
+            "重放审计行在账"
+        );
         let seqs: Vec<u64> = records.iter().map(|r| r.seq).collect();
         let expected: Vec<u64> = (1..=records.len() as u64).collect();
         assert_eq!(seqs, expected, "重放后序号仍连续");
-        assert_eq!(jsonl_lines(&out.join("results.jsonl")).len(), 1, "legacy 行不重落");
-        assert_eq!(jsonl_lines(&out.join("records.jsonl")).len(), 1, "v1 行不重落");
+        assert_eq!(
+            jsonl_lines(&out.join("results.jsonl")).len(),
+            1,
+            "legacy 行不重落"
+        );
+        assert_eq!(
+            jsonl_lines(&out.join("records.jsonl")).len(),
+            1,
+            "v1 行不重落"
+        );
         assert_eq!(mes_events(&out).len(), 4, "MES 仍四类各一");
     })
 }

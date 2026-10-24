@@ -83,14 +83,28 @@ pub enum AttemptLayout {
 
 /// 驱动层 attempt 目录分配（方案 §5-P5：分配进驱动层，单元只收
 /// `ctx.attempt_dir`；swev 单元的 run_id `-a<N>` 后缀即从该命名解析）。
+/// 建目录是单元的事（swev/tb 单元各按 af-bench 原样 `create_dir_all`）。
 pub fn allocate_attempt_dir(
     runs_root: &Path,
     task_id: &str,
     profile: &str,
     layout: &AttemptLayout,
 ) -> PathBuf {
-    let _ = (runs_root, task_id, profile, layout);
-    unimplemented!("P5 GREEN 落位：allocate_attempt_dir")
+    match layout {
+        // D-20：既有同前缀目录最大序号 +1，绝不删除旧目录（main.rs:760-766）。
+        AttemptLayout::SwevIncrement => {
+            let attempt = crate::suite::next_attempt_index(runs_root, task_id, profile);
+            runs_root.join(format!("swev-{task_id}-{profile}-a{attempt}"))
+        }
+        // R8 不对称如实保留：固定名 + remove_dir_all 覆写（main.rs:1000-1002；
+        // 删除失败按 af-bench 原样 `let _ =` 吞——建目录随后的 create_dir_all
+        // 仍会因残件失败而显形，不静默改道）。
+        AttemptLayout::TbOverwrite => {
+            let dir = runs_root.join(format!("tb-{task_id}-{profile}"));
+            let _ = std::fs::remove_dir_all(&dir);
+            dir
+        }
+    }
 }
 
 /// 一次 `drive` 的报告。
@@ -263,13 +277,32 @@ impl OrderLifecycleDriver {
         }
         let artifacts_dir = self.cfg.out_dir.join(ARTIFACTS_DIR);
         std::fs::create_dir_all(&artifacts_dir)?;
+        // P5 接线（方案 §5-P5）：attempt 目录由驱动层分配（swev D-20 递增 /
+        // TB 固定名覆写按布局，R8 保留）；RecordSink 文件实现落本单 out_dir
+        // （results.jsonl / records.jsonl 双轨，append 跨单续写）。重放路径
+        // （上方）不触这两步——单元不重跑、行不重落。准备失败按单元失败
+        // 入账（ok=false、幂等键不落，重试真跑）。
+        let attempt_dir = allocate_attempt_dir(
+            &self.cfg.out_dir.join(RUNS_DIR),
+            &self.cfg.task_id,
+            &self.cfg.profile,
+            &self.cfg.attempt_layout,
+        );
+        let sink = match crate::record::FileRecordSink::open(&self.cfg.out_dir) {
+            Ok(sink) => sink,
+            Err(detail) => {
+                let err = ExeclineError::UnitFailed { detail };
+                self.append_record(
+                    "attach_artifact",
+                    idem,
+                    false,
+                    Some(("unit_failed", err.to_string())),
+                    None,
+                )?;
+                return Err(err);
+            }
+        };
         // P4 扩展字段（方案 §2.2）：宿主/题库/题目/试验标记从 DriverConfig 透传。
-        // attempt 目录与 record sink 的驱动层接线是 P5（方案 §5-P5：attempt 由
-        // 驱动层 next_attempt_index 分配、RecordSink 文件实现落驱动层）——P4 以
-        // out_dir/runs 占位与 fail-loud 占位 sink 传入保类型完整；驱动面现役
-        // 单元（Stub）不消费这两项，真实单元经驱动执行前必须先完成 P5 接线
-        // （占位 sink 误用即 Err，不静默丢行）。
-        let pending_sink = crate::record::PendingRecordSink;
         let ctx = ExecContext {
             order_id: &self.cfg.order_id,
             stable_id: self.order.stable_id().as_str(),
@@ -278,8 +311,8 @@ impl OrderLifecycleDriver {
             task_id: &self.cfg.task_id,
             host_alias: &self.cfg.host_alias,
             data_root: &self.cfg.data_root,
-            attempt_dir: &self.cfg.out_dir.join("runs"),
-            record_sink: &pending_sink,
+            attempt_dir: &attempt_dir,
+            record_sink: &sink,
             trial: self.cfg.trial,
         };
         let output = match unit.execute(&ctx) {

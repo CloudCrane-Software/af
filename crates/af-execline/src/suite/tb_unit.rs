@@ -29,10 +29,21 @@
 //! - cleanup ← main.rs:1035/1061（RAII guard，§2.4 cleanup 必达）。
 
 use std::sync::Arc;
+use std::time::Instant;
 
+use af_harness::{
+    AgentSpec, BudgetRef, BudgetUnit, ContextTemplate, EndpointSpec, Policy, StopCondition,
+    ToolDecl,
+};
+use af_workorder::WorkArtifact;
+use serde_json::Value;
+
+use crate::agent::{AgentLaunch, AgentRunFailure, AgentRunOutcome, BashFn};
 use crate::error::ExeclineError;
 use crate::exec::{ExecContext, ExecOutput, ExecuteUnit};
 use crate::hostbridge::HostBridge;
+use crate::record::TbExecutionFacts;
+use crate::suite::tb::{self, ContainerGuard, TbEnv};
 
 /// TB 单元静态声明（方案 §2.2"换一档实验要改代码的东西进这里"）。
 /// 缺省值 = af-bench run_tb 现值（main.rs:975/981-991/1021-1027）。
@@ -116,7 +127,187 @@ impl ExecuteUnit for TbExecuteUnit {
     }
 
     fn execute(&self, ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
-        let _ = ctx;
-        unimplemented!("P5 GREEN 落位：TbExecuteUnit::execute")
+        let profile = crate::profile::profile(&self.spec.profile).map_err(|err| {
+            ExeclineError::UnitFailed {
+                detail: format!("profile 解析失败: {err}"),
+            }
+        })?;
+        // ---- setup 相（main.rs:921/933）----
+        // 任务装载失败 = 供给面失败（题库根错/任务包缺）——af-bench 原为批级
+        // ? 中止（main.rs:921）；单元化后归 setup_failed 行 + EX3001（口径同
+        // P4 RESULT §3-5，订单侧不停终态可重试）。
+        let tasks = tb::load_tb_tasks(ctx.data_root, &[ctx.task_id.to_string()])
+            .map_err(|err| self.setup_failed_row(ctx, &err))?;
+        let Some(task) = tasks.into_iter().next() else {
+            let err = format!("任务包空: {}", ctx.task_id);
+            return Err(self.setup_failed_row(ctx, &err));
+        };
+        let env = TbEnv::setup(
+            self.bridge.as_ref(),
+            ctx.host_alias,
+            &task,
+            &self.spec.profile,
+        )
+        .map_err(|err| self.setup_failed_row(ctx, &err))?;
+        let env = Arc::new(env);
+        // cleanup 必达（§2.4）：RAII guard（main.rs:1035/1061 显式调用 → Drop）。
+        let _guard = ContainerGuard {
+            bridge: self.bridge.clone(),
+            env: Some(env.clone()),
+        };
+        // ---- run 相（main.rs:1000-1009）----
+        // run 目录覆写在驱动层布局（AttemptLayout::TbOverwrite，R8 保留）；
+        // 单元只建目录（main.rs:1002 的 create_dir_all 面）。
+        std::fs::create_dir_all(ctx.attempt_dir).map_err(|err| ExeclineError::UnitFailed {
+            detail: format!("建 run 目录失败: {err}"),
+        })?;
+        let started = Instant::now();
+        let launch = AgentLaunch {
+            attempt_dir: ctx.attempt_dir,
+            // main.rs:1013：run_id 即 task_id（无 -a<N> 后缀——TB 无 attempt 序号）。
+            run_id: task.task_id.clone(),
+            // main.rs:1015：裸 prompt（无 instance 纪律模板拼接）。
+            user_message: task.prompt.clone(),
+            spec: self.agent_spec(&profile.endpoint, env.workdir())?,
+            bash: self.bash_tool(env.clone()),
+            key_cmd: profile.key_cmd,
+            spend_cap_cents: self.spec.spend_cap_cents,
+            tool_spend_cents: self.spec.tool_spend_cents,
+            budget_ledger_cents: self.spec.budget_ledger_cents,
+        };
+        let mut http_retries: u64 = 0;
+        let report = match self.runner.run(launch) {
+            Ok(AgentRunOutcome {
+                report,
+                http_retries: retries,
+            }) => {
+                http_retries += retries;
+                report
+            }
+            Err(AgentRunFailure {
+                message,
+                http_retries: retries,
+            }) => {
+                http_retries += retries;
+                // run_failed 行（main.rs:1037-1046）+ cleanup（guard Drop）→ EX3001。
+                let row = crate::record::tb_run_failed_row(
+                    &task.task_id,
+                    &self.spec.profile,
+                    ctx.trial,
+                    http_retries,
+                    &message,
+                );
+                return Err(self.fail_with_row(ctx, &row, &format!("run 失败: {message}")));
+            }
+        };
+        // agent_wall_ms（main.rs:1059）：run 相时长，不含 setup/verify。
+        let agent_wall_ms = started.elapsed().as_millis() as u64;
+        // ---- verify 相（main.rs:1060：容器链原样，提 /app→建验证器→test.sh→
+        // reward.txt；infra/reward 语义 = Some(true)/Some(false)/None）----
+        let (reward, verifier_note) = env.verify(self.bridge.as_ref());
+        // ---- 行落盘相（main.rs:1068-1090：12 键 legacy，单轨）----
+        let facts = TbExecutionFacts {
+            task_id: task.task_id.clone(),
+            profile: self.spec.profile.clone(),
+            trial: ctx.trial,
+            reward,
+            status: crate::suite::status_label(&report.status),
+            http_retries,
+            turns: report.turns,
+            model_calls: report.model_calls,
+            tokens: report.tokens,
+            agent_wall_ms,
+            verifier_note,
+        };
+        let row = crate::record::tb_legacy_row(&facts);
+        self.append_legacy_row(ctx, &row)?;
+        Ok(ExecOutput {
+            // reward=Some(true) → 合格终态工件（引擎 close 门材料）；infra
+            // （None）不是错误——行照落、工件不合格，订单侧自然进不了 close 门。
+            artifacts: vec![WorkArtifact {
+                artifact_id: format!("tb-{}", task.task_id),
+                is_final: true,
+                qualified: reward == Some(true),
+            }],
+            // TB 无本地三件套（判分在远端容器链/卷里）——不虚列证据。
+            outputs: Vec::new(),
+            note: facts.verifier_note.chars().take(300).collect(),
+            verdict: reward,
+            // TB 无 v1 投影（方案 §1.4 映射表面向 swe-v 18 键行；登记 RESULT-P5）。
+            record: None,
+            evidence: Vec::new(),
+        })
+    }
+}
+
+impl TbExecuteUnit {
+    /// setup_failed 行落盘 + 转 EX3001（main.rs:935-957；§2.4 订单侧不停终态）。
+    fn setup_failed_row(&self, ctx: &ExecContext<'_>, err: &str) -> ExeclineError {
+        let row =
+            crate::record::tb_setup_failed_row(ctx.task_id, &self.spec.profile, ctx.trial, err);
+        self.fail_with_row(ctx, &row, &format!("setup 失败: {err}"))
+    }
+
+    /// 失败路径共用：先落 legacy 行（main.rs:947-949 append+flush），sink 失败
+    /// 并案进错误文案；随后返回 EX3001（§2.4：可重试）。
+    fn fail_with_row(&self, ctx: &ExecContext<'_>, row: &Value, detail: &str) -> ExeclineError {
+        let sink_note = ctx.record_sink.append_legacy(&row.to_string()).err();
+        ExeclineError::UnitFailed {
+            detail: match sink_note {
+                None => detail.to_string(),
+                Some(err) => format!("{detail}；且落行失败: {err}"),
+            },
+        }
+    }
+
+    /// 成功路径 legacy 行落盘（main.rs:1086-1090 writeln + flush）。
+    fn append_legacy_row(&self, ctx: &ExecContext<'_>, row: &Value) -> Result<(), ExeclineError> {
+        ctx.record_sink
+            .append_legacy(&row.to_string())
+            .map_err(|err| ExeclineError::UnitFailed {
+                detail: format!("写 results 失败: {err}"),
+            })
+    }
+
+    /// AgentSpec 组装（main.rs:971-992）。TB **无采样覆写**（main.rs:628-631
+    /// 注释明言"只作用于 swe-v 线；TB/竞赛套件不动"——endpoint 原样用档案基底）。
+    fn agent_spec(
+        &self,
+        endpoint: &EndpointSpec,
+        workdir: &str,
+    ) -> Result<AgentSpec, ExeclineError> {
+        let tool_decl =
+            serde_json::from_value::<ToolDecl>(tb::bash_tool_decl(workdir)).map_err(|err| {
+                ExeclineError::UnitFailed {
+                    detail: format!("bash 工具声明: {err}"),
+                }
+            })?;
+        Ok(AgentSpec {
+            endpoint: endpoint.clone(),
+            context_template: ContextTemplate {
+                system: self.spec.system_prompt.into(),
+                slots: Vec::new(),
+            },
+            toolset: vec![tool_decl],
+            policy: Policy {
+                max_turns: self.spec.max_turns,
+                stop: StopCondition {
+                    completion_signals: vec![self.spec.completion_signal.into()],
+                    tool_free_turn_limit: self.spec.tool_free_turn_limit,
+                },
+                budget_ref: BudgetRef {
+                    dimension: "llm.cents".into(),
+                    per_turn: 1,
+                    unit: BudgetUnit::Cents,
+                },
+            },
+        })
+    }
+
+    /// bash 工具闭包（main.rs:960-970）：容器执行经 bridge，**无护栏**——
+    /// 反考古/重复命令拦截是 swe-v 线的（main.rs:710-734），TB 注册处原样没有。
+    fn bash_tool(&self, env: Arc<TbEnv>) -> BashFn {
+        let bridge = self.bridge.clone();
+        Arc::new(move |command: &str| env.exec(bridge.as_ref(), command))
     }
 }

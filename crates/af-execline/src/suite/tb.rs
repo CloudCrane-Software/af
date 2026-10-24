@@ -19,6 +19,7 @@
 use crate::hostbridge::HostBridge;
 use serde_json::{json, Value};
 use std::path::Path;
+use std::sync::Arc;
 
 pub struct TbTask {
     pub task_id: String,
@@ -262,12 +263,92 @@ impl TbEnv {
     /// （← af-bench tb.rs:224-292 原样搬入，P5：`ssh()` 换 `bridge.run()`，
     /// 命令串与超时逐字节不变——TB 判分是容器链不是 swev-judge 子进程，
     /// 判分三件套契约不适用本套件。）
-    pub fn verify(&self, _bridge: &dyn HostBridge) -> (Option<bool>, String) {
-        unimplemented!("P5 GREEN 落位：TbEnv::verify")
+    pub fn verify(&self, bridge: &dyn HostBridge) -> (Option<bool>, String) {
+        let vol = format!("/data/bench/vol/{}-{}", self.task, self.container);
+        // 旧卷里有 root 所有的验证器产物，pan-ding 删不动——用容器内的 root 清。
+        let _ = bridge.run(
+            &self.host,
+            &format!(
+                "docker run --rm --memory {TB_CONTAINER_MEM} --pids-limit {TB_CONTAINER_PIDS} -v {vol}:/vol --entrypoint sh python:3.12-slim -c 'rm -rf /vol/* /vol/.[!.]*; chmod 777 /vol' 2>/dev/null || rm -rf {vol}"
+            ),
+            120,
+        );
+        match bridge.run(
+            &self.host,
+            &format!(
+                "mkdir -p {vol}/app {vol}/logs && docker cp {}:/app/. {vol}/app/",
+                self.container
+            ),
+            300,
+        ) {
+            Ok((true, _)) => {}
+            Ok((false, log)) => return (None, format!("提取 /app 失败: {}", tail(&log, 300))),
+            Err(err) => return (None, format!("提取 /app 失败: {err}")),
+        }
+        let verifier = format!("afbench-tbver-{}", self.task);
+        let remote_dir = format!("/data/bench/tb/{}", self.task);
+        match bridge.run(
+            &self.host,
+            &format!(
+                "docker build -q --network host \
+                 --build-arg HTTPS_PROXY=http://127.0.0.1:8123 \
+                 --build-arg HTTP_PROXY=http://127.0.0.1:8123 \
+                 --build-arg NO_PROXY=localhost,127.0.0.1,100.64.0.0/10 \
+                  \
+                  \
+                 -t {verifier} {remote_dir}/tests"
+            ),
+            1800,
+        ) {
+            Ok((true, _)) => {}
+            Ok((false, log)) => return (None, format!("build 验证器失败: {}", tail(&log, 600))),
+            Err(err) => return (None, format!("build 验证器失败: {err}")),
+        }
+        let run_log = match bridge.run(
+            &self.host,
+            &format!(
+                "docker run --rm --memory {TB_CONTAINER_MEM} --pids-limit {TB_CONTAINER_PIDS} -v {vol}/app:/app -v {vol}/logs:/logs {verifier} bash /tests/test.sh"
+            ),
+            1200,
+        ) {
+            Ok((_, text)) => text,
+            Err(err) => return (None, format!("验证器执行失败: {err}")),
+        };
+        let reward_cmd = format!("cat {vol}/logs/verifier/reward.txt 2>/dev/null || echo missing");
+        match bridge.run(&self.host, &reward_cmd, 30) {
+            Ok((_, text)) => {
+                let reward = text.trim();
+                match reward {
+                    "1" => (Some(true), tail(&run_log, 600)),
+                    "0" => (Some(false), tail(&run_log, 600)),
+                    _ => (
+                        None,
+                        format!("无 reward.txt；验证器输出: {}", tail(&run_log, 400)),
+                    ),
+                }
+            }
+            Err(err) => (None, format!("读 reward 失败: {err}")),
+        }
     }
 
     /// 清容器（← af-bench tb.rs:294-296 原样，`ssh()` 换 `bridge.run()`）。
     pub fn cleanup(&self, bridge: &dyn HostBridge) {
         let _ = bridge.run(&self.host, &format!("docker rm -f {}", self.container), 60);
+    }
+}
+
+/// 容器清理 RAII guard（方案 §2.4"cleanup 必达"：Drop → tb.rs:294-296 的
+/// `docker rm -f`，防新增早退路径漏清容器——anolis 事故教训，tb.rs:101-114
+/// 注释背景）。swev（P4）/tb（P5）两单元共用（P5 起定居本模块，紧邻 TbEnv）。
+pub(crate) struct ContainerGuard {
+    pub(crate) bridge: Arc<dyn HostBridge + Send + Sync>,
+    pub(crate) env: Option<Arc<TbEnv>>,
+}
+
+impl Drop for ContainerGuard {
+    fn drop(&mut self) {
+        if let Some(env) = self.env.take() {
+            env.cleanup(self.bridge.as_ref());
+        }
     }
 }
