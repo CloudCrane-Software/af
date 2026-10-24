@@ -81,7 +81,10 @@ pub enum ExeclineError {
     #[error("EX1005: af-engine 响应无法解析: {detail}")]
     EngineBadResponse { detail: String },
     #[error("EX1006: af-engine 拒绝 op={op}: {rejection}")]
-    EngineRejected { op: String, rejection: EngineRejection },
+    EngineRejected {
+        op: String,
+        rejection: EngineRejection,
+    },
     #[error("EX2001: ledger IO 失败: {detail}")]
     LedgerIo { detail: String },
     #[error("EX2002: ledger 损坏: {detail}")]

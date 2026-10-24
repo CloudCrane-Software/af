@@ -41,7 +41,10 @@ pub enum GateRejection {
         transition: Transition,
         missing: Vec<Missing>,
     },
-    MutationForbidden { state: OrderState, op: String },
+    MutationForbidden {
+        state: OrderState,
+        op: String,
+    },
 }
 
 impl GateRejection {
@@ -58,11 +61,7 @@ impl GateRejection {
 impl fmt::Display for GateRejection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::IllegalTransition {
-                from,
-                to,
-                allowed,
-            } => write!(
+            Self::IllegalTransition { from, to, allowed } => write!(
                 f,
                 "非法状态转换 {from:?} → {to:?}（状态机不存在这条边，允许出边 {allowed:?}）"
             ),
@@ -108,9 +107,12 @@ pub struct EngineAccept {
 }
 
 /// 一次引擎调用的结局。放行与拒绝互斥，与协议一致。
+///
+/// `Accept` 装箱：整单快照大，拒绝支路小；不装箱时 enum 体积被放行支路
+/// 撑大（clippy large_enum_variant），而拒绝是高频路径。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EngineOutcome {
-    Accept(EngineAccept),
+    Accept(Box<EngineAccept>),
     Reject(EngineRejection),
 }
 
@@ -136,8 +138,36 @@ impl EngineClient {
     ///
     /// `workspace_root`：af 仓库根（含 `Cargo.toml` workspace）。
     /// `target_dir`：构建产物目录（ADR-009：`~/afbuild-phase2`）。
-    pub fn locate(_workspace_root: &Path, _target_dir: &Path) -> Result<Self, ExeclineError> {
-        unimplemented!("RED：EngineClient::locate 待最小实现")
+    ///
+    /// 已存在即用；否则在 workspace 根跑一次 `cargo build -p af-engine`。
+    /// 构建失败 = EX1002，构建后仍找不到二进制 = EX1001——都不静默跳过。
+    pub fn locate(workspace_root: &Path, target_dir: &Path) -> Result<Self, ExeclineError> {
+        let bin = target_dir.join("debug").join("af-engine");
+        if !bin.is_file() {
+            let output = Command::new("cargo")
+                .args(["build", "-p", "af-engine"])
+                .current_dir(workspace_root)
+                .env("CARGO_TARGET_DIR", target_dir)
+                .output()
+                .map_err(|err| ExeclineError::EngineBuildFailed {
+                    detail: format!("cargo 拉起失败: {err}"),
+                })?;
+            if !output.status.success() {
+                return Err(ExeclineError::EngineBuildFailed {
+                    detail: format!(
+                        "cargo build -p af-engine 退出码 {:?}: {}",
+                        output.status.code(),
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    ),
+                });
+            }
+        }
+        if !bin.is_file() {
+            return Err(ExeclineError::EngineBinaryMissing {
+                path: bin.display().to_string(),
+            });
+        }
+        Ok(Self { bin })
     }
 
     /// 二进制路径。证明判定走的是真引擎进程，而非进程内库调用。
@@ -146,8 +176,90 @@ impl EngineClient {
     }
 
     /// 一次 op 调用。`request` 是完整的一行请求对象（含 `op` / `order` / 该 op 参数）。
-    pub fn call(&self, _request: &Value) -> Result<EngineOutcome, ExeclineError> {
-        unimplemented!("RED：EngineClient::call 待最小实现")
+    ///
+    /// 进程协议：一行请求写 stdin，读一行 stdout，进程退出。协议内的放行和
+    /// 拒绝都退出 0；非零退出 / 空 stdout / 坏 JSON 才是传输层错误
+    /// （EX1003 / EX1004 / EX1005）。
+    pub fn call(&self, request: &Value) -> Result<EngineOutcome, ExeclineError> {
+        let line =
+            serde_json::to_string(request).map_err(|err| ExeclineError::EngineBadResponse {
+                detail: format!("请求序列化失败: {err}"),
+            })?;
+        let mut child = Command::new(&self.bin)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|err| ExeclineError::EngineSpawnFailed {
+                detail: format!("{}: {err}", self.bin.display()),
+            })?;
+        {
+            let stdin = child
+                .stdin
+                .as_mut()
+                .ok_or_else(|| ExeclineError::EngineSpawnFailed {
+                    detail: "stdin 管道不可用".into(),
+                })?;
+            stdin
+                .write_all(line.as_bytes())
+                .and_then(|()| stdin.write_all(b"\n"))
+                .map_err(|err| ExeclineError::EngineSpawnFailed {
+                    detail: format!("stdin 写入失败: {err}"),
+                })?;
+        }
+        let output = child
+            .wait_with_output()
+            .map_err(|err| ExeclineError::EngineCrashed {
+                detail: format!("等待 af-engine 退出失败: {err}"),
+            })?;
+        if !output.status.success() {
+            return Err(ExeclineError::EngineCrashed {
+                detail: format!(
+                    "退出码 {:?}: {}",
+                    output.status.code(),
+                    String::from_utf8_lossy(&output.stderr).trim()
+                ),
+            });
+        }
+        let stdout =
+            String::from_utf8(output.stdout).map_err(|err| ExeclineError::EngineBadResponse {
+                detail: format!("stdout 不是 UTF-8: {err}"),
+            })?;
+        let response_line =
+            stdout
+                .lines()
+                .next()
+                .ok_or_else(|| ExeclineError::EngineBadResponse {
+                    detail: "stdout 为空：af-engine 未写响应行".into(),
+                })?;
+        let raw: RawResponse = serde_json::from_str(response_line).map_err(|err| {
+            ExeclineError::EngineBadResponse {
+                detail: format!("响应行不是合法 JSON: {err}（原文: {response_line}）"),
+            }
+        })?;
+        match (raw.ok, raw.order, raw.error) {
+            (true, Some(order), None) => Ok(EngineOutcome::Accept(Box::new(EngineAccept {
+                order,
+                engine_version: raw.engine_version,
+            }))),
+            (false, None, Some(error)) => Ok(EngineOutcome::Reject(error)),
+            (true, None, _) => Err(ExeclineError::EngineBadResponse {
+                detail: "ok=true 但响应缺 order 快照".into(),
+            }),
+            (false, _, None) => Err(ExeclineError::EngineBadResponse {
+                detail: "ok=false 但响应缺 error".into(),
+            }),
+            (true, Some(_), Some(_)) => Err(ExeclineError::EngineBadResponse {
+                detail: "order 与 error 同时出现，违反协议互斥".into(),
+            }),
+            (false, order, error) => Err(ExeclineError::EngineBadResponse {
+                detail: format!(
+                    "ok=false 但响应不合法: order={} error={}",
+                    order.is_some(),
+                    error.is_some()
+                ),
+            }),
+        }
     }
 }
 

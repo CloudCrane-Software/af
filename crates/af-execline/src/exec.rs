@@ -5,6 +5,7 @@
 //! `af.plan.record.v1` 结果行契约是后续任务包（见 RESULT.md 差距节）。
 //! 执行单元自身不持有工单状态——上下文只给只读定位信息与产出目录。
 
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use af_workorder::WorkArtifact;
@@ -63,8 +64,34 @@ impl ExecuteUnit for StubExecuteUnit {
         "stub-unit"
     }
 
-    fn execute(&self, _ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
-        unimplemented!("RED：StubExecuteUnit::execute 待最小实现")
+    fn execute(&self, ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
+        fs::create_dir_all(ctx.out_dir)?;
+        let artifact_path = ctx.out_dir.join(format!("{}.json", self.artifact_id));
+        let payload = serde_json::json!({
+            "unit_id": self.unit_id(),
+            "order_id": ctx.order_id,
+            "stable_id": ctx.stable_id,
+            "line_id": ctx.line_id,
+            "artifact": {
+                "artifact_id": self.artifact_id,
+                "is_final": self.is_final,
+                "qualified": self.qualified,
+            },
+        });
+        let text =
+            serde_json::to_string_pretty(&payload).map_err(|err| ExeclineError::UnitFailed {
+                detail: format!("工件载荷序列化失败: {err}"),
+            })?;
+        fs::write(&artifact_path, format!("{text}\n"))?;
+        Ok(ExecOutput {
+            artifacts: vec![WorkArtifact {
+                artifact_id: self.artifact_id.clone(),
+                is_final: self.is_final,
+                qualified: self.qualified,
+            }],
+            outputs: vec![artifact_path],
+            note: format!("stub 单元产出工件 {}", self.artifact_id),
+        })
     }
 }
 

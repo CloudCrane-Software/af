@@ -8,17 +8,26 @@
 //! 拒绝路径全部类型化：引擎的 `GateError` / `DecisionError` 原样包进
 //! [`ExeclineError::EngineRejected`]，不 panic、不降级成字符串。
 
+use std::collections::BTreeSet;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
-use af_workorder::{BudgetVoucher, GraphVersion, LineBinding, OrderState, Sla, WorkOrder};
+use af_workorder::{
+    BudgetVoucher, GraphVersion, LineBinding, OrderState, Sla, StableId, WorkOrder,
+};
+use serde_json::{json, Map, Value};
 
 use crate::clock::Clock;
-use crate::engine::EngineClient;
+use crate::engine::{EngineClient, EngineOutcome, EngineRejection};
 use crate::error::ExeclineError;
 use crate::exec::{ExecContext, ExecOutput, ExecuteUnit};
 use crate::ledger::{LedgerRecord, OrderLedger};
 use crate::mes::MesFileWriter;
+
+/// 账本与事件文件名（out 目录布局）。
+const LEDGER_FILE: &str = "ledger.jsonl";
+const MES_FILE: &str = "mes-events.jsonl";
+const ARTIFACTS_DIR: &str = "artifacts";
 
 /// MES 记账的生命周期事件类型。绑定/凭证/执行登记不单独发事件——
 /// 事件账本与订单 ledger 分工：ledger 记全部 op，MES 记产线关心的四类跃迁。
@@ -63,19 +72,60 @@ pub struct OrderLifecycleDriver {
     ledger: OrderLedger,
     mes: MesFileWriter,
     /// 已成功完成的幂等键。
-    done: std::collections::BTreeSet<String>,
+    done: BTreeSet<String>,
     /// 本次驱动累计的 MES 事件（`drive` 取出）。
     drive_mes: Vec<af_mes::MesEvent>,
+    /// 本次驱动跳过的重放次数（`drive` 重置；用于报告 replayed）。
+    replay_hits: usize,
 }
 
 impl OrderLifecycleDriver {
     /// 打开驱动。`out_dir` 下已有 ledger 则重载恢复（身份不符 = EX2002）。
     pub fn open(
-        _cfg: DriverConfig,
-        _client: EngineClient,
-        _clock: Box<dyn Clock>,
+        cfg: DriverConfig,
+        client: EngineClient,
+        clock: Box<dyn Clock>,
     ) -> Result<Self, ExeclineError> {
-        unimplemented!("RED：OrderLifecycleDriver::open 待最小实现")
+        std::fs::create_dir_all(&cfg.out_dir)?;
+        let ledger = OrderLedger::open(&cfg.out_dir.join(LEDGER_FILE))?;
+        // 账本身份必须与本单一致：异单账本不得冒充（EX2002）。
+        if let Some(first) = ledger.records().first() {
+            let expected = StableId::generate(&cfg.order_id);
+            if first.stable_id != expected.as_str() {
+                return Err(ExeclineError::LedgerCorrupt {
+                    detail: format!(
+                        "账本身份不符: 账本 stable_id={}，本单 {} 派生 {}，拒绝打开",
+                        first.stable_id, cfg.order_id, expected
+                    ),
+                });
+            }
+        }
+        // 恢复订单：取账本最近一条快照；空账本按确定性规则新建
+        // （stable_id 只由 order_id 决定，重建与首驱逐字相同）。
+        let order = ledger.current_order().cloned().unwrap_or_else(|| {
+            WorkOrder::new(
+                cfg.order_id.clone(),
+                GraphVersion::new(cfg.graph_version.clone()),
+                cfg.sla.clone(),
+            )
+        });
+        let done = ledger
+            .done_idem_keys()
+            .into_iter()
+            .map(str::to_string)
+            .collect();
+        let mes = MesFileWriter::new(cfg.out_dir.join(MES_FILE));
+        Ok(Self {
+            cfg,
+            client,
+            clock,
+            order,
+            ledger,
+            mes,
+            done,
+            drive_mes: Vec::new(),
+            replay_hits: 0,
+        })
     }
 
     /// 当前整单快照。
@@ -103,50 +153,279 @@ impl OrderLifecycleDriver {
 
     /// 构造订单（本地，无引擎调用）：写入初始快照。
     pub fn create_order(&mut self) -> Result<(), ExeclineError> {
-        unimplemented!("RED：create_order 待最小实现")
+        let idem = self.idem_key("create_order");
+        if self.done.contains(&idem) {
+            return self.replay_skip(idem);
+        }
+        self.order = WorkOrder::new(
+            self.cfg.order_id.clone(),
+            GraphVersion::new(self.cfg.graph_version.clone()),
+            self.cfg.sla.clone(),
+        );
+        self.append_record(
+            "create_order",
+            idem.clone(),
+            true,
+            None,
+            Some(self.order.clone()),
+        )?;
+        self.done.insert(idem);
+        Ok(())
     }
 
     /// 登记产线绑定（引擎 op `bind_line`）。
     pub fn bind_line(&mut self) -> Result<(), ExeclineError> {
-        unimplemented!("RED：bind_line 待最小实现")
+        self.engine_step("bind_line", json!({ "line": self.cfg.line }))?;
+        Ok(())
     }
 
     /// 登记预算凭证（引擎 op `attach_voucher`）。
     pub fn attach_voucher(&mut self) -> Result<(), ExeclineError> {
-        unimplemented!("RED：attach_voucher 待最小实现")
+        self.engine_step("attach_voucher", json!({ "voucher": self.cfg.voucher }))?;
+        Ok(())
     }
 
     /// release 门（引擎 op `release`；必经引擎）。拒绝时返回类型化
     /// `EngineRejected`，携带 `Missing` 清单。
     pub fn release(&mut self) -> Result<(), ExeclineError> {
-        unimplemented!("RED：release 待最小实现")
+        if self.engine_step("release", json!({}))? {
+            self.emit_mes("release", 1)?;
+        }
+        Ok(())
     }
 
     /// 开工（引擎 op `start`）。
     pub fn start(&mut self) -> Result<(), ExeclineError> {
-        unimplemented!("RED：start 待最小实现")
+        if self.engine_step("start", json!({}))? {
+            self.emit_mes("start", 1)?;
+        }
+        Ok(())
     }
 
     /// 执行单元 + `attach_artifact`（引擎 op）。单元失败 = EX3001，
     /// 订单停在 InProgress（可重试；幂等键未落，重试不重复记账）。
-    pub fn execute(&mut self, _unit: &dyn ExecuteUnit) -> Result<ExecOutput, ExeclineError> {
-        unimplemented!("RED：execute 待最小实现")
+    pub fn execute(&mut self, unit: &dyn ExecuteUnit) -> Result<ExecOutput, ExeclineError> {
+        let idem = self.idem_key("attach_artifact");
+        if self.done.contains(&idem) {
+            self.replay_skip(idem)?;
+            return Ok(ExecOutput {
+                artifacts: self.order.artifacts().to_vec(),
+                outputs: Vec::new(),
+                note: "replay: 工件已登记，未重跑执行单元".to_string(),
+            });
+        }
+        let artifacts_dir = self.cfg.out_dir.join(ARTIFACTS_DIR);
+        std::fs::create_dir_all(&artifacts_dir)?;
+        let ctx = ExecContext {
+            order_id: &self.cfg.order_id,
+            stable_id: self.order.stable_id().as_str(),
+            line_id: &self.cfg.line.line_id,
+            out_dir: &artifacts_dir,
+        };
+        let output = match unit.execute(&ctx) {
+            Ok(output) => output,
+            Err(err) => {
+                // 执行失败入账（ok=false），幂等键不落——重试会真跑
+                self.append_record(
+                    "attach_artifact",
+                    idem,
+                    false,
+                    Some(("unit_failed", err.to_string())),
+                    None,
+                )?;
+                return Err(err);
+            }
+        };
+        // 协议一次一个工件：逐个过引擎登记。任一被拒都入账并向上传播。
+        for artifact in &output.artifacts {
+            let request = engine_request(
+                &self.order,
+                "attach_artifact",
+                json!({ "artifact": artifact }),
+            )?;
+            match self.client.call(&request)? {
+                EngineOutcome::Accept(accept) => self.order = accept.order,
+                EngineOutcome::Reject(rejection) => {
+                    let (kind, detail) = rejection_kind_and_detail(&rejection);
+                    self.append_record("attach_artifact", idem, false, Some((kind, detail)), None)?;
+                    return Err(ExeclineError::EngineRejected {
+                        op: "attach_artifact".to_string(),
+                        rejection,
+                    });
+                }
+            }
+        }
+        self.append_record(
+            "attach_artifact",
+            idem.clone(),
+            true,
+            None,
+            Some(self.order.clone()),
+        )?;
+        self.done.insert(idem);
+        Ok(output)
     }
 
     /// 完工（引擎 op `complete`）。
     pub fn complete(&mut self) -> Result<(), ExeclineError> {
-        unimplemented!("RED：complete 待最小实现")
+        if self.engine_step("complete", json!({}))? {
+            self.emit_mes("complete", 1)?;
+        }
+        Ok(())
     }
 
     /// close 门（引擎 op `close`；必经引擎）。无合格终态工件被引擎拒绝。
     pub fn close(&mut self) -> Result<(), ExeclineError> {
-        unimplemented!("RED：close 待最小实现")
+        if self.engine_step("close", json!({}))? {
+            self.emit_mes("close", 1)?;
+        }
+        Ok(())
     }
 
     /// 全生命周期驱动（幂等）：同一 order_id 二次驱动只重放已完成 op。
-    pub fn drive(&mut self, _unit: &dyn ExecuteUnit) -> Result<DriveReport, ExeclineError> {
-        unimplemented!("RED：drive 待最小实现")
+    pub fn drive(&mut self, unit: &dyn ExecuteUnit) -> Result<DriveReport, ExeclineError> {
+        let seq_before = self.ledger.seq();
+        self.drive_mes.clear();
+        self.replay_hits = 0;
+        self.create_order()?;
+        self.bind_line()?;
+        self.attach_voucher()?;
+        self.release()?;
+        self.start()?;
+        let exec_output = self.execute(unit)?;
+        self.complete()?;
+        self.close()?;
+        Ok(DriveReport {
+            order: self.order.clone(),
+            replayed: self.replay_hits > 0,
+            appended: self.ledger.seq() - seq_before,
+            mes_events: std::mem::take(&mut self.drive_mes),
+            exec_output: Some(exec_output),
+        })
     }
+
+    // ---------- 内部 ----------
+
+    /// 幂等键：`{stable_id}/{op}`。stable_id 只由 order_id 决定，
+    /// 因此同单重放得到同键；换单换键。
+    fn idem_key(&self, op: &str) -> String {
+        format!("{}/{op}", self.order.stable_id().as_str())
+    }
+
+    /// 一个引擎 op：幂等检查 → 子进程调用 → 记账。
+    /// 返回 `true` = 本次真调了引擎（调用方据此发 MES）；`false` = 重放跳过。
+    fn engine_step(&mut self, op: &str, params: Value) -> Result<bool, ExeclineError> {
+        let idem = self.idem_key(op);
+        if self.done.contains(&idem) {
+            self.replay_skip(idem)?;
+            return Ok(false);
+        }
+        let request = engine_request(&self.order, op, params)?;
+        match self.client.call(&request)? {
+            EngineOutcome::Accept(accept) => {
+                self.order = accept.order;
+                self.append_record(op, idem.clone(), true, None, Some(self.order.clone()))?;
+                self.done.insert(idem);
+                Ok(true)
+            }
+            EngineOutcome::Reject(rejection) => {
+                let (kind, detail) = rejection_kind_and_detail(&rejection);
+                self.append_record(op, idem, false, Some((kind, detail)), None)?;
+                Err(ExeclineError::EngineRejected {
+                    op: op.to_string(),
+                    rejection,
+                })
+            }
+        }
+    }
+
+    /// 重放审计行：不调引擎、不重复终态，只记"这步已做过"。
+    fn replay_skip(&mut self, idem: String) -> Result<(), ExeclineError> {
+        self.replay_hits += 1;
+        self.append_record("replay_skip", idem, true, None, Some(self.order.clone()))
+    }
+
+    /// 追加一行账本。`state_after` 取当前快照状态；拒绝行不带快照。
+    fn append_record(
+        &mut self,
+        op: &str,
+        idem_key: String,
+        ok: bool,
+        error: Option<(&str, String)>,
+        order_after: Option<WorkOrder>,
+    ) -> Result<(), ExeclineError> {
+        let (error_kind, error_detail) = match error {
+            Some((kind, detail)) => (Some(kind.to_string()), Some(detail)),
+            None => (None, None),
+        };
+        let record = LedgerRecord {
+            seq: 0,
+            ts_ms: self.clock.now_ms(),
+            order_id: self.cfg.order_id.clone(),
+            stable_id: self.order.stable_id().as_str().to_string(),
+            op: op.to_string(),
+            idem_key,
+            ok,
+            state_after: Some(state_name(self.order.state())),
+            error_kind,
+            error_detail,
+            order_after,
+        };
+        self.ledger.append(record)?;
+        Ok(())
+    }
+
+    /// 发一条 MES 事件（stub writer 落盘）。event_id 用账本序号保唯一。
+    /// 落盘失败 = 记账事故，向上传播不静默。
+    fn emit_mes(&mut self, kind: &str, quantity: u64) -> Result<(), ExeclineError> {
+        let stable_id = self.order.stable_id().as_str().to_string();
+        let seq = self.ledger.seq();
+        let event = af_mes::MesEvent::new(
+            stable_id.clone(),
+            self.clock.now_ms(),
+            format!("{stable_id}:{kind}:{seq}"),
+            self.cfg.line.line_id.clone(),
+            self.cfg.station_id.clone(),
+            kind,
+            quantity,
+        );
+        self.mes.append(&event)?;
+        self.drive_mes.push(event);
+        Ok(())
+    }
+}
+
+/// 组一行引擎请求：op + 整单快照 + 该 op 的参数。
+fn engine_request(order: &WorkOrder, op: &str, params: Value) -> Result<Value, ExeclineError> {
+    let order_value =
+        serde_json::to_value(order).map_err(|err| ExeclineError::EngineBadResponse {
+            detail: format!("订单快照序列化失败: {err}"),
+        })?;
+    let mut request = Map::new();
+    request.insert("op".to_string(), json!(op));
+    request.insert("order".to_string(), order_value);
+    if let Value::Object(extra) = params {
+        request.extend(extra);
+    }
+    Ok(Value::Object(request))
+}
+
+/// 拒绝的分类标签与可读详情（入账用；类型化拒绝仍由 EngineRejection 承载）。
+fn rejection_kind_and_detail(rejection: &EngineRejection) -> (&'static str, String) {
+    match rejection {
+        EngineRejection::BadRequest { .. } => ("bad_request", rejection.to_string()),
+        EngineRejection::RejectionEnvelope { .. } => ("rejection_envelope", rejection.to_string()),
+        EngineRejection::Gate { .. } => ("gate", rejection.to_string()),
+        EngineRejection::Decision { .. } => ("decision", rejection.to_string()),
+    }
+}
+
+/// 状态名的线格式（OrderState 的 serde 名：Created/Released/...）。
+fn state_name(state: OrderState) -> String {
+    serde_json::to_value(state)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_string))
+        .unwrap_or_else(|| format!("{state:?}"))
 }
 
 impl fmt::Debug for OrderLifecycleDriver {

@@ -27,14 +27,46 @@ impl MesFileWriter {
         &self.path
     }
 
-    /// 追加一行事件（JSONL，append-only）。
-    pub fn append(&mut self, _event: &MesEvent) -> Result<(), ExeclineError> {
-        unimplemented!("RED：MesFileWriter::append 待最小实现")
+    /// 追加一行事件（JSONL，append-only，fsync 后返回）。
+    pub fn append(&mut self, event: &MesEvent) -> Result<(), ExeclineError> {
+        let line = serde_json::to_string(event).map_err(|err| ExeclineError::LedgerCorrupt {
+            detail: format!("MesEvent 序列化失败: {err}"),
+        })?;
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
+        writeln!(file, "{line}")?;
+        file.flush()?;
+        file.sync_all()?;
+        Ok(())
     }
 
-    /// 重载全部事件。坏行 = EX2002 账本类损坏（事件账本与订单账本同纪律）。
-    pub fn load(_path: &Path) -> Result<Vec<MesEvent>, ExeclineError> {
-        unimplemented!("RED：MesFileWriter::load 待最小实现")
+    /// 重载全部事件。坏行 = EX2002（事件账本与订单账本同纪律）。
+    pub fn load(path: &Path) -> Result<Vec<MesEvent>, ExeclineError> {
+        if !path.is_file() {
+            return Err(ExeclineError::LedgerIo {
+                detail: format!("MES 事件文件不存在: {}", path.display()),
+            });
+        }
+        let file = fs::File::open(path)?;
+        let mut events = Vec::new();
+        for (index, line) in BufReader::new(file).lines().enumerate() {
+            let line = line?;
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let event: MesEvent =
+                serde_json::from_str(trimmed).map_err(|err| ExeclineError::LedgerCorrupt {
+                    detail: format!("第 {} 行不是合法 MesEvent: {err}", index + 1),
+                })?;
+            events.push(event);
+        }
+        Ok(events)
     }
 }
 

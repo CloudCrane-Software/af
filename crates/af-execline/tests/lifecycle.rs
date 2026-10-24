@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 use std::process;
 
 use af_execline::{
-    Clock, DriverConfig, EngineClient, EngineRejection, ExeclineError, ExecuteUnit, ExecContext,
-    ExecOutput, FixedClock, MesFileWriter, OrderLedger, OrderLifecycleDriver, StubExecuteUnit,
+    DriverConfig, EngineClient, EngineRejection, ExecContext, ExecOutput, ExeclineError,
+    ExecuteUnit, FixedClock, MesFileWriter, OrderLedger, OrderLifecycleDriver, StubExecuteUnit,
 };
 use af_mes::MesEvent;
 use af_workorder::{
@@ -51,7 +51,12 @@ fn scratch(tag: &str) -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .expect("系统时钟")
         .as_nanos();
-    let dir = std::env::temp_dir().join(format!("af-execline-it-{}-{}-{}", process::id(), tag, nanos));
+    let dir = std::env::temp_dir().join(format!(
+        "af-execline-it-{}-{}-{}",
+        process::id(),
+        tag,
+        nanos
+    ));
     fs::create_dir_all(&dir).expect("创建测试 scratch 目录");
     dir
 }
@@ -131,7 +136,11 @@ fn happy_path_full_lifecycle_ledger_and_mes() {
     // 终态与履历
     assert_eq!(report.order.state(), OrderState::Closed);
     assert!(!report.replayed, "首驱不是重放");
-    assert_eq!(report.order.history().len(), 4, "release/start/complete/close 四条边");
+    assert_eq!(
+        report.order.history().len(),
+        4,
+        "release/start/complete/close 四条边"
+    );
     assert_eq!(report.order.artifacts().len(), 1, "执行桩工件已登记");
     // stable_id 按 af-workorder 派生规则（域 af-workorder/stable-id/v1\0 || order_id）
     assert_eq!(
@@ -242,12 +251,9 @@ fn release_with_unsigned_voucher_names_the_voucher() {
     let out = scratch("gate-unsigned");
     let mut cfg = config("wo-gate-2", out.clone());
     cfg.voucher.signed = false;
-    let mut driver = OrderLifecycleDriver::open(
-        cfg,
-        engine_client(),
-        Box::new(FixedClock::new(FIXED_MS)),
-    )
-    .expect("打开驱动");
+    let mut driver =
+        OrderLifecycleDriver::open(cfg, engine_client(), Box::new(FixedClock::new(FIXED_MS)))
+            .expect("打开驱动");
     driver.create_order().unwrap();
     driver.bind_line().unwrap();
     driver.attach_voucher().unwrap();
@@ -297,7 +303,11 @@ fn close_without_qualified_final_artifact_is_rejected() {
         other => panic!("期望 EngineRejected，实际 {other:?}"),
     }
     assert_eq!(err.code().as_str(), "EX1006");
-    assert_eq!(driver.state(), OrderState::Completed, "拒绝后停在 Completed");
+    assert_eq!(
+        driver.state(),
+        OrderState::Completed,
+        "拒绝后停在 Completed"
+    );
 
     // 补上合格终态工件后放行
     let output = driver.execute(&stub_unit("wo-gate-3")).unwrap();
@@ -341,10 +351,7 @@ fn second_drive_replays_without_duplicate_terminal() {
         history_after_first,
         "不得产生重复跃迁"
     );
-    assert!(
-        second.mes_events.is_empty(),
-        "重放不得重复发 MES 事件"
-    );
+    assert!(second.mes_events.is_empty(), "重放不得重复发 MES 事件");
 
     // 账本证据：close 成功记录仍唯一；出现 replay_skip；序号连续
     let records = ledger_records(&out);
@@ -382,7 +389,11 @@ fn failed_unit_keeps_order_in_progress_and_retry_completes() {
 
     let err = driver.execute(&FailingUnit).unwrap_err();
     assert_eq!(err.code().as_str(), "EX3001", "执行单元失败稳定码");
-    assert_eq!(driver.state(), OrderState::InProgress, "失败后停在 InProgress");
+    assert_eq!(
+        driver.state(),
+        OrderState::InProgress,
+        "失败后停在 InProgress"
+    );
     let records = ledger_records(&out);
     assert!(
         records.iter().any(|r| r.op == "attach_artifact" && !r.ok),
@@ -390,7 +401,9 @@ fn failed_unit_keeps_order_in_progress_and_retry_completes() {
     );
 
     // 重试：同一驱动换合格单元，走完剩余生命周期
-    let output = driver.execute(&stub_unit("wo-retry-1")).expect("重试应放行");
+    let output = driver
+        .execute(&stub_unit("wo-retry-1"))
+        .expect("重试应放行");
     assert_eq!(output.artifacts.len(), 1);
     driver.complete().unwrap();
     driver.close().unwrap();
@@ -417,7 +430,11 @@ fn failed_unit_keeps_order_in_progress_and_retry_completes() {
 fn ledger_seq_gap_is_rejected_as_corrupt() {
     let out = scratch("ledger-gap");
     let path = out.join("ledger.jsonl");
-    let order = WorkOrder::new("wo-gap", GraphVersion::new("g-poc-1"), Sla::new(None, Priority::Normal));
+    let order = WorkOrder::new(
+        "wo-gap",
+        GraphVersion::new("g-poc-1"),
+        Sla::new(None, Priority::Normal),
+    );
     let base = af_execline::LedgerRecord {
         seq: 0,
         ts_ms: FIXED_MS,
@@ -444,15 +461,27 @@ fn ledger_seq_gap_is_rejected_as_corrupt() {
     assert_eq!(err.code().as_str(), "EX2002", "序号断层 = 账本损坏");
     assert!(err.to_string().contains("序号不连续"), "{err}");
 
-    // 身份不一致同样拒绝（换 order_id 的账本不能冒充）
+    // 同一账本混入异单记录：跨行身份不一致，同样拒绝
     let mut foreign = base.clone();
-    foreign.seq = 1;
+    foreign.seq = 2;
     foreign.order_id = "wo-other".into();
     foreign.stable_id = StableId::generate("wo-other").as_str().to_string();
     foreign.idem_key = format!("{}/create_order", StableId::generate("wo-other").as_str());
-    fs::write(&path, format!("{}\n", serde_json::to_string(&foreign).unwrap())).unwrap();
+    foreign.order_after = None;
+    let mut mixed = base.clone();
+    mixed.seq = 1;
+    fs::write(
+        &path,
+        format!(
+            "{}\n{}\n",
+            serde_json::to_string(&mixed).unwrap(),
+            serde_json::to_string(&foreign).unwrap()
+        ),
+    )
+    .unwrap();
     let err = OrderLedger::load(&path).unwrap_err();
     assert_eq!(err.code().as_str(), "EX2002");
+    assert!(err.to_string().contains("身份不一致"), "{err}");
 }
 
 // ---------- 负向：ledger 身份与订单不符时驱动拒绝打开 ----------
@@ -462,7 +491,11 @@ fn driver_open_rejects_ledger_of_another_order() {
     let out = scratch("foreign-ledger");
     let path = out.join("ledger.jsonl");
     let foreign_id = "wo-foreign";
-    let order = WorkOrder::new(foreign_id, GraphVersion::new("g-poc-1"), Sla::new(None, Priority::Normal));
+    let order = WorkOrder::new(
+        foreign_id,
+        GraphVersion::new("g-poc-1"),
+        Sla::new(None, Priority::Normal),
+    );
     let record = af_execline::LedgerRecord {
         seq: 1,
         ts_ms: FIXED_MS,
@@ -476,7 +509,11 @@ fn driver_open_rejects_ledger_of_another_order() {
         error_detail: None,
         order_after: Some(order),
     };
-    fs::write(&path, format!("{}\n", serde_json::to_string(&record).unwrap())).unwrap();
+    fs::write(
+        &path,
+        format!("{}\n", serde_json::to_string(&record).unwrap()),
+    )
+    .unwrap();
 
     let err = OrderLifecycleDriver::open(
         config("wo-mine", out.clone()),

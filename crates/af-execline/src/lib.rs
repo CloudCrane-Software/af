@@ -35,7 +35,7 @@ pub mod ledger;
 pub mod mes;
 
 pub use clock::{Clock, FixedClock, SystemClock};
-pub use driver::{DriverConfig, DriveReport, OrderLifecycleDriver};
+pub use driver::{DriveReport, DriverConfig, OrderLifecycleDriver};
 pub use engine::{EngineAccept, EngineClient, EngineOutcome, EngineRejection};
 pub use error::ExeclineError;
 pub use exec::{ExecContext, ExecOutput, ExecuteUnit, StubExecuteUnit};

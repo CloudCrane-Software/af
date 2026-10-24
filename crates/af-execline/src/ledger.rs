@@ -50,13 +50,77 @@ pub struct OrderLedger {
 
 impl OrderLedger {
     /// 打开账本：不存在则新建空账本；存在则重载并校验（序号连续、身份一致）。
-    pub fn open(_path: &Path) -> Result<Self, ExeclineError> {
-        unimplemented!("RED：OrderLedger::open 待最小实现")
+    pub fn open(path: &Path) -> Result<Self, ExeclineError> {
+        if path.is_file() {
+            let records = Self::load(path)?;
+            let seq = records.last().map(|record| record.seq).unwrap_or(0);
+            Ok(Self {
+                path: path.to_path_buf(),
+                seq,
+                records,
+            })
+        } else {
+            Ok(Self {
+                path: path.to_path_buf(),
+                seq: 0,
+                records: Vec::new(),
+            })
+        }
     }
 
     /// 只读重载 + 校验。对账与测试用；调用方不获得追加能力。
-    pub fn load(_path: &Path) -> Result<Vec<LedgerRecord>, ExeclineError> {
-        unimplemented!("RED：OrderLedger::load 待最小实现")
+    ///
+    /// 校验三条：每行是合法记录（坏行 = EX2002）；序号从 1 起连续
+    /// （断层 = EX2002，不猜、不补）；全账本身份一致（一张账本一个订单）。
+    pub fn load(path: &Path) -> Result<Vec<LedgerRecord>, ExeclineError> {
+        if !path.is_file() {
+            return Err(ExeclineError::LedgerIo {
+                detail: format!("ledger 文件不存在: {}", path.display()),
+            });
+        }
+        let file = fs::File::open(path)?;
+        let mut records = Vec::new();
+        for (index, line) in BufReader::new(file).lines().enumerate() {
+            let line = line?;
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let record: LedgerRecord =
+                serde_json::from_str(trimmed).map_err(|err| ExeclineError::LedgerCorrupt {
+                    detail: format!("第 {} 行不是合法 ledger 记录: {err}", index + 1),
+                })?;
+            records.push(record);
+        }
+        for (index, record) in records.iter().enumerate() {
+            let expected = index as u64 + 1;
+            if record.seq != expected {
+                return Err(ExeclineError::LedgerCorrupt {
+                    detail: format!(
+                        "序号不连续: 第 {} 行期望 seq={expected}，实际 seq={}",
+                        index + 1,
+                        record.seq
+                    ),
+                });
+            }
+        }
+        if let Some(first) = records.first() {
+            for record in &records[1..] {
+                if record.stable_id != first.stable_id || record.order_id != first.order_id {
+                    return Err(ExeclineError::LedgerCorrupt {
+                        detail: format!(
+                            "身份不一致: 首行 order_id={} stable_id={}，第 {} 行 order_id={} stable_id={}",
+                            first.order_id,
+                            first.stable_id,
+                            record.seq,
+                            record.order_id,
+                            record.stable_id
+                        ),
+                    });
+                }
+            }
+        }
+        Ok(records)
     }
 
     pub fn path(&self) -> &Path {
@@ -71,9 +135,26 @@ impl OrderLedger {
         &self.records
     }
 
-    /// 追加一行。序号由账本盖上（上一行 + 1），落盘后更新内存视图。
-    pub fn append(&mut self, _record: LedgerRecord) -> Result<LedgerRecord, ExeclineError> {
-        unimplemented!("RED：OrderLedger::append 待最小实现")
+    /// 追加一行。序号由账本盖上（上一行 + 1），落盘（含 fsync）后才更新
+    /// 内存视图——崩溃时内存不领先于盘。
+    pub fn append(&mut self, mut record: LedgerRecord) -> Result<LedgerRecord, ExeclineError> {
+        record.seq = self.seq + 1;
+        let line = serde_json::to_string(&record).map_err(|err| ExeclineError::LedgerCorrupt {
+            detail: format!("记录序列化失败: {err}"),
+        })?;
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)?;
+        writeln!(file, "{line}")?;
+        file.flush()?;
+        file.sync_all()?;
+        self.seq = record.seq;
+        self.records.push(record.clone());
+        Ok(record)
     }
 
     /// 已成功完成的幂等键集合（`ok=true` 的行）。驱动层据此跳过重放。
