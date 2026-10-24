@@ -10,13 +10,36 @@ use clickhouse::Client;
 use std::future::Future;
 use tokio::runtime::Runtime;
 
-pub fn build_client(endpoint: &str, database: &str) -> Client {
-    Client::default()
+/// 客户端构造（正式 API；原补丁台账-第二阶段 #A 转正，历史 `build_client`
+/// 并入本函数的 `None/None` 形态——匿名请求线逐字节不变，由 tests/http.rs
+/// `anonymous_writer_wire_is_unchanged_no_credentials` 钉死）。
+///
+/// 口令认证面向 mingda MES 实例（2026-10-22 起 default 用户设口令）等
+/// 需要凭据的 ClickHouse 部署。凭据经官方客户端以 `X-ClickHouse-User` /
+/// `X-ClickHouse-Key` 请求头携带（明文只在头里，不进 URL、不进日志）；
+/// 由调用方解析注入，本 crate 不读凭据文件。
+///
+/// `user`/`password` 任一为 `None` 即该头不发送——两者都 `None` 时与
+/// 认证面引入前的请求线完全一致。
+pub fn build_client_auth(
+    endpoint: &str,
+    database: &str,
+    user: Option<&str>,
+    password: Option<&str>,
+) -> Client {
+    let mut client = Client::default()
         .with_url(endpoint)
         .with_database(database)
         .with_compression(clickhouse::Compression::Lz4)
         .with_validation(false)
-        .with_product_info("af-mes", env!("CARGO_PKG_VERSION"))
+        .with_product_info("af-mes", env!("CARGO_PKG_VERSION"));
+    if let Some(user) = user {
+        client = client.with_user(user);
+    }
+    if let Some(password) = password {
+        client = client.with_password(password);
+    }
+    client
 }
 
 pub fn runtime() -> Result<Runtime, MesError> {

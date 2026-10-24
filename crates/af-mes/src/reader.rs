@@ -22,6 +22,8 @@ pub struct MesReader {
 }
 
 impl MesReader {
+    /// 匿名 reader（历史行为原样）：等价于 [`MesReader::open_with_auth`]
+    /// 的匿名形态（不带任何 ClickHouse 认证头）。
     pub fn open(
         endpoint: impl Into<String>,
         database: impl Into<String>,
@@ -30,7 +32,27 @@ impl MesReader {
         ch::validate_endpoint(&endpoint)?;
         let database = database_or_default(&database.into()).to_string();
         ch::validate_ident(&database, "database")?;
-        let client = ch::build_client(&endpoint, &database);
+        let client = ch::build_client_auth(&endpoint, &database, None, None);
+        let runtime = ch::runtime()?;
+        Ok(Self { runtime, client })
+    }
+
+    /// 带口令认证的 reader（正式 API；CH 读侧对账需要与 writer 同款的
+    /// 认证面——mingda 实例 2026-10-22 起对 default 用户设口令）。
+    ///
+    /// 凭据以 `X-ClickHouse-User` / `X-ClickHouse-Key` 头进入官方客户端，
+    /// 明文只在内存与请求头，不落盘不打印。匿名读用 [`MesReader::open`]。
+    pub fn open_with_auth(
+        endpoint: impl Into<String>,
+        database: impl Into<String>,
+        user: &str,
+        password: &str,
+    ) -> Result<Self, MesError> {
+        let endpoint = endpoint.into();
+        ch::validate_endpoint(&endpoint)?;
+        let database = database_or_default(&database.into()).to_string();
+        ch::validate_ident(&database, "database")?;
+        let client = ch::build_client_auth(&endpoint, &database, Some(user), Some(password));
         let runtime = ch::runtime()?;
         Ok(Self { runtime, client })
     }
