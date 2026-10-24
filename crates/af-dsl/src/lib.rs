@@ -47,3 +47,9 @@ pub fn load_str(src: &str) -> Result<Document, LoadError> {
 pub fn validate(doc: &Document) -> Report {
     validate::validate(doc)
 }
+
+/// 带可配置项的语义校验（M2 起：context 配额总量上限等）。
+pub use validate::validate_with;
+
+/// 语义校验可配置项。
+pub use validate::ValidateOptions;

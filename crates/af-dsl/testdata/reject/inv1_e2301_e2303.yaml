@@ -1,0 +1,23 @@
+version: 1
+meta:
+  name: inv1_demo
+  graph_version: "1.0"
+  entry: solver
+  input: t
+  output: { ref: a, from: solver }
+types:
+  - { name: t, schema: { type: object, required: [question], properties: { question: { type: string } } } }
+  - { name: a, schema: { type: object, required: [text], properties: { text: { type: string } } } }
+stores:
+  - { name: trajectory, type: message_log, writer: solver, lifecycle: run, retention: { max_items: 64 } }
+nodes:
+  - id: solver
+    kind: task
+    uses: { model: route.main@1 }
+    writes: [trajectory]
+    reads: [trajectory]                     # E2303：LLM 节点直读 store（只能经 section）
+    emits: { answer: a }
+    context:
+      sections:
+        - { from: input, fields: [question], policy: project, quota_tokens: 200 }
+        - { from: input, fields: [requirement], policy: project, quota_tokens: 200 }  # E2301：meta.input 无此字段

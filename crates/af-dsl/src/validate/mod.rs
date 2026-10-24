@@ -52,6 +52,20 @@ pub fn validate(doc: &Document) -> Report {
     report
 }
 
+/// 语义校验可配置项（M2 起）。§5 的 INV-1 无总量规则，默认全部不收紧。
+#[derive(Debug, Clone, Default)]
+pub struct ValidateOptions {
+    /// 每节点 `context.sections` 的 quota_tokens 总量上限（policy:none 段按 0
+    /// 计入）；None = 不核对总量（默认，§5 语义原样）。
+    pub context_quota_cap: Option<u64>,
+}
+
+/// 带可配置项的语义校验（一次收齐）。
+pub fn validate_with(doc: &Document, opts: &ValidateOptions) -> Report {
+    let _ = opts; // RED 占位：直通 M1 校验；M2 实装见 GREEN 提交
+    validate(doc)
+}
+
 impl<'a> Index<'a> {
     pub(crate) fn build(doc: &'a Document, report: &mut Report) -> Self {
         let mut ix = Self {
