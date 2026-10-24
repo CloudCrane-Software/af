@@ -18,6 +18,8 @@ thiserror = { workspace = true }
 [dev-dependencies]
 # 集成测试读回 ledger / MES / 验签凭证；版本随 workspace，不另引。
 af-execline = { path = "../af-execline" }
+# 消债 B① 集成测试：--mes-ch 声明流到驱动缝的 mock CH（workspace 内 crate）。
+af-mes = { path = "../af-mes" }
 af-workorder = { path = "../af-workorder" }
 
 [lints]
