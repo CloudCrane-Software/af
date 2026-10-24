@@ -605,6 +605,12 @@ warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
           └── serde_yaml v0.9.34+deprecated
               └── af-dsl v0.1.0 (*)
 
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/deny.toml:28:4
+   │
+28 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
 warning[duplicate]: found 3 duplicate entries for crate 'itertools'
     ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/Cargo.lock:162:1
     │  
@@ -1203,12 +1209,6 @@ warning[duplicate]: found 2 duplicate entries for crate 'spki'
           │       └── p256 v0.13.2 (*)
           └── sec1 v0.7.3
               └── elliptic-curve v0.13.8 (*)
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/deny.toml:25:4
-   │
-25 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 3 duplicate entries for crate 'syn'
     ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/Cargo.lock:300:1
@@ -1952,33 +1952,4 @@ warning[duplicate]: found 2 duplicate entries for crate 'windows-sys'
           │       └── lalrpop v0.22.2 (*)
           └── walkdir v2.5.0 (*)
 
-error[unmaintained]: unsafe-libyaml is unmaintained
-    ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/Cargo.lock:333:1
-    │
-333 │ unsafe-libyaml 0.2.11 registry+https://github.com/rust-lang/crates.io-index
-    │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ unmaintained advisory detected
-    │
-    ├ ID: RUSTSEC-2024-0449
-    ├ Advisory: https://rustsec.org/advisories/RUSTSEC-2024-0449
-    ├ The [repository](https://github.com/dtolnay/unsafe-libyaml) was archived by
-      its owner on 2024-03-25 and is read-only. The last release is 0.2.11
-      (March 2024).
-      
-      `unsafe-libyaml` is a machine translation of libyaml's C code into unsafe
-      Rust (c2rust). Bugs found in it will not be fixed upstream. It is used by
-      `serde_yaml` (itself deprecated) and by forks such as `serde_yaml_ng`.
-      
-      ## Alternatives
-      
-      Consider a YAML parser written in safe Rust, for example:
-      
-      - [saphyr](https://crates.io/crates/saphyr) ([serde-saphyr](https://crates.io/crates/serde-saphyr) for serde users)
-      - [noyalib](https://crates.io/crates/noyalib)
-    ├ Announcement: https://github.com/dtolnay/unsafe-libyaml
-    ├ Solution: No safe upgrade is available!
-    ├ unsafe-libyaml v0.2.11
-      └── serde_yaml v0.9.34+deprecated
-          └── af-dsl v0.1.0
-              └── af-compiler v0.1.0
-
-advisories FAILED, bans ok, licenses ok, sources ok
+advisories ok, bans ok, licenses ok, sources ok
