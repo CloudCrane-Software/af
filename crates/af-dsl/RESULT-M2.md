@@ -99,6 +99,14 @@ E2404+）未私占；§6 预算「每新增一条须在提案登记」，本模�
    节点；context 仅 LLM-bound 可用属 E1005（构造×kind，归属待裁决，M1 遗留），
    在 E1005 落地前，非 LLM 节点带 context 的端口闭合同样核对（其 context 已
    声明即应自洽），E1005 落地后可按需收窄。
+   **【2026-10-24 已收窄（phase2-dsl-fix1，G3 复核 失败分类账 #5）】**：G3 首轮
+   裁定 Agensh-DeLM E2304×4 中 verify/fail_scan（kind:check + uses.unit，非
+   LLM）两条系本偏差误报——check 单元的入边端口 patch 是程序性数据载荷（被
+   验证对象），非上下文装配面。按提案 §5 原文收窄为仅 LLM-bound（`inv1.rs`
+   E2304 分支），先于 E1005 落地；非 LLM 节点带 context 的 E2301/E2302/E2401/
+   E2402/E2403 段级核对保留不变（其 context 已声明即应自洽）。回归：inv1 36
+   例 + 新增红绿例 `non_llm_node_with_context_in_port_not_sectioned_is_clean`，
+   全套绿；六 golden 不受影响（其 context 节点全为 LLM-bound）。
 6. **E2303 抑制未知 store 项**：reads 引用未声明 store 时 refs 层 E2001 已定罪，
    E2303 只列已声明项（混合时同报两码、E2303 列已声明子集）。提案 §5 无此样例；
    此为保 M1 已交付测试（`reads_unknown_store_is_e2001` 断言恰 [E2001]）不动
