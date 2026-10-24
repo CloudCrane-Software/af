@@ -273,6 +273,7 @@ fn new_path_run(
 
 /// 冻结 af-bench main.rs:861-890 的 18 键行装配模板（旧路行 oracle——语句
 /// 原样重建；模板在册由 cmp_p6_row_template_in_frozen_source 钉死）。
+#[allow(clippy::too_many_arguments)]
 fn old_template_row(
     task_id: &str,
     run_dir: &Path,
@@ -657,9 +658,9 @@ fn l1_real_judge_old_vs_new_full_verify_chain() {
                     "维 6 eval.sh = 任务包脚本"
                 );
                 eprintln!(
-                "[L1-真判分] {log_name}: old=({r_old:?}, {sha_old:?}) new 一致，note 前 60 字: {}",
-                &note_old.chars().take(60).collect::<String>()
-            );
+                    "[L1-真判分] {log_name}: old=({r_old:?}, {sha_old:?}) new 一致，note 前 60 字: {}",
+                    note_old.chars().take(60).collect::<String>()
+                );
             },
         );
     }

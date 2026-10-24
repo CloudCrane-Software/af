@@ -434,20 +434,22 @@ fn smoke_real_local_docker_via_bridge() {
     let _ = bridge.run("local", &format!("docker rm -f {name}"), 30);
 }
 
-// ---- 源文本比对：黄金命令串的模板原文必须在 af-bench 源在册 ----
+// ---- 源文本比对：黄金命令串的模板原文必须在 af-bench 冻结件在册 ----
+//（P6 薄壳化：af-bench 本体已不含这些载荷，基准迁 tests/fixtures/p6-frozen-bench/
+// = P5 完成点 1830371 字节级冻结件，同 p1_comparison/p3_judge 的明示等价迁移。）
 
 fn bench_src(rel: &str) -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(rel);
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/p6-frozen-bench")
+        .join(rel);
     std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("读 {} 失败: {err}", path.display()))
 }
 
 /// 桥接包裹 + swev/tb setup/exec 的命令模板与失败文案原文在册（tb.rs / swev.rs）。
-/// 黄金串由这些模板 + 已对照的护栏常量（P1 cmp_guardrail_constants）决定——
-/// 实现改动命令构造即与黄金串失配，模板漂移即与本断言失配，双向钉死。
 #[test]
 fn cmp_p2_templates_against_bench_source() {
-    let tb = bench_src("../af-bench/src/tb.rs");
-    let swev = bench_src("../af-bench/src/swev.rs");
+    let tb = bench_src("tb.rs");
+    let swev = bench_src("swev.rs");
 
     // 桥接包裹模板：tb.rs:43 与 swev.rs:269-271 同构（收敛为一的依据）。
     assert!(

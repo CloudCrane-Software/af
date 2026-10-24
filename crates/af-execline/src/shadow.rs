@@ -54,6 +54,10 @@ impl L0Evidence {
 /// 旧路判分调用（← af-bench swev.rs:205-210 语句逐字复制：硬编码绝对路径直
 /// `Command`，无 locator、无 env 注入、不经 wrapper shell）。源文本与冻结件
 /// 双向钉死（tests/p6_shadow.rs cmp_p6_*）。
+// `&log_path`/`&diff_path` 的取引用是**有意的**：源文本与冻结 swev.rs:205-210
+// 逐字一致是对拍锚（cmp_p6_old_judge_call_matches_frozen_bench_source 钉死），
+// 不是冗余借用。
+#[allow(clippy::needless_borrows_for_generic_args)]
 pub fn old_judge_call(
     task_json_path: &Path,
     log_path: &Path,
@@ -542,10 +546,9 @@ impl L2Canary {
     /// 与在飞扩量批 / 运营者批预算 / 旧路二进制指纹核销。真跑前逐项人工核销。
     pub fn preflight_checklist(&self) -> Vec<String> {
         vec![
-            format!(
-                "判分双锚口径：现产 a292547f…（JudgeLocator::production 默认锚）+ 历史 \
+            "判分双锚口径：现产 a292547f…（JudgeLocator::production 默认锚）+ 历史 \
                  0338566c…（rsi-drill 冻结件）双锚并记（方案 §3.1/§4.3-R5）"
-            ),
+                .to_string(),
             format!(
                 "旧路二进制指纹：sha256 前 16 位必须 = {OLD_BIN_SHA256_PREFIX}（冻结件 \
                  7a87876c…，盘点 §②）——不匹配即拒跑"
@@ -555,10 +558,9 @@ impl L2Canary {
                 .to_string(),
             "窗口：避开每小时 :17 cron（ADR-008:14）与在飞三测试扩量批（在飞盘点 §②）".to_string(),
             "预算：L2 = 模型+容器级（10 题双路 ≈ 双份单题成本上限）——运营者批预算/窗口".to_string(),
-            format!(
-                "判据：硬门 = 新路三件套旧 judge 复判 100% 一致；软门 = resolved 一致率 \
+            "判据：硬门 = 新路三件套旧 judge 复判 100% 一致；软门 = resolved 一致率 \
                  ≥9/10，不一致逐题归因（模型采样/供给面 vs 判分链），归因不得落在判分链"
-            ),
+                .to_string(),
         ]
     }
 }
