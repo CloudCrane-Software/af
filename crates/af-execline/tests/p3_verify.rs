@@ -349,22 +349,38 @@ fn verify_normal_flow_and_log_parsed_prefix_matrix() {
     })
 }
 
+/// 造一个指定假 python 行为与（可选）python 路径的定位：脚本任意字节，
+/// 锚 = 真实 sha256（过 verify 前置指纹门）。`python_body` 为 None 时 python
+/// 路径指向不存在的文件（judge 拉起失败臂）。
+fn fake_locator_with_python(tag: &str, python_body: Option<&str>) -> JudgeLocator {
+    let root = temp_root(tag);
+    let script = root.join("fake-swev-judge.py");
+    std::fs::write(&script, b"# fixture").unwrap();
+    let python = match python_body {
+        Some(body) => {
+            let python = root.join("fake-python");
+            write_exec(&python, body);
+            python
+        }
+        None => root.join("no-such-python"),
+    };
+    JudgeLocator {
+        script_sha256: sha256_of(&script),
+        python,
+        script,
+    }
+}
+
 /// judge 失败三臂（swev.rs:244-256 原样文案）：退出非零 / stdout 非 JSON /
 /// 拉起失败。三臂都保留 eval_sha256（判分已跑完、日志字节可对账）。
 #[test]
 fn verify_judge_failure_paths_match_bench_messages() {
     with_fake_docker(|_bin| {
         // ① judge 退出非零 → "judge 退出 <status>: <stderr 前 300>"。
-        let root = temp_root("jerr");
-        let python = root.join("fake-python");
-        write_exec(&python, "#!/bin/bash\necho 'boom detail' >&2\nexit 3\n");
-        let script = root.join("fake-swev-judge.py");
-        std::fs::write(&script, b"# fixture").unwrap();
-        let judge = JudgeLocator {
-            script_sha256: sha256_of(&script),
-            python,
-            script,
-        };
+        let judge = fake_locator_with_python(
+            "jerr",
+            Some("#!/bin/bash\necho 'boom detail' >&2\nexit 3\n"),
+        );
         let (resolved, note, sha, vroot) = run_verify(&judge, "afexl-p3-ok", "jerr-run2");
         assert_eq!(resolved, None);
         assert!(
@@ -377,16 +393,8 @@ fn verify_judge_failure_paths_match_bench_messages() {
         );
 
         // ② judge stdout 非 JSON → "judge 输出不是 JSON: <serde 错>: <前 200 字符>"。
-        let root = temp_root("jnotjson");
-        let python = root.join("fake-python");
-        write_exec(&python, "#!/bin/bash\necho 'not json at all'\n");
-        let script = root.join("fake-swev-judge.py");
-        std::fs::write(&script, b"# fixture").unwrap();
-        let judge = JudgeLocator {
-            script_sha256: sha256_of(&script),
-            python,
-            script,
-        };
+        let judge =
+            fake_locator_with_python("jnotjson", Some("#!/bin/bash\necho 'not json at all'\n"));
         let (resolved, note, sha, vroot) = run_verify(&judge, "afexl-p3-ok", "jnotjson-run2");
         assert_eq!(resolved, None);
         assert!(note.starts_with("judge 输出不是 JSON: "), "{note}");
@@ -398,14 +406,7 @@ fn verify_judge_failure_paths_match_bench_messages() {
 
         // ③ judge 拉起失败（python 缺席，脚本与锚完好——指纹门只验脚本）→
         //    "judge 启动失败: <io 错>"。
-        let root = temp_root("jspawn");
-        let script = root.join("fake-swev-judge.py");
-        std::fs::write(&script, b"# fixture").unwrap();
-        let judge = JudgeLocator {
-            script_sha256: sha256_of(&script),
-            python: root.join("no-such-python"),
-            script,
-        };
+        let judge = fake_locator_with_python("jspawn", None);
         let (resolved, note, sha, vroot) = run_verify(&judge, "afexl-p3-ok", "jspawn-run2");
         assert_eq!(resolved, None);
         assert!(note.starts_with("judge 启动失败: "), "{note}");
