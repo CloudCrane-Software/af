@@ -404,7 +404,10 @@ fn mock_addr(mock: &af_mes::mock::MockClickHouse) -> String {
 }
 
 /// 坏目标 fail-loud：`--mes-ch` 指向不可解析目标（无 scheme）→ 非零退出 +
-/// EX2003 稳定码透传（订单本体已 Closed，CH 记账未达显性上报）。
+/// EX2003 稳定码透传。失败点在驱动之前：`MesChTarget::parse` 不校验
+/// scheme（mes_ch.rs），EX2003 抛自 submit 编排里的 `MesChSink::open`
+/// 端点解析（cli.rs，早于 `driver.drive()`）——订单从未驱动，更无
+/// Closed；sink 打不开即拒跑，不静默降级文件正本。
 #[test]
 fn submit_mes_ch_bad_target_fails_loud_ex2003() {
     let state = Scratch(scratch("mes-ch-bad"));
