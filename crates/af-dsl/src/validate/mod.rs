@@ -1,12 +1,18 @@
-//! 语义层校验编排（M1-M3）：手写词表（E1004）→ 重复 id（E2003，建索引时收）
+//! 语义层校验编排（M1-M4）：手写词表（E1004）→ 重复 id（E2003，建索引时收）
 //! → 引用闭包（refs）→ context.sections 装配 + INV-1（inv1）→ INV-2（inv2）
-//! → INV-3 自验证（inv3）→ INV-4 评估输入（inv4），一次收齐。顺序固定以
+//! → INV-3 自验证（inv3）→ INV-4 评估输入（inv4）→ M4 收口（CEL 位点判定 →
+//! route 归一化 → topology_selector 候选核对），一次收齐。顺序固定以
 //! 保证违例输出确定性。
+//!
+//! 与 §3.1 草图序的偏差：草图把「CEL 编译」排在引用闭包前，但 M4 的 CEL
+//! 判定需要按**位置词表**（作用域链 + schema）建合成绑定，依赖索引——故
+//! CEL 位点判定在引用闭包后（RESULT-M4 偏差表登记）。
 
 mod inv1;
 mod inv2;
 mod inv3;
 mod inv4;
+mod m4;
 mod refs;
 
 use crate::error::{ErrorCode, Report};
@@ -73,6 +79,7 @@ pub fn validate_with(doc: &Document, opts: &ValidateOptions) -> Report {
     inv2::check(&index, &mut report);
     inv3::check(&index, &mut report);
     inv4::check(&index, &mut report);
+    m4::check(doc, &index, opts, &mut report);
     report
 }
 

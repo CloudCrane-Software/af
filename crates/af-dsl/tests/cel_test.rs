@@ -191,7 +191,7 @@ fn ternary_and_negate_not_in_conservative_subset() {
         &env(&[("steps", steps_env())]),
     );
     assert_eq!(e.code.code(), "E1052");
-    assert_eq!(e.detail, "非算子函数/方法调用 \"_?_:\"（函数与方法调用一律拒绝）");
+    assert_eq!(e.detail, "非算子函数/方法调用 \"_?_:_\"（函数与方法调用一律拒绝）");
 
     let e = err_of("-(steps.turns) < 0", &env(&[("steps", steps_env())]));
     assert_eq!(e.code.code(), "E1052");

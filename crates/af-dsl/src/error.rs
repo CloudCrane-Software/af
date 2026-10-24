@@ -30,6 +30,15 @@ pub enum ErrorCode {
     /// E1004 枚举值非法（serde `unknown variant` + 手写闭环词表：ops 算子名、
     /// section 来源名等）。
     InvalidEnumValue,
+    /// E1051 CEL 解析失败（含 cel-parser 0.10.1 内部 panic 的 catch_unwind
+    /// 兜底归一——尾部运算符/空输入触发 antlr4rust 错误恢复 panic，承 af-graph
+    /// `predicate.rs:11-14` 实测注记）。
+    CelParse,
+    /// E1052 CEL 非保守子集：非算子函数/方法调用（白名单 15 算子，`in` 登记
+    /// 为 `@in`——提案 §4.7 实测修正）。
+    CelNonSubset,
+    /// E1053 CEL 谓词求值非布尔（承 af-graph `PredicateError::NotBoolean`）。
+    CelNotBoolean,
 
     // ---- E2xxx 语义：引用闭包（M1）----
     /// E2001 悬空引用（与 af-graph 共享码位）：节点 / store / 入口 / 写者路径 /
@@ -37,6 +46,13 @@ pub enum ErrorCode {
     DanglingReference,
     /// E2003 重复 id（同作用域节点 id / 类型名 / store 名）。
     DuplicateId,
+    /// E2101 route 出边目标未被任何规则/default 覆盖。
+    RouteUncovered,
+    /// E2102 route 规则/default 的 goto 不是出边目标也不是 exit。
+    RouteGotoDangling,
+    /// E2103 route 同一出边目标被多条分支命中（后中者不可达——请合并为
+    /// `A || B`）。
+    RouteUnreachable,
     /// E2104 map.over 引用可解析但不是 list。
     MapOverNotList,
     /// E2105 loop.args / map.over 的 `节点.端口` / `input.字段` 引用悬空。
@@ -49,6 +65,9 @@ pub enum ErrorCode {
     EdgePortTypeMismatch,
     /// E2202 meta.output.from 节点不发射 output.ref 所指类型。
     OutputNotEmitted,
+    /// E2203 CEL 未知根绑定（根 ∉ 位置词表——按位点作用域链 + §1.4 词汇表
+    /// 建模）。
+    CelUnknownRoot,
     /// E2204 failures.route / fallback_route 目标既非关键词也非已声明节点。
     FailureRouteDangling,
     /// E2205 未知类型名（类型名 / list<·> / envelope<·> 的载荷名不在 types 表，
@@ -113,14 +132,21 @@ impl ErrorCode {
             Self::MissingField => "E1002",
             Self::TypeMismatch => "E1003",
             Self::InvalidEnumValue => "E1004",
+            Self::CelParse => "E1051",
+            Self::CelNonSubset => "E1052",
+            Self::CelNotBoolean => "E1053",
             Self::DanglingReference => "E2001",
             Self::DuplicateId => "E2003",
+            Self::RouteUncovered => "E2101",
+            Self::RouteGotoDangling => "E2102",
+            Self::RouteUnreachable => "E2103",
             Self::MapOverNotList => "E2104",
             Self::ArgOverRefDangling => "E2105",
             Self::FromBodyDangling => "E2106",
             Self::SafetyPointDangling => "E2107",
             Self::EdgePortTypeMismatch => "E2201",
             Self::OutputNotEmitted => "E2202",
+            Self::CelUnknownRoot => "E2203",
             Self::FailureRouteDangling => "E2204",
             Self::UnknownTypeName => "E2205",
             Self::BudgetCapOrScopeInvalid => "E2207",
@@ -151,14 +177,21 @@ impl ErrorCode {
             Self::MissingField => "missing_field",
             Self::TypeMismatch => "type_mismatch",
             Self::InvalidEnumValue => "invalid_enum_value",
+            Self::CelParse => "cel_parse",
+            Self::CelNonSubset => "cel_non_subset",
+            Self::CelNotBoolean => "cel_not_boolean",
             Self::DanglingReference => "dangling_reference",
             Self::DuplicateId => "duplicate_id",
+            Self::RouteUncovered => "route_edge_uncovered",
+            Self::RouteGotoDangling => "route_goto_dangling",
+            Self::RouteUnreachable => "route_rule_unreachable",
             Self::MapOverNotList => "map_over_not_list",
             Self::ArgOverRefDangling => "arg_over_ref_dangling",
             Self::FromBodyDangling => "from_body_dangling",
             Self::SafetyPointDangling => "safety_point_dangling",
             Self::EdgePortTypeMismatch => "edge_port_type_mismatch",
             Self::OutputNotEmitted => "output_not_emitted",
+            Self::CelUnknownRoot => "cel_unknown_root",
             Self::FailureRouteDangling => "failure_route_dangling",
             Self::UnknownTypeName => "unknown_type_name",
             Self::BudgetCapOrScopeInvalid => "budget_cap_or_scope_invalid",

@@ -23,7 +23,8 @@ pub struct Document {
 }
 
 /// meta：身份 + 入口 + 整图 I/O 契约（input/output 折进类型表引用）。
-/// `topology_selector` 为择优裁决 §二-1 吸收项（编译期解析语义；M1 只解析结构）。
+/// `topology_selector` 为择优裁决 §二-1 吸收项（编译期解析语义；语义校验
+/// ——候选图须已声明且版本化、when 过 CEL 判定——在 `validate::m4`）。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Meta {
@@ -517,7 +518,8 @@ pub struct ResumeDecl {
     pub schema: serde_json::Value,
 }
 
-/// route 构造（M1 只解析；归一化算法在 M4）：有序 CEL 规则 + 必填 default。
+/// route 构造（§1.5 归一化算法在 `crate::route`，语义校验在 `validate::m4`）：
+/// 有序 CEL 规则 + 必填 default（缺 → serde E1002，§1.3「不进语义 pass」）。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RouteDecl {
@@ -647,7 +649,7 @@ pub struct RetryDecl {
     pub backoff_ms: u64,
 }
 
-/// context（M1 只解析结构，sections 语义校验在 M2）。
+/// context（sections 语义校验 = INV-1，`validate/inv1.rs`）。
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContextDecl {

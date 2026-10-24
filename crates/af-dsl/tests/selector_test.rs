@@ -47,13 +47,14 @@ fn codes(src: &str, declared: &[&str]) -> Vec<&'static str> {
 
 #[test]
 fn selector_without_fallback_is_rejected_as_e1002() {
-    let src = format!(
-        "version: 1\n\
-meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: {{ ref: a, from: n1 }}\n  topology_selector:\n    rules:\n      - {{ when: \"input.q == 'x'\", use: pkg.g@1 }}\n\
-types:\n  - {{ name: in_t, schema: {{ type: object, properties: {{ q: {{ type: string }} }} }} }}\n  - {{ name: a, schema: {{ type: object }} }}\n\
-nodes:\n  - {{ id: n1, kind: task, uses: {{ model: route.main@1 }}, emits: {{ answer: a }} }}\n\
-edges: []\npolicies: {{ budgets: [], stop: [], failures: [] }}\n"
-    );
+    let src = concat!(
+        "version: 1\n",
+        "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\n  topology_selector:\n    rules:\n      - { when: \"input.q == 'x'\", use: pkg.g@1 }\n",
+        "types:\n  - { name: in_t, schema: { type: object, properties: { q: { type: string } } } }\n  - { name: a, schema: { type: object } }\n",
+        "nodes:\n  - { id: n1, kind: task, uses: { model: route.main@1 }, emits: { answer: a } }\n",
+        "edges: []\npolicies: { budgets: [], stop: [], failures: [] }\n"
+    )
+    .to_string();
     let err = load_str(&src).expect_err("缺 fallback 应被拒");
     assert!(matches!(err, LoadError::Shape(_)));
     assert_eq!(err.codes(), ["E1002"]);

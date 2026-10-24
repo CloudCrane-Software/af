@@ -113,7 +113,7 @@ fn multiple_exit_rules_are_benign_and_union() {
         guards_of(&norm),
         vec![("x".to_string(), "!((a == 1) || (b == 2))".to_string())]
     );
-    assert_eq!(norm.exit_guard, Some("(a == 1) || (b == 2)".to_string()));
+    assert_eq!(norm.exit_guard, Some("(a == 1) || (b == 2) && !((a == 1))".to_string()));
 }
 
 // ---------- 构造违例（一次收齐） ----------
@@ -293,14 +293,15 @@ fn six_golden_samples_pass_full_m4_validation() {
 
 #[test]
 fn route_without_default_is_rejected_as_e1002() {
-    let src = format!(
-        "version: 1\n\
-meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: router\n  input: in_t\n  output: {{ ref: a, from: router }}\n\
-types:\n  - {{ name: in_t, schema: {{ type: object, properties: {{ q: {{ type: string }} }} }} }}\n  - {{ name: a, schema: {{ type: object }} }}\n\
-nodes:\n  - id: router\n    kind: task\n    emits: {{ answer: a }}\n    route:\n      rules:\n        - {{ when: \"steps.tool_free >= 2\", goto: n2 }}\n
-  - {{ id: n2, kind: task, consumes: {{ answer: a }}, emits: {{ answer: a }} }}\n\
-edges: [{{ from: router, output: answer, to: n2, input: answer }}]\n"
-    );
+    let src = concat!(
+        "version: 1\n",
+        "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: router\n  input: in_t\n  output: { ref: a, from: router }\n",
+        "types:\n  - { name: in_t, schema: { type: object, properties: { q: { type: string } } } }\n  - { name: a, schema: { type: object } }\n",
+        "nodes:\n  - id: router\n    kind: task\n    emits: { answer: a }\n    route:\n      rules:\n        - { when: \"steps.tool_free >= 2\", goto: n2 }\n",
+        "  - { id: n2, kind: task, consumes: { answer: a }, emits: { answer: a } }\n",
+        "edges: [{ from: router, output: answer, to: n2, input: answer }]\n"
+    )
+    .to_string();
     let err = load_str(&src).expect_err("route 缺 default 应被拒");
     assert_eq!(err.codes(), ["E1002"]);
 }
@@ -328,7 +329,7 @@ fn route_goto_unknown_target_is_exactly_e2102() {
 #[test]
 fn route_uncovered_out_edge_is_exactly_e2101() {
     let src = doc(
-        &route_yaml("n2", &[("steps.tool_free >= 2", "n2")]),
+        &route_yaml("exit", &[("steps.tool_free >= 2", "n2")]),
         BOTH_EDGES,
     );
     assert_eq!(codes(&src), ["E2101"]);
