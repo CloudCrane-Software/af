@@ -1,0 +1,135 @@
+version: 1
+meta:
+  name: langgraph_subset
+  graph_version: "1.0"
+  entry: react_ring
+  input: lg_input
+  output: { ref: answer, from: react_ring }
+  intent: "通道单写化+读侧交错替代 reducer；条件边=route；recursion_limit=循环上限；interrupt=人工节点；checkpointer=边检查点"
+
+types:
+  - name: lg_input
+    schema:
+      type: object
+      required: [question]
+      properties: { question: { type: string } }
+  - name: answer
+    schema:
+      type: object
+      required: [text]
+      properties: { text: { type: string } }
+  - name: action_call
+    schema:
+      type: object
+      required: [tool, args]
+      properties:
+        tool: { type: string }
+        args: { type: object }
+  - name: observation
+    schema:
+      type: object
+      required: [ok, text]
+      properties:
+        ok: { type: boolean }
+        text: { type: string }
+  - name: approval
+    schema:
+      type: object
+      required: [approved]
+      properties: { approved: { type: boolean } }
+
+stores:
+  # LangGraph 单通道 messages + add_messages（多写者）→ 拆两槽单写 + 读侧交错
+  - name: agent_turns
+    type: message_log
+    writer: react_ring.agent         # 原 agent 节点写 messages
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: tool_turns
+    type: message_log
+    writer: react_ring.tools         # 原 tools 节点写 messages
+    lifecycle: run
+    retention: { max_items: 64 }
+
+nodes:
+  - id: react_ring
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: agent
+            kind: task
+            uses: { model: route.main@1, tools: [pkg.hopqa.search, pkg.hopqa.lookup] }
+            writes: [agent_turns]
+            consumes: { checked: observation, decision: approval }
+            emits: { answer: answer, action: action_call }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.hopqa.react_system, quota_tokens: 500 }
+                - { from: input, fields: [question], policy: project, quota_tokens: 200 }
+                - { from: store, store: agent_turns, policy: full, quota_tokens: 3000 }
+                - { from: store, store: tool_turns, policy: full, quota_tokens: 3000 }
+                # 两个 message_log 段由内建规则按 step 序交错（add_messages 的读侧对应物）
+                - { from: edge, port: checked, policy: project, quota_tokens: 400, optional: true }
+                - { from: edge, port: decision, fields: [approved], policy: project, quota_tokens: 100, optional: true }
+          - id: tools
+            kind: task
+            uses: { tool: pkg.hopqa.toolbench@1 }
+            writes: [tool_turns]
+            consumes: { action: action_call }
+            emits: { observation: observation }
+          - id: format_check
+            kind: gate                  # 本语法新增要求：任何循环必须有验证面安全点
+            consumes: { observation: observation }
+            assert: "inputs.observation.ok == true"
+            emits: { checked: observation }     # 通过则前向转发观察
+            route:                      # 不合法 → 结束本轮迭代（下轮带失败观察重来）
+              default: agent
+              rules:
+                - { when: "format_check.passed == false", goto: exit }
+          - id: approve
+            kind: task
+            human:
+              station: review-desk
+              role: reviewer
+              quorum: 1
+              resume:
+                schema:
+                  type: object
+                  required: [approved]
+                  properties: { approved: { type: boolean } }
+            consumes: { answer: answer }
+            emits: { decision: approval }
+            route:                      # 打回：回环体重启（Command(goto=...) 的声明式对应）
+              default: exit
+              rules:
+                - { when: "resume.approved == false", goto: agent }
+        edges:
+          - { from: agent, output: action, to: tools, input: action, checkpoint: true }
+          - { from: tools, output: observation, to: format_check, input: observation, checkpoint: true }
+          - { from: format_check, output: checked, to: agent, input: checked }
+          - { from: agent, output: answer, to: approve, input: answer }
+          - { from: approve, output: decision, to: agent, input: decision }
+      max_iterations: 25               # recursion_limit=25
+      carried:
+        - { store: agent_turns, max_items: 64 }
+        - { store: tool_turns, max_items: 64 }
+      safety_points:
+        - { node: format_check, kind: gate }
+      exit_when: "resume.approved == true"
+      on_exhausted: fail               # GraphRecursionError 对应物 → 终态 failed
+    emits: { answer: { from_body: agent.answer } }
+
+edges: []
+
+policies:
+  budgets:
+    - { id: turns_cap, dimension: turns, scope: loop:react_ring, cap: 50 }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }   # RetryPolicy 对应物（分类维度=语义类别）
+    - class: environment_failure
+      retry: { max: 3, backoff_ms: 60000 }
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed
