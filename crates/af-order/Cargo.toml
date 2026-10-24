@@ -1,0 +1,24 @@
+[package]
+name = "af-order"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+description = "下单门面 CLI 骨架：submit/list/show 一命令直驱订单生命周期（复用 af-execline 驱动/账本/MES 与 af-workorder ed25519）"
+
+# ADR-002：af-order = 下单门面 CLI。判定、驱动、账本、MES、执行桩全部复用
+# af-execline；签名复用 af-workorder 的 ed25519。不新增任何外部依赖
+# （AGENT.md 硬纪律 6：默认拒绝新依赖）。
+[dependencies]
+af-execline = { path = "../af-execline" }
+af-workorder = { path = "../af-workorder" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# 集成测试读回 ledger / MES / 验签凭证；版本随 workspace，不另引。
+af-execline = { path = "../af-execline" }
+af-workorder = { path = "../af-workorder" }
+
+[lints]
+workspace = true
