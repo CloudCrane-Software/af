@@ -24,12 +24,23 @@
 //! P5 由 driver 引擎 op 承接。清理必达 + setup/run 失败行语义保留 + gate
 //! 不接引擎 close 门，三条 §2.4 约束全部落位。
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
+use af_harness::{
+    AgentSpec, BudgetRef, BudgetUnit, ContextTemplate, Policy, StopCondition, ToolDecl,
+};
+use af_workorder::WorkArtifact;
+use serde_json::Value;
+
+use crate::agent::{AgentLaunch, AgentRunFailure, AgentRunOutcome};
 use crate::error::ExeclineError;
 use crate::exec::{ExecContext, ExecOutput, ExecuteUnit};
 use crate::hostbridge::HostBridge;
 use crate::judge::JudgeLocator;
+use crate::record::ExecutionFacts;
+use crate::suite::swev::{self, ARCHAEOLOGY_PATTERNS};
+use crate::suite::tb::{self, TbEnv};
 
 /// swe-v 单元静态声明（方案 §2.2"换一档实验要改代码的东西进这里"，
 /// 随 unit_version 版本化，对齐契约 §1.2 unit.json）。缺省值 = fix2 代际
@@ -95,11 +106,8 @@ impl SwevUnitSpec {
 /// 与 AgentRunner（模型执行）。Arc 形态见 agent.rs 文档（af-harness 'static
 /// 约束）。
 pub struct SwevExecuteUnit {
-    #[allow(dead_code)] // RED 桩：GREEN 的 execute 消费三字段
     spec: SwevUnitSpec,
-    #[allow(dead_code)]
     bridge: Arc<dyn HostBridge + Send + Sync>,
-    #[allow(dead_code)]
     runner: Arc<dyn crate::agent::AgentRunner>,
 }
 
@@ -120,8 +128,15 @@ impl SwevExecuteUnit {
         bridge: Arc<dyn HostBridge + Send + Sync>,
         runner: Arc<dyn crate::agent::AgentRunner>,
     ) -> Result<Self, ExeclineError> {
-        let _ = (&spec, &bridge, &runner);
-        unimplemented!("P4 GREEN：装载期指纹门（EX3002 fail-loud）+ profile 可解析检查")
+        spec.judge.check_fingerprint()?;
+        crate::profile::profile(&spec.profile).map_err(|err| ExeclineError::UnitFailed {
+            detail: format!("装载失败：{err}"),
+        })?;
+        Ok(Self {
+            spec,
+            bridge,
+            runner,
+        })
     }
 }
 
@@ -131,26 +146,303 @@ impl ExecuteUnit for SwevExecuteUnit {
     }
 
     fn execute(&self, ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
-        let _ = ctx;
-        unimplemented!("P4 GREEN：分相执行 setup→run→gate→verify→行落盘→cleanup(RAII)")
+        let profile = crate::profile::profile(&self.spec.profile).map_err(|err| {
+            ExeclineError::UnitFailed {
+                detail: format!("profile 解析失败: {err}"),
+            }
+        })?;
+        // ---- setup 相（main.rs:640/652 + 850）----
+        // 任务装载失败 = 供给面失败（题库根错/任务包缺），落 setup_failed 行后
+        // Err（订单侧不停终态，EX3001 可重试——§2.4；af-bench 原为批级 ? 中止，
+        // 单元化后按 F2 分类落行，登记 RESULT-P4.md §3）。
+        let tasks = swev::load_swev_tasks(ctx.data_root, &[ctx.task_id.to_string()])
+            .map_err(|err| self.setup_failed_row(ctx, &err))?;
+        let Some(task) = tasks.into_iter().next() else {
+            let err = format!("任务包空: {}", ctx.task_id);
+            return Err(self.setup_failed_row(ctx, &err));
+        };
+        let task_json = ctx.data_root.join(format!("{}.json", ctx.task_id));
+        let env = swev::setup(
+            self.bridge.as_ref(),
+            ctx.host_alias,
+            &task,
+            &self.spec.profile,
+        )
+        .map_err(|err| self.setup_failed_row(ctx, &err))?;
+        let env = Arc::new(env);
+        // cleanup 必达（§2.4）：RAII guard，任何早退路径 Drop → docker rm -f。
+        let _guard = ContainerGuard {
+            bridge: self.bridge.clone(),
+            env: Some(env.clone()),
+        };
+        // ---- run 相（main.rs:698/760-798）----
+        let attempt = attempt_from_dir(ctx.attempt_dir);
+        let attempt_dir = ctx.attempt_dir;
+        // D-20 项 1：只新建、不删除——旧目录是判分复核的证据，绝不覆写。
+        std::fs::create_dir_all(attempt_dir).map_err(|err| ExeclineError::UnitFailed {
+            detail: format!("建 run 目录失败: {err}"),
+        })?;
+        let run_started = Instant::now();
+        let bash = self.bash_tool(env.clone());
+        let launch = AgentLaunch {
+            attempt_dir,
+            run_id: format!("{}-a{}", task.instance_id, attempt),
+            user_message: format!("{}\n\n{}", task.prompt(), self.spec.instance_protocol),
+            spec: self.agent_spec(&profile.endpoint, env.workdir())?,
+            bash,
+            key_cmd: profile.key_cmd,
+            spend_cap_cents: self.spec.spend_cap_cents,
+            tool_spend_cents: self.spec.tool_spend_cents,
+            budget_ledger_cents: self.spec.spend_cap_cents,
+        };
+        let mut http_retries: u64 = 0;
+        let report = match self.runner.run(launch) {
+            Ok(AgentRunOutcome {
+                report,
+                http_retries: retries,
+            }) => {
+                http_retries += retries;
+                report
+            }
+            Err(AgentRunFailure {
+                message,
+                http_retries: retries,
+            }) => {
+                http_retries += retries;
+                // run_failed 行（main.rs:818-845）：记实际目录 + 累计重试 + 失败
+                // 文案；行落盘后 Err（订单侧不停终态）。
+                let row = crate::record::swev_run_failed_row(
+                    &task.instance_id,
+                    &self.spec.profile,
+                    ctx.trial,
+                    attempt_dir,
+                    http_retries,
+                    &message,
+                );
+                return Err(self.fail_with_row(ctx, &row, &format!("run 失败: {message}")));
+            }
+        };
+        // gate 相（main.rs:801-813）：完成度记账非门控——no_patch/test_edit 落行，
+        // 不入重试、不阻断判分。
+        let diff = swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, attempt_dir)
+            .unwrap_or_default();
+        let gate = if diff.trim().is_empty() {
+            "no_patch"
+        } else if !swev::diff_touches_tests(&diff).is_empty() {
+            "test_edit"
+        } else {
+            "ok"
+        };
+        // agent_wall_ms（main.rs:688/849）：run 相时长（key 现取 + 模型 + gate 取证），
+        // 不含 setup/verify。
+        let agent_wall_ms = run_started.elapsed().as_millis() as u64;
+        // ---- verify 相（main.rs:852-853：P3 判分链原样）----
+        let (resolved, note, eval_sha256) = swev::verify(
+            self.bridge.as_ref(),
+            &self.spec.judge,
+            ctx.host_alias,
+            &env,
+            &task,
+            attempt_dir,
+            &task_json,
+        );
+        // ---- 行落盘相（main.rs:861-895：双轨同源）----
+        let facts = ExecutionFacts {
+            suite: "swe-v",
+            task_id: task.instance_id.clone(),
+            profile: self.spec.profile.clone(),
+            trial: ctx.trial,
+            reward: resolved,
+            status: crate::suite::status_label(&report.status),
+            scaffold: self.spec.scaffold,
+            reasoning_tier: self.spec.reasoning_tier,
+            run_dir: Some(attempt_dir.display().to_string()),
+            eval_sha256,
+            gate: gate.into(),
+            attempts: 1,
+            http_retries,
+            turns: report.turns,
+            model_calls: report.model_calls,
+            tokens: report.tokens,
+            agent_wall_ms,
+            verifier_note: note,
+        };
+        let legacy_row = crate::record::swev_legacy_row(&facts);
+        let v1_row = crate::record::swev_v1_row(
+            &facts,
+            ctx.order_id,
+            ctx.line_id,
+            ctx.host_alias,
+            self.unit_id(),
+            self.spec.unit_version,
+        );
+        self.append_legacy_row(ctx, &legacy_row)?;
+        self.append_v1_row(ctx, &v1_row)?;
+        // 判分三件套实际路径（§2.2 evidence：只记在盘文件——早期失败臂缺件不虚列）。
+        let evidence = [
+            task_json,
+            attempt_dir.join("eval.log"),
+            attempt_dir.join("agent.diff"),
+        ]
+        .into_iter()
+        .filter(|path| path.is_file())
+        .collect::<Vec<_>>();
+        Ok(ExecOutput {
+            // resolved=true → 合格终态工件（引擎 close 门材料；gate 不接 close 门，
+            // §2.4——no_patch/test_edit 行照落，工件资格只看判分）。
+            artifacts: vec![WorkArtifact {
+                artifact_id: format!("swev-{}", task.instance_id),
+                is_final: true,
+                qualified: resolved == Some(true),
+            }],
+            outputs: evidence.clone(),
+            note: facts.verifier_note.chars().take(300).collect(),
+            verdict: resolved,
+            record: Some(v1_row),
+            evidence,
+        })
+    }
+}
+
+impl SwevExecuteUnit {
+    /// setup_failed 行落盘 + 转 EX3001（main.rs:654-677：字段齐备含 null；
+    /// §2.4 订单侧不停终态——可重试）。
+    fn setup_failed_row(&self, ctx: &ExecContext<'_>, err: &str) -> ExeclineError {
+        let row =
+            crate::record::swev_setup_failed_row(ctx.task_id, &self.spec.profile, ctx.trial, err);
+        self.fail_with_row(ctx, &row, &format!("setup 失败: {err}"))
+    }
+
+    /// 失败路径共用：先落 legacy 行（append + flush 语义由 sink 承载，
+    /// main.rs:668-670），sink 失败并案进错误文案；随后返回 EX3001（§2.4：
+    /// 行由单元落、订单侧不停终态——可重试）。
+    fn fail_with_row(&self, ctx: &ExecContext<'_>, row: &Value, detail: &str) -> ExeclineError {
+        let sink_note = ctx.record_sink.append_legacy(&row.to_string()).err();
+        ExeclineError::UnitFailed {
+            detail: match sink_note {
+                None => detail.to_string(),
+                Some(err) => format!("{detail}；且落行失败: {err}"),
+            },
+        }
+    }
+
+    /// 成功路径 legacy 行落盘（main.rs:891-895：writeln + flush）；失败
+    /// fail-loud（EX3001），不静默丢行。
+    fn append_legacy_row(&self, ctx: &ExecContext<'_>, row: &Value) -> Result<(), ExeclineError> {
+        ctx.record_sink
+            .append_legacy(&row.to_string())
+            .map_err(|err| ExeclineError::UnitFailed {
+                detail: format!("写 results 失败: {err}"),
+            })
+    }
+
+    /// v1 行落盘（{{output_dir}}/records.jsonl 流；方案 §1.4）。
+    fn append_v1_row(&self, ctx: &ExecContext<'_>, row: &Value) -> Result<(), ExeclineError> {
+        ctx.record_sink
+            .append_v1(&row.to_string())
+            .map_err(|err| ExeclineError::UnitFailed {
+                detail: format!("写 records 失败: {err}"),
+            })
+    }
+
+    /// AgentSpec 组装（main.rs:736-759 + 采样覆写 main.rs:633-636）。
+    fn agent_spec(
+        &self,
+        endpoint: &af_harness::EndpointSpec,
+        workdir: &str,
+    ) -> Result<AgentSpec, ExeclineError> {
+        // fix2 采样参数对齐（mini-swe-agent 榜单口径，只作用于 swe-v 线）：
+        // temperature 0.0 / top_p 1.0 显式写入请求体；max_tokens 显式 32000
+        // （不吃协议默认）。值出自 spec（换档位=换 spec）。
+        let mut endpoint = endpoint.clone();
+        endpoint.temperature_milli = Some(self.spec.temperature_milli);
+        endpoint.top_p_milli = Some(self.spec.top_p_milli);
+        endpoint.max_tokens = Some(self.spec.max_tokens);
+        let tool_decl =
+            serde_json::from_value::<ToolDecl>(tb::bash_tool_decl(workdir)).map_err(|err| {
+                ExeclineError::UnitFailed {
+                    detail: format!("bash 工具声明: {err}"),
+                }
+            })?;
+        Ok(AgentSpec {
+            endpoint,
+            context_template: ContextTemplate {
+                system: self.spec.system_prompt.into(),
+                slots: Vec::new(),
+            },
+            toolset: vec![tool_decl],
+            policy: Policy {
+                // 1 turn = 1 模型调用（与 mini step 同义）。
+                max_turns: self.spec.max_turns,
+                stop: StopCondition {
+                    completion_signals: vec![self.spec.completion_signal.into()],
+                    tool_free_turn_limit: self.spec.tool_free_turn_limit,
+                },
+                budget_ref: BudgetRef {
+                    dimension: "llm.cents".into(),
+                    per_turn: 1,
+                    unit: BudgetUnit::Cents,
+                },
+            },
+        })
+    }
+
+    /// bash 工具闭包（main.rs:700-735）：容器执行（经 bridge）+ 反考古护栏 +
+    /// 重复命令拦截。闭包整体 'static + Send + Sync（af-harness 工具函数体约束，
+    /// run.rs:53-55）——环境句柄与桥以 Arc 拥有，最近命令窗口以 Mutex 持有。
+    fn bash_tool(&self, env: Arc<TbEnv>) -> Arc<dyn Fn(&str) -> String + Send + Sync> {
+        let bridge = self.bridge.clone();
+        let recent = Arc::new(Mutex::new(Vec::<String>::new()));
+        Arc::new(move |command: &str| {
+            let out = env.exec(bridge.as_ref(), command);
+            let mut hist = recent.lock().unwrap_or_else(|e| e.into_inner());
+            bash_guard_wrap(command, out, &mut hist)
+        })
     }
 }
 
 /// bash 工具护栏包装（af-bench main.rs:710-734 原样语义）：
-/// 反考古命中即在输出前注入护栏；重复命令计入最近 6 条窗口，第 3 次起拦截。
-/// 抽为纯函数供单测与闭包共用（GREEN 落位）。
-#[allow(dead_code)] // RED 桩：GREEN 的 bash 闭包消费
+/// 反考古命中即在输出前注入护栏（51/145 run 单例烧 10-20 轮且从不收敛）；
+/// 重复命令计入最近 6 条窗口，第 3 次起拦截教学。
 pub(crate) fn bash_guard_wrap(command: &str, out: String, recent: &mut Vec<String>) -> String {
-    let _ = (command, out, recent);
-    unimplemented!("P4 GREEN：反考古护栏注入 + 重复命令 ≥3 拦截（main.rs:710-734）")
+    let mut out = out;
+    if ARCHAEOLOGY_PATTERNS.iter().any(|p| command.contains(p)) {
+        out = format!(
+            "[harness] Searching for an upstream fix (git archaeology / full-disk search) is unavailable in this environment — the upstream fix is not in this repository, this line of work never pays off. Implement the fix yourself with the code in /testbed.\n{out}"
+        );
+    }
+    let repeats = recent.iter().filter(|c| c.as_str() == command).count();
+    recent.push(command.to_string());
+    if recent.len() > 6 {
+        recent.remove(0);
+    }
+    if repeats >= 2 {
+        return format!(
+            "[harness] You have issued this exact command {} times. Repeating it will not make progress — try a different approach, or finish with your best current fix.\n{}",
+            repeats + 1, out
+        );
+    }
+    out
+}
+
+/// 从 run 目录名解析 attempt 序号（swev-<task>-<profile>-a<N>，next_attempt_index
+/// 的命名约定）：目录由调用方/驱动层分配（§2.2），run_id 的 `-a<N>` 后缀取自
+/// 目录名（main.rs:778）。非约定命名 → 1（fix2 口径 attempt 恒 1，行内
+/// attempts 字段本就不随目录序号变；登记 RESULT-P4.md §3）。
+fn attempt_from_dir(attempt_dir: &std::path::Path) -> u32 {
+    attempt_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .and_then(|name| name.rsplit_once("-a"))
+        .and_then(|(_, num)| num.parse().ok())
+        .unwrap_or(1)
 }
 
 /// 容器清理 RAII guard（§2.4"cleanup 必达"：Drop → tb.rs:294-296 的 docker rm -f，
 /// 防新增早退路径漏清容器）。
-#[allow(dead_code)] // RED 桩：GREEN 的 execute 构造
 struct ContainerGuard {
     bridge: Arc<dyn HostBridge + Send + Sync>,
-    env: Option<Arc<crate::suite::tb::TbEnv>>,
+    env: Option<Arc<TbEnv>>,
 }
 
 impl Drop for ContainerGuard {
@@ -158,5 +450,57 @@ impl Drop for ContainerGuard {
         if let Some(env) = self.env.take() {
             env.cleanup(self.bridge.as_ref());
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 护栏纯函数：普通命令透传；反考古注入前缀；第 3 次同命令拦截；
+    /// 窗口滑出（>6 条丢最老）后同名命令重新计数。
+    #[test]
+    fn bash_guard_wrap_semantics() {
+        let mut recent = Vec::new();
+        let out = bash_guard_wrap("echo hi", "out\nexit=0".into(), &mut recent);
+        assert_eq!(out, "out\nexit=0");
+        assert!(bash_guard_wrap("git fsck", "o".into(), &mut recent)
+            .starts_with("[harness] Searching for an upstream fix"));
+        // 第 3 次（repeats=2 前置命中）→ 教学包装，次数计数 = 3。
+        bash_guard_wrap("dup", String::new(), &mut recent);
+        let _ = bash_guard_wrap("dup", String::new(), &mut recent);
+        let third = bash_guard_wrap("dup", "body".into(), &mut recent);
+        assert!(third.starts_with("[harness] You have issued this exact command 3 times."));
+        assert!(third.ends_with("body"), "原输出保留: {third}");
+    }
+
+    /// 窗口滑出：6 条窗口丢最老，同名命令滑出后重新计数（main.rs:725-727）。
+    #[test]
+    fn bash_guard_window_slides_after_six() {
+        let mut recent = Vec::new();
+        bash_guard_wrap("dup", String::new(), &mut recent);
+        bash_guard_wrap("dup", String::new(), &mut recent);
+        // 6 条异名命令把两条 dup 挤出窗口（push 后 >6 即丢最老）。
+        for i in 0..6 {
+            bash_guard_wrap(&format!("pad{i}"), String::new(), &mut recent);
+        }
+        assert_eq!(recent.len(), 6, "窗口恒 6: {recent:?}");
+        assert!(
+            !recent.contains(&"dup".to_string()),
+            "dup 已滑出: {recent:?}"
+        );
+        let out = bash_guard_wrap("dup", "plain".into(), &mut recent);
+        assert_eq!(out, "plain", "窗口滑出后同命令重新计数，不误拦");
+    }
+
+    /// attempt 目录名解析：约定命名取后缀序号；非约定命名回退 1。
+    #[test]
+    fn attempt_from_dir_follows_next_attempt_naming() {
+        let dir = std::path::Path::new("/tmp/runs/swev-x-glm-cp-a3");
+        assert_eq!(attempt_from_dir(dir), 3);
+        assert_eq!(
+            attempt_from_dir(std::path::Path::new("/tmp/runs/free-name")),
+            1
+        );
     }
 }

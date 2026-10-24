@@ -20,7 +20,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use af_execline::agent::{AgentLaunch, AgentRunner, AgentRunFailure, AgentRunOutcome};
+use af_execline::agent::{AgentLaunch, AgentRunFailure, AgentRunOutcome, AgentRunner};
 use af_execline::error::ErrorCode;
 use af_execline::exec::{ExecContext, ExecuteUnit};
 use af_execline::hostbridge::HostBridge;
@@ -108,10 +108,7 @@ fn fresh_attempt_dir(root: &Path) -> PathBuf {
 fn fake_judge(tag: &str, json_line: &str) -> JudgeLocator {
     let root = temp_root(tag);
     let python = root.join("fake-python");
-    write_exec(
-        &python,
-        &format!("#!/bin/bash\necho '{json_line}'\n"),
-    );
+    write_exec(&python, &format!("#!/bin/bash\necho '{json_line}'\n"));
     let script = root.join("fake-swev-judge.py");
     std::fs::write(&script, b"# fixture judge script bytes").unwrap();
     let script_sha256 = sha256_of(&script);
@@ -191,16 +188,24 @@ impl FakeBridge {
 
 impl HostBridge for FakeBridge {
     fn run(&self, host: &str, script: &str, timeout_sec: u32) -> BridgeResult {
-        self.calls
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push((host.to_string(), script.to_string(), timeout_sec));
+        self.calls.lock().unwrap_or_else(|e| e.into_inner()).push((
+            host.to_string(),
+            script.to_string(),
+            timeout_sec,
+        ));
         if script.starts_with("docker rm -f") {
             Ok((true, String::new()))
         } else if script.starts_with("docker run") {
-            self.run_result.lock().unwrap_or_else(|e| e.into_inner()).clone()
+            self.run_result
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
         } else if script.contains("git -c core.fileMode=false diff") {
-            let text = self.diff_text.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            let text = self
+                .diff_text
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             Ok((true, text))
         } else if script.starts_with("docker exec") {
             // bash 工具体（TbEnv::exec 消费）：带 __AF_RC 标记行。
@@ -276,7 +281,10 @@ impl FakeRunner {
     }
 
     fn launches(&self) -> usize {
-        self.launches.lock().unwrap_or_else(|e| e.into_inner()).len()
+        self.launches
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     fn launch(&self) -> CapturedLaunch {
@@ -579,7 +587,10 @@ fn full_flow_trio_rows_and_launch_shape() {
                 assert_eq!(output.artifacts.len(), 1, "协议一次一个工件");
                 assert_eq!(output.artifacts[0].artifact_id, format!("swev-{TASK}"));
                 assert!(output.artifacts[0].is_final);
-                assert!(output.artifacts[0].qualified, "resolved=true → 合格终态工件");
+                assert!(
+                    output.artifacts[0].qualified,
+                    "resolved=true → 合格终态工件"
+                );
 
                 // ---- AgentLaunch 形状（main.rs:736-798 组装面）----
                 let launch = parts.runner.launch();
@@ -594,7 +605,10 @@ fn full_flow_trio_rows_and_launch_shape() {
                 );
                 assert_eq!(launch.system, af_execline::suite::swev::SWEV_SYSTEM_PROMPT);
                 // 采样覆写（main.rs:634-636）+ glm-cp 档案基底（main.rs:59-74）。
-                assert_eq!(launch.endpoint.base_url, "https://open.bigmodel.cn/api/anthropic");
+                assert_eq!(
+                    launch.endpoint.base_url,
+                    "https://open.bigmodel.cn/api/anthropic"
+                );
                 assert_eq!(launch.endpoint.model, "GLM-5.3-Flash");
                 assert_eq!(launch.endpoint.temperature_milli, Some(0));
                 assert_eq!(launch.endpoint.top_p_milli, Some(1_000));
@@ -614,15 +628,25 @@ fn full_flow_trio_rows_and_launch_shape() {
                 // ---- 桥调用序列（setup 前置 rm → run → capture×2(gate/verify) → cleanup rm）----
                 let calls = parts.bridge.calls();
                 assert_eq!(calls.len(), 5, "恰五次桥调用: {calls:#?}");
-                assert_eq!(calls[0], ("local".into(), format!("docker rm -f {CONTAINER}"), 30));
-                assert!(calls[1].1.starts_with(&format!("docker run -d --name {CONTAINER}")));
+                assert_eq!(
+                    calls[0],
+                    ("local".into(), format!("docker rm -f {CONTAINER}"), 30)
+                );
+                assert!(calls[1]
+                    .1
+                    .starts_with(&format!("docker run -d --name {CONTAINER}")));
                 assert!(calls[1].1.contains("--memory 6g"));
                 assert!(calls[1].1.contains("--pids-limit 512"));
-                assert!(calls[1].1.contains("sweb.eval.x86_64.astropy-12907 sleep infinity"));
+                assert!(calls[1]
+                    .1
+                    .contains("sweb.eval.x86_64.astropy-12907 sleep infinity"));
                 assert_eq!(calls[1].2, 120);
                 assert_eq!(calls[2], ("local".into(), CAPTURE_CMD.to_string(), 60));
                 assert_eq!(calls[3], ("local".into(), CAPTURE_CMD.to_string(), 60));
-                assert_eq!(calls[4], ("local".into(), format!("docker rm -f {CONTAINER}"), 60));
+                assert_eq!(
+                    calls[4],
+                    ("local".into(), format!("docker rm -f {CONTAINER}"), 60)
+                );
             },
         )
     })
@@ -665,7 +689,11 @@ fn gate_test_edit_on_test_file_diff() {
                     json!("test_edit"),
                     "diff_touches_tests 命中 → test_edit"
                 );
-                assert_eq!(output.verdict, Some(true), "gate 只记账，verdict 仍出自 judge");
+                assert_eq!(
+                    output.verdict,
+                    Some(true),
+                    "gate 只记账，verdict 仍出自 judge"
+                );
             },
         )
     })
@@ -809,12 +837,14 @@ fn bash_tool_guards_archaeology_and_repeats() {
             assert!(third.contains("exit=0"), "原输出保留: {third}");
 
             // 桥收到的 bash 命令构造（tb.rs:213-218：docker exec + cd 前缀 + __AF_RC 标记）。
+            // 调用序列：rm(前置)/run/rm(guard Drop) 三次容器面 + 五次 bash
+            // （echo once / git fsck / dup×3）。
             let calls = parts.bridge.calls();
             let exec_calls: Vec<&(String, String, u32)> = calls
                 .iter()
                 .filter(|(_, script, _)| script.starts_with("docker exec"))
                 .collect();
-            assert_eq!(exec_calls.len(), 4, "四次 bash 调用: {calls:#?}");
+            assert_eq!(exec_calls.len(), 5, "五次 bash 调用: {calls:#?}");
             assert_eq!(
                 exec_calls[0].1,
                 format!(
@@ -822,7 +852,9 @@ fn bash_tool_guards_archaeology_and_repeats() {
                 )
             );
             assert_eq!(exec_calls[0].2, 180, "bash 单命令 180s 超时");
-            assert!(exec_calls[1].1.contains("'cd /testbed && git fsck --lost-found'"));
+            assert!(exec_calls[1]
+                .1
+                .contains("'cd /testbed && git fsck --lost-found'"));
         },
     )
 }
@@ -836,10 +868,13 @@ fn unit_load_fingerprint_gate_fail_loud() {
     // 造改字节的脚本副本：锚仍声明原脚本 → 装载即拒（EX3002）。
     let tampered = root.join("judge-tampered.py");
     std::fs::write(&tampered, b"# fixture judge script bytes TAMPERED\n").unwrap();
-    let bad_spec = SwevUnitSpec::fix2(PROFILE, JudgeLocator {
-        script: tampered,
-        ..judge.clone()
-    });
+    let bad_spec = SwevUnitSpec::fix2(
+        PROFILE,
+        JudgeLocator {
+            script: tampered,
+            ..judge.clone()
+        },
+    );
 
     let bridge = Arc::new(FakeBridge::new());
     let runner = Arc::new(FakeRunner::ok());
@@ -901,7 +936,11 @@ fn failure_rows_key_sets_and_note_truncation() {
 
     let setup = swev_setup_failed_row(TASK, PROFILE, false, &long_note);
     assert_eq!(setup.as_object().unwrap().len(), 9);
-    assert_eq!(setup["verifier_note"].as_str().unwrap().len(), 300, "截断至 300 字符");
+    assert_eq!(
+        setup["verifier_note"].as_str().unwrap().len(),
+        300,
+        "截断至 300 字符"
+    );
     assert_eq!(setup["status"], json!("setup_failed"));
     assert_eq!(setup["run_dir"], json!(null));
 
@@ -958,4 +997,3 @@ fn pending_driver_sink_fails_loud() {
     let err = RecordSink::append_v1(&sink, "{}").expect_err("占位 sink 不得静默丢行");
     assert!(err.contains("P5"), "文案指向接线任务包: {err}");
 }
-

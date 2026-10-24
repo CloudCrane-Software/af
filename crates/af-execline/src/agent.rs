@@ -14,10 +14,17 @@
 //! http_retries 仍取自 opened.http_retries()），故 Err 侧是结构化
 //! [`AgentRunFailure`] 而非裸 String。
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use af_harness::{AgentSpec, RunReport};
+use af_harness::{AgentSpec, BudgetBinding, Launch, Opened, RunReport, ToolRegistry};
+use af_meter::BudgetLedger;
+use af_stop::StopPolicy;
+use af_workorder::{GraphVersion, Priority, Sla, WorkOrder};
+use serde_json::Value;
+
+use crate::profile::resolve_key;
 
 /// bash 工具体：命令文本 → 工具输出文本（单元侧护栏包装后的执行闭包；
 /// af-bench main.rs:704-735 的语义在单元内，本缝只收成品）。
@@ -84,8 +91,90 @@ impl HarnessRunner {
 }
 
 impl AgentRunner for HarnessRunner {
+    /// 语句级对照（af-bench main.rs）：
+    /// - 根凭证逐题签发 ← main.rs:681-686（issue_root：bash/bench/10000 cents）；
+    /// - bash 工具注册（command 参数提取 ← main.rs:703-710；护栏在单元侧闭包）；
+    /// - harness 侧账面工单 ← WorkOrder::new(run_id)（main.rs:687 经 bench_order
+    ///   的 new 部分；四步生命周期按方案 §1.1 不搬，P5 由 driver 引擎 op 承接——
+    ///   af-harness 只查 id 非空，run.rs:221-223）；
+    /// - key 紧邻现取 + 401 重取器 ← main.rs:768-772（OAuth 会被 sidecar 轮换，
+    ///   构建期可能几十分钟；长题 >1h 撞令牌寿命时端点 401 重跑 key_cmd 一次）；
+    /// - Launch 组装 ← main.rs:776-798（vars 空/namespace bench/StopPolicy 缺省/
+    ///   Breakpoint::None）；
+    /// - http_retries 双路径累计 ← main.rs:800/819。
     fn run(&self, launch: AgentLaunch<'_>) -> Result<AgentRunOutcome, AgentRunFailure> {
-        let _ = launch;
-        unimplemented!("P4 GREEN：Opened::open + opened.run(Launch) + key 紧邻现取/401 重取")
+        let root = af_credential::issue_root(&af_credential::RootSpec {
+            tools: vec!["bash".to_string()],
+            namespace: "bench".into(),
+            budget_cents: 10_000,
+        })
+        .map_err(|err| AgentRunFailure {
+            message: format!("issue root: {err}"),
+            http_retries: 0,
+        })?;
+        // bash 工具体：单元已在闭包内做护栏（main.rs:710-734），此处只做
+        // harness 胶水——command 参数提取与 Value 包装（main.rs:704-710/734）。
+        let bash = launch.bash.clone();
+        let mut registry = ToolRegistry::new();
+        registry.register("bash", move |call| {
+            let command = call
+                .get("command")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            Ok(Value::String(bash(&command)))
+        });
+        // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻
+        // run 现取（401 竞态实证，main.rs:767）。
+        let key = resolve_key(launch.key_cmd).map_err(|err| AgentRunFailure {
+            message: err,
+            http_retries: 0,
+        })?;
+        // 401 重取器：长题 >1h 撞 mcode 令牌寿命时，harness 端点 401 会重跑本
+        // 命令换新 key 重试一次（main.rs:769-772）。
+        let key_cmd = launch.key_cmd;
+        let key_refresh: Option<af_harness::KeyRefresher> =
+            Some(Arc::new(move || resolve_key(key_cmd)));
+        let opened = Opened::open(launch.attempt_dir).map_err(|err| AgentRunFailure {
+            message: format!("open run: {err}"),
+            http_retries: 0,
+        })?;
+        let order = WorkOrder::new(
+            launch.run_id.clone(),
+            GraphVersion::new("bench"),
+            Sla::new(None, Priority::Normal),
+        );
+        let result = opened.run(Launch {
+            spec: launch.spec,
+            run_id: launch.run_id,
+            vars: BTreeMap::new(),
+            user_message: launch.user_message,
+            key: af_harness::EndpointKey::new(key),
+            key_refresh,
+            parent: &root.token,
+            public_key: &root.keypair.public(),
+            namespace: "bench".into(),
+            spend_cap_cents: launch.spend_cap_cents,
+            tool_spend_cents: launch.tool_spend_cents,
+            budget: BudgetBinding::Cents {
+                dimension: "llm.cents".into(),
+                ledger: BudgetLedger::new(launch.budget_ledger_cents),
+                spend_cap_cents: launch.spend_cap_cents,
+            },
+            order: &order,
+            tools: registry,
+            stop_policy: StopPolicy::default(),
+            breakpoint: af_harness::Breakpoint::None,
+        });
+        match result {
+            Ok(report) => Ok(AgentRunOutcome {
+                report,
+                http_retries: opened.http_retries(),
+            }),
+            Err(err) => Err(AgentRunFailure {
+                message: err.to_string(),
+                http_retries: opened.http_retries(),
+            }),
+        }
     }
 }

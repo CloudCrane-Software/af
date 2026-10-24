@@ -17,7 +17,13 @@
 use std::path::Path;
 
 use af_harness::TokenTotals;
-use serde_json::Value;
+use serde_json::{json, Value};
+
+/// note 截断（af-bench main.rs:666/834/889 的 `.chars().take(300)` 口径；
+/// v1 契约 §1.2"截断至 ~300 字符"同源）。
+fn clip300(note: &str) -> String {
+    note.chars().take(300).collect()
+}
 
 /// 结果行写入器（append + flush 语义，main.rs:644-648）。
 ///
@@ -77,12 +83,41 @@ pub struct ExecutionFacts {
 
 /// 18 键 swe-v legacy 行（af-bench main.rs:861-890 原样装配）。
 pub fn swev_legacy_row(facts: &ExecutionFacts) -> Value {
-    let _ = facts;
-    unimplemented!("P4 GREEN：18 键 legacy 行装配（main.rs:861-890 原样）")
+    json!({
+        "suite": facts.suite,
+        "task_id": facts.task_id,
+        "profile": facts.profile,
+        "trial": facts.trial,
+        "reward": facts.reward,
+        "status": facts.status,
+        // fix2（结果代号 fix2，审计 §6.A 对齐）：scaffold v3 = 提交式完成协议 +
+        // instance 纪律 + 250 步/$3/温度0/top_p1/max_tokens 32000 + 无 gate 重试。
+        // reasoning 档位按审计 §6.A.7 显式声明（保持 Off = mini 默认不发 thinking）。
+        "scaffold": facts.scaffold,
+        "reasoning_tier": facts.reasoning_tier,
+        // D-20 项 1：实际 run 目录（重跑按序号递增，不再同名覆写）。
+        "run_dir": facts.run_dir,
+        // D-20 项 2：eval.log sha256（判分时计算，判分复核可逐字节对账）。
+        "eval_sha256": facts.eval_sha256,
+        "gate": facts.gate,
+        // fix2：attempt 恒 1（审计 D5 关闭 gate 重试），字段保留供历史行兼容。
+        "attempts": facts.attempts,
+        "http_retries": facts.http_retries,
+        "turns": facts.turns,
+        "model_calls": facts.model_calls,
+        "tokens": {
+            "input": facts.tokens.input,
+            "output": facts.tokens.output,
+            "cache_read": facts.tokens.cache_read,
+        },
+        "agent_wall_ms": facts.agent_wall_ms,
+        "verifier_note": clip300(&facts.verifier_note),
+    })
 }
 
 /// `af.plan.record.v1` 投影（契约 §1.2 行形状 + 方案 §1.4 映射表）。
-/// `plan_id/node_id` 来自订单上下文（order_id/line_id），`item_id` = task_id。
+/// `plan_id/node_id` 来自订单上下文（order_id/line_id），`item_id` = task_id；
+/// evidence_digest = eval_sha256（证据字节指纹，可空）。
 pub fn swev_v1_row(
     facts: &ExecutionFacts,
     plan_id: &str,
@@ -91,16 +126,50 @@ pub fn swev_v1_row(
     unit_id: &str,
     unit_version: &str,
 ) -> Value {
-    let _ = (
-        facts, plan_id, node_id, host_alias, unit_id, unit_version,
-    );
-    unimplemented!("P4 GREEN：af.plan.record.v1 投影（契约 §1.2 + 方案 §1.4 映射表）")
+    json!({
+        "plan_id": plan_id,
+        "node_id": node_id,
+        "item_id": facts.task_id,
+        "attempt": facts.attempts,
+        "host_alias": host_alias,
+        "unit_id": unit_id,
+        "unit_version": unit_version,
+        "status": facts.status,
+        "verdict": facts.reward,
+        "evidence": {
+            "run_dir": facts.run_dir,
+            "evidence_digest": facts.eval_sha256,
+        },
+        "gate": facts.gate,
+        "usage": {
+            "turns": facts.turns,
+            "unit_calls": facts.model_calls,
+            "http_retries": facts.http_retries,
+            "quota": {
+                "input": facts.tokens.input,
+                "output": facts.tokens.output,
+                "cache_read": facts.tokens.cache_read,
+            },
+        },
+        "wall_ms": facts.agent_wall_ms,
+        "note": clip300(&facts.verifier_note),
+    })
 }
 
 /// setup_failed 行（af-bench main.rs:656-667：字段齐备含 null，D-20）。
 pub fn swev_setup_failed_row(task_id: &str, profile: &str, trial: bool, note: &str) -> Value {
-    let _ = (task_id, profile, trial, note);
-    unimplemented!("P4 GREEN：setup_failed 行装配（main.rs:656-667 原样）")
+    json!({
+        "suite": "swe-v",
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "setup_failed",
+        // D-20：供给失败行也保持字段齐备（run 目录未建/eval 未跑 → null）。
+        "run_dir": null,
+        "eval_sha256": null,
+        "verifier_note": clip300(note),
+    })
 }
 
 /// run_failed 行（af-bench main.rs:822-834：记实际目录，trail 留在现场供复核）。
@@ -112,6 +181,18 @@ pub fn swev_run_failed_row(
     http_retries: u64,
     note: &str,
 ) -> Value {
-    let _ = (task_id, profile, trial, run_dir, http_retries, note);
-    unimplemented!("P4 GREEN：run_failed 行装配（main.rs:822-834 原样）")
+    json!({
+        "suite": "swe-v",
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "run_failed",
+        "scaffold": "v3",
+        // D-20 项 1：run_failed 行也记实际目录（trail 留在现场供复核）。
+        "run_dir": run_dir.display().to_string(),
+        "eval_sha256": null,
+        "http_retries": http_retries,
+        "verifier_note": clip300(note),
+    })
 }

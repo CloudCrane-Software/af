@@ -42,7 +42,9 @@ pub mod profile;
 pub mod record;
 pub mod suite;
 
-pub use agent::{AgentLaunch, AgentRunner, AgentRunFailure, AgentRunOutcome, BashFn, HarnessRunner};
+pub use agent::{
+    AgentLaunch, AgentRunFailure, AgentRunOutcome, AgentRunner, BashFn, HarnessRunner,
+};
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use driver::{DriveReport, DriverConfig, OrderLifecycleDriver};
 pub use engine::{EngineAccept, EngineClient, EngineOutcome, EngineRejection};
