@@ -619,3 +619,45 @@ pub struct CelRef {
     pub roots: BTreeSet<String>,
     pub digest: String,
 }
+
+// ============================================================
+// 透传 Value 键序规范化（确定性契约护栏）
+// ============================================================
+
+/// 递归把 `serde_json::Value::Object` 的键序规范为 BTree 序。
+///
+/// 背景纪律缺口：`Value::Object` 的迭代序随 crate 特性切换——默认
+/// BTreeMap（键序=字典序），而 workspace 级 feature 统一会把
+/// `cedar-policy-core`（经 af-credential → cedar-policy 传入）启用的
+/// `serde_json/preserve_order` 并进本 crate 的构建图（IndexMap，键序=插入
+/// 序），击穿「序列化无任何 HashMap 参与迭代序」的确定性契约（§3.5-1；
+/// [`CelRef`] 注记的「无 preserve_order」前提同理不再成立——其规范 JSON
+/// 为手写两键且两序一致，故 digest 不受影响）。凡入 IR 的透传 Value
+/// （types 词典 schema / human resume schema / section args）一律先经
+/// 本函数：两种特性解析下产出逐位相同的序列化字节；默认特性下为语义
+/// 无操作（本就 BTree 序）。
+pub(crate) fn canonical_value(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut pairs: Vec<(String, serde_json::Value)> = map
+                .iter()
+                .map(|(key, inner)| (key.clone(), canonical_value(inner)))
+                .collect();
+            pairs.sort_by(|a, b| a.0.cmp(&b.0));
+            pairs.into_iter().collect()
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(canonical_value).collect())
+        }
+        other => other.clone(),
+    }
+}
+
+/// [`canonical_value`] 的表形态：`BTreeMap<String, Value>` 值侧规范化。
+pub(crate) fn canonical_value_map(
+    map: &BTreeMap<String, serde_json::Value>,
+) -> BTreeMap<String, serde_json::Value> {
+    map.iter()
+        .map(|(key, value)| (key.clone(), canonical_value(value)))
+        .collect()
+}

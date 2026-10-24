@@ -95,11 +95,12 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
             output_from: doc.meta.output.from.clone(),
             intent: doc.meta.intent.clone(),
         },
-        // 类型词典（重复名 = stage 1 E2003 面，last-wins 机械收集）
+        // 类型词典（重复名 = stage 1 E2003 面，last-wins 机械收集）；
+        // schema 为透传 Value，经 canonical_value 规范键序（见 ir.rs 契约护栏）
         types: doc
             .types
             .iter()
-            .map(|t| (t.name.clone(), t.schema.clone()))
+            .map(|t| (t.name.clone(), canonical_value(&t.schema)))
             .collect(),
         stores: doc
             .stores
@@ -570,7 +571,8 @@ fn human_spec(h: &m::HumanDecl) -> HumanSpec {
         role: h.role.clone(),
         quorum: h.quorum,
         resume: ResumeSpec {
-            schema: h.resume.schema.clone(),
+            // 透传 JSON Schema，键序规范化（ir.rs 契约护栏）
+            schema: canonical_value(&h.resume.schema),
         },
     }
 }
@@ -620,7 +622,8 @@ fn section_spec(s: &m::SectionDecl) -> SectionSpec {
         port: s.port.clone(),
         store: s.store.clone(),
         policy: s.policy.clone(),
-        args: s.args.clone().unwrap_or_default(),
+        // 透传 Value 表，值侧键序规范化（ir.rs 契约护栏）
+        args: s.args.as_ref().map(canonical_value_map).unwrap_or_default(),
         component: s.component.clone(),
         optional: s.optional,
     }
