@@ -304,8 +304,8 @@ fn corpus_golden_path(name: &str) -> std::path::PathBuf {
         .join(format!("{stem}.ir.json"))
 }
 
-/// 单份核验（与 CLI 同口径）：重新 load + 全量校验 + lower + pretty 序列化
-/// + 换行，与 `testdata/golden/<stem>.ir.json` **逐字节**比对。任何一位
+/// 单份核验（与 CLI 同口径）：重新 load + 全量校验 + lower + pretty 序列化，
+/// 再补换行，与 `testdata/golden/<stem>.ir.json` **逐字节**比对。任何一位
 /// 不同即 panic——这是篡改检测测试借用的同一把牙齿。
 fn assert_golden_byte_exact(name: &str) {
     let src_path = corpus_src_path(name);
