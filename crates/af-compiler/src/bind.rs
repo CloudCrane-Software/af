@@ -297,11 +297,12 @@ fn resolve(
             }
             (n, Some(v))
         }
-        Some(_) | None if !reference.is_empty() && !reference.contains('@') => {
-            (reference, None)
-        }
+        Some(_) | None if !reference.is_empty() && !reference.contains('@') => (reference, None),
         Some(_) | None => {
-            push(BindCode::RefMissing, "引用串不可解析（空串或内嵌 '@'）".into());
+            push(
+                BindCode::RefMissing,
+                "引用串不可解析（空串或内嵌 '@'）".into(),
+            );
             return None;
         }
     };
@@ -309,7 +310,10 @@ fn resolve(
     let Some(versions) = registry.versions_of(name) else {
         push(
             BindCode::RefMissing,
-            format!("组件 {name:?} 未注册（注册表共 {} 条声明）", registry.component_count()),
+            format!(
+                "组件 {name:?} 未注册（注册表共 {} 条声明）",
+                registry.component_count()
+            ),
         );
         return None;
     };
@@ -343,7 +347,10 @@ fn resolve(
     if decl.class != expected {
         push(
             BindCode::ClassMismatch,
-            format!("{name:?}@{version} 注册类别为 {:?}，此处按 {:?} 引用", decl.class, expected),
+            format!(
+                "{name:?}@{version} 注册类别为 {:?}，此处按 {:?} 引用",
+                decl.class, expected
+            ),
         );
         return None;
     }

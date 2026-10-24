@@ -67,7 +67,9 @@ fn envelope_rejects_unknown_top_key() {
     v["extra"] = json!(1);
     assert_eq!(
         af_compiler::decode_ir(&v.to_string()),
-        Err(IrParseError::UnknownTopKey { key: "extra".into() })
+        Err(IrParseError::UnknownTopKey {
+            key: "extra".into()
+        })
     );
 }
 
@@ -173,8 +175,7 @@ fn first_class_placeholder_values_are_empty_defaults() {
     let p = af_compiler::lower(&doc).expect("lowering 失败");
     let solver = &p.body.graph.nodes[0];
     assert_eq!(solver.capability_refs, Default::default());
-    let j: Value =
-        serde_json::from_str(&af_compiler::snapshot_json(&doc).unwrap()).unwrap();
+    let j: Value = serde_json::from_str(&af_compiler::snapshot_json(&doc).unwrap()).unwrap();
     assert_eq!(j["body"]["graph"]["nodes"][0]["capability_refs"], json!([]));
     assert_eq!(j["body"]["trust"], json!({}));
     let ex = &p.body.node_exec["solver"];

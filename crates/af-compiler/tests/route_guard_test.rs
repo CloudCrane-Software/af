@@ -19,7 +19,9 @@ fn assert_cel(cel: &CelRef, source: &str, roots: &[&str]) {
     assert_eq!(cel.roots, want, "roots 应为表达式实际引用的根绑定集");
     assert_eq!(cel.digest.len(), 64, "digest = SHA-256 十六进制 64 字符");
     assert!(
-        cel.digest.chars().all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
+        cel.digest
+            .chars()
+            .all(|c| c.is_ascii_digit() || ('a'..='f').contains(&c)),
         "digest 应为小写十六进制"
     );
 }
@@ -41,7 +43,9 @@ fn sample5_route_guards() {
     );
     let fc = &sg.nodes.iter().find(|n| n.id == "format_check").unwrap();
     assert_cel(
-        fc.route_exit_guard.as_ref().expect("goto:exit 分支守卫记在节点"),
+        fc.route_exit_guard
+            .as_ref()
+            .expect("goto:exit 分支守卫记在节点"),
         "(format_check.passed == false)",
         &["format_check"],
     );
@@ -76,7 +80,13 @@ fn sample5_route_guards() {
         &["inputs"],
     );
     // loop exit_when → CelRef（roots = budget 词汇表根）
-    let ring = &p.body.graph.nodes.iter().find(|n| n.id == "react_ring").unwrap();
+    let ring = &p
+        .body
+        .graph
+        .nodes
+        .iter()
+        .find(|n| n.id == "react_ring")
+        .unwrap();
     assert_cel(
         ring.loop_spec.as_ref().unwrap().exit_when.as_ref().unwrap(),
         "resume.approved == true",
@@ -153,37 +163,62 @@ fn cel_digest_stable_across_compiles() {
         // 全部 CelRef 的 digest 由 (source, roots) 唯一决定：两次编译逐字段相等
         let collect = |p: &af_compiler::ir::IrProgram| -> Vec<String> {
             let mut out = Vec::new();
-            let mut push = |c: &CelRef| out.push(format!("{}|{:?}|{}", c.source, c.roots, c.digest));
+            let mut push =
+                |c: &CelRef| out.push(format!("{}|{:?}|{}", c.source, c.roots, c.digest));
             for n in &p.body.graph.nodes {
-                if let Some(c) = &n.route_exit_guard { push(c); }
+                if let Some(c) = &n.route_exit_guard {
+                    push(c);
+                }
                 if let Some(lp) = &n.loop_spec {
-                    if let Some(c) = &lp.exit_when { push(c); }
+                    if let Some(c) = &lp.exit_when {
+                        push(c);
+                    }
                 }
             }
             for sg in p.body.graph.subgraphs.values() {
                 for n in &sg.nodes {
-                    if let Some(c) = &n.route_exit_guard { push(c); }
+                    if let Some(c) = &n.route_exit_guard {
+                        push(c);
+                    }
                     if let Some(lp) = &n.loop_spec {
-                        if let Some(c) = &lp.exit_when { push(c); }
+                        if let Some(c) = &lp.exit_when {
+                            push(c);
+                        }
                     }
                 }
                 for e in &sg.edges {
-                    if let Some(c) = &e.guard { push(c); }
+                    if let Some(c) = &e.guard {
+                        push(c);
+                    }
                 }
             }
             for e in &p.body.graph.edges {
-                if let Some(c) = &e.guard { push(c); }
+                if let Some(c) = &e.guard {
+                    push(c);
+                }
             }
             for ex in p.body.node_exec.values() {
-                if let Some(c) = &ex.assert { push(c); }
+                if let Some(c) = &ex.assert {
+                    push(c);
+                }
             }
             for s in &p.body.policies.stop {
-                out.push(format!("{}|{:?}|{}", s.when.source, s.when.roots, s.when.digest));
+                out.push(format!(
+                    "{}|{:?}|{}",
+                    s.when.source, s.when.roots, s.when.digest
+                ));
             }
             out.sort_unstable();
             out
         };
-        assert_eq!(collect(&p1), collect(&p2), "{name}: CelRef 集两次编译不一致");
-        assert!(!collect(&p1).is_empty(), "{name}: 样例应含至少一条 CEL 位点");
+        assert_eq!(
+            collect(&p1),
+            collect(&p2),
+            "{name}: CelRef 集两次编译不一致"
+        );
+        assert!(
+            !collect(&p1).is_empty(),
+            "{name}: 样例应含至少一条 CEL 位点"
+        );
     }
 }

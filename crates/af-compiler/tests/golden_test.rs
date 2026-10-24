@@ -5,7 +5,13 @@ mod common;
 
 use af_compiler::ir::*;
 
-fn find_edge<'a>(edges: &'a [IrEdge], from: &str, output: &str, to: &str, input: &str) -> &'a IrEdge {
+fn find_edge<'a>(
+    edges: &'a [IrEdge],
+    from: &str,
+    output: &str,
+    to: &str,
+    input: &str,
+) -> &'a IrEdge {
     edges
         .iter()
         .find(|e| e.from == from && e.output == output && e.to == to && e.input == input)
@@ -93,7 +99,10 @@ fn sample1_projection_facts() {
     assert_eq!(i.input_type, "react_input");
     assert_eq!(i.output_type, "answer");
     assert_eq!(i.output_from, "solver");
-    assert_eq!(i.intent.as_deref(), Some("单 agent 节点：工具回灌在节点运行时内串行落账；语义终止 + 三重预算"));
+    assert_eq!(
+        i.intent.as_deref(),
+        Some("单 agent 节点：工具回灌在节点运行时内串行落账；语义终止 + 三重预算")
+    );
 
     // stores
     let st = &b.stores["trajectory"];
@@ -111,7 +120,11 @@ fn sample1_projection_facts() {
     assert!(ex.components.memory.is_empty());
     let tool_names: Vec<&str> = ex.components.tools.keys().map(String::as_str).collect();
     assert_eq!(tool_names, ["pkg.hopqa.lookup", "pkg.hopqa.search"]);
-    assert!(ex.components.tools.values().all(|t| t.effect_class.is_none()));
+    assert!(ex
+        .components
+        .tools
+        .values()
+        .all(|t| t.effect_class.is_none()));
     assert_eq!(ex.writes, strset(&["trajectory"]));
     assert!(ex.reads.is_empty());
     assert!(ex.consumes.is_empty());
@@ -147,10 +160,19 @@ fn sample1_projection_facts() {
     assert_eq!(pol.stop[1].outcome, StopOutcome::Failed);
     assert_eq!(pol.failures.len(), 3);
     assert_eq!(pol.failures[0].class, FailureClass::TransportTransient);
-    assert_eq!(pol.failures[0].retry, Some(RetrySpec { max: 3, backoff_ms: 800 }));
+    assert_eq!(
+        pol.failures[0].retry,
+        Some(RetrySpec {
+            max: 3,
+            backoff_ms: 800
+        })
+    );
     assert_eq!(pol.failures[1].class, FailureClass::ToolError);
     assert_eq!(pol.failures[1].route.as_deref(), Some("same_node"));
-    assert_eq!(pol.failures[1].feedback.as_deref(), Some("error_observation"));
+    assert_eq!(
+        pol.failures[1].feedback.as_deref(),
+        Some("error_observation")
+    );
     assert_eq!(pol.failures[2].class, FailureClass::BudgetExhausted);
     assert_eq!(pol.failures[2].terminal, Some(true));
     assert_eq!(pol.failures[2].outcome, Some(StopOutcome::Failed));
@@ -167,7 +189,10 @@ fn sample4_sample5_projection_facts() {
     // check 节点 uses.unit 投影
     let assess = &p4.body.node_exec["search.assess"];
     assert_eq!(assess.node_id, "assess");
-    assert_eq!(assess.components.unit.as_deref(), Some("pkg.searchkit.assess@1"));
+    assert_eq!(
+        assess.components.unit.as_deref(),
+        Some("pkg.searchkit.assess@1")
+    );
     assert_eq!(assess.reads, strset(&["answers_ref"]));
     // 非输出节点工件非终态；signal 类型原样
     let loader = &p4.body.node_exec["loader"];
@@ -175,7 +200,10 @@ fn sample4_sample5_projection_facts() {
     assert!(!loader.artifacts["done"].is_final);
     // from_body 声明保真（map 构造自动包 list<> 的推导不在此复制——见 ir.rs 注记）
     let run = &p4.body.node_exec["search.run"];
-    assert_eq!(run.artifacts["items"].from_body.as_deref(), Some("aggregate.answer"));
+    assert_eq!(
+        run.artifacts["items"].from_body.as_deref(),
+        Some("aggregate.answer")
+    );
 
     let (doc5, _) = common::sample("sample5.yaml");
     let p5 = af_compiler::lower(&doc5).expect("lowering 失败");
@@ -187,8 +215,26 @@ fn sample4_sample5_projection_facts() {
     // 边 checkpoint 投影（LangGraph checkpointer 声明位）
     let sg = &p5.body.graph.subgraphs["langgraph_subset/react_ring"];
     assert!(find_edge(sg.edges.as_slice(), "agent", "action", "tools", "action").checkpoint);
-    assert!(find_edge(sg.edges.as_slice(), "tools", "observation", "format_check", "observation").checkpoint);
-    assert!(!find_edge(sg.edges.as_slice(), "format_check", "checked", "agent", "checked").checkpoint);
+    assert!(
+        find_edge(
+            sg.edges.as_slice(),
+            "tools",
+            "observation",
+            "format_check",
+            "observation"
+        )
+        .checkpoint
+    );
+    assert!(
+        !find_edge(
+            sg.edges.as_slice(),
+            "format_check",
+            "checked",
+            "agent",
+            "checked"
+        )
+        .checkpoint
+    );
     // human 构造：station/role/quorum/resume.schema
     let approve = &sg.nodes.iter().find(|n| n.id == "approve").unwrap();
     let h = approve.human.as_ref().unwrap();
@@ -198,7 +244,10 @@ fn sample4_sample5_projection_facts() {
     assert_eq!(h.resume.schema["properties"]["approved"]["type"], "boolean");
     // loop 节点的 from_body 转发 + 终态位
     let ring = &p5.body.node_exec["react_ring"];
-    assert_eq!(ring.artifacts["answer"].from_body.as_deref(), Some("agent.answer"));
+    assert_eq!(
+        ring.artifacts["answer"].from_body.as_deref(),
+        Some("agent.answer")
+    );
     assert!(ring.artifacts["answer"].is_final);
 }
 
@@ -241,11 +290,15 @@ const G3_CORPUS: [&str; 17] = [
 const TAMPER_TARGET: &str = "sample1.yaml";
 
 fn corpus_src_path(name: &str) -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/src").join(name)
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("testdata/src")
+        .join(name)
 }
 
 fn corpus_golden_path(name: &str) -> std::path::PathBuf {
-    let stem = name.strip_suffix(".yaml").expect("语料文件名应以 .yaml 结尾");
+    let stem = name
+        .strip_suffix(".yaml")
+        .expect("语料文件名应以 .yaml 结尾");
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("testdata/golden")
         .join(format!("{stem}.ir.json"))
@@ -256,19 +309,24 @@ fn corpus_golden_path(name: &str) -> std::path::PathBuf {
 /// 不同即 panic——这是篡改检测测试借用的同一把牙齿。
 fn assert_golden_byte_exact(name: &str) {
     let src_path = corpus_src_path(name);
-    let src = std::fs::read_to_string(&src_path)
-        .unwrap_or_else(|e| panic!("读取 {src_path:?}：{e}"));
+    let src =
+        std::fs::read_to_string(&src_path).unwrap_or_else(|e| panic!("读取 {src_path:?}：{e}"));
     let doc = af_dsl::load_str(&src).unwrap_or_else(|e| panic!("{name} 装载失败：{e}"));
     let report = af_dsl::validate(&doc);
     assert!(report.is_ok(), "{name} 应过 af-dsl 全量校验：{report}");
     let json = af_compiler::snapshot_json_pretty(&doc)
         .unwrap_or_else(|e| panic!("{name} lowering 失败：{e}"));
     // CLI 末尾 writeln! 一个换行——golden 即 CLI stdout 逐字节落盘
-    let expected: Vec<u8> = json.as_bytes().iter().copied().chain(std::iter::once(b'\n')).collect();
+    let expected: Vec<u8> = json
+        .as_bytes()
+        .iter()
+        .copied()
+        .chain(std::iter::once(b'\n'))
+        .collect();
 
     let golden_path = corpus_golden_path(name);
-    let actual = std::fs::read(&golden_path)
-        .unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
+    let actual =
+        std::fs::read(&golden_path).unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
 
     if expected != actual {
         // 报告首个差异位与上下文，避免整个文件倾倒进断言消息
@@ -280,7 +338,9 @@ fn assert_golden_byte_exact(name: &str) {
             .unwrap_or(el.min(al));
         let ctx = |v: &[u8]| {
             let s = pos.saturating_sub(20);
-            String::from_utf8_lossy(&v[s..(pos + 20).min(v.len())]).escape_debug().to_string()
+            String::from_utf8_lossy(&v[s..(pos + 20).min(v.len())])
+                .escape_debug()
+                .to_string()
         };
         panic!(
             "{name}: golden 逐字节不一致——期望 {el} 字节 / 实际 {al} 字节，\
@@ -318,7 +378,10 @@ fn g3_golden_corpus_manifest_closed() {
             .collect();
     let expected_src: std::collections::BTreeSet<String> =
         manifest.iter().map(|n| n.to_string()).collect();
-    assert_eq!(src_files, expected_src, "testdata/src 与 G3 清单不一致（C10：须登记后变更）");
+    assert_eq!(
+        src_files, expected_src,
+        "testdata/src 与 G3 清单不一致（C10：须登记后变更）"
+    );
 
     let golden_files: std::collections::BTreeSet<String> =
         std::fs::read_dir(corpus_golden_path(G3_CORPUS[0]).parent().unwrap())
@@ -342,9 +405,13 @@ fn g3_golden_corpus_manifest_closed() {
 #[test]
 fn g3_golden_tamper_detection() {
     let golden_path = corpus_golden_path(TAMPER_TARGET);
-    let original = std::fs::read(&golden_path)
-        .unwrap_or_else(|e| panic!("读取 {golden_path:?}：{e}"));
-    assert_eq!(original.first(), Some(&b'{'), "golden 应以 '{{' 开头，才有可篡改的字符");
+    let original =
+        std::fs::read(&golden_path).unwrap_or_else(|e| panic!("读取 {golden_path:?}：{e}"));
+    assert_eq!(
+        original.first(),
+        Some(&b'{'),
+        "golden 应以 '{{' 开头，才有可篡改的字符"
+    );
 
     // 篡改一个字符并落盘
     let mut tampered = original.clone();
@@ -354,8 +421,7 @@ fn g3_golden_tamper_detection() {
     // 核验必须失败（panic 被捕获）；临时静音 panic 钩子避免噪音
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
-    let caught =
-        std::panic::catch_unwind(|| assert_golden_byte_exact(TAMPER_TARGET));
+    let caught = std::panic::catch_unwind(|| assert_golden_byte_exact(TAMPER_TARGET));
     std::panic::set_hook(prev_hook);
     assert!(
         caught.is_err(),
@@ -384,10 +450,10 @@ fn g3_golden_tamper_detection() {
 /// P2-L10 入库清单（闭集第二批）：4 份 selector 转绿稿（源 YAML 与
 /// `计划/研究组/对齐草稿/` 正本逐字节一致，入库零修改）。
 const G3_SELECTOR_CORPUS: [&str; 4] = [
-    "ADAS.yaml",             // adaskit 3 图（discovered_maze/wordle + mas_search）
+    "ADAS.yaml",              // adaskit 3 图（discovered_maze/wordle + mas_search）
     "AutoGen-Team-JSON.yaml", // autogen 5 图（team.* 五拓扑）
-    "GPTSwarm.yaml",         // swarmkit 3 图（plan_execute_review/fanout_vote/react_baseline）
-    "MetaGPT.yaml",          // sweng 3 图（sop_full/no_qa/minimal）
+    "GPTSwarm.yaml",          // swarmkit 3 图（plan_execute_review/fanout_vote/react_baseline）
+    "MetaGPT.yaml",           // sweng 3 图（sop_full/no_qa/minimal）
 ];
 
 /// 篡改检测的第二目标（21 份中抽样 2 份复核：既有 TAMPER_TARGET =
@@ -405,20 +471,28 @@ fn repo_packages_root() -> std::path::PathBuf {
 /// 序列化 + 换行，与 `testdata/golden/<stem>.ir.json` **逐字节**比对。
 fn assert_golden_byte_exact_with_registry(name: &str) {
     let src_path = corpus_src_path(name);
-    let src = std::fs::read_to_string(&src_path)
-        .unwrap_or_else(|e| panic!("读取 {src_path:?}：{e}"));
+    let src =
+        std::fs::read_to_string(&src_path).unwrap_or_else(|e| panic!("读取 {src_path:?}：{e}"));
     let doc = af_dsl::load_str(&src).unwrap_or_else(|e| panic!("{name} 装载失败：{e}"));
     let reg = af_dsl::registry::Registry::load(repo_packages_root())
         .unwrap_or_else(|e| panic!("{name} registry 装载失败：{e}"));
     let report = af_dsl::validate_with(&doc, &reg.options());
-    assert!(report.is_ok(), "{name} 应过注入 declared_graphs 的全量校验：{report}");
+    assert!(
+        report.is_ok(),
+        "{name} 应过注入 declared_graphs 的全量校验：{report}"
+    );
     let json = af_compiler::snapshot_json_pretty(&doc)
         .unwrap_or_else(|e| panic!("{name} lowering 失败：{e}"));
-    let expected: Vec<u8> = json.as_bytes().iter().copied().chain(std::iter::once(b'\n')).collect();
+    let expected: Vec<u8> = json
+        .as_bytes()
+        .iter()
+        .copied()
+        .chain(std::iter::once(b'\n'))
+        .collect();
 
     let golden_path = corpus_golden_path(name);
-    let actual = std::fs::read(&golden_path)
-        .unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
+    let actual =
+        std::fs::read(&golden_path).unwrap_or_else(|e| panic!("读取 golden {golden_path:?}：{e}"));
 
     if expected != actual {
         let (el, al) = (expected.len(), actual.len());
@@ -429,7 +503,9 @@ fn assert_golden_byte_exact_with_registry(name: &str) {
             .unwrap_or(el.min(al));
         let ctx = |v: &[u8]| {
             let s = pos.saturating_sub(20);
-            String::from_utf8_lossy(&v[s..(pos + 20).min(v.len())]).escape_debug().to_string()
+            String::from_utf8_lossy(&v[s..(pos + 20).min(v.len())])
+                .escape_debug()
+                .to_string()
         };
         panic!(
             "{name}: golden（registry 注入链）逐字节不一致——期望 {el} 字节 / 实际 {al} 字节，\
@@ -447,7 +523,11 @@ fn assert_golden_byte_exact_with_registry(name: &str) {
 fn g3p2_selector_injection_is_load_bearing() {
     let reg = af_dsl::registry::Registry::load(repo_packages_root())
         .expect("仓库正本 af/packages 应装载（4 示例包）");
-    assert_eq!(reg.package_count(), 4, "af/packages 应恰有 adaskit/autogen/swarmkit/sweng 四包");
+    assert_eq!(
+        reg.package_count(),
+        4,
+        "af/packages 应恰有 adaskit/autogen/swarmkit/sweng 四包"
+    );
     for name in G3_SELECTOR_CORPUS {
         let src = std::fs::read_to_string(corpus_src_path(name))
             .unwrap_or_else(|e| panic!("读取 {name}：{e}"));
@@ -466,7 +546,10 @@ fn g3p2_selector_injection_is_load_bearing() {
 
         // 注入仓库正本清单：全量校验零违例
         let injected = af_dsl::validate_with(&doc, &reg.options());
-        assert!(injected.is_ok(), "{name} 注入 af/packages 声明集后应过全量校验：{injected}");
+        assert!(
+            injected.is_ok(),
+            "{name} 注入 af/packages 声明集后应过全量校验：{injected}"
+        );
     }
 }
 
@@ -485,9 +568,13 @@ fn g3p2_selector_golden_byte_exact() {
 #[test]
 fn g3p2_selector_tamper_detection() {
     let golden_path = corpus_golden_path(SELECTOR_TAMPER_TARGET);
-    let original = std::fs::read(&golden_path)
-        .unwrap_or_else(|e| panic!("读取 {golden_path:?}：{e}"));
-    assert_eq!(original.first(), Some(&b'{'), "golden 应以 '{{' 开头，才有可篡改的字符");
+    let original =
+        std::fs::read(&golden_path).unwrap_or_else(|e| panic!("读取 {golden_path:?}：{e}"));
+    assert_eq!(
+        original.first(),
+        Some(&b'{'),
+        "golden 应以 '{{' 开头，才有可篡改的字符"
+    );
 
     let mut tampered = original.clone();
     tampered[0] = b' ';
@@ -495,9 +582,8 @@ fn g3p2_selector_tamper_detection() {
 
     let prev_hook = std::panic::take_hook();
     std::panic::set_hook(Box::new(|_| {}));
-    let caught = std::panic::catch_unwind(|| {
-        assert_golden_byte_exact_with_registry(SELECTOR_TAMPER_TARGET)
-    });
+    let caught =
+        std::panic::catch_unwind(|| assert_golden_byte_exact_with_registry(SELECTOR_TAMPER_TARGET));
     std::panic::set_hook(prev_hook);
     assert!(
         caught.is_err(),

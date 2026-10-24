@@ -50,10 +50,16 @@ impl fmt::Display for LowerError {
                 write!(f, "构造 {construct:?} 的体为空（entry 无从取；E1007 面）")
             }
             Self::RouteUnnormalized { node, issues } => {
-                write!(f, "节点 {node:?} route 归一化违例（输入未过 stage 1 校验）：{issues:?}")
+                write!(
+                    f,
+                    "节点 {node:?} route 归一化违例（输入未过 stage 1 校验）：{issues:?}"
+                )
             }
             Self::CelCompile { source, detail } => {
-                write!(f, "CEL 编译失败（输入未过 stage 1 校验）{source:?}：{detail}")
+                write!(
+                    f,
+                    "CEL 编译失败（输入未过 stage 1 校验）{source:?}：{detail}"
+                )
             }
             Self::Serialize(detail) => write!(f, "IR 序列化失败：{detail}"),
         }
@@ -90,15 +96,26 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
             intent: doc.meta.intent.clone(),
         },
         // 类型词典（重复名 = stage 1 E2003 面，last-wins 机械收集）
-        types: doc.types.iter().map(|t| (t.name.clone(), t.schema.clone())).collect(),
-        stores: doc.stores.iter().map(|s| (s.name.clone(), store_spec(s))).collect(),
+        types: doc
+            .types
+            .iter()
+            .map(|t| (t.name.clone(), t.schema.clone()))
+            .collect(),
+        stores: doc
+            .stores
+            .iter()
+            .map(|s| (s.name.clone(), store_spec(s)))
+            .collect(),
         node_exec: lw.node_exec,
         policies: policies(doc)?,
         escapes: lw.escapes,
         // trust 注记一等占位（ADR-010 §5）：v0.1 恒空
         trust: BTreeMap::new(),
     };
-    Ok(IrProgram { ir_version: IR_VERSION, body })
+    Ok(IrProgram {
+        ir_version: IR_VERSION,
+        body,
+    })
 }
 
 /// 逐作用域降维状态（根图 + 嵌套体共用）。
@@ -156,7 +173,8 @@ impl Lowering {
             } else {
                 format!("{parent}.{}", n.id)
             };
-            self.node_exec.insert(path.clone(), self.node_exec(n, &path)?);
+            self.node_exec
+                .insert(path.clone(), self.node_exec(n, &path)?);
 
             let loop_spec = match &n.loop_spec {
                 Some(lp) => Some(self.loop_spec(lp, &path)?),
@@ -240,11 +258,16 @@ impl Lowering {
             // tool（单）与 tools（列表）合并为引用集；effect_class 一等占位
             // 恒 None（stage 3 由组件注册表回填——ADR-010 §5）。
             if let Some(tool) = &uses.tool {
-                components.tools.insert(tool.clone(), ToolSpec { effect_class: None });
+                components
+                    .tools
+                    .insert(tool.clone(), ToolSpec { effect_class: None });
             }
             if let Some(tools) = &uses.tools {
                 for t in tools {
-                    components.tools.entry(t.clone()).or_insert(ToolSpec { effect_class: None });
+                    components
+                        .tools
+                        .entry(t.clone())
+                        .or_insert(ToolSpec { effect_class: None });
                 }
             }
             if let Some(mem) = &uses.memory {
@@ -267,7 +290,12 @@ impl Lowering {
                             && (ty.as_deref() == Some(self.output_type.as_str()) || fb.is_some());
                         (
                             port.clone(),
-                            ArtifactSpec { r#type: ty, from_body: fb, is_final, provenance: None },
+                            ArtifactSpec {
+                                r#type: ty,
+                                from_body: fb,
+                                is_final,
+                                provenance: None,
+                            },
                         )
                     })
                     .collect()
@@ -289,25 +317,40 @@ impl Lowering {
                 .as_ref()
                 .map(|c| c.sections.iter().map(section_spec).collect())
                 .unwrap_or_default(),
-            ops: n.ops.as_ref().map(|ops| ops.iter().map(op_spec).collect()).unwrap_or_default(),
+            ops: n
+                .ops
+                .as_ref()
+                .map(|ops| ops.iter().map(op_spec).collect())
+                .unwrap_or_default(),
             assert: n.assert.as_deref().map(cel_ref).transpose()?,
         })
     }
 
     /// loop 构造 → ControlledLoop + 内联体降维子图。
-    fn loop_spec(&mut self, lp: &m::LoopDecl, owner_path: &str) -> Result<ControlledLoop, LowerError> {
+    fn loop_spec(
+        &mut self,
+        lp: &m::LoopDecl,
+        owner_path: &str,
+    ) -> Result<ControlledLoop, LowerError> {
         let name = self.subgraph_name(owner_path);
-        let entry = lp
-            .body
-            .nodes
-            .first()
-            .map(|n| n.id.clone())
-            .ok_or_else(|| LowerError::EmptyBody { construct: format!("loop@{owner_path}") })?;
+        let entry =
+            lp.body
+                .nodes
+                .first()
+                .map(|n| n.id.clone())
+                .ok_or_else(|| LowerError::EmptyBody {
+                    construct: format!("loop@{owner_path}"),
+                })?;
         let (nodes, edges) = self.scope(&lp.body.nodes, &lp.body.edges, owner_path)?;
         // graph_version 一律 stamp 父图版本（E2007 在 DSL 面不可触发）
         self.subgraphs.insert(
             name.clone(),
-            SubGraph { graph_version: self.graph_version.clone(), entry, nodes, edges },
+            SubGraph {
+                graph_version: self.graph_version.clone(),
+                entry,
+                nodes,
+                edges,
+            },
         );
         let mut carried: Vec<CarriedState> = lp
             .carried
@@ -326,7 +369,10 @@ impl Lowering {
         let mut safety_points: Vec<SafetyPoint> = lp
             .safety_points
             .iter()
-            .map(|s| SafetyPoint { node: s.node.clone(), kind: safety_kind(s.kind) })
+            .map(|s| SafetyPoint {
+                node: s.node.clone(),
+                kind: safety_kind(s.kind),
+            })
             .collect();
         safety_points.sort_by(|a, b| a.node.cmp(&b.node));
         Ok(ControlledLoop {
@@ -343,18 +389,29 @@ impl Lowering {
     /// map 构造 → MapSpec + 内联体降维子图。
     fn map_spec(&mut self, mp: &m::MapDecl, owner_path: &str) -> Result<MapSpec, LowerError> {
         let name = self.subgraph_name(owner_path);
-        let entry = mp
-            .body
-            .nodes
-            .first()
-            .map(|n| n.id.clone())
-            .ok_or_else(|| LowerError::EmptyBody { construct: format!("map@{owner_path}") })?;
+        let entry =
+            mp.body
+                .nodes
+                .first()
+                .map(|n| n.id.clone())
+                .ok_or_else(|| LowerError::EmptyBody {
+                    construct: format!("map@{owner_path}"),
+                })?;
         let (nodes, edges) = self.scope(&mp.body.nodes, &mp.body.edges, owner_path)?;
         self.subgraphs.insert(
             name.clone(),
-            SubGraph { graph_version: self.graph_version.clone(), entry, nodes, edges },
+            SubGraph {
+                graph_version: self.graph_version.clone(),
+                entry,
+                nodes,
+                edges,
+            },
         );
-        Ok(MapSpec { body: name, over: mp.over.clone(), max_fanout: mp.max_fanout })
+        Ok(MapSpec {
+            body: name,
+            over: mp.over.clone(),
+            max_fanout: mp.max_fanout,
+        })
     }
 }
 
@@ -371,7 +428,10 @@ fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
     let program = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(compile)) {
         Ok(Ok(p)) => p,
         Ok(Err(e)) => {
-            return Err(LowerError::CelCompile { source: source.into(), detail: e.to_string() })
+            return Err(LowerError::CelCompile {
+                source: source.into(),
+                detail: e.to_string(),
+            })
         }
         Err(_) => {
             return Err(LowerError::CelCompile {
@@ -380,12 +440,20 @@ fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
             })
         }
     };
-    let roots: BTreeSet<String> =
-        program.references().variables().into_iter().map(str::to_owned).collect();
+    let roots: BTreeSet<String> = program
+        .references()
+        .variables()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
     let canonical = serde_json::json!({ "roots": roots, "source": source });
     let text = serde_json::to_string(&canonical)
         .map_err(|e| LowerError::Serialize(format!("CelRef 规范序列化失败：{e}")))?;
-    Ok(CelRef { source: source.to_string(), roots, digest: hex(&Sha256::digest(text.as_bytes())) })
+    Ok(CelRef {
+        source: source.to_string(),
+        roots,
+        digest: hex(&Sha256::digest(text.as_bytes())),
+    })
 }
 
 /// SHA-256 摘要 → 小写十六进制串（64 字符）。
@@ -426,16 +494,28 @@ fn policies(doc: &m::Document) -> Result<IrPolicies, LowerError> {
         .policies
         .stop
         .iter()
-        .map(|s| Ok(StopEntry { when: cel_ref(&s.when)?, outcome: stop_outcome(s.outcome) }))
+        .map(|s| {
+            Ok(StopEntry {
+                when: cel_ref(&s.when)?,
+                outcome: stop_outcome(s.outcome),
+            })
+        })
         .collect::<Result<Vec<_>, LowerError>>()?;
     let failures = doc.policies.failures.iter().map(failure_entry).collect();
-    Ok(IrPolicies { budgets, stop, failures })
+    Ok(IrPolicies {
+        budgets,
+        stop,
+        failures,
+    })
 }
 
 fn failure_entry(f: &m::FailureDecl) -> FailureEntry {
     FailureEntry {
         class: failure_class(f.class),
-        retry: f.retry.as_ref().map(|r| RetrySpec { max: r.max, backoff_ms: r.backoff_ms }),
+        retry: f.retry.as_ref().map(|r| RetrySpec {
+            max: r.max,
+            backoff_ms: r.backoff_ms,
+        }),
         route: f.route.clone(),
         feedback: f.feedback.clone(),
         fallback_route: f.fallback_route.clone(),
@@ -449,7 +529,9 @@ fn failure_entry(f: &m::FailureDecl) -> FailureEntry {
 // ============================================================
 
 fn set_of(v: &Option<Vec<String>>) -> BTreeSet<String> {
-    v.as_ref().map(|xs| xs.iter().cloned().collect()).unwrap_or_default()
+    v.as_ref()
+        .map(|xs| xs.iter().cloned().collect())
+        .unwrap_or_default()
 }
 
 fn store_spec(s: &m::StoreDecl) -> StoreSpec {
@@ -487,7 +569,9 @@ fn human_spec(h: &m::HumanDecl) -> HumanSpec {
         station: h.station.clone(),
         role: h.role.clone(),
         quorum: h.quorum,
-        resume: ResumeSpec { schema: h.resume.schema.clone() },
+        resume: ResumeSpec {
+            schema: h.resume.schema.clone(),
+        },
     }
 }
 
