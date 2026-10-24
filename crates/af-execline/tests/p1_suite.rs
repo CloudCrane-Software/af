@@ -177,8 +177,10 @@ fn split_rc_marker_missing_and_present() {
     assert_eq!(text, "out\n");
     assert_eq!(rc, Some(0));
 
+    // 标记行在中部：只删标记行内容本身（line_end 指向其行尾换行），其后内容连同
+    // 前导换行原样保留（tb.rs:70-72 注释语义）。
     let (text, rc) = split_rc("a\n__AF_RC=7\nstderr tail");
-    assert_eq!(text, "a\nstderr tail");
+    assert_eq!(text, "a\n\nstderr tail");
     assert_eq!(rc, Some(7));
 }
 
