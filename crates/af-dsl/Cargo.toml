@@ -1,0 +1,16 @@
+[package]
+name = "af-dsl"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+description = "AFB DSL (Agent Flow Blueprint) 前端：信封+七段解析+静态校验（ADR-002 crate 职责）"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+# YAML 主干由 ADR-001（DSL 形态裁决）授权引入；crates.io 0.9 线末版。
+# 上游仓库已归档（0.9.34+deprecated），版本钉死在 0.9 线内，不引入 serde_yaml 之外的传递依赖面。
+serde_yaml = "0.9.34"
+
+[lints]
+workspace = true

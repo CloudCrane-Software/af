@@ -1,0 +1,169 @@
+version: 1
+meta:
+  name: aflow_search
+  graph_version: "1.0"
+  entry: loader
+  input: search_input
+  output: { ref: candidate, from: best }
+  intent: "搜索元循环=受控循环：合成（L4）→候选执行→外部评估→经验回灌；答案与分数对候选不可读"
+
+types:
+  - name: search_input
+    schema:
+      type: object
+      required: [problem, validation_set]
+      properties:
+        problem: { type: string }
+        validation_set:
+          type: array
+          items:
+            type: object
+            required: [prompt]
+            properties: { prompt: { type: string } }
+  - name: candidate
+    schema:
+      type: object
+      required: [ref, parent]
+      properties:
+        ref: { type: string }
+        parent: { type: integer }
+  - name: answer
+    schema:
+      type: object
+      required: [text]
+      properties: { text: { type: string } }
+  - name: tally_result
+    schema:
+      type: object
+      required: [answers, top_count, top_share_milli]
+      properties:
+        answers: { type: integer }
+        top_count: { type: integer }
+        top_share_milli: { type: integer }
+  - name: score_record
+    schema:
+      type: object
+      required: [candidate, quality_milli, cost_milli]
+      properties:
+        candidate: { type: integer }
+        quality_milli: { type: integer }
+        cost_milli: { type: integer }
+
+stores:
+  - name: experience
+    type: collection
+    item: score_record
+    writer: search.scoreboard        # INV-2：评估结果由记分板唯一串行写入
+    lifecycle: run
+    retention: { max_items: 20 }     # 有界经验池
+  - name: answers_ref
+    type: collection
+    item: answer
+    writer: loader
+    lifecycle: run
+    retention: { max_items: 64 }
+    eval_input: true                 # INV-4：参考答案只对评估器可读
+
+nodes:
+  - id: loader
+    kind: task
+    uses: { tool: pkg.searchkit.corpus@1 }
+    writes: [answers_ref]
+    emits: { done: signal }
+  - id: search
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: synth
+            kind: task
+            escape:                     # L4：元智能体产出候选变体（程序合成）
+              impl_ref: packages/searchkit@1.0.0/hatches/graph_synth.py
+              reason: "元智能体产出候选变体：核心只允许对已注册算子集做参数化组变；任意拓扑合成经逃逸并版本化登记后实例化"
+              owner: lang-team
+              share_budget_pct: 30
+            reads: [experience]         # 变异器可读分数（候选子图不可读——INV-4）
+            emits: { candidates: "list<candidate>" }
+          - id: run
+            kind: task
+            map:
+              over: synth.candidates
+              body:
+                nodes:
+                  - id: gen_a
+                    kind: task
+                    uses: { model: route.main@1 }
+                    emits: { draft: answer }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.searchkit.solver_system, quota_tokens: 500 }
+                        - { from: arg, name: item, policy: project, quota_tokens: 600 }
+                  - id: gen_b
+                    kind: task
+                    uses: { model: route.alt@1 }
+                    emits: { draft: answer }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.searchkit.solver_system, vars: { variant: b }, quota_tokens: 500 }
+                        - { from: arg, name: item, policy: project, quota_tokens: 600 }
+                  - id: aggregate
+                    kind: transform
+                    consumes: { draft_a: answer, draft_b: answer }
+                    ops:
+                      - { op: tally, port: draft_a, by: text, into: votes }
+                      - { op: select_best, port: draft_b, by: text, prefer: max, into: answer }
+                    emits:
+                      votes: tally_result
+                      answer: answer
+                edges:
+                  - { from: gen_a, output: draft, to: aggregate, input: draft_a }
+                  - { from: gen_b, output: draft, to: aggregate, input: draft_b }
+            emits: { items: { from_body: aggregate.answer } }
+          - id: assess
+            kind: check                  # INV-4：评估器外部化，读参考答案
+            uses: { unit: pkg.searchkit.assess@1 }
+            reads: [answers_ref]
+            consumes: { items: "list<answer>" }
+            emits: { scores: "list<score_record>" }
+          - id: scoreboard
+            kind: transform
+            writes: [experience]
+            ops:
+              - { op: project, port: scores, into: experience }   # 末端落点=store
+            consumes: { scores: "list<score_record>" }
+            emits: {}
+        edges:
+          - { from: synth, output: candidates, to: run, input: candidates }
+          - { from: run, output: items, to: assess, input: items }
+          - { from: assess, output: scores, to: scoreboard, input: scores }
+      max_iterations: 20                # MCTS 迭代预算
+      carried:
+        - { store: experience, max_items: 20 }
+      safety_points:
+        - { node: assess, kind: check } # 每轮必须过外部评估（反馈环的安全点）
+      exit_when: "budget.cents_spent >= budget.cents_cap * 9 / 10"
+      on_exhausted: continue
+  - id: best
+    kind: transform
+    reads: [experience]
+    ops:
+      - { op: select_best, port: experience, by: quality_milli, prefer: max, into: winner }
+    emits: { winner: candidate }
+
+edges:
+  - { from: loader, output: done, to: search, input: done }
+  - { from: search, output: done, to: best, input: done }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 5000 }
+    - { id: eval_tokens, dimension: tokens_total, scope: loop:search, cap: 2000000 }
+  failures:
+    - class: schema_invalid       # 合成产物不合法：候选判无效丢弃，重新生成
+      retry: { max: 2, backoff_ms: 0 }
+      route: next_iteration
+    - class: tool_error           # 单样本执行失败计入质量分，不中止评估
+      route: next_iteration
+    - class: budget_exhausted
+      terminal: true
+      outcome: completed          # 跑满预算取最优（AFlow 主设置）
