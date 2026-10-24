@@ -74,7 +74,7 @@ fn writer_declared_as_body_path_matches() {
 #[test]
 fn uncovered_outer_store_written_in_body_is_e2211() {
     let src = doc_with_store(
-        "l1",
+        "l1.b1",
         "  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: b1, kind: task, writes: [s], emits: { x: a } }\n        edges: []\n      max_iterations: 2\n      safety_points: []\n    emits: { answer: { from_body: b1.x } }\n",
     );
     assert_eq!(check(&src), ["E2211"]);

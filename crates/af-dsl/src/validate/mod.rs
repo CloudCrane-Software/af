@@ -2,6 +2,7 @@
 //! → 引用闭包（refs）→ INV-2（inv2），一次收齐。
 //! 顺序固定以保证违例输出确定性（承提案 B §3.1 顺序说明的 M1 前缀）。
 
+mod inv2;
 mod refs;
 
 use crate::error::{ErrorCode, Report};
@@ -47,7 +48,7 @@ pub fn validate(doc: &Document) -> Report {
     report.violations.extend(crate::shape::check_vocab(doc));
     let index = Index::build(doc, &mut report);
     refs::check(doc, &index, &mut report);
-    // INV-2（E2311/E2312/E2211）在 M1 末段（C8）接入。
+    inv2::check(&index, &mut report);
     report
 }
 
