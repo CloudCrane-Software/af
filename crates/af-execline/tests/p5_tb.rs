@@ -153,6 +153,7 @@ struct CapturedLaunch {
     spend_cap_cents: i64,
     tool_spend_cents: i64,
     budget_ledger_cents: i64,
+    bash: Arc<dyn Fn(&str) -> String + Send + Sync>,
 }
 
 fn fixed_report() -> RunReport {
@@ -235,6 +236,7 @@ impl AgentRunner for FakeRunner {
                 spend_cap_cents: launch.spend_cap_cents,
                 tool_spend_cents: launch.tool_spend_cents,
                 budget_ledger_cents: launch.budget_ledger_cents,
+                bash: launch.bash,
             });
         match &self.result {
             Ok(report) => Ok(AgentRunOutcome {
@@ -667,6 +669,47 @@ fn tb_run_failure_row_and_container_cleanup() {
                     .any(|(_, s, _)| s.contains("bash /tests/test.sh")),
                 "判分链未启动（run 失败短路在 verify 之前）"
             );
+        },
+    )
+}
+
+// ---------- TB bash 工具无护栏（main.rs:963-970 原样差异 vs swev 710-734）----------
+
+/// TB 注册处无反考古/重复命令包装——迁移不"顺手补齐"。对照锚：同命令在
+/// swe-v 线会注入 `[harness] Searching…` 前缀/第 3 次 `exact command` 拦截
+/// （p4_unit 两个护栏测试），TB 线两者皆无（失败 runner 驱动下闭包已捕获）。
+#[test]
+fn tb_bash_tool_has_no_guards() {
+    tb_scenario(
+        "bashnoguard",
+        FakeBridge::new(),
+        FakeRunner::failing("unused", 0),
+        |_data_root, _attempt_dir, _sink, _bridge, runner, _outcome| {
+            let bash = runner.launch().bash;
+
+            // 普通命令：容器执行原样（exit 行在末尾），无任何 [harness] 前缀。
+            let normal = bash("echo once");
+            assert!(normal.contains("exec-output"), "{normal}");
+            assert!(normal.contains("exit=0"), "{normal}");
+            assert!(!normal.contains("[harness]"), "{normal}");
+
+            // 反考古命令（swev 会命中 ARCHAEOLOGY_PATTERNS）：TB 不注入护栏。
+            let arch = bash("git fsck --lost-found");
+            assert!(
+                !arch.contains("[harness]"),
+                "TB 无反考古护栏（main.rs:963-970 vs 710-734 原样差异）: {arch}"
+            );
+            assert!(arch.contains("exec-output"), "原输出透传: {arch}");
+
+            // 同命令第 3 次：TB 无重复命令拦截（swev 会教学包装）。
+            let _ = bash("echo dup");
+            let _ = bash("echo dup");
+            let third = bash("echo dup");
+            assert!(
+                !third.contains("exact command"),
+                "TB 无重复命令护栏: {third}"
+            );
+            assert!(third.contains("exit=0"), "{third}");
         },
     )
 }
