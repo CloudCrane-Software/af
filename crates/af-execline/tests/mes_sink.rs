@@ -12,13 +12,15 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process;
+use std::sync::{Arc, Mutex};
 
 use af_execline::{
-    DriverConfig, EngineClient, FixedClock, MesChSink, MesChTarget, MesFileWriter, MesSink,
-    MesSyncKind, OrderLifecycleDriver, StubExecuteUnit,
+    DriverConfig, EngineClient, ExecContext, ExecOutput, ExeclineError, ExecuteUnit, FixedClock,
+    MesChSink, MesChTarget, MesFileWriter, MesSink, MesSyncKind, MesSyncReport,
+    OrderLifecycleDriver, StubExecuteUnit,
 };
 use af_mes::mock::MockClickHouse;
-use af_mes::{Accept, ManualClock, MesWriter, WriterConfig};
+use af_mes::{Accept, ManualClock, MesEvent, MesWriter, WriterConfig};
 use af_workorder::{BudgetVoucher, LineBinding, Priority, Sla};
 
 fn scratch(tag: &str) -> PathBuf {
@@ -412,4 +414,137 @@ fn driver_consumes_ch_sink_end_to_end_and_replay_ships_nothing() {
         .map(|captured| captured.rows.len())
         .sum();
     assert_eq!(total_accepted, 4, "CH 终态恰 4 行，零双写");
+}
+
+// ---------- MES-FAIL（修复批 2026-10-25）：失败路径收尾对账 guarantee ----------
+
+/// 记账 sink 状态：append 的事件种类 + sync 调用次数。驱动持有
+/// `Box<dyn MesSink>`，测试用共享 `Arc` 旁路检视（drop 驱动前即可断言）。
+#[derive(Default)]
+struct RecordingSinkState {
+    appended_kinds: Vec<String>,
+    sync_calls: usize,
+}
+
+/// 记账 sink：append 全收、sync 计数并回 no-op 报告（对账行为面由
+/// 上面 CH 用例覆盖；本组用例只验驱动"失败也调 sync"的编排保证）。
+struct RecordingSink {
+    state: Arc<Mutex<RecordingSinkState>>,
+}
+
+impl MesSink for RecordingSink {
+    fn append(&mut self, event: &MesEvent) -> Result<(), ExeclineError> {
+        self.state
+            .lock()
+            .unwrap()
+            .appended_kinds
+            .push(event.kind.clone());
+        Ok(())
+    }
+
+    fn sync(&mut self) -> Result<MesSyncReport, ExeclineError> {
+        self.state.lock().unwrap().sync_calls += 1;
+        Ok(MesSyncReport::file_stub())
+    }
+
+    fn path(&self) -> &Path {
+        Path::new("recording-sink")
+    }
+}
+
+/// 总是失败的执行单元（EX3001 路径用）。
+struct FailingUnit;
+
+impl ExecuteUnit for FailingUnit {
+    fn unit_id(&self) -> &str {
+        "mes-fail-unit"
+    }
+
+    fn execute(&self, _ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
+        Err(ExeclineError::UnitFailed {
+            detail: "桩失败：MES-FAIL 失败路径用例".into(),
+        })
+    }
+}
+
+/// MES-FAIL：close 被引擎拒收时，EX1006 照旧透传，但收尾 `mes.sync()`
+/// 必须仍执行**恰一次**——已发生的 release/start/complete 事件的对账
+/// 不能因失败被跳过（F-第三单探针 F3a2 实证：拒收路径 CH 读回 0 行，
+/// 仅订单目录正本有事件）。拒收不打桩：不合格工件走真引擎 close 门。
+#[test]
+fn drive_close_rejected_still_runs_mes_sync_once() {
+    let dir = Scratch(scratch("mes-fail-close"));
+    let order_id = "wo-mes-fail-close";
+    let state = Arc::new(Mutex::new(RecordingSinkState::default()));
+    let mut driver = OrderLifecycleDriver::open_with_sink(
+        driver_config(order_id, dir.0.clone()),
+        engine_client(),
+        Box::new(FixedClock::new(1_767_225_600_000)),
+        Box::new(RecordingSink {
+            state: state.clone(),
+        }),
+    )
+    .unwrap();
+    // is_final=true / qualified=false：complete 无前置门可过，close 门
+    // 点名 NoQualifiedFinalArtifact 拒收——失败点在收尾对账之前最后一步。
+    let unit = StubExecuteUnit {
+        artifact_id: format!("fa-{order_id}"),
+        is_final: true,
+        qualified: false,
+    };
+
+    let err = match driver.drive(&unit) {
+        Err(err) => err,
+        Ok(_) => panic!("close 门应拒收不合格工件，drive 却成功了"),
+    };
+    match &err {
+        ExeclineError::EngineRejected { op, .. } => assert_eq!(op, "close"),
+        other => panic!("期望 EngineRejected(close)，实际 {other:?}"),
+    }
+    assert_eq!(err.code().as_str(), "EX1006", "{err}");
+
+    let guard = state.lock().unwrap();
+    assert_eq!(guard.sync_calls, 1, "失败路径收尾对账必须恰执行一次");
+    let mut kinds = guard.appended_kinds.clone();
+    kinds.sort_unstable();
+    assert_eq!(
+        kinds,
+        vec!["complete", "release", "start"],
+        "已发生事件恰为 release/start/complete（close 未发生）"
+    );
+}
+
+/// MES-FAIL 同款·执行单元失败路径：EX3001 照旧透传，收尾 `mes.sync()`
+/// 仍恰一次、已发生的 release/start 事件入 sink——失败点比 close 拒收
+/// 更早（complete 都没到），验证 guarantee 覆盖管线全程而非仅收尾一步。
+#[test]
+fn drive_unit_failed_still_runs_mes_sync_once() {
+    let dir = Scratch(scratch("mes-fail-unit"));
+    let order_id = "wo-mes-fail-unit";
+    let state = Arc::new(Mutex::new(RecordingSinkState::default()));
+    let mut driver = OrderLifecycleDriver::open_with_sink(
+        driver_config(order_id, dir.0.clone()),
+        engine_client(),
+        Box::new(FixedClock::new(1_767_225_600_000)),
+        Box::new(RecordingSink {
+            state: state.clone(),
+        }),
+    )
+    .unwrap();
+
+    let err = match driver.drive(&FailingUnit) {
+        Err(err) => err,
+        Ok(_) => panic!("失败单元应使 drive 返回 EX3001"),
+    };
+    assert_eq!(err.code().as_str(), "EX3001", "{err}");
+
+    let guard = state.lock().unwrap();
+    assert_eq!(guard.sync_calls, 1, "单元失败路径收尾对账必须恰执行一次");
+    let mut kinds = guard.appended_kinds.clone();
+    kinds.sort_unstable();
+    assert_eq!(
+        kinds,
+        vec!["release", "start"],
+        "已发生事件恰为 release/start（execute 之后皆未发生）"
+    );
 }

@@ -376,10 +376,55 @@ impl OrderLifecycleDriver {
     }
 
     /// 全生命周期驱动（幂等）：同一 order_id 二次驱动只重放已完成 op。
+    ///
+    /// 收尾对账 guarantee（MES-FAIL 修复，2026-10-25）：`mes.sync()` 无论
+    /// 管线成败都执行——对账以**已发生事件**为准（close 被拒收/执行单元
+    /// 失败时，release/start/complete 已发事件同样须对账入 CH，不留只存
+    /// 在于正本的缺口）。管线失败时原错误优先返回；sync 自身再失败，原
+    /// 错误不吞，sync 失败追加记账一行（失败真相由 ledger 承担）。
     pub fn drive(&mut self, unit: &dyn ExecuteUnit) -> Result<DriveReport, ExeclineError> {
         let seq_before = self.ledger.seq();
         self.drive_mes.clear();
         self.replay_hits = 0;
+        let inner = self.drive_inner(unit);
+        // 收尾对账面（B②③）——无条件执行：CH sink = retry_outbox + 读侧
+        // event_id 对账 + 差量送批，以已发生事件为准；Parked = EX2003
+        // fail-loud——失败时订单止于管线实际到达的状态（happy = Closed；
+        // close 被拒 = Completed；单元失败 = InProgress），重跑按实际状态
+        // 续走、读侧对账只补差量；文件 sink = no-op（冒烟路径行为不变）。
+        let sync = self.mes.sync();
+        match (inner, sync) {
+            (Ok(exec_output), Ok(mes_sync)) => Ok(DriveReport {
+                order: self.order.clone(),
+                replayed: self.replay_hits > 0,
+                appended: self.ledger.seq() - seq_before,
+                mes_events: std::mem::take(&mut self.drive_mes),
+                mes_sync,
+                exec_output: Some(exec_output),
+            }),
+            // 管线失败 = 返回值；sync 若也失败只追加记账（原错误优先，
+            // 不吞不覆盖）。追加本身失败（账本已在坏态）无从再记——
+            // 原错误已携带返回，静默不掩盖任何新事实。
+            (Err(orig), sync_result) => {
+                if let Err(sync_err) = sync_result {
+                    let _ = self.append_record(
+                        "mes_sync",
+                        self.idem_key("mes_sync"),
+                        false,
+                        Some(("mes_sync_failed", sync_err.to_string())),
+                        None,
+                    );
+                }
+                Err(orig)
+            }
+            // 管线成功而 sync 失败：与既有语义一致 fail-loud（EX2003）。
+            (Ok(_), Err(sync_err)) => Err(sync_err),
+        }
+    }
+
+    /// `drive` 的管线本体（create → … → close）。收尾对账由 [`Self::drive`]
+    /// 的外层 guarantee 统一承担，本函数不触 sync——失败可在任一步上行。
+    fn drive_inner(&mut self, unit: &dyn ExecuteUnit) -> Result<ExecOutput, ExeclineError> {
         self.create_order()?;
         self.bind_line()?;
         self.attach_voucher()?;
@@ -388,18 +433,7 @@ impl OrderLifecycleDriver {
         let exec_output = self.execute(unit)?;
         self.complete()?;
         self.close()?;
-        // 收尾对账面（B②③）：CH sink = retry_outbox + 读侧 event_id 对账 +
-        // 差量送批（Parked = EX2003 fail-loud，订单本体已 Closed，重跑只补差量）；
-        // 文件 sink = no-op（冒烟路径行为不变）。
-        let mes_sync = self.mes.sync()?;
-        Ok(DriveReport {
-            order: self.order.clone(),
-            replayed: self.replay_hits > 0,
-            appended: self.ledger.seq() - seq_before,
-            mes_events: std::mem::take(&mut self.drive_mes),
-            mes_sync,
-            exec_output: Some(exec_output),
-        })
+        Ok(exec_output)
     }
 
     // ---------- 内部 ----------
