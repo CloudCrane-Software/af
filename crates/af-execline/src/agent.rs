@@ -18,7 +18,10 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use af_harness::{AgentSpec, BudgetBinding, Launch, Opened, RunReport, ToolRegistry};
+use af_harness::{
+    AgentSpec, BudgetBinding, BudgetRef, BudgetUnit, Launch, Opened, Policy, RunReport,
+    StopCondition, ToolRegistry,
+};
 use af_meter::BudgetLedger;
 use af_stop::StopPolicy;
 use af_workorder::{GraphVersion, Priority, Sla, WorkOrder};
@@ -71,6 +74,28 @@ pub struct AgentRunFailure {
 /// Err 侧升结构化以保 http_retries）。
 pub trait AgentRunner {
     fn run(&self, launch: AgentLaunch<'_>) -> Result<AgentRunOutcome, AgentRunFailure>;
+}
+
+/// llm.cents 预算 Policy 组装（swev/tb 两单元共用，P5 重构抽取；行为不变——
+/// af-bench main.rs:746-758 与 980-991 同构段：1 turn = 1 模型调用、
+/// 单完成信号词、连续无工具轮上限、每 turn 记 1 cent）。
+pub(crate) fn llm_cents_policy(
+    max_turns: u32,
+    completion_signal: &str,
+    tool_free_turn_limit: u32,
+) -> Policy {
+    Policy {
+        max_turns,
+        stop: StopCondition {
+            completion_signals: vec![completion_signal.into()],
+            tool_free_turn_limit,
+        },
+        budget_ref: BudgetRef {
+            dimension: "llm.cents".into(),
+            per_turn: 1,
+            unit: BudgetUnit::Cents,
+        },
+    }
 }
 
 /// 真实现：af-harness 包装器（main.rs:681-687 root + 768-798 key/Launch/registry

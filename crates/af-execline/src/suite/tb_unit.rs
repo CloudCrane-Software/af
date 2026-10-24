@@ -31,12 +31,8 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use af_harness::{
-    AgentSpec, BudgetRef, BudgetUnit, ContextTemplate, EndpointSpec, Policy, StopCondition,
-    ToolDecl,
-};
+use af_harness::{AgentSpec, ContextTemplate, EndpointSpec, ToolDecl};
 use af_workorder::WorkArtifact;
-use serde_json::Value;
 
 use crate::agent::{AgentLaunch, AgentRunFailure, AgentRunOutcome, BashFn};
 use crate::error::ExeclineError;
@@ -197,7 +193,11 @@ impl ExecuteUnit for TbExecuteUnit {
                     http_retries,
                     &message,
                 );
-                return Err(self.fail_with_row(ctx, &row, &format!("run 失败: {message}")));
+                return Err(crate::record::fail_with_legacy_row(
+                    ctx,
+                    &row,
+                    &format!("run 失败: {message}"),
+                ));
             }
         };
         // agent_wall_ms（main.rs:1059）：run 相时长，不含 setup/verify。
@@ -220,7 +220,7 @@ impl ExecuteUnit for TbExecuteUnit {
             verifier_note,
         };
         let row = crate::record::tb_legacy_row(&facts);
-        self.append_legacy_row(ctx, &row)?;
+        crate::record::append_legacy_row(ctx, &row)?;
         Ok(ExecOutput {
             // reward=Some(true) → 合格终态工件（引擎 close 门材料）；infra
             // （None）不是错误——行照落、工件不合格，订单侧自然进不了 close 门。
@@ -245,28 +245,7 @@ impl TbExecuteUnit {
     fn setup_failed_row(&self, ctx: &ExecContext<'_>, err: &str) -> ExeclineError {
         let row =
             crate::record::tb_setup_failed_row(ctx.task_id, &self.spec.profile, ctx.trial, err);
-        self.fail_with_row(ctx, &row, &format!("setup 失败: {err}"))
-    }
-
-    /// 失败路径共用：先落 legacy 行（main.rs:947-949 append+flush），sink 失败
-    /// 并案进错误文案；随后返回 EX3001（§2.4：可重试）。
-    fn fail_with_row(&self, ctx: &ExecContext<'_>, row: &Value, detail: &str) -> ExeclineError {
-        let sink_note = ctx.record_sink.append_legacy(&row.to_string()).err();
-        ExeclineError::UnitFailed {
-            detail: match sink_note {
-                None => detail.to_string(),
-                Some(err) => format!("{detail}；且落行失败: {err}"),
-            },
-        }
-    }
-
-    /// 成功路径 legacy 行落盘（main.rs:1086-1090 writeln + flush）。
-    fn append_legacy_row(&self, ctx: &ExecContext<'_>, row: &Value) -> Result<(), ExeclineError> {
-        ctx.record_sink
-            .append_legacy(&row.to_string())
-            .map_err(|err| ExeclineError::UnitFailed {
-                detail: format!("写 results 失败: {err}"),
-            })
+        crate::record::fail_with_legacy_row(ctx, &row, &format!("setup 失败: {err}"))
     }
 
     /// AgentSpec 组装（main.rs:971-992）。TB **无采样覆写**（main.rs:628-631
@@ -289,18 +268,11 @@ impl TbExecuteUnit {
                 slots: Vec::new(),
             },
             toolset: vec![tool_decl],
-            policy: Policy {
-                max_turns: self.spec.max_turns,
-                stop: StopCondition {
-                    completion_signals: vec![self.spec.completion_signal.into()],
-                    tool_free_turn_limit: self.spec.tool_free_turn_limit,
-                },
-                budget_ref: BudgetRef {
-                    dimension: "llm.cents".into(),
-                    per_turn: 1,
-                    unit: BudgetUnit::Cents,
-                },
-            },
+            policy: crate::agent::llm_cents_policy(
+                self.spec.max_turns,
+                self.spec.completion_signal,
+                self.spec.tool_free_turn_limit,
+            ),
         })
     }
 

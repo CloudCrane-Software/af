@@ -20,6 +20,8 @@ use std::sync::Mutex;
 use af_harness::TokenTotals;
 use serde_json::{json, Value};
 
+use crate::error::ExeclineError;
+
 /// note 截断（af-bench main.rs:666/834/889 的 `.chars().take(300)` 口径；
 /// v1 契约 §1.2"截断至 ~300 字符"同源）。
 fn clip300(note: &str) -> String {
@@ -103,6 +105,38 @@ fn writeln_flush(file: &mut std::fs::File, row: &str, what: &str) -> Result<(), 
     writeln!(file, "{row}").map_err(|err| format!("写 {what} 失败: {err}"))?;
     file.flush()
         .map_err(|err| format!("flush {what} 失败: {err}"))
+}
+
+// ---- 单元侧行落盘共用件（P5 重构抽取：swev/tb 两单元同构段，行为不变）----
+
+/// 成功路径 legacy 行落盘（单元视角；writeln+flush 语义在 sink，失败包
+/// EX3001 fail-loud 不静默丢行）。← main.rs:891-895（swev）/ 1086-1090（tb）同款。
+pub(crate) fn append_legacy_row(
+    ctx: &crate::exec::ExecContext<'_>,
+    row: &Value,
+) -> Result<(), ExeclineError> {
+    ctx.record_sink
+        .append_legacy(&row.to_string())
+        .map_err(|err| ExeclineError::UnitFailed {
+            detail: format!("写 results 失败: {err}"),
+        })
+}
+
+/// 失败路径：先落 legacy 行（append+flush），sink 失败并案进错误文案；随后
+/// 返回 EX3001（§2.4：行由单元落、订单侧不停终态——可重试）。
+/// ← main.rs:668-670（swev）/ 947-949（tb）同款。
+pub(crate) fn fail_with_legacy_row(
+    ctx: &crate::exec::ExecContext<'_>,
+    row: &Value,
+    detail: &str,
+) -> ExeclineError {
+    let sink_note = ctx.record_sink.append_legacy(&row.to_string()).err();
+    ExeclineError::UnitFailed {
+        detail: match sink_note {
+            None => detail.to_string(),
+            Some(err) => format!("{detail}；且落行失败: {err}"),
+        },
+    }
 }
 
 /// 单题执行事实——两轨行的同源（方案 §1.4"防漂移"）。

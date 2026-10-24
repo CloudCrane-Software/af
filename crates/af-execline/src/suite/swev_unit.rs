@@ -27,9 +27,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use af_harness::{
-    AgentSpec, BudgetRef, BudgetUnit, ContextTemplate, Policy, StopCondition, ToolDecl,
-};
+use af_harness::{AgentSpec, ContextTemplate, ToolDecl};
 use af_workorder::WorkArtifact;
 use serde_json::Value;
 
@@ -219,7 +217,11 @@ impl ExecuteUnit for SwevExecuteUnit {
                     http_retries,
                     &message,
                 );
-                return Err(self.fail_with_row(ctx, &row, &format!("run 失败: {message}")));
+                return Err(crate::record::fail_with_legacy_row(
+                    ctx,
+                    &row,
+                    &format!("run 失败: {message}"),
+                ));
             }
         };
         // gate 相（main.rs:801-813）：完成度记账非门控——no_patch/test_edit 落行，
@@ -270,7 +272,7 @@ impl ExecuteUnit for SwevExecuteUnit {
             self.unit_id(),
             self.spec.unit_version,
         );
-        self.append_legacy_row(ctx, &legacy_row)?;
+        crate::record::append_legacy_row(ctx, &legacy_row)?;
         self.append_v1_row(ctx, &v1_row)?;
         // 判分三件套实际路径（§2.2 evidence：只记在盘文件——早期失败臂缺件不虚列）。
         let evidence = [
@@ -300,37 +302,16 @@ impl ExecuteUnit for SwevExecuteUnit {
 
 impl SwevExecuteUnit {
     /// setup_failed 行落盘 + 转 EX3001（main.rs:654-677：字段齐备含 null；
-    /// §2.4 订单侧不停终态——可重试）。
+    /// §2.4 订单侧不停终态——可重试）。失败路径落盘共用件 =
+    /// [`crate::record::fail_with_legacy_row`]（P5 重构抽取，tb 单元同款）。
     fn setup_failed_row(&self, ctx: &ExecContext<'_>, err: &str) -> ExeclineError {
         let row =
             crate::record::swev_setup_failed_row(ctx.task_id, &self.spec.profile, ctx.trial, err);
-        self.fail_with_row(ctx, &row, &format!("setup 失败: {err}"))
+        crate::record::fail_with_legacy_row(ctx, &row, &format!("setup 失败: {err}"))
     }
 
-    /// 失败路径共用：先落 legacy 行（append + flush 语义由 sink 承载，
-    /// main.rs:668-670），sink 失败并案进错误文案；随后返回 EX3001（§2.4：
-    /// 行由单元落、订单侧不停终态——可重试）。
-    fn fail_with_row(&self, ctx: &ExecContext<'_>, row: &Value, detail: &str) -> ExeclineError {
-        let sink_note = ctx.record_sink.append_legacy(&row.to_string()).err();
-        ExeclineError::UnitFailed {
-            detail: match sink_note {
-                None => detail.to_string(),
-                Some(err) => format!("{detail}；且落行失败: {err}"),
-            },
-        }
-    }
-
-    /// 成功路径 legacy 行落盘（main.rs:891-895：writeln + flush）；失败
-    /// fail-loud（EX3001），不静默丢行。
-    fn append_legacy_row(&self, ctx: &ExecContext<'_>, row: &Value) -> Result<(), ExeclineError> {
-        ctx.record_sink
-            .append_legacy(&row.to_string())
-            .map_err(|err| ExeclineError::UnitFailed {
-                detail: format!("写 results 失败: {err}"),
-            })
-    }
-
-    /// v1 行落盘（{{output_dir}}/records.jsonl 流；方案 §1.4）。
+    /// v1 行落盘（{{output_dir}}/records.jsonl 流；方案 §1.4；swe-v 独有——
+    /// TB 无 v1 投影）。
     fn append_v1_row(&self, ctx: &ExecContext<'_>, row: &Value) -> Result<(), ExeclineError> {
         ctx.record_sink
             .append_v1(&row.to_string())
@@ -365,19 +346,13 @@ impl SwevExecuteUnit {
                 slots: Vec::new(),
             },
             toolset: vec![tool_decl],
-            policy: Policy {
-                // 1 turn = 1 模型调用（与 mini step 同义）。
-                max_turns: self.spec.max_turns,
-                stop: StopCondition {
-                    completion_signals: vec![self.spec.completion_signal.into()],
-                    tool_free_turn_limit: self.spec.tool_free_turn_limit,
-                },
-                budget_ref: BudgetRef {
-                    dimension: "llm.cents".into(),
-                    per_turn: 1,
-                    unit: BudgetUnit::Cents,
-                },
-            },
+            // 1 turn = 1 模型调用（与 mini step 同义）；组装共用件 =
+            // [`crate::agent::llm_cents_policy`]（P5 重构抽取，tb 单元同款）。
+            policy: crate::agent::llm_cents_policy(
+                self.spec.max_turns,
+                self.spec.completion_signal,
+                self.spec.tool_free_turn_limit,
+            ),
         })
     }
 
@@ -444,8 +419,8 @@ fn attempt_from_dir(attempt_dir: &std::path::Path) -> u32 {
         .unwrap_or(1)
 }
 
-/// 容器清理 RAII guard：P5 起定居 [`crate::suite::tb::ContainerGuard`]
-/// （swev/tb 两单元共用），本模块仅按上文体注引用。
+// 容器清理 RAII guard：P5 起定居 `crate::suite::tb::ContainerGuard`
+// （swev/tb 两单元共用），本模块按上文体注引用。
 
 #[cfg(test)]
 mod tests {
