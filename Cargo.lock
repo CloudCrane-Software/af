@@ -178,6 +178,7 @@ name = "af-order"
 version = "0.1.0"
 dependencies = [
  "af-execline",
+ "af-mes",
  "af-workorder",
  "serde",
  "serde_json",
