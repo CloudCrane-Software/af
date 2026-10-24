@@ -11,7 +11,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use af_execline::{
-    DriverConfig, EngineClient, MesFileWriter, OrderLifecycleDriver, StubExecuteUnit, SystemClock,
+    AttemptLayout, DriverConfig, EngineClient, MesFileWriter, OrderLifecycleDriver,
+    StubExecuteUnit, SystemClock,
 };
 use af_workorder::{Priority, Sla, StableId};
 use serde_json::{json, Value};
@@ -201,6 +202,14 @@ fn run_submit(
         voucher,
         out_dir: order_dir.clone(),
         station_id: DEFAULT_STATION_ID.to_string(),
+        // P4 扩展透传字段（af-execline §2.2）：CLI submit 用桩单元，不消费这些字段。
+        host_alias: "anolis".into(),
+        data_root: PathBuf::new(),
+        task_id: String::new(),
+        trial: false,
+        // P5 扩展（af-execline §5-P5 驱动层 attempt 分配）：桩单元不消费，占位即可。
+        profile: "stub".into(),
+        attempt_layout: AttemptLayout::SwevIncrement,
     };
     let mut driver = OrderLifecycleDriver::open(cfg, client, Box::new(SystemClock))?;
     let artifact_id = format!("fa-{}", spec.order_id);
