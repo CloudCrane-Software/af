@@ -1,0 +1,6 @@
+{
+  "package": "beta",
+  "graphs": [
+    { "name": "router", "version": "1", "source": "graphs/router@1.afb" }
+  ]
+}
