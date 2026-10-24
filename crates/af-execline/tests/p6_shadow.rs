@@ -254,7 +254,6 @@ fn new_path_run(
         trial: false,
     };
     let output = unit.execute(&ctx).expect("新路全流程应 Ok");
-    assert_eq!(output.verdict, Some(true), "fake judge 回 resolved=true");
     let rows: Vec<Value> = std::fs::read_to_string(out_dir.join("results.jsonl"))
         .unwrap()
         .lines()
@@ -262,8 +261,14 @@ fn new_path_run(
         .map(|line| serde_json::from_str(line).unwrap())
         .collect();
     assert_eq!(rows.len(), 1, "新路恰一行 legacy");
+    let row = rows.into_iter().next().unwrap();
+    assert_eq!(
+        row["reward"],
+        json!(output.verdict),
+        "行 reward 与单元 verdict 同源（双轨不漂移）"
+    );
     let run_id = runner.captured_run_id();
-    (attempt_dir, rows.into_iter().next().unwrap(), run_id)
+    (attempt_dir, row, run_id)
 }
 
 /// 冻结 af-bench main.rs:861-890 的 18 键行装配模板（旧路行 oracle——语句
@@ -352,9 +357,9 @@ fn cmp_p6_old_judge_call_matches_frozen_bench_source() {
     for needle in [
         r#"Command::new("/home/pan-ding/swev-venv/bin/python")"#,
         r#".arg("/home/pan-ding/workspace/agent黑灯工厂/tools/swev-judge.py")"#,
-        ".arg(task_json)",
-        ".arg(log)",
-        ".arg(diff)",
+        ".arg(task_json_path)",
+        ".arg(&log_path)",
+        ".arg(&diff_path)",
         ".output()",
     ] {
         assert!(
@@ -513,13 +518,14 @@ fn l1_fake_runner_chain_vs_frozen_bench_six_dimensions() {
         assert_eq!(row_new["gate"], json!(gate_old), "D10: gate 记账一致");
 
         // D7 行对拍：新旧 18 键行 Value 全等（wall 弹出）+ 序列化字节全等。
+        assert_eq!(row_new.as_object().unwrap().len(), 18, "18 键齐备");
         let agent_wall = row_new
             .as_object_mut()
             .unwrap()
             .remove("agent_wall_ms")
             .and_then(|v| v.as_u64())
             .expect("wall 字段");
-        let oracle = old_template_row(
+        let mut oracle = old_template_row(
             TASK,
             &attempt_dir,
             Some(true),
@@ -529,7 +535,16 @@ fn l1_fake_runner_chain_vs_frozen_bench_six_dimensions() {
             agent_wall,
             &expected_note,
         );
-        assert_eq!(row_new.as_object().unwrap().len(), 18, "18 键齐备");
+        // oracle 的 wall 与行同值（喂入的就是行的值）——弹出后比其余 17 键，
+        // 序列化字节断言亦在两弹出对象间进行（wall 属计时豁免面）。
+        assert_eq!(
+            oracle
+                .as_object_mut()
+                .unwrap()
+                .remove("agent_wall_ms")
+                .and_then(|v| v.as_u64()),
+            Some(agent_wall)
+        );
         assert_eq!(
             row_new, oracle,
             "D7: 新路行 = 旧路冻结模板 oracle（Value 全等）"
