@@ -10,6 +10,8 @@
 //! - M4（本模块期）：CEL 保守子集静态判定（§1.4，E1051-E1053/E2203）+
 //!   route 归一化（§1.5，E2101-E2103）+ topology_selector 编译期解析语义
 //!   （裁决 §二-1）。
+//! - P2-L09：`registry` 包图清单装载器（af/packages/*/manifest.json →
+//!   declared_graphs 注入面；失败分类账 #1-4「缺组件」终裁补齐）。
 //!
 //! 权威语法规范：《DSL-语法提案-B》（正本）+ 择优裁决 2026-10-24 §二。
 
@@ -17,6 +19,7 @@ pub mod cel;
 pub mod envelope;
 pub mod error;
 pub mod model;
+pub mod registry;
 pub mod route;
 pub mod shape;
 pub mod validate;

@@ -1,0 +1,7 @@
+{
+  "package": "alpha",
+  "graphs": [
+    { "name": "g1", "version": "1", "source": "graphs/g1@1.afb" },
+    { "name": "core.best", "version": "2.0", "source": "graphs/core/best@2.0.afb" }
+  ]
+}

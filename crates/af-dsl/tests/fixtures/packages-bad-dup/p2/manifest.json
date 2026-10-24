@@ -1,0 +1,6 @@
+{
+  "package": "d",
+  "graphs": [
+    { "name": "x", "version": "1", "source": "graphs/x-copy@1.afb" }
+  ]
+}
