@@ -30,6 +30,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "af-compiler"
+version = "0.1.0"
+dependencies = [
+ "af-dsl",
+ "cel-interpreter",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+]
+
+[[package]]
 name = "af-credential"
 version = "0.1.0"
 dependencies = [
