@@ -27,7 +27,7 @@
 - `MesReader::open_with_auth`（reader.rs）：B③ 读侧对账所需认证读（B② 的 sink 同源使用）。
 - mock 扩展（mock.rs）：`CapturedRequest{request_line, headers}` 全录 + `requests()` 访问器（凭据线格式断言依据）。
 
-**测试**（tests/http.rs，26/26 绿）：带认证 writer 头注入与值一致 / 匿名零凭据头零 URL 凭据（插入+SELECT 全查）/ 带认证 reader SELECT / WriterConfig Debug 脱敏。
+**测试**（af-mes 整包 26/26 绿 = 单元 12 + tests/http.rs 14；http 新增 4 测）：带认证 writer 头注入与值一致 / 匿名零凭据头零 URL 凭据（插入+SELECT 全查）/ 带认证 reader SELECT / WriterConfig Debug 脱敏。
 
 **偏差**：无。
 

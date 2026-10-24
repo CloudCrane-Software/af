@@ -8,9 +8,11 @@
 //!   同约定）或显式 URL（可含 `user:pass@host`，拆出转官方客户端认证头，
 //!   凭据零落日志/回执）。
 //! - **读侧对账**（替换 marker）：ship 前按 `work_order_id` 查
-//!   `af_mes.mes_event`（SELECT FINAL），已在 CH 的 event_id 跳过，只补
-//!   差量。MergeTree 无去重——幂等的真值源是 CH 本身，不是本地 marker；
-//!   跨驱补送（重放驱新跃迁、上次 park 的批）因此结构性闭合。
+//!   `af_mes.mes_event`（SELECT 不带 FINAL——表是 MergeTree，mingda CH
+//!   26.7 实测 ILLEGAL_FINAL，见 af-mes reader.rs 文档），已在 CH 的
+//!   event_id 跳过，只补差量。MergeTree 无去重——幂等的真值源是 CH
+//!   本身，不是本地 marker；跨驱补送（重放驱新跃迁、上次 park 的批）
+//!   因此结构性闭合。
 //! - **fail-loud**：送批 Parked（CH 未接住、批已进 outbox）= EX2003——
 //!   真实落账纪律，不接受"可能已写"；at-least-once 由 af-mes outbox +
 //!   下轮 `sync` 开头的 retry_outbox 收敛（重试入账后再对账，不双写）。
