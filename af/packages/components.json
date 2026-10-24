@@ -1,0 +1,34 @@
+{
+  "components": [
+    {
+      "class": "model_route",
+      "name": "route.main",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/main.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.cheap",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/cheap.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3-Flash",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    }
+  ]
+}

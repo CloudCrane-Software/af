@@ -389,7 +389,7 @@ fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
 }
 
 /// SHA-256 摘要 → 小写十六进制串（64 字符）。
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut s = String::with_capacity(bytes.len() * 2);
     for b in bytes {
@@ -397,6 +397,12 @@ fn hex(bytes: &[u8]) -> String {
         s.push(HEX[(b & 0x0f) as usize] as char);
     }
     s
+}
+
+/// 字节面的 SHA-256 十六进制摘要（G2b 起的 crate 内共享入口——
+/// `CelRef.digest`/`dsl_digest`/`registry_digest` 同一确定性口径）。
+pub(crate) fn digest_of(bytes: &[u8]) -> String {
+    hex(&Sha256::digest(bytes))
 }
 
 // ============================================================

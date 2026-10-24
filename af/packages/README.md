@@ -37,3 +37,26 @@
 | `sweng` | MetaGPT.yaml:23-25 | 3 |
 
 图本体（AFB 文件）可后续提供；装载期只登记引用（`source` 指向预留路径）。
+
+## components.json —— 组件声明清单（P2-L11，af-compiler stage 3 装载）
+
+`af-dsl::registry` 只读 `manifest.json`（包图清单）；本目录自 P2-L11 起另有
+**组件声明清单** `components.json`，装载器为 `af-compiler::components`（DSL
+侧对此文件零感知——`manifest.json` 规范与四包闭包不变）。
+
+- 位置两种：**包级** `af/packages/<包>/components.json`（该包自有的
+  tool/unit/memory 组件）与**根级** `af/packages/components.json`（跨包共享
+  组件——本首版收 model_route 模型路由档案）。根级文件是非目录条目，
+  `af-dsl::registry` 的目录扫描天然跳过。
+- 每条声明：`class`（model_route | tool | unit | memory）+ `name`（DSL
+  `uses.*` 引用串去 `@版本` 段）+ `version`；tool 类必填 `effect_class`
+  （pure | persist | external_once——ADR-010 effect_class 回填源）；model_route
+  类必填 `endpoint`（af-harness `EndpointSpec` 字段级同形，`key_ref` 只存
+  引用名）；可选 `impl_ref`（实现定位串）。
+- 组合引用：`{name}@{version}`。同名同版本跨文件重复 → 装载即拒（首声者
+  路径在案）。目录按路径序处理，确定性装载；全量声明的规范序列化取
+  SHA-256 即 `registry_digest`（计划对象携带，执行面核对——E9004 面）。
+
+首批声明 = golden 源 sample2 / sample3 / GPTSwarm 三稿 `uses.*` 引用闭包：
+`route.main@1`、`route.cheap@1`（根级）；`pkg.sweng.locate/view/edit`、
+`pkg.sweng.test_unit@1`（sweng）；`pkg.swarmkit.tools@1`（swarmkit）。

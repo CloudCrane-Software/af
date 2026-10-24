@@ -1,0 +1,31 @@
+{
+  "components": [
+    {
+      "class": "tool",
+      "name": "pkg.sweng.locate",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "packages/sweng@1.0.0/tools/locate.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.view",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "packages/sweng@1.0.0/tools/view.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.edit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "packages/sweng@1.0.0/tools/edit.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.sweng.test_unit",
+      "version": "1",
+      "impl_ref": "packages/sweng@1.0.0/units/test_unit.py"
+    }
+  ]
+}
