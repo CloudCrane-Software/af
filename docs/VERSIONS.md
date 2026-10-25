@@ -45,7 +45,7 @@ af-sandbox/af-station/af-stop/af-trace/af-workorder）均为 0.1.0，语义结�
 | 项 | 版本/值 | 载体 |
 |---|---|---|
 | CI 管道 | 九门 + step9 FV advisory | `ci/run.sh`；每跑次 SUMMARY 落 `ci/out/` 随分支入档 |
-| 中立性门红名单 | 21 项登记 | `ci/neutrality_gate.sh`（19→21，执行器合流批） |
+| 中立性门红名单 | 22 项登记 | `ci/neutrality-expected-fail.txt`（19→21 执行器合流批 381945c9；+1 预算校准批 81ac6e6 `sop_full_v1_1_token_cap_calibrated_to_f4c_measurement`——本表初版误记 21，复核指出后按文件亲数改 22） |
 | 形式验证 | FV-1 第一波：Kani 32+17 / Verus 29 / Rocq 陈述库 10/10 | `proofs/` + `proofs/README-形式验证.md` |
 
 ## 五、开放议程（在档，非承诺）
