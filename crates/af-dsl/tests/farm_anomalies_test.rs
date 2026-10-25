@@ -148,3 +148,143 @@ fn al08_failures_route_into_body_rejected_as_e2204() {
         "failures.route 指向体内节点：按根图限定拒（E2204）：\n{report}"
     );
 }
+
+// ---------- P1-ALIAS：点号 id 词法拒 E1008 + entry/output.from 口径统一（裁决 §三-⑥） ----------
+
+/// 路径别名族（ANOMALIES.md B-1）：节点 id 无字符集限制，「根节点 a.b」与
+/// 「a 的 loop 体节点 b」点号路径同形 → 语义索引 BTreeMap 键覆盖无侦测，
+/// 单文档致盲 INV-2 多写者/E2312/E2321 自环/E2331 越权读者/E2322 安全点
+/// 五防线（六份 PASS 样本）。提案-B 文法中点号始终是路径分隔符（§1.2
+/// writer「节点 id **或**点号路径」两类），id 段本不含点号——词法层 E1008
+/// 拒绝即同时解漏网与误杀，0 语法演进。
+#[test]
+fn alias_family_dotted_ids_rejected_as_e1008() {
+    for name in [
+        "C_AL01_writer_alias_root_over_body.yaml",
+        "C_AL02_writer_alias_body_wins.yaml",
+        "C_AL03_map_writer_hidden.yaml",
+        "C_AL06_verifier_selfloop_hidden.yaml",
+        "C_AL07_eval_reader_hidden.yaml",
+        "C_AL13_safetypoint_fake_pass.yaml",
+    ] {
+        let report = farm(name);
+        assert!(
+            codes(&report).contains(&"E1008"),
+            "{name} 点号 id 应词法拒（E1008），不得因索引别名静默过审：\n{report}"
+        );
+    }
+}
+
+/// 误杀 4 份（ANOMALIES.md C 类）：点号 id 节点被 entry 精确 id / output.from
+/// 点号分段双口径分裂（C_AL04 E2001）、安全点/from_body 命中双胞胎
+/// （C_AL12 E2322 / C_AL14 E2106）、CEL 词表整名登记 vs 分段解析根
+/// （C_AL10 E2203）——同根因另一面。词法拒后四份均以 E1008 定罪，幽灵
+/// 语义误杀随之消解（不再是拒绝理由）。
+#[test]
+fn alias_false_kills_now_reject_for_e1008() {
+    for name in [
+        "C_AL04_entry_output_asym.yaml",
+        "C_AL10_cel_dotted_id_unreachable.yaml",
+        "C_AL12_safetypoint_wrong_target_fk.yaml",
+        "C_AL14_frombody_shadow_fk.yaml",
+    ] {
+        let report = farm(name);
+        assert!(
+            codes(&report).contains(&"E1008"),
+            "{name} 应以 E1008（点号 id）定罪，而非幽灵语义误杀：\n{report}"
+        );
+    }
+}
+
+/// 口径分裂消亡钉：entry=根图精确 id；output.from=根图 id 或点号体内
+/// 路径（inv1_test 既有契约，n1.lp.leaf 形）。两口径的分裂面（同一节点
+/// 可作入口、不可作输出来源）只在**点号 id** 场景成立——E1008 词法拒后
+/// 合法文档 id 无点号，单段 from 与 entry 同命中、多段 from 是真体内
+/// 路径，分裂不再可达（农田 C_AL04 的幽灵分裂随 E1008 消解）。
+#[test]
+fn entry_and_output_from_calibers_cannot_diverge_post_e1008() {
+    // 体内路径 from: a.b 合法（既定契约照旧）；同一字符串作 entry 则按
+    // 根图精确 id 判 E2001——两口径各自稳定，且点号 id 已不可声明。
+    let base = "\
+version: 1
+meta:
+  name: caliber
+  graph_version: '1'
+  entry: n1
+  input: T_in
+  output: { ref: T_out, from: a.b }
+types:
+- name: T_in
+  schema: { type: object, properties: { q: { type: string } } }
+- name: T_out
+  schema: { type: object, properties: { r: { type: string } } }
+nodes:
+- id: n1
+  kind: task
+  uses: { model: m@1 }
+  emits: { out: T_out }
+  context:
+    sections: [{ from: input, fields: [q], quota_tokens: 10 }]
+- id: a
+  kind: task
+  loop:
+    body:
+      nodes:
+      - id: b
+        kind: check
+        emits: { o: T_out }
+        uses: { unit: g@1 }
+      edges: []
+    max_iterations: 1
+    safety_points: [{ node: b, kind: check }]
+edges: []
+policies: {}
+";
+    let doc = af_dsl::load_str(base).unwrap();
+    assert!(
+        validate(&doc).is_ok(),
+        "from: a.b（a 的体内 check 节点）按既定路径契约合法：\n{}",
+        validate(&doc)
+    );
+
+    // entry 换成同字符串：根图精确 id 无 "a.b" → E2001（entry 只认根图）。
+    let src = base.replace("entry: n1", "entry: a.b");
+    let doc = af_dsl::load_str(&src).unwrap();
+    let report = validate(&doc);
+    assert_eq!(
+        codes(&report),
+        vec!["E2001"],
+        "entry 只认根图节点 id：\n{report}"
+    );
+}
+
+// ---------- 文档化边界回归钉（裁决 §三：「5 项文档化边界入档不立案」+ B-5 复核存档） ----------
+
+/// 裁决明确不改码的样本钉现裁定（PASS），防本修复批误伤：零写者不报
+/// （inv2 注记）、间接自验证 v0.1 不查（inv3 注记）、求值错误不判（cel
+/// 注记）、阈值/口径类留人工裁决（B-5）。修复批只动裁决点名的六项。
+#[test]
+fn documented_boundaries_stay_pass() {
+    for name in [
+        "B10_type_schema_str.yaml",
+        "B23_ops_param_unclosed.yaml",
+        "B50_retention_zero.yaml",
+        "B69_zero_writer.yaml",
+        "C_MW03_zero_writer.yaml",
+        "C_IV35_indirect_selfverify_documented.yaml",
+        "C_CE10_steps_badfield.yaml",
+        "C_CE21_div_zero.yaml",
+        "C_CE02_list_literal.yaml",
+        "C_CE03_map_literal.yaml",
+        "C_CX20_two_edges_one_section.yaml",
+        "C_IV48_writer_port_forward_leak.yaml",
+        "C_IV49_evaluator_port_forward_leak.yaml",
+        "C_RT06_exit_named_node.yaml",
+    ] {
+        let report = farm(name);
+        assert!(
+            report.is_ok(),
+            "{name} 属文档化边界/复核存档（不在修复面），应保持 PASS：\n{report}"
+        );
+    }
+}

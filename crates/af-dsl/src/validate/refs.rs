@@ -34,6 +34,11 @@ fn check_meta(doc: &Document, ix: &Index<'_>, report: &mut Report) {
             format!("meta.entry 指向未声明节点 {:?}", doc.meta.entry),
         );
     }
+    // output.from：根图 id 或点号路径（体内解析——inv1_test 既有契约，
+    // n1.lp.leaf 形）。entry 为根图精确 id（上行）——两口径在点号 id 场景
+    // 曾分裂误杀（农田 C_AL04：同一节点可作入口、不可作输出来源）；点号
+    // id 词法拒（E1008，shape 层先于索引）后分裂面消亡：合法文档 id 无
+    // 点号，单段 from 与 entry 同命中，多段 from 是真体内路径。
     let from = match ix.resolve_root_path(&doc.meta.output.from) {
         Some(f) => f,
         None => {
