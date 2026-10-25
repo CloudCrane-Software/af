@@ -115,3 +115,20 @@ fn d209_blast_reports_e2205() {
         "D_209 output.ref=\"map\" 未登记，E2205 必须在场：\n{report}"
     );
 }
+
+// ---------- P1-HAS-MACRO：has() 宏不得逃过 E1052 白名单（裁决 §三-④） ----------
+
+/// C_CE04（policies.stop[].when: "has(input.q)"）：cel-parser 0.10.1 将
+/// has() 宏展开为 Select{test:true}——AST 不登记函数名，references().
+/// functions() 为空，E1052 白名单面拦不住（ANOMALIES.md B-3，文档-代码
+/// 分歧：cel.rs 注记「宏不在保守子集内」但宏面无检查）。词法补位后以
+/// E1052 拒（码位不变，宏即非保守子集）。
+#[test]
+fn ce04_has_macro_rejected_as_e1052() {
+    let report = farm("C_CE04_has_macro.yaml");
+    assert_eq!(
+        codes(&report),
+        vec!["E1052"],
+        "has() 宏应按非保守子集拒（E1052）：\n{report}"
+    );
+}
