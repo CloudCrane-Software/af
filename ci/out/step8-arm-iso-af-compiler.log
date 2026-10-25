@@ -21,19 +21,19 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 17 tests
 test components_files_do_not_touch_graph_manifest_surface ... FAILED
-test registry_rejects_name_containing_at_sign ... ok
-test registry_rejects_duplicate_refs_across_files ... ok
 test registry_rejects_model_route_without_endpoint ... ok
 test repo_components_registry_loads_deterministically ... FAILED
 test registry_rejects_tool_without_effect_class ... ok
+test registry_rejects_duplicate_refs_across_files ... ok
+test registry_rejects_name_containing_at_sign ... ok
 test registry_rejects_endpoint_discipline_violations ... ok
 test e9001_malformed_reference_string_is_rejected ... ok
 test e9001_unregistered_reference_is_rejected ... ok
 test empty_registry_binds_doc_without_uses_refs ... ok
-test e9003_class_mismatch_is_rejected ... ok
-test e9002_version_mismatch_is_rejected ... ok
-test e9002_unversioned_ref_on_multi_version_name_is_rejected ... ok
 test violations_are_collected_not_first_stopped ... ok
+test e9003_class_mismatch_is_rejected ... ok
+test e9002_unversioned_ref_on_multi_version_name_is_rejected ... ok
+test e9002_version_mismatch_is_rejected ... ok
 test escape_injection_point_passes_escape_spec_through ... ok
 test sample2_binds_all_uses_refs_with_first_class_fills ... FAILED
 test sample3_binds_nested_body_node_to_shared_route ... FAILED
@@ -42,7 +42,7 @@ failures:
 
 ---- components_files_do_not_touch_graph_manifest_surface stdout ----
 
-thread 'components_files_do_not_touch_graph_manifest_surface' (4147942) panicked at crates/af-compiler/tests/bind_test.rs:72:5:
+thread 'components_files_do_not_touch_graph_manifest_surface' (48535) panicked at crates/af-compiler/tests/bind_test.rs:72:5:
 assertion `left == right` failed: +reportkit（G4 终态，裁决§二）
   left: 0
  right: 5
@@ -50,19 +50,19 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 ---- repo_components_registry_loads_deterministically stdout ----
 
-thread 'repo_components_registry_loads_deterministically' (4147955) panicked at crates/af-compiler/tests/bind_test.rs:43:5:
+thread 'repo_components_registry_loads_deterministically' (48548) panicked at crates/af-compiler/tests/bind_test.rs:43:5:
 assertion `left == right` failed: P2-L11 首批 7 + P2-L12 扩容 50 + G4 reportkit 6（57→63，裁决§二同 commit）
   left: 0
  right: 63
 
 ---- sample2_binds_all_uses_refs_with_first_class_fills stdout ----
 
-thread 'sample2_binds_all_uses_refs_with_first_class_fills' (4147956) panicked at crates/af-compiler/tests/bind_test.rs:101:5:
+thread 'sample2_binds_all_uses_refs_with_first_class_fills' (48549) panicked at crates/af-compiler/tests/bind_test.rs:101:5:
 sample2 应零违例：[BindViolation { code: RefMissing, node: "architect", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.edit", message: "组件 \"pkg.sweng.edit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.locate", message: "组件 \"pkg.sweng.locate\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.view", message: "组件 \"pkg.sweng.view\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.qa", reference: "pkg.sweng.test_unit@1", message: "组件 \"pkg.sweng.test_unit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "planner", reference: "route.cheap@1", message: "组件 \"route.cheap\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "pm", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }]
 
 ---- sample3_binds_nested_body_node_to_shared_route stdout ----
 
-thread 'sample3_binds_nested_body_node_to_shared_route' (4147957) panicked at crates/af-compiler/tests/bind_test.rs:183:5:
+thread 'sample3_binds_nested_body_node_to_shared_route' (48550) panicked at crates/af-compiler/tests/bind_test.rs:183:5:
 sample3 应零违例：[BindViolation { code: RefMissing, node: "adjudicate", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "rounds.debate_map.debater", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }]
 
 
@@ -94,7 +94,7 @@ failures:
 
 ---- g3p2_selector_golden_byte_exact stdout ----
 
-thread 'g3p2_selector_golden_byte_exact' (4147964) panicked at crates/af-compiler/tests/golden_test.rs:502:5:
+thread 'g3p2_selector_golden_byte_exact' (48557) panicked at crates/af-compiler/tests/golden_test.rs:502:5:
 ADAS.yaml 应过注入 declared_graphs 的全量校验：E2001 dangling_reference[meta]: topology_selector rules[0].use 候选图 "pkg.adaskit.discovered_maze@1" 未在已声明的版本化图/子图集内
 E2001 dangling_reference[meta]: topology_selector rules[1].use 候选图 "pkg.adaskit.discovered_wordle@1" 未在已声明的版本化图/子图集内
 E2001 dangling_reference[meta]: topology_selector fallback 候选图 "pkg.adaskit.mas_search@1" 未在已声明的版本化图/子图集内
@@ -103,7 +103,7 @@ note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 ---- g3p2_selector_tamper_detection stdout ----
 
-thread 'g3p2_selector_tamper_detection' (4147966) panicked at crates/af-compiler/tests/golden_test.rs:502:5:
+thread 'g3p2_selector_tamper_detection' (48559) panicked at crates/af-compiler/tests/golden_test.rs:502:5:
 GPTSwarm.yaml 应过注入 declared_graphs 的全量校验：E2001 dangling_reference[meta]: topology_selector rules[0].use 候选图 "pkg.swarmkit.graph.plan_execute_review@2.1" 未在已声明的版本化图/子图集内
 E2001 dangling_reference[meta]: topology_selector rules[1].use 候选图 "pkg.swarmkit.graph.fanout_vote@1.4" 未在已声明的版本化图/子图集内
 E2001 dangling_reference[meta]: topology_selector fallback 候选图 "pkg.swarmkit.graph.react_baseline@1.0" 未在已声明的版本化图/子图集内
@@ -115,7 +115,7 @@ failures:
     g3p2_selector_injection_is_load_bearing
     g3p2_selector_tamper_detection
 
-test result: FAILED. 8 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+test result: FAILED. 8 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
 
 error: test failed, to rerun pass `-p af-compiler --test golden_test`
      Running tests/inline_body_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/inline_body_test-3b8c6b021bfbc684)
@@ -131,12 +131,12 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/ir_schema_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/ir_schema_test-79f89524aceecd2e)
 
 running 8 tests
-test envelope_rejects_unknown_top_key ... ok
-test envelope_rejects_non_integer_version ... ok
 test envelope_version_is_one ... ok
-test envelope_rejects_version_not_one ... ok
-test first_class_placeholder_values_are_empty_defaults ... ok
+test envelope_rejects_unknown_top_key ... ok
 test envelope_rejects_missing_version ... ok
+test first_class_placeholder_values_are_empty_defaults ... ok
+test envelope_rejects_non_integer_version ... ok
+test envelope_rejects_version_not_one ... ok
 test envelope_rejects_unknown_body_field_and_nested_field ... ok
 test first_class_fields_present_in_all_samples ... ok
 
@@ -154,11 +154,11 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 9 tests
 test plan_projects_emits_types_and_consumes_contracts ... FAILED
-test plan_node_exec_projects_context_sections ... FAILED
-test decode_plan_roundtrip_equals_generated ... FAILED
-test plan_envelope_is_rejecting ... FAILED
 test sample2_plan_shape_matches_contract_skeleton ... FAILED
+test plan_envelope_is_rejecting ... FAILED
+test decode_plan_roundtrip_equals_generated ... FAILED
 test unbound_report_refuses_plan_generation ... ok
+test plan_node_exec_projects_context_sections ... FAILED
 test plan_json_pretty_entry_matches_stepwise ... FAILED
 test gptswarm_plan_carries_escape_specs ... FAILED
 test gate_samples_ir_and_plan_deterministic_bitwise ... FAILED
@@ -167,38 +167,38 @@ failures:
 
 ---- plan_projects_emits_types_and_consumes_contracts stdout ----
 
-thread 'plan_projects_emits_types_and_consumes_contracts' (4147995) panicked at crates/af-compiler/tests/plan_test.rs:404:6:
+thread 'plan_projects_emits_types_and_consumes_contracts' (48589) panicked at crates/af-compiler/tests/plan_test.rs:404:6:
 sop_full@1.0.afb 仓库正本应在盘: Os { code: 2, kind: NotFound, message: "No such file or directory" }
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
----- plan_node_exec_projects_context_sections stdout ----
+---- sample2_plan_shape_matches_contract_skeleton stdout ----
 
-thread 'plan_node_exec_projects_context_sections' (4147994) panicked at crates/af-compiler/tests/plan_test.rs:355:5:
+thread 'sample2_plan_shape_matches_contract_skeleton' (48590) panicked at crates/af-compiler/tests/plan_test.rs:69:5:
 assertion failed: report.is_ok()
-
----- decode_plan_roundtrip_equals_generated stdout ----
-
-thread 'decode_plan_roundtrip_equals_generated' (4147989) panicked at crates/af-compiler/tests/plan_test.rs:266:44:
-called `Result::unwrap()` on an `Err` value: Unbound { violations: [BindViolation { code: RefMissing, node: "architect", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.edit", message: "组件 \"pkg.sweng.edit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.locate", message: "组件 \"pkg.sweng.locate\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.view", message: "组件 \"pkg.sweng.view\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.qa", reference: "pkg.sweng.test_unit@1", message: "组件 \"pkg.sweng.test_unit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "planner", reference: "route.cheap@1", message: "组件 \"route.cheap\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "pm", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }] }
 
 ---- plan_envelope_is_rejecting stdout ----
 
-thread 'plan_envelope_is_rejecting' (4147992) panicked at crates/af-compiler/tests/plan_test.rs:279:44:
+thread 'plan_envelope_is_rejecting' (48586) panicked at crates/af-compiler/tests/plan_test.rs:279:44:
 called `Result::unwrap()` on an `Err` value: Unbound { violations: [BindViolation { code: RefMissing, node: "architect", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.edit", message: "组件 \"pkg.sweng.edit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.locate", message: "组件 \"pkg.sweng.locate\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.view", message: "组件 \"pkg.sweng.view\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.qa", reference: "pkg.sweng.test_unit@1", message: "组件 \"pkg.sweng.test_unit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "planner", reference: "route.cheap@1", message: "组件 \"route.cheap\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "pm", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }] }
 
----- sample2_plan_shape_matches_contract_skeleton stdout ----
+---- decode_plan_roundtrip_equals_generated stdout ----
 
-thread 'sample2_plan_shape_matches_contract_skeleton' (4147996) panicked at crates/af-compiler/tests/plan_test.rs:69:5:
+thread 'decode_plan_roundtrip_equals_generated' (48583) panicked at crates/af-compiler/tests/plan_test.rs:266:44:
+called `Result::unwrap()` on an `Err` value: Unbound { violations: [BindViolation { code: RefMissing, node: "architect", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.edit", message: "组件 \"pkg.sweng.edit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.locate", message: "组件 \"pkg.sweng.locate\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.view", message: "组件 \"pkg.sweng.view\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.qa", reference: "pkg.sweng.test_unit@1", message: "组件 \"pkg.sweng.test_unit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "planner", reference: "route.cheap@1", message: "组件 \"route.cheap\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "pm", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }] }
+
+---- plan_node_exec_projects_context_sections stdout ----
+
+thread 'plan_node_exec_projects_context_sections' (48588) panicked at crates/af-compiler/tests/plan_test.rs:355:5:
 assertion failed: report.is_ok()
 
 ---- plan_json_pretty_entry_matches_stepwise stdout ----
 
-thread 'plan_json_pretty_entry_matches_stepwise' (4147993) panicked at crates/af-compiler/tests/plan_test.rs:343:62:
+thread 'plan_json_pretty_entry_matches_stepwise' (48587) panicked at crates/af-compiler/tests/plan_test.rs:343:62:
 called `Result::unwrap()` on an `Err` value: Unbound { violations: [BindViolation { code: RefMissing, node: "adjudicate", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "rounds.debate_map.debater", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }] }
 
 ---- gptswarm_plan_carries_escape_specs stdout ----
 
-thread 'gptswarm_plan_carries_escape_specs' (4147991) panicked at crates/af-compiler/tests/plan_test.rs:36:5:
+thread 'gptswarm_plan_carries_escape_specs' (48585) panicked at crates/af-compiler/tests/plan_test.rs:36:5:
 GPTSwarm.yaml 应过校验：E2001 dangling_reference[meta]: topology_selector rules[0].use 候选图 "pkg.swarmkit.graph.plan_execute_review@2.1" 未在已声明的版本化图/子图集内
 E2001 dangling_reference[meta]: topology_selector rules[1].use 候选图 "pkg.swarmkit.graph.fanout_vote@1.4" 未在已声明的版本化图/子图集内
 E2001 dangling_reference[meta]: topology_selector fallback 候选图 "pkg.swarmkit.graph.react_baseline@1.0" 未在已声明的版本化图/子图集内
@@ -206,7 +206,7 @@ E2001 dangling_reference[meta]: topology_selector fallback 候选图 "pkg.swarmk
 
 ---- gate_samples_ir_and_plan_deterministic_bitwise stdout ----
 
-thread 'gate_samples_ir_and_plan_deterministic_bitwise' (4147990) panicked at crates/af-compiler/tests/plan_test.rs:50:5:
+thread 'gate_samples_ir_and_plan_deterministic_bitwise' (48584) panicked at crates/af-compiler/tests/plan_test.rs:50:5:
 sample2.yaml 绑定应零违例：[BindViolation { code: RefMissing, node: "architect", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.edit", message: "组件 \"pkg.sweng.edit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.locate", message: "组件 \"pkg.sweng.locate\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.engineer", reference: "pkg.sweng.view", message: "组件 \"pkg.sweng.view\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "build.qa", reference: "pkg.sweng.test_unit@1", message: "组件 \"pkg.sweng.test_unit\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "planner", reference: "route.cheap@1", message: "组件 \"route.cheap\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "pm", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }]
 
 
@@ -226,35 +226,35 @@ error: test failed, to rerun pass `-p af-compiler --test plan_test`
      Running tests/registry_decl_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/registry_decl_test-d25c44f9620a8b9d)
 
 running 5 tests
-test repo_registry_total_is_57_after_p2l12_expansion ... FAILED
-test unversioned_referenced_names_declare_exactly_one_version ... FAILED
 test decls_table_matches_gate_coverage_counts ... ok
+test unversioned_referenced_names_declare_exactly_one_version ... FAILED
+test repo_registry_total_is_57_after_p2l12_expansion ... FAILED
 test all_50_p2l12_declarations_resolve_with_expected_version_and_class ... FAILED
 test class_mismatch_against_repo_registry_is_rejected ... FAILED
 
 failures:
 
+---- unversioned_referenced_names_declare_exactly_one_version stdout ----
+
+thread 'unversioned_referenced_names_declare_exactly_one_version' (48597) panicked at crates/af-compiler/tests/registry_decl_test.rs:166:32:
+pkg.agensh.inspect 应已注册
+
 ---- repo_registry_total_is_57_after_p2l12_expansion stdout ----
 
-thread 'repo_registry_total_is_57_after_p2l12_expansion' (4148002) panicked at crates/af-compiler/tests/registry_decl_test.rs:143:5:
+thread 'repo_registry_total_is_57_after_p2l12_expansion' (48596) panicked at crates/af-compiler/tests/registry_decl_test.rs:143:5:
 assertion `left == right` failed: 7（P2-L11 首批）+ 50（P2-L12 扩容）+ 6（G4 reportkit）
   left: 0
  right: 63
 
----- unversioned_referenced_names_declare_exactly_one_version stdout ----
-
-thread 'unversioned_referenced_names_declare_exactly_one_version' (4148003) panicked at crates/af-compiler/tests/registry_decl_test.rs:166:32:
-pkg.agensh.inspect 应已注册
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
-
 ---- all_50_p2l12_declarations_resolve_with_expected_version_and_class stdout ----
 
-thread 'all_50_p2l12_declarations_resolve_with_expected_version_and_class' (4147999) panicked at crates/af-compiler/tests/registry_decl_test.rs:111:32:
+thread 'all_50_p2l12_declarations_resolve_with_expected_version_and_class' (48593) panicked at crates/af-compiler/tests/registry_decl_test.rs:111:32:
 route.plan 应已注册（P2-L12 声明）
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 ---- class_mismatch_against_repo_registry_is_rejected stdout ----
 
-thread 'class_mismatch_against_repo_registry_is_rejected' (4148000) panicked at crates/af-compiler/tests/registry_decl_test.rs:207:5:
+thread 'class_mismatch_against_repo_registry_is_rejected' (48594) panicked at crates/af-compiler/tests/registry_decl_test.rs:207:5:
 unit 声明被 uses.tools 引用应 E9003：[BindViolation { code: RefMissing, node: "worker", reference: "route.main@1", message: "组件 \"route.main\" 未注册（注册表共 0 条声明）" }, BindViolation { code: RefMissing, node: "worker", reference: "pkg.adaskit.verifier@1", message: "组件 \"pkg.adaskit.verifier\" 未注册（注册表共 0 条声明）" }]
 
 

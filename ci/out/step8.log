@@ -1,5 +1,5 @@
-== step8 neutrality 门开始 2026-10-25 17:39:55
-[PASS] Z0-pre 沙箱 /home/pan-ding/afb-neut-sbx（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，10M）；target=/home/pan-ding/afbuild-neutrality
+== step8 neutrality 门开始 2026-10-25 19:08:33
+[PASS] Z0-pre 沙箱 /home/pan-ding/afb-neut-sbx（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，11M）；target=/home/pan-ding/afbuild-neutrality
 -- 阶段1 对照臂（包原样）
   对照臂 af-dsl exit=0
   对照臂 af-compiler exit=0

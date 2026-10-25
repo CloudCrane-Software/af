@@ -459,26 +459,52 @@ impl GraphExecuteUnit {
         // 模型调 `declare({<端口>: <载荷>})`——工具输出首行 TASK_COMPLETE 即环
         // 完成信号，参数即 envelope 声明（优先源）；终态消息 JSON 为回退源
         // （两源同一契约，EX4006 对双源违例如实拒收）。
-        // 终态端口（is_final）的载荷 schema 计划可推导（interface.output_type）
-        // ——一并写进契约；非终态端口类型不在计划投影，v0.2 登记。
-        let final_schema_note = {
-            let note = node
-                .artifact_contract
+        //
+        // declare 契约面（2026-10-25 第二结构性缺口立法，F4B/F4B2 判例）：
+        // 旧契约对非可推导端口系统性致死——描述把「裸调=自动取证」无差别写给
+        // 一切端口（仅 patch 形有此活路）、parameters 零形状（API 面零信号）、
+        // 校验只在跑后 commit 相（模型零反馈机会）。修法 = 按端口可推导性分面：
+        // - patch 形单端口可推导 → permissive（裸 declare → 容器取证推导，
+        //   sop_minimal 路径行为不变）；
+        // - 非可推导端口在场 → strict（API 面 schema 注入 + 闭环内校验门）。
+        // 逐端口契约材料：端口名 + 类型表达式（emits 面；旧计划 is_final 端口
+        // 回退 interface.output_type）+ 物化 schema（命名类型内联）。
+        let port_contracts: Vec<(String, String, Option<Value>)> = node
+            .artifact_contract
+            .iter()
+            .filter_map(|a| {
+                let expr = a
+                    .r#type
+                    .clone()
+                    .or_else(|| a.is_final.then(|| plan.body.interface.output_type.clone()))?;
+                let materialized = materialize_schema(&plan.body.types, &expr);
+                Some((a.name.clone(), expr, materialized))
+            })
+            .collect();
+        let bare_derivable = node.artifact_contract.len() == 1
+            && bare_derivable_schema(
+                &plan.body.types,
+                &plan.body.interface.output_type,
+                &node.artifact_contract[0],
+            )
+            .as_ref()
+            .is_some_and(derivable_port_fields);
+        // 契约段：全部端口带类型表达式 + 物化 schema（旧版仅 is_final 端口
+        // ——非终态端口零形状信息 = F4B 死因之一）。
+        let schema_note = {
+            let note = port_contracts
                 .iter()
-                .filter(|a| a.is_final)
-                .filter_map(|a| {
-                    plan.body
-                        .types
-                        .get(&plan.body.interface.output_type)
-                        .map(|schema| (a.name.clone(), schema.clone()))
+                .filter_map(|(port, expr, schema)| {
+                    schema
+                        .as_ref()
+                        .map(|s| format!("    {port:?} (type {expr}): {s}"))
                 })
-                .map(|(port, schema)| format!("    {port:?}: {schema}"))
                 .collect::<Vec<_>>()
                 .join(",\n");
             if note.is_empty() {
                 String::new()
             } else {
-                format!("The value of each key must match:\n{note}")
+                format!("   The value of each key must match:\n{note}\n")
             }
         };
         let contract = format!(
@@ -486,17 +512,35 @@ impl GraphExecuteUnit {
              1. Do the task below with bash tool calls.\n\
              2. When done, call the `declare` tool with ONE argument — a JSON object keyed by \
              artifact port name: {}. Calling `declare` ends the run (its tool output is the \
-             completion signal).\n{}",
+             completion signal).{}\n\
+             3. {}. Payload shapes follow the schemas above; malformed calls are rejected with \
+             feedback — fix and call `declare` again.",
             serde_json::to_string(&ports).unwrap_or_default(),
-            if final_schema_note.is_empty() {
+            if schema_note.is_empty() {
                 String::new()
             } else {
-                format!("   {final_schema_note}\n")
+                format!("\n{schema_note}")
+            },
+            if bare_derivable {
+                "For patch-shaped ports you may also call `declare` bare ({{}}) — the workspace \
+                 diff and touched files are captured automatically"
+            } else {
+                "Bare or empty `declare` calls are rejected — the artifact cannot be captured \
+                 automatically"
             },
         );
         let user = format!("{contract}\n\n[task]\n{user}");
-        // declare 工具（环组装面）：声明落共享单元 + 返回完成信号。
-        let (declare_decl, declare_fn, declaration) = declare_tool(&ports);
+        // declare 工具（环组装面）：声明落共享单元 + 返回完成信号——按端口
+        // 可推导性选面（permissive 旧形零动 / strict schema 注入 + 校验门）。
+        let (declare_decl, declare_fn, declaration) = if bare_derivable {
+            declare_tool(&ports)
+        } else {
+            declare_tool_strict(
+                &node.node_id,
+                &port_contracts,
+                Arc::new(plan.body.types.clone()),
+            )
+        };
         let spend_cap = budget.node_spend_cap(self.spec.spend_cap_cents, stage.cents_used);
         let node_dir = ctx.attempt_dir.join("nodes").join(&node.node_id);
         std::fs::create_dir_all(&node_dir)
@@ -513,12 +557,16 @@ impl GraphExecuteUnit {
                 endpoint,
                 context_template: ContextTemplate {
                     // 环组装面附加声明纪律（模板正文不动字节——包资产是正本，
-                    // 环拥有的装配段另起一段）。
+                    // 环拥有的装配段另起一段）。declare 契约面（2026-10-25）：
+                    // 形状信号三处同源——declare 工具定义（parameters 内联
+                    // schema + worked example）、用户消息契约段、本协议段。
                     system: format!(
                         "{system}\n\n[artifact protocol] Your finished work is delivered by \
                          calling the `declare` tool with one JSON object keyed by artifact port \
-                         name(s); that call also ends the run. The user message carries the \
-                         exact keys and schemas."
+                         name(s); that call also ends the run. The `declare` tool definition \
+                         (parameters schema and worked example) and the user message carry the \
+                         exact keys and schemas. Malformed declarations are rejected with \
+                         feedback — fix the payload and call `declare` again."
                     ),
                     slots: Vec::new(),
                 },
@@ -587,14 +635,15 @@ impl GraphExecuteUnit {
                 });
             }
             // 裸 declare = 提交工作区：唯一工件端口且 required ⊆ {diff, files}
-            // 才可推导（其余形状裸调 = 声明缺失，EX4006）。
+            // 才可推导（其余形状裸调 = 声明缺失，EX4006）。schema 源与工具面
+            // 选面同一口径（[`bare_derivable_schema`]——两相不可能 disagree）。
             if node.artifact_contract.len() == 1 {
                 let port = &node.artifact_contract[0].name;
-                let schema = plan
-                    .body
-                    .types
-                    .get(&plan.body.interface.output_type)
-                    .cloned();
+                let schema = bare_derivable_schema(
+                    &plan.body.types,
+                    &plan.body.interface.output_type,
+                    &node.artifact_contract[0],
+                );
                 if schema.as_ref().is_some_and(derivable_port_fields) {
                     let diff =
                         swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &node_dir)
@@ -614,8 +663,11 @@ impl GraphExecuteUnit {
                     });
                 }
             }
+            // 防御位（strict 面闭环内已拒裸调，此分支仅为 Fake 直调闭包与
+            // 未来面演化兜底）：措辞与 declare 契约面同步。
             return Err(Self::envelope_err(format!(
-                "节点 {} 裸 declare 但端口形状不可 ground-truth 推导（须端口键控参数声明）",
+                "节点 {} 裸 declare 但端口形状不可 ground-truth 推导（须端口键控参数\
+                 声明；正确形状见 declare 工具描述内联 schema）",
                 node.node_id
             )));
         }
@@ -1115,6 +1167,17 @@ type DeclarationCell = Arc<std::sync::Mutex<Option<Value>>>;
 /// declare 工具（环组装面，`pkg.sweagent.aci.submit` 完成载体先例）：
 /// 模型以工具调用交付 envelope 声明——参数 = 端口键控 JSON 对象，工具输出
 /// 首行 = TASK_COMPLETE 即环完成信号。返回 (声明, 执行闭包, 共享单元)。
+///
+/// **declare 契约面（2026-10-25 第二结构性缺口立法，F4B/F4B2 判例）**：
+/// 工具面按端口可推导性分两形——
+/// - **permissive**（本函数，patch 形单端口可推导）：旧形逐字节保持——
+///   parameters 零形状（裸调必须能到达闭包——四跑真模型判例：模型把
+///   declare 当完成按钮按，参数重述被稳定拒绝；裸调语义=提交工作区，由
+///   驱动面按端口 schema 判可推导性，容器取证推导路径行为不变）；
+/// - **strict**（[`declare_tool_strict`]，非可推导端口）：API 面 schema
+///   注入（parameters.required=端口集 + properties=物化 schema——模型在
+///   工具定义里直接看见要交的形状）+ 闭环内校验门（畸形载荷 = 可重试的
+///   工具错误反馈，不再等到跑后 EX4006 致死）。
 fn declare_tool(ports: &[&str]) -> (ToolDecl, ToolFn, DeclarationCell) {
     let cell: DeclarationCell = Arc::new(std::sync::Mutex::new(None));
     let sink = cell.clone();
@@ -1124,9 +1187,8 @@ fn declare_tool(ports: &[&str]) -> (ToolDecl, ToolFn, DeclarationCell) {
         *sink.lock().unwrap_or_else(|e| e.into_inner()) = Some(args.clone());
         Ok(Value::String("TASK_COMPLETE".to_string()))
     });
-    // harness 面不设 required（裸 declare 必须能到达闭包——四跑真模型判例：
-    // 模型把 declare 当完成按钮按，参数重述被稳定拒绝；裸调语义=提交工作区，
-    // 由驱动面按端口 schema 判可推导性）。端口键集校验在 commit 相（EX4006）。
+    // harness 面不设 required（裸 declare 必须能到达闭包）。端口键集校验在
+    // commit 相（EX4006）。
     let decl = serde_json::from_value::<ToolDecl>(serde_json::json!({
         "name": "declare",
         "description": format!(
@@ -1143,6 +1205,220 @@ fn declare_tool(ports: &[&str]) -> (ToolDecl, ToolFn, DeclarationCell) {
     }))
     .expect("declare ToolDecl 静态构造必须合法（af-harness spec.rs 契约）");
     (decl, on_call, cell)
+}
+
+/// strict 面 declare（非可推导端口）：schema 注入 + 闭环内校验门。
+///
+/// - **parameters**（API 面——anthropic `input_schema`/openai `parameters`
+///   原样上送，模型在工具定义里直接看见形状）：`required` = 端口集
+///   （harness `check_schema` 同源拦截缺键裸调——工具错误反馈进环，模型
+///   可重试），`properties` = 逐端口物化 schema（命名类型内联——API 面
+///   无 plan.types 词典可查）。
+/// - **描述**：worked example（端口键控 + 最小合形载荷）+ 裸调拒绝措辞
+///   （旧「you may call it bare」诱惑措辞对非可推导端口是致死误导——
+///   F4B 判例：模型 turn 0 零工作按完成按钮）。
+/// - **闭包 = 校验门**：键集恰等（缺/未知分报）+ 逐端口 [`check_typed`]
+///   （与 commit 相同一校验器——闭环内采纳即 commit 必过）；畸形 = Err
+///   反馈（EX4006 同源文案 + 形状指引），**不存储、不发完成信号**；合形
+///   才入共享单元并回 TASK_COMPLETE。有效声明被后续畸形调用覆盖不可能
+///   （畸形不入单元）。
+fn declare_tool_strict(
+    node_id: &str,
+    contracts: &[(String, String, Option<Value>)],
+    types: Arc<BTreeMap<String, Value>>,
+) -> (ToolDecl, ToolFn, DeclarationCell) {
+    let cell: DeclarationCell = Arc::new(std::sync::Mutex::new(None));
+    let sink = cell.clone();
+    let port_names: Vec<String> = contracts.iter().map(|(p, _, _)| p.clone()).collect();
+    // API 面 parameters：required=端口集；properties=物化 schema（解析失败
+    // 的端口只进 required 不进 properties——形状留白，校验相 fail-loud）。
+    let mut properties = serde_json::Map::new();
+    for (port, _, schema) in contracts {
+        if let Some(schema) = schema {
+            properties.insert(port.clone(), schema.clone());
+        }
+    }
+    let parameters = serde_json::json!({
+        "type": "object",
+        "required": port_names,
+        "properties": Value::Object(properties),
+    });
+    // worked example：端口键控 + 逐端口最小合形载荷。
+    let example: Value = {
+        let mut obj = serde_json::Map::new();
+        for (port, _, schema) in contracts {
+            let value = schema
+                .as_ref()
+                .map(|s| example_from_schema(s, 0))
+                .unwrap_or_else(|| serde_json::json!("<artifact payload>"));
+            obj.insert(port.clone(), value);
+        }
+        Value::Object(obj)
+    };
+    let description = format!(
+        "Deliver your finished artifact and end the run. Call this tool with ONE argument — a \
+         JSON object keyed by artifact port name {ports:?}, each value that port's payload. The \
+         exact shape of each payload is given in this tool's `parameters` (JSON Schema: required \
+         keys and property types are enforced). Bare or empty calls are REJECTED for this node: \
+         the artifact cannot be captured from the workspace automatically. Worked example: \
+         declare({example}). This is the only completion path.",
+        ports = port_names,
+    );
+    let decl = serde_json::from_value::<ToolDecl>(serde_json::json!({
+        "name": "declare",
+        "description": description,
+        "parameters": parameters,
+        "effect": "pure",
+    }))
+    .expect("declare strict ToolDecl 静态构造必须合法（af-harness spec.rs 契约）");
+    // 闭环内校验门：闭包捕获 (node, 端口→类型表达式, types 词典)，逐调用
+    // 校验——与 commit 相 check_typed 同源（采纳即必过 commit）。
+    let node = node_id.to_string();
+    let port_types: Vec<(String, String)> = contracts
+        .iter()
+        .map(|(p, e, _)| (p.clone(), e.clone()))
+        .collect();
+    let on_call: ToolFn = Arc::new(move |args: &Value| {
+        let shape_hint =
+            "正确形状见 declare 工具描述与 parameters 内联 schema（端口键控），修正后重调 declare";
+        let obj = args.as_object().ok_or_else(|| {
+            format!(
+                "declare 拒收：节点 {node} 参数必须是按端口名键控的 JSON 对象（本节点端口 \
+                 {ports:?}）；{shape_hint}",
+                ports = port_names,
+            )
+        })?;
+        let keys: BTreeSet<&String> = obj.keys().collect();
+        let want: BTreeSet<&String> = port_names.iter().collect();
+        let missing: Vec<&String> = want.difference(&keys).cloned().collect();
+        let unknown: Vec<&String> = keys.difference(&want).cloned().collect();
+        if !missing.is_empty() || !unknown.is_empty() {
+            return Err(format!(
+                "declare 拒收：节点 {node} 端口键不符（缺 {missing:?}，未知 {unknown:?}；本节点\
+                 端口 {ports:?}，载荷须按端口名键控）；{shape_hint}",
+                ports = port_names,
+            ));
+        }
+        for (port, type_expr) in &port_types {
+            if let Some(payload) = obj.get(port) {
+                check_typed(&types, &node, port, type_expr, payload)
+                    .map_err(|err| format!("declare 拒收（EX4006 同源）：{err}；{shape_hint}"))?;
+            }
+        }
+        *sink.lock().unwrap_or_else(|e| e.into_inner()) = Some(args.clone());
+        Ok(Value::String("TASK_COMPLETE".to_string()))
+    });
+    (decl, on_call, cell)
+}
+
+/// 类型表达式 → 自含 JSON Schema（API 面/提示词面/示例面共用）：
+/// `list<T>` → array 包裹；命名类型 → plan.types 词典解析 + 命名引用递归
+/// 内联（深度帽 16，与 [`SchemaValidator`] 同口径——API 面无词典可查）；
+/// 解析失败 → None（不静默造形——校验相 fail-loud 报基名缺席）。
+fn materialize_schema(types: &BTreeMap<String, Value>, type_expr: &str) -> Option<Value> {
+    if let Some(inner) = type_expr
+        .strip_prefix("list<")
+        .and_then(|t| t.strip_suffix('>'))
+    {
+        let items = materialize_schema(types, inner)?;
+        return Some(serde_json::json!({ "type": "array", "items": items }));
+    }
+    let schema = types.get(type_expr)?;
+    Some(inline_named_refs(types, schema.clone(), 0))
+}
+
+/// schema 内的命名类型引用（`type` 段为非原始关键字串）递归替换为
+/// plan.types 词典正文；properties/items 同步下钻。未知命名引用原样保留
+/// （校验相点名报错，不在此静默处理）。
+fn inline_named_refs(types: &BTreeMap<String, Value>, schema: Value, depth: usize) -> Value {
+    if depth > 16 {
+        return schema;
+    }
+    let Value::Object(mut map) = schema else {
+        return schema;
+    };
+    if let Some(Value::String(ty)) = map.get("type") {
+        if !PRIMITIVES.contains(&ty.as_str()) {
+            if let Some(resolved) = types.get(ty) {
+                return inline_named_refs(types, resolved.clone(), depth + 1);
+            }
+        }
+    }
+    if let Some(props) = map.get_mut("properties").and_then(Value::as_object_mut) {
+        for (_, sub) in props.iter_mut() {
+            *sub = inline_named_refs(types, sub.take(), depth + 1);
+        }
+    }
+    if let Some(items) = map.get_mut("items").filter(|i| i.is_object()) {
+        *items = inline_named_refs(types, items.take(), depth + 1);
+    }
+    Value::Object(map)
+}
+
+/// schema → 最小合形示例值（declare strict 描述的 worked example 面）：
+/// required 字段按类型填占位（缺 required 段则取全 properties——示例偏
+/// 丰富一侧）；array 取单元素示例；深度帽 8 防自引用爆炸。
+fn example_from_schema(schema: &Value, depth: usize) -> Value {
+    if depth > 8 {
+        return Value::String("<…>".into());
+    }
+    let Some(obj) = schema.as_object() else {
+        return Value::String("<value>".into());
+    };
+    match obj.get("type").and_then(Value::as_str) {
+        Some("string") => Value::String("<string>".into()),
+        Some("boolean") => Value::Bool(true),
+        Some("integer") | Some("number") => serde_json::json!(1),
+        Some("array") => {
+            let item = obj
+                .get("items")
+                .map(|s| example_from_schema(s, depth + 1))
+                .unwrap_or_else(|| serde_json::json!({}));
+            serde_json::json!([item])
+        }
+        // object / 无 type 段 / 未内联的命名引用残段：按 properties 造对象。
+        _ => {
+            let Some(props) = obj.get("properties").and_then(Value::as_object) else {
+                return serde_json::json!({});
+            };
+            let required: Vec<&str> = obj
+                .get("required")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            let mut out = serde_json::Map::new();
+            for (key, sub) in props {
+                // required 优先；缺 required 段 = 全 properties（丰富示例）。
+                if required.is_empty() || required.contains(&key.as_str()) {
+                    out.insert(key.clone(), example_from_schema(sub, depth + 1));
+                }
+            }
+            Value::Object(out)
+        }
+    }
+}
+
+/// 裸 declare 可推导判定的端口 schema 源（declare 契约面统一口径，
+/// 2026-10-25 立法）：端口自带类型表达式（emits 面）优先；缺（旧计划）
+/// 回退 interface.output_type（is_final 端口——旧推导判定的原口径）。两源
+/// 在 sop 两图上同值（patch 形）；统一后工具面选面与 commit 相推导判定
+/// 同源，不可能 disagree。`list<T>` 形端口不参与推导（载荷是数组，推导
+/// 产物是 diff/files 对象——形状即不符）。
+fn bare_derivable_schema(
+    types: &BTreeMap<String, Value>,
+    output_type: &str,
+    artifact: &af_compiler::plan::PlanArtifact,
+) -> Option<Value> {
+    if let Some(expr) = &artifact.r#type {
+        if expr.starts_with("list<") {
+            return None;
+        }
+        return types.get(expr).cloned();
+    }
+    if artifact.is_final {
+        return types.get(output_type).cloned();
+    }
+    None
 }
 
 /// 裸 declare 的可推导判定：端口 schema 的 required 字段 ⊆ {diff(string),
@@ -1719,6 +1995,146 @@ fn check_typed(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// declare 契约面（2026-10-25 立法批）——materialize_schema：命名引用
+    /// 递归内联（task_plan.steps → plan_step 展开成自含 schema）、list<T>
+    /// array 包裹、未知类型 → None（fail-loud 留给校验相）。
+    #[test]
+    fn materialize_schema_inlines_named_refs_and_lists() {
+        let types: BTreeMap<String, Value> = [
+            (
+                "plan_step".to_string(),
+                serde_json::json!({"type": "object", "required": ["id", "action", "target"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "action": {"type": "string"},
+                    "target": {"type": "string"},
+                    "depends_on": {"type": "array", "items": {"type": "string"}}
+                }}),
+            ),
+            (
+                "task_plan".to_string(),
+                serde_json::json!({"type": "object", "required": ["instance_id", "steps"],
+                "properties": {
+                    "instance_id": {"type": "string"},
+                    "steps": {"type": "array", "items": {"type": "plan_step"}}
+                }}),
+            ),
+            (
+                "code_file".to_string(),
+                serde_json::json!({"type": "object", "required": ["path", "content_ref"],
+                    "properties": {"path": {"type": "string"}, "content_ref": {"type": "string"}}}),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let plan = materialize_schema(&types, "task_plan").expect("task_plan 应物化");
+        assert_eq!(
+            plan["properties"]["steps"]["items"]["required"],
+            serde_json::json!(["id", "action", "target"]),
+            "plan_step 内联进 items（API 面自含）"
+        );
+        let files = materialize_schema(&types, "list<code_file>").expect("list 形应物化");
+        assert_eq!(files["type"], serde_json::json!("array"));
+        assert_eq!(
+            files["items"]["required"],
+            serde_json::json!(["path", "content_ref"])
+        );
+        assert!(
+            materialize_schema(&types, "ghost").is_none(),
+            "未知类型 → None（校验相 fail-loud）"
+        );
+        assert!(
+            materialize_schema(&types, "list<ghost>").is_none(),
+            "list 未知元素 → None"
+        );
+    }
+
+    /// declare 契约面——example_from_schema：最小合形 worked example
+    /// （required 字段占位、array 单元素、缺 required 段取全 properties）。
+    #[test]
+    fn example_from_schema_builds_minimal_conforming_example() {
+        let task_plan = serde_json::json!({
+            "type": "object",
+            "required": ["instance_id", "steps"],
+            "properties": {
+                "instance_id": {"type": "string"},
+                "steps": {"type": "array", "items": {
+                    "type": "object",
+                    "required": ["id", "action", "target"],
+                    "properties": {
+                        "id": {"type": "string"},
+                        "action": {"type": "string"},
+                        "target": {"type": "string"}
+                    }
+                }},
+                "notes": {"type": "string"}
+            }
+        });
+        let example = example_from_schema(&task_plan, 0);
+        assert_eq!(example["instance_id"], serde_json::json!("<string>"));
+        // notes 非 required → 不进示例（最小形）。
+        assert!(example.get("notes").is_none(), "示例取 required 最小形");
+        assert_eq!(
+            example["steps"][0]["id"],
+            serde_json::json!("<string>"),
+            "array 单元素示例"
+        );
+        // 合形自证：示例对原 schema 过 SchemaValidator。
+        let types: BTreeMap<String, Value> = BTreeMap::new();
+        let mut errors = Vec::new();
+        SchemaValidator { types: &types }.validate(&example, &task_plan, "$", &mut errors);
+        assert!(errors.is_empty(), "worked example 必须合形：{errors:?}");
+    }
+
+    /// declare 契约面——bare_derivable_schema：r#type 优先（list 形不推导）、
+    /// 旧计划 is_final 回退 interface.output_type。
+    #[test]
+    fn bare_derivable_schema_prefers_port_type_with_final_fallback() {
+        let types: BTreeMap<String, Value> = [
+            (
+                "patch".to_string(),
+                serde_json::json!({"type": "object", "required": ["diff", "files"],
+                    "properties": {"diff": {"type": "string"},
+                                   "files": {"type": "array", "items": {"type": "string"}}}}),
+            ),
+            (
+                "task_plan".to_string(),
+                serde_json::json!({"type": "object", "required": ["instance_id", "steps"]}),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let artifact =
+            |name: &str, is_final: bool, r#type: Option<&str>| af_compiler::plan::PlanArtifact {
+                name: name.into(),
+                is_final,
+                r#type: r#type.map(str::to_string),
+                qualified_by: None,
+                provenance: None,
+            };
+        // r#type 优先。
+        assert!(
+            bare_derivable_schema(&types, "patch", &artifact("patch", true, Some("patch")))
+                .is_some()
+        );
+        // list 形端口不参与推导（载荷形状即不符）。
+        assert!(bare_derivable_schema(
+            &types,
+            "patch",
+            &artifact("files", false, Some("list<patch>"))
+        )
+        .is_none());
+        // 旧计划（r#type 缺）：is_final 回退 interface.output_type。
+        assert!(bare_derivable_schema(&types, "patch", &artifact("patch", true, None)).is_some());
+        // 非终态且无 r#type：无 schema 源。
+        assert!(bare_derivable_schema(&types, "patch", &artifact("plan", false, None)).is_none());
+        // output_type 指向非 patch 形（如 task_plan）：schema 在但推导判定
+        // 由 derivable_port_fields 另判（此处只验 schema 源）。
+        assert!(
+            bare_derivable_schema(&types, "task_plan", &artifact("plan", true, None)).is_some()
+        );
+    }
 
     /// B 席嫁接（合流批）——SchemaValidator 命名类型递归：required/类型/
     /// 嵌套 properties/items/**命名类型引用**（task_plan.steps → plan_step）。
