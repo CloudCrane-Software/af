@@ -207,6 +207,14 @@ pub struct DraftInput {
     pub writer_prompt: String,
 }
 
+/// v1 未接线档：真实模型起草环=铺单批 F-第五单（裁决17）——路由面已通，
+/// 驱动即如实失败（EX3001 文案点名），不假装配。
+pub fn draft_fn_unwired() -> DraftFn {
+    Arc::new(|_input: &DraftInput| {
+        Err("真实模型起草环=铺单批 F-第五单（裁决17：施工批产出可执行计划+干跑+组件实测；真实模型执行不在批内）".to_string())
+    })
+}
+
 /// 起草缝：输入 → research_report JSON 文本（Err = 起草失败文案）。
 /// v1 由测试/驱动层注入；F-第五单以真 harness 环（reader→writer 循环 +
 /// ToolRegistry 注册 web_search/web_fetch——agent.rs registry.register 面）

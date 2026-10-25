@@ -90,9 +90,10 @@ fn llm_graph_yaml() -> String {
     "version: 1\n\
      meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: answer, from: n1 }\n\
      types:\n  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }\n\
+     \x20 - { name: answer, schema: { type: object } }\n\
      stores:\n  - { name: s, type: message_log, writer: n1, lifecycle: run, retention: { max_items: 8 } }\n\
      nodes:\n\
-     \x20 - { id: n1, kind: task, uses: { model: route.main@1 }, writes: [s], emits: { answer: in_t } }\n\
+     \x20 - { id: n1, kind: task, uses: { model: route.main@1 }, writes: [s], emits: { answer: answer } }\n\
      edges: []\n"
         .into()
 }
