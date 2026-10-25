@@ -1,0 +1,75 @@
+version: 1
+meta:
+  name: farm_g
+  graph_version: '1'
+  entry: W
+  input: T_in
+  output:
+    ref: T_out
+    from: W
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+stores:
+- name: answer
+  type: document
+  writer: W
+  lifecycle: run
+  retention:
+    max_items: 16
+  eval_input: true
+nodes:
+- id: W
+  kind: task
+  uses:
+    model: m@1
+  writes:
+  - answer
+  emits:
+    fin: T_out
+  context:
+    sections:
+    - from: input
+      fields:
+      - q
+      quota_tokens: 100
+- id: ev
+  kind: check
+  uses:
+    unit: grader@1
+  consumes:
+    go: T_out
+  reads:
+  - answer
+  emits:
+    leak: T_out
+- id: downstream
+  kind: task
+  consumes:
+    go: T_out
+  emits:
+    o: T_out
+edges:
+- from: W
+  output: fin
+  to: ev
+  input: go
+- from: ev
+  output: leak
+  to: downstream
+  input: go
+policies: {}

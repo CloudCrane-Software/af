@@ -1,0 +1,42 @@
+version: 1
+meta:
+  name: farm_g
+  graph_version: '1'
+  entry: weird.name
+  input: T_in
+  output:
+    ref: T_out
+    from: weird.name
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+stores: []
+nodes:
+- id: weird.name
+  kind: task
+  uses:
+    model: m@1
+  emits:
+    out: T_out
+  context:
+    sections:
+    - from: input
+      fields:
+      - q
+      quota_tokens: 100
+edges: []
+policies: {}

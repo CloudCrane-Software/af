@@ -1,0 +1,72 @@
+version: 1
+meta:
+  name: farm_g
+  graph_version: '1'
+  entry: src
+  input: T_in
+  output:
+    ref: T_out
+    from: sink
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+- name: T_item
+  schema:
+    type: object
+    properties:
+      x:
+        type: string
+stores: []
+nodes:
+- id: src
+  kind: task
+  emits:
+    items: list<T_item>
+- id: mp
+  kind: task
+  map:
+    over: src.items
+    body:
+      nodes:
+      - id: b
+        kind: task
+        emits:
+          r: T_out
+      edges: []
+  emits:
+    fwd:
+      from_body: b.r
+- id: sink
+  kind: task
+  consumes:
+    go: signal
+  emits:
+    fin: T_out
+- id: mp.b
+  kind: task
+  emits:
+    zz: T_item
+edges:
+- from: src
+  output: items
+  to: mp
+  input: go
+- from: mp
+  output: done
+  to: sink
+  input: go
+policies: {}

@@ -33,11 +33,25 @@ pub fn classify_serde_error(err: &serde_yaml::Error) -> Report {
     report
 }
 
-/// 手写闭环词表检查（平铺联合体承载的枚举面）：ops 算子名、section 来源名。
-/// 归入语义层 Report（码位属形状域 E1004，由 validate 一并收齐）。
+/// 手写闭环词表/词法检查（平铺联合体承载的枚举面 + id 字符集）：
+/// ops 算子名、section 来源名（E1004）；节点 id 点号禁用（E1008——点号是
+/// 构造体路径分隔符，id 段含点号会与路径同形，语义索引键覆盖致盲五防线，
+/// 农田 B-1 路径别名族）。归入语义层 Report（码位属形状域，由 validate
+/// 一并收齐——先于索引构建，别名结构不进语义判定面）。
 pub fn check_vocab(doc: &Document) -> Vec<crate::error::Violation> {
     let mut out = Vec::new();
     walk_nodes(doc, &mut |node, scope| {
+        if node.id.contains('.') {
+            out.push(Violation::new(
+                ErrorCode::DottedNodeId,
+                scope.to_string(),
+                format!(
+                    "节点 id {:?} 含点号——点号保留给构造体路径分隔\
+                     （writer/safety_points 的「点号路径」语义），id 段禁用",
+                    node.id
+                ),
+            ));
+        }
         if let Some(ops) = &node.ops {
             for (i, op) in ops.iter().enumerate() {
                 if !crate::model::OP_KINDS.contains(&op.op.as_str()) {

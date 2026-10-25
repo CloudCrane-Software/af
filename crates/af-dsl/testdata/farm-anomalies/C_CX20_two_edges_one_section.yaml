@@ -1,0 +1,60 @@
+version: 1
+meta:
+  name: farm_g
+  graph_version: '1'
+  entry: n1
+  input: T_in
+  output:
+    ref: T_out
+    from: n2
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+stores: []
+nodes:
+- id: n1
+  kind: task
+  emits:
+    p: T_in
+- id: n1b
+  kind: task
+  emits:
+    p: T_in
+- id: n2
+  kind: task
+  uses:
+    model: m@1
+  consumes:
+    go: T_in
+    go2: T_in
+  emits:
+    p2: T_out
+  context:
+    sections:
+    - from: edge
+      port: go
+      quota_tokens: 80
+edges:
+- from: n1
+  output: p
+  to: n2
+  input: go
+- from: n1b
+  output: p
+  to: n2
+  input: go
+policies: {}
