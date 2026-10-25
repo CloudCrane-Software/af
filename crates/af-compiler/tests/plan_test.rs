@@ -343,3 +343,48 @@ fn plan_json_pretty_entry_matches_stepwise() {
     let via_entry = plan_json_pretty(&doc, &repo_registry()).unwrap();
     assert_eq!(via_entry, full_chain_plan(name));
 }
+
+/// 图执行器增补投影（v1.1）：node_exec[].context = IR NodeExec.context 原样
+/// （template_ref/输入字段面/边端口面——「单文件即编排真相」补齐：此前该面
+/// 只在 IR，执行器无从取节点提示词材料）；旧计划（无 context 键）可 decode
+/// （serde default，向后兼容）。sample2 = MetaGPT SOP（体内节点带 context）。
+#[test]
+fn plan_node_exec_projects_context_sections() {
+    let ir = gate_sample("sample2.yaml");
+    let report = bind(&ir, &repo_registry());
+    assert!(report.is_ok());
+    let plan = generate_plan(&ir, &report).unwrap();
+    let engineer = plan
+        .body
+        .node_exec
+        .iter()
+        .find(|n| n.node_id == "build.engineer")
+        .expect("体内节点应在 node_exec");
+    assert!(
+        !engineer.context.is_empty(),
+        "engineer 的 context.sections 应投影进计划"
+    );
+    assert!(
+        engineer
+            .context
+            .iter()
+            .any(|s| s.from == "template" && s.template_ref.is_some()),
+        "template 段（template_ref 载荷）应在投影面"
+    );
+    // 投影 = IR 原样（文档序 = 拼接序保持）。
+    let ir_exec = ir
+        .body
+        .node_exec
+        .get("build.engineer")
+        .expect("IR node_exec 应有同名投影源");
+    assert_eq!(engineer.context, ir_exec.context);
+
+    // 向后兼容：删掉 context 键的旧计划 JSON 仍可 decode（缺省空）。
+    let mut legacy: serde_json::Value =
+        serde_json::from_str(&serde_json::to_string(&plan).unwrap()).unwrap();
+    for node in legacy["body"]["node_exec"].as_array_mut().unwrap() {
+        node.as_object_mut().unwrap().remove("context");
+    }
+    let decoded = decode_plan(&legacy.to_string()).expect("旧计划（无 context 键）应可 decode");
+    assert!(decoded.body.node_exec.iter().all(|n| n.context.is_empty()));
+}

@@ -36,13 +36,18 @@ pub fn status_label(status: &RunStatus) -> String {
 /// 新实现：后缀序号按既有同名前缀目录的最大序号 +1 递增（a1/a2/…），绝不删除旧目录。
 /// ← af-bench main.rs:590-610 原样。
 pub fn next_attempt_index(runs_root: &Path, task_id: &str, profile: &str) -> u32 {
-    let prefix = format!("swev-{task_id}-{profile}-a");
+    next_attempt_index_with_prefix(runs_root, &format!("swev-{task_id}-{profile}-a"))
+}
+
+/// 前缀参数化形态（图执行器 `graph-<task>-<profile>-a<N>` 同 D-20 递增语义；
+/// swev 先例的泛化，行为对既有 swev 前缀逐字节不变）。
+pub fn next_attempt_index_with_prefix(runs_root: &Path, prefix: &str) -> u32 {
     let mut max = 0u32;
     if let Ok(entries) = std::fs::read_dir(runs_root) {
         for entry in entries.flatten() {
             let name = entry.file_name();
             let lossy = name.to_string_lossy();
-            let Some(rest) = lossy.strip_prefix(&prefix) else {
+            let Some(rest) = lossy.strip_prefix(prefix) else {
                 continue;
             };
             if let Ok(n) = rest.parse::<u32>() {

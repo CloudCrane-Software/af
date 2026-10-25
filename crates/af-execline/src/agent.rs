@@ -35,10 +35,13 @@ pub type BashFn = Arc<dyn Fn(&str) -> String + Send + Sync>;
 
 /// 通用工具体（F-第五单报告环）：参数 JSON → 工具输出 JSON；Err = 工具失败
 /// 文案（HarnessRunner 映射 ToolFailure{E_TOOL}，进止损事件不进执行器故障）。
+/// 图执行器 A 席合流裁决：本缝即唯一命名工具面——declare/sweng 等节点工具
+/// 闭包一律迁移至本签名（&Value→Result），不再另设 &str→String 通道。
 pub type ToolFn = Arc<dyn Fn(&Value) -> Result<Value, String> + Send + Sync>;
 
 /// 节点级工具注册件（name + 函数体）。报告环的 web_fetch/submit_notes/
-/// submit_report 经 [`AgentLaunch::extra_tools`] 进 HarnessRunner 的
+/// submit_report 与图执行器的 declare/sweng 工具面均经
+/// [`AgentLaunch::extra_tools`] 进 HarnessRunner 的
 /// ToolRegistry（run.rs registry.register 面）；swev/tb 不携带（空集）。
 pub struct ToolBinding {
     pub name: String,
@@ -67,7 +70,8 @@ pub struct AgentLaunch<'a> {
     pub tool_spend_cents: i64,
     /// 预算账本总额（main.rs:790：BudgetLedger::new(300)）。
     pub budget_ledger_cents: i64,
-    /// 节点级额外工具（F-第五单报告环；swev/tb 空集——bash 仍是唯一内置件）。
+    /// 节点级额外工具（F-第五单报告环 + 图执行器 A 席 declare/sweng 工具面；
+    /// swev/tb 空集——bash 仍是唯一内置件）。
     pub extra_tools: Vec<ToolBinding>,
 }
 
@@ -193,9 +197,9 @@ impl AgentRunner for HarnessRunner {
     /// - http_retries 双路径累计 ← main.rs:800/819。
     fn run(&self, launch: AgentLaunch<'_>) -> Result<AgentRunOutcome, AgentRunFailure> {
         // 根凭证工具事实 = bash + 节点级额外工具（authz 白名单 = 规格工具名 ∩
-        // 父凭证事实——report 环的 web_fetch/submit_* 必须进父事实，否则交集
-        // 空、模型侧工具不可见（ToolFreeLimit 假象）；swev/tb 无 extra_tools，
-        // 行为不变）。
+        // 父凭证事实——report 环的 web_fetch/submit_* 与图执行器的 declare/
+        // sweng 工具都必须进父事实，否则交集空、模型侧工具不可见
+        // （ToolFreeLimit 假象）；swev/tb 无 extra_tools，行为不变）。
         let mut root_tools = vec!["bash".to_string()];
         root_tools.extend(launch.extra_tools.iter().map(|t| t.name.clone()));
         let root = af_credential::issue_root(&af_credential::RootSpec {
@@ -219,8 +223,9 @@ impl AgentRunner for HarnessRunner {
                 .to_string();
             Ok(Value::String(bash(&command)))
         });
-        // 节点级额外工具（报告环：web_fetch/submit_*）：同 registry.register 面，
-        // Err(String) 映射 ToolFailure（工具失败=止损事件，非执行器故障）。
+        // 节点级额外工具（报告环 web_fetch/submit_* + 图执行器 declare/sweng）：
+        // 同 registry.register 面，Err(String) 映射 ToolFailure
+        // （工具失败=止损事件，非执行器故障）。
         for binding in &launch.extra_tools {
             let name = binding.name.clone();
             let handler = binding.handler.clone();

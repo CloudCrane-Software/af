@@ -78,6 +78,9 @@ pub struct DriverConfig {
 pub enum AttemptLayout {
     /// `swev-<task>-<profile>-a<N>`，N = 既有同前缀目录最大序号 +1，绝不删旧目录。
     SwevIncrement,
+    /// `graph-<task>-<profile>-a<N>`，同 D-20 递增语义（图执行器；前缀区分
+    /// 套件面，工件目录互不混置）。
+    GraphIncrement,
     /// `tb-<task>-<profile>` 固定名，分配即 `remove_dir_all` 覆写（R8 保留）。
     TbOverwrite,
 }
@@ -96,6 +99,14 @@ pub fn allocate_attempt_dir(
         AttemptLayout::SwevIncrement => {
             let attempt = crate::suite::next_attempt_index(runs_root, task_id, profile);
             runs_root.join(format!("swev-{task_id}-{profile}-a{attempt}"))
+        }
+        // 图执行器：同 D-20 递增语义，前缀 graph-（套件面区分）。
+        AttemptLayout::GraphIncrement => {
+            let attempt = crate::suite::next_attempt_index_with_prefix(
+                runs_root,
+                &format!("graph-{task_id}-{profile}-a"),
+            );
+            runs_root.join(format!("graph-{task_id}-{profile}-a{attempt}"))
         }
         // R8 不对称如实保留：固定名 + remove_dir_all 覆写（main.rs:1000-1002；
         // 删除失败按 af-bench 原样 `let _ =` 吞——建目录随后的 create_dir_all

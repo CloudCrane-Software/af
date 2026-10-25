@@ -190,6 +190,37 @@ pub fn profile(name: &str) -> Result<Profile, String> {
     }
 }
 
+/// 档案名全集（`resolve_key_cmd` 的扫描面；表内新增档案须同步此处——
+/// `resolve_key_cmd_finds_all_profile_key_refs` 单测守卫闭集）。
+pub const PROFILE_NAMES: &[&str] = &[
+    "mavis-m31f",
+    "mavis-m3",
+    "glm-cp",
+    "glm-cp-max",
+    "step-5",
+    "kimi-k3",
+    "qwen30b-local",
+    "qwen3-4b-local",
+    "qwen3-8b-local",
+    "qwen3-8b-anolis",
+];
+
+/// 按 key_ref 反查 key_cmd（图执行器模型路由面：注册表 `EndpointSpec.key_ref`
+/// → 现取命令）。key_ref 多档案共用（如 zhipu-coding-plan = glm-cp/glm-cp-max）
+/// → 取首个匹配档案（同 key_ref 必同 key_cmd——明文纪律下密钥通道只有一条）。
+/// 未匹配 → None（调用方回退基座档案）。
+pub fn resolve_key_cmd(key_ref: &str) -> Option<&'static str> {
+    PROFILE_NAMES
+        .iter()
+        .find(|name| {
+            profile(name)
+                .ok()
+                .is_some_and(|p| p.endpoint.key_ref == key_ref)
+        })
+        .and_then(|name| profile(name).ok())
+        .map(|p| p.key_cmd)
+}
+
 /// ← af-bench main.rs:329-350 原样。
 pub fn resolve_key(cmd: &str) -> Result<String, String> {
     let output = Command::new("bash")
@@ -212,4 +243,30 @@ pub fn resolve_key(cmd: &str) -> Result<String, String> {
         return Err("密钥解析器输出过短，疑似失败".into());
     }
     Ok(key)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// key_ref 反查：zhipu-coding-plan → glm-cp 的现取命令；未知 ref → None。
+    #[test]
+    fn resolve_key_cmd_matches_registry_key_refs() {
+        let glm = profile("glm-cp").unwrap();
+        assert_eq!(resolve_key_cmd("zhipu-coding-plan"), Some(glm.key_cmd));
+        assert_eq!(
+            resolve_key_cmd("mcode-oauth"),
+            Some(profile("mavis-m31f").unwrap().key_cmd)
+        );
+        assert_eq!(resolve_key_cmd("no-such-ref"), None);
+    }
+
+    /// 闭集守卫（正向）：PROFILE_NAMES 全部在档案表可解析（登记面不虚列）。
+    /// 反向（表新增漏登记）由 key_ref 反查的消费面显式断言兜底。
+    #[test]
+    fn profile_names_closed_over_table() {
+        for name in PROFILE_NAMES {
+            assert!(profile(name).is_ok(), "{name} 应在档案表");
+        }
+    }
 }

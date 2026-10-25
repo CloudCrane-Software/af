@@ -34,6 +34,7 @@ pub mod driver;
 pub mod engine;
 pub mod error;
 pub mod exec;
+pub mod graph_unit;
 pub mod hostbridge;
 pub mod judge;
 pub mod ledger;
@@ -56,6 +57,7 @@ pub use driver::{AttemptLayout, DriveReport, DriverConfig, OrderLifecycleDriver}
 pub use engine::{EngineAccept, EngineClient, EngineOutcome, EngineRejection};
 pub use error::ExeclineError;
 pub use exec::{ExecContext, ExecOutput, ExecuteUnit, StubExecuteUnit};
+pub use graph_unit::{linearize, GraphExecuteUnit, GraphUnitSpec};
 pub use hostbridge::{HostBridge, SshBridge};
 pub use judge::{invoke as judge_invoke, JudgeLocator};
 pub use ledger::{LedgerRecord, OrderLedger};
