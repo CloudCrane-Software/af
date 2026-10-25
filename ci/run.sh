@@ -10,11 +10,17 @@
 #   5 scrub   ci/parse_scrub.py 对 7 份真实日志判定       硬门：期望判定逐一核对
 #   6 cosign  断网 netns verify-blob --trusted-root    硬门：正例过/篡改例拒
 #             （sudo unshare -n 优先；no_new_privs 沙箱回退 unshare -Urn，隔离语义等价）
+#   7 deny    cargo deny --offline check               硬门：licenses/bans/sources/advisories
+#   8 neutrality 删包自洽+领域词扫描+golden 登记        硬门（ci/neutrality_gate.sh）
+#   9 fv-advisory 形式验证早警报（Rocq coqc + Kani INV 镜像）advisory：FAIL 只 WARN
+#             不红（非阻塞；工具缺席同 WARN；预算 <2min；Verus 本体不装——失败史在案）
 #
 # 外部依赖: cargo+rustup(rustfmt/clippy 组件)、python3、unshare（sudo 可选）、
-#           AF/bin/cosign、AF/poc/poc-cue/bin/cue、AF/poc/poc-cas 真实测试资产。
+#           AF/bin/cosign、AF/poc/poc-cue/bin/cue、AF/poc/poc-cas 真实测试资产；
+#           step9 可选依赖 coqc（PATH）、Kani 0.68.0（tmpfs /dev/shm/fv0，缺席 WARN）。
 # 可重复性: 全部路径相对本脚本所在仓库根；产物写 ci/out/（可整目录删除重跑）。
-# 退出码: 0=全绿；1=有硬门失败（所有步骤仍会跑完，一次拿全量诊断）。
+# 退出码: 0=全绿；1=有硬门失败（所有步骤仍会跑完，一次拿全量诊断）；
+#         step9 advisory 失败不影响退出码（SUMMARY 标 ADVISORY-WARN）。
 # =============================================================================
 set -u -o pipefail
 
@@ -192,6 +198,82 @@ step 7 "cargo deny --offline check" -- bash -c "cd '$AF_ROOT' && cargo deny --of
 echo "== step8 neutrality 删包自洽+领域词扫描+golden 登记"
 step 8 "neutrality 删包自洽+领域词扫描+golden 登记" -- \
   bash "$CI_DIR/neutrality_gate.sh"
+
+# ---- 9. 形式验证 advisory 门（FV-1 收编批 2026-10-25 挂入；非阻塞） -------------
+# 语义：advisory = 形式验证面的漂移/回退早警报，**不是放行门**——step9 任何失败
+#   只进 SUMMARY 的 ADVISORY-WARN 行并全文打印，绝不改 OVERALL（exit code 不受
+#   影响）；工具缺席同判 WARN（环境面，非内容失败）。
+# 内容：9a Rocq 陈述库 coqc 类型检查（proofs/rocq-规范库-v0 十文件，期望 10/10
+#   ——Admitted 即待证义务登记，类型过=陈述自洽）；
+#   9b Kani 快检子集 = INV 镜像套件全量 32 harness（proofs/Kani镜像员-INV组，
+#   实测 ~28s 预算内）；确定性组 17 harness 不入快检——c02 单条实测 143.4s，超
+#   本门 <2min 预算（即「Kani 全量太慢」分支，全量复现命令见 proofs/README）。
+# 工具前提（tmpfs/PATH 缺席只 WARN）：coqc 走 PATH（本机 8.20.1 实测 10 文件
+#   ~0.5s）；Kani 0.68.0 为 tmpfs 保留件 /dev/shm/fv0/kani-0.68.0（重启即失），
+#   配套 RUSTUP_HOME=/dev/shm/fv0/rustup（工具链 nightly-2026-08-21；
+#   RUSTUP_TOOLCHAIN 显式覆盖仓内 rust-toolchain.toml 的 1.99.1 钉住——Kani
+#   harness 需跑在其自带工具链上）。
+# Verus 本体不装（安装失败史在案：41 次代理下载 curl exit 35，FV-1 裁决书 §一；
+#   状态机组 29 verified 以 proofs/状态机组-Verus/verus-state-group.log 入档
+#   内核输出为准，CI 不重跑）。
+echo "== step9 FV advisory（非阻塞：Rocq coqc 10 文件 + Kani INV 镜像 32 harness）"
+fv_advisory() {
+  local rc=0
+  # —— 9a. Rocq 陈述库 coqc 类型检查（临时副本跑，.vo/.glob/.aux 不落工作树）——
+  if command -v coqc >/dev/null 2>&1; then
+    local RP="$OUT/step9-rocq" ; rm -rf "$RP" ; mkdir -p "$RP"
+    cp "$AF_ROOT"/proofs/rocq-规范库-v0/T*.v "$RP"/
+    local rp=0 rf=0 f
+    for f in "$RP"/T*.v; do
+      if (cd "$RP" && coqc "$(basename "$f")" >/dev/null 2>&1); then
+        rp=$((rp+1))
+      else
+        rf=$((rf+1)) ; echo "coqc FAIL: $(basename "$f")"
+      fi
+    done
+    echo "9a Rocq 陈述库 coqc 类型检查: ${rp}/10 通过${rf:+，$rf 失败}"
+    rm -rf "$RP"
+    [ "$rp" -eq 10 ] || rc=1
+  else
+    echo "9a WARN: coqc 不在 PATH——Rocq 面 advisory 未跑（工具缺席，非内容失败）"
+    rc=1
+  fi
+  # —— 9b. Kani INV 镜像快检（临时副本置 $HOME——仓库树外，cargo 不会把它误认
+  #    workspace 成员；Cargo.lock/target 均不落工作树，跑完即删）——
+  local KDIR=/dev/shm/fv0/kani-0.68.0
+  if [ -x "$KDIR/bin/cargo-kani" ] && [ -d /dev/shm/fv0/rustup ]; then
+    local KH="$HOME/afb-fv-advisory-harness" ; rm -rf "$KH" ; mkdir -p "$KH"
+    cp -r "$AF_ROOT/proofs/Kani镜像员-INV组/harness/." "$KH"/
+    if (cd "$KH" && env RUSTUP_HOME=/dev/shm/fv0/rustup \
+        RUSTUP_TOOLCHAIN=nightly-2026-08-21-x86_64-unknown-linux-gnu \
+        PATH="$KDIR/bin:$PATH" \
+        CARGO_TARGET_DIR="$HOME/afbuild-phase2fv-kani" \
+        timeout 100 cargo kani > "$OUT/step9-kani.log" 2>&1); then
+      echo "9b Kani INV 镜像快检: exit=0"
+      grep -E '^Complete - ' "$OUT/step9-kani.log" | tail -1 || \
+        echo "（日志缺 Complete 汇总行——见 ci/out/step9-kani.log）"
+    else
+      echo "9b WARN: Kani 快检非零退出（超时 100s 或验证失败——详见 ci/out/step9-kani.log）"
+      tail -5 "$OUT/step9-kani.log" 2>/dev/null | sed 's/^/      | /'
+      rc=1
+    fi
+    rm -rf "$KH"
+  else
+    echo "9b WARN: Kani 0.68.0 tmpfs 安装缺席（$KDIR 或 /dev/shm/fv0/rustup 不在）——Kani 面 advisory 未跑（tmpfs 重启即失，非内容失败）"
+    rc=1
+  fi
+  return $rc
+}
+T9_0=$(now_ns)
+if fv_advisory > "$OUT/step9.log" 2>&1; then
+  a_verdict="ADVISORY-PASS"          # 非阻塞：两态均不改 OVERALL（exit code 不受影响）
+else
+  a_verdict="ADVISORY-WARN"
+fi
+T9_1=$(now_ns); T9_MS=$(( (T9_1 - T9_0) / 1000000 ))
+SUMMARY+=("step9  $a_verdict  ${T9_MS}ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）")
+printf '  [9] %s %6dms  FV advisory（Rocq coqc + Kani INV 镜像 32，非阻塞）\n' "$a_verdict" "$T9_MS"
+cat "$OUT/step9.log"
 
 # ---- 汇总 -------------------------------------------------------------------
 echo "== 汇总"

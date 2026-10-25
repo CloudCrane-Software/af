@@ -24,3 +24,7 @@ poc/poc-rekor/bin/
 poc/poc-rekor/.gocache/
 poc/poc-rekor/rekor-tiles/
 ci/advisory-db/
+
+# ── FV 收编批（2026-10-25）：step9 advisory 门的大体积 solver 全文日志不入档
+#    （裁决行 10/10 + Complete-32 已存 ci/out/step9.log 与 SUMMARY.txt；重跑 step9 即再生）
+ci/out/step9-kani.log
