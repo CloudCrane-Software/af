@@ -701,13 +701,9 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
         let signal = spec.completion_signal.clone();
         let notes_submit_slot = notes_slot.clone();
         let submit_notes_tool = Arc::new(move |args: &Value| -> Result<Value, String> {
-            let notes = args
-                .get("notes")
-                .and_then(normalize_notes)
-                .ok_or_else(|| {
-                    "submit_notes 载荷应是笔记数组 list<note_item>（[{point,anchor}, ...]）"
-                        .to_string()
-                })?;
+            let notes = args.get("notes").and_then(normalize_notes).ok_or_else(|| {
+                "submit_notes 载荷应是笔记数组 list<note_item>（[{point,anchor}, ...]）".to_string()
+            })?;
             *notes_submit_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(notes);
             Ok(Value::String(signal.clone()))
         }) as crate::agent::ToolFn;
