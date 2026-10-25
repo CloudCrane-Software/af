@@ -143,6 +143,8 @@ pub enum UnitChoice {
     Auto,
     Swev,
     Report,
+    /// 图执行器（F-第四单执行长缺口销项）：消费 <data_root>/<task>/plan.json。
+    Graph,
     Stub,
 }
 
@@ -152,6 +154,7 @@ pub enum SelectedUnit {
     Stub,
     Swev,
     Report,
+    Graph,
 }
 
 /// `--unit` 值解析（swev|report|stub；其余 OR1001）。
@@ -159,10 +162,11 @@ pub fn parse_unit_choice(raw: &str) -> Result<UnitChoice, OrderError> {
     match raw {
         "swev" => Ok(UnitChoice::Swev),
         "report" => Ok(UnitChoice::Report),
+        "graph" => Ok(UnitChoice::Graph),
         "stub" => Ok(UnitChoice::Stub),
         other => Err(OrderError::Usage {
             detail: format!(
-                "OR1001: 未知 --unit {other:?}（可选 swev | report | stub；不给 = 现行为：三件套在=swev、缺=stub 冒烟）"
+                "OR1001: 未知 --unit {other:?}（可选 swev | report | graph | stub；不给 = 现行为：三件套在=swev、缺=stub 冒烟）"
             ),
         }),
     }
@@ -176,13 +180,20 @@ pub fn resolve_unit(
     match (choice, exec) {
         (UnitChoice::Auto, Some(_)) => Ok(SelectedUnit::Swev),
         (UnitChoice::Auto, None) => Ok(SelectedUnit::Stub),
-        (UnitChoice::Swev, Some(_)) | (UnitChoice::Report, Some(_)) => Ok(match choice {
+        (UnitChoice::Swev, Some(_))
+        | (UnitChoice::Report, Some(_))
+        | (UnitChoice::Graph, Some(_)) => Ok(match choice {
             UnitChoice::Swev => SelectedUnit::Swev,
-            _ => SelectedUnit::Report,
+            UnitChoice::Report => SelectedUnit::Report,
+            UnitChoice::Graph => SelectedUnit::Graph,
+            UnitChoice::Auto | UnitChoice::Stub => unreachable!("匹配臂已收"),
         }),
-        (UnitChoice::Swev, None) | (UnitChoice::Report, None) => Err(OrderError::Usage {
-            detail: "OR1001: --unit swev/report 需要 --task/--profile/--data-root 三件套".into(),
-        }),
+        (UnitChoice::Swev, None) | (UnitChoice::Report, None) | (UnitChoice::Graph, None) => {
+            Err(OrderError::Usage {
+                detail: "OR1001: --unit swev/report/graph 需要 --task/--profile/--data-root 三件套"
+                    .into(),
+            })
+        }
         (UnitChoice::Stub, Some(_)) => Err(OrderError::Usage {
             detail: "OR1001: --unit stub 与执行三件套互斥（冒烟档不带执行参数）".into(),
         }),
@@ -225,6 +236,44 @@ pub fn report_unit_for(exec: &RealExec) -> Result<ReportUnitSpec, OrderError> {
     Ok(ReportUnitSpec::v1(
         exec.profile.clone(),
         af_execline::ReportJudgeLocator::production(),
+        registry_root,
+    ))
+}
+
+// ============================================================
+// --unit graph 图执行器材料面（F-第四单执行长缺口销项）
+// ============================================================
+
+/// graph 单元材料面（v1 约定：任务包目录 `<data_root>/<task>/` 携
+/// task.json + plan.json——与 report 同款约定；submit 级 `--plan` 档形态 =
+/// 开放问题 8 已裁留 v0.2；registry_root 取 task.json 声明，缺省机器本地常量）。
+pub fn graph_unit_for(exec: &RealExec) -> Result<af_execline::GraphUnitSpec, OrderError> {
+    let task_dir = exec.data_root.join(&exec.task);
+    let task_json = task_dir.join("task.json");
+    let raw = std::fs::read_to_string(&task_json).map_err(|err| OrderError::Usage {
+        detail: format!(
+            "OR1001: graph 任务包缺 task.json（约定布局 {}/task.json）: {err}",
+            task_dir.display()
+        ),
+    })?;
+    let task: serde_json::Value = serde_json::from_str(&raw).map_err(|err| OrderError::Usage {
+        detail: format!("OR1001: task.json 不是合法 JSON: {err}"),
+    })?;
+    if !task_dir.join("plan.json").is_file() {
+        return Err(OrderError::Usage {
+            detail: format!(
+                "OR1001: graph 任务包缺 plan.json（v1 约定：计划随任务包；submit 级 --plan 档形态=开放问题 8 已裁留 v0.2）: {}",
+                task_dir.display()
+            ),
+        });
+    }
+    let registry_root = task
+        .get("registry_root")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_REGISTRY_ROOT));
+    Ok(af_execline::GraphUnitSpec::v1(
+        exec.profile.clone(),
         registry_root,
     ))
 }

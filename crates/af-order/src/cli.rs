@@ -20,8 +20,8 @@ use serde_json::{json, Value};
 
 use crate::error::OrderError;
 use crate::exec::{
-    parse_exec_flags, parse_unit_choice, report_unit_for, resolve_unit, swev_unit_spec_for,
-    RealExec, SelectedUnit, UnitChoice, DEFAULT_HOST, EXEC_FLAGS,
+    graph_unit_for, parse_exec_flags, parse_unit_choice, report_unit_for, resolve_unit,
+    swev_unit_spec_for, RealExec, SelectedUnit, UnitChoice, DEFAULT_HOST, EXEC_FLAGS,
 };
 use crate::spec::parse_spec;
 use crate::state::{self, StateDir};
@@ -252,7 +252,11 @@ fn run_submit(
         profile: exec
             .map(|e| e.profile.clone())
             .unwrap_or_else(|| "stub".into()),
-        attempt_layout: AttemptLayout::SwevIncrement,
+        attempt_layout: match unit {
+            // 图执行器：graph- 前缀 D-20 递增布局（套件面区分）。
+            UnitChoice::Graph => AttemptLayout::GraphIncrement,
+            _ => AttemptLayout::SwevIncrement,
+        },
     };
     // MES 写缝（B②③）：--mes-ch 只是目标声明（与执行面正交），写侧
     // （含读侧对账）全在 af-execline 的 MesChSink；不声明 = 文件正本。
@@ -267,9 +271,11 @@ fn run_submit(
     // 执行单元：真实路径 = SwevExecuteUnit（SshBridge + HarnessRunner 真模型
     // 调用环 + 冻结判分指纹门）；冒烟档 = StubExecuteUnit（明示非生产路径）。
     // 预算硬顶由执行面注入（B①：--max-turns/--spend-cap-cents 覆写 fix2 缺省）。
-    // 单元路由（裁决7：--unit swev|report|stub；缺省=现行为）。报告臂装载期
-    // 即过 planbind 三重门（指纹/模板/档案）+ 任务包材料核对（fail-loud）。
-    let report = match resolve_unit(unit, exec)? {
+    // 单元路由（裁决7：--unit swev|report|graph|stub；缺省=现行为）。报告臂装载期
+    // 即过 planbind 三重门（指纹/模板/档案）+ 任务包材料核对（fail-loud）；
+    // 图臂 = 图执行器（planbind 三核对 + 拓扑序逐节点驱动）。
+    let selected = resolve_unit(unit, exec)?;
+    let report = match selected {
         SelectedUnit::Swev => {
             let exec = exec.expect("resolve 已保证 Swev 携三件套");
             let unit_spec = swev_unit_spec_for(exec);
@@ -287,6 +293,22 @@ fn run_submit(
                 unit_spec,
                 af_execline::suite::report_unit::draft_fn_unwired(),
                 Arc::new(af_execline::LocalFileFetcher),
+            )
+            .map_err(OrderError::from)?;
+            driver.drive(&unit)?
+        }
+        SelectedUnit::Graph => {
+            // 图执行器（F-第四单执行长缺口销项）：planbind 三核对 + 拓扑序逐
+            // 节点驱动；计划从任务包约定路径 <data_root>/<task>/plan.json 读。
+            let exec = exec.expect("resolve 已保证 Graph 携三件套");
+            let unit_spec = graph_unit_for(exec)?;
+            let runner = HarnessRunner::new().map_err(|err| OrderError::State {
+                detail: format!("HarnessRunner 装载失败: {err}"),
+            })?;
+            let unit = af_execline::GraphExecuteUnit::new(
+                unit_spec,
+                Arc::new(SshBridge),
+                Arc::new(runner),
             )
             .map_err(OrderError::from)?;
             driver.drive(&unit)?
@@ -323,7 +345,13 @@ fn run_submit(
         "voucher_id": voucher_record.voucher_id,
         "voucher_key_id": voucher_record.key_id,
         "exec": exec.map(|e| json!({
-            "unit": "swev-unit",
+            // 单元名如实（--unit 路由产物；Auto 缺省 = swev）。
+            "unit": match selected {
+                SelectedUnit::Swev => "swev-unit",
+                SelectedUnit::Report => "report-unit",
+                SelectedUnit::Graph => "graph-unit",
+                SelectedUnit::Stub => "stub-unit",
+            },
             "task": e.task,
             "profile": e.profile,
             "host": e.host,
