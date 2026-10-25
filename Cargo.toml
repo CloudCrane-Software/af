@@ -1,6 +1,10 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+# proofs/ = FV-1 第一波形式验证工件收编（2026-10-25）：Kani/Verus harness 与
+# 农场 harness 是独立 cargo 工程（零外部依赖或绝对 path 依赖历史工作树），
+# 不参与 workspace 构建/测试/clippy——exclude 防「believes it's in a workspace」。
+exclude = ["proofs"]
 
 [workspace.package]
 edition = "2021"

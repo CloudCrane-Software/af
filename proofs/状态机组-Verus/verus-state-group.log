@@ -1,0 +1,131 @@
+warning: autoderive Clone impl does not take the form Verus expects; continuing, but without adding a specification for the derived Clone impl
+  --> state_group_mirror.rs:83:10
+   |
+83 | #[derive(Clone, PartialEq, Eq)]
+   |          ^^^^^
+   |
+   = help: to suppress this warning, use `#[verifier::allow(autoderive_clone_without_spec)]` on the surrounding function, datatype, or module or `#![verifier::allow(autoderive_clone_without_spec)]` in the module or crate
+
+note: automatically chose triggers for this expression:
+   --> state_group_mirror.rs:302:5
+    |
+302 |     exists |i: int| 0 <= i < arts.len() && arts[i].is_final && arts[i].qualified
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note:   trigger 1 of 1:
+   --> state_group_mirror.rs:302:44
+    |
+302 |     exists |i: int| 0 <= i < arts.len() && arts[i].is_final && arts[i].qualified
+    |                                            ^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> state_group_mirror.rs:386:13
+    |
+386 |             forall |k: int| 0 <= k < i as int ==> !(artifacts@[k].is_final && artifacts@[k].qualified),
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note:   trigger 1 of 1:
+   --> state_group_mirror.rs:386:53
+    |
+386 |             forall |k: int| 0 <= k < i as int ==> !(artifacts@[k].is_final && artifacts@[k].qualified),
+    |                                                     ^^^^^^^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> state_group_mirror.rs:562:9
+    |
+562 | /         forall |t: Transition|
+563 | |             t != Transition::Cancel ==>
+564 | |                 can_apply_spec(from_state_spec(t), t)
+565 | |                 && declared_edge(from_state_spec(t), t)
+566 | |                 && to_state_spec(t) != from_state_spec(t),
+    | |_________________________________________________________^
+
+note:   trigger 1 of 2:
+   --> state_group_mirror.rs:564:32
+    |
+564 |                 can_apply_spec(from_state_spec(t), t)
+    |                                ^^^^^^^^^^^^^^^^^^
+
+note:   trigger 2 of 2:
+   --> state_group_mirror.rs:566:20
+    |
+566 |                 && to_state_spec(t) != from_state_spec(t),
+    |                    ^^^^^^^^^^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> state_group_mirror.rs:587:9
+    |
+587 | /         forall |lb: bool, vp: bool, vs: bool, vid: u64|
+588 | |             (release_missing_spec(lb, vp, vs, vid).len() == 0) <==> (lb && vp && vs),
+    | |____________________________________________________________________________________^
+
+note:   trigger 1 of 1:
+   --> state_group_mirror.rs:588:14
+    |
+588 |             (release_missing_spec(lb, vp, vs, vid).len() == 0) <==> (lb && vp && vs),
+    |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> state_group_mirror.rs:590:9
+    |
+590 | /         forall |arts: Seq<ArtM>|
+591 | |             (close_missing_spec(artifacts_qf(arts)).len() == 0) <==> artifacts_qf(arts),
+    | |_______________________________________________________________________________________^
+
+note:   trigger 1 of 1:
+   --> state_group_mirror.rs:591:33
+    |
+591 |             (close_missing_spec(artifacts_qf(arts)).len() == 0) <==> artifacts_qf(arts),
+    |                                 ^^^^^^^^^^^^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> state_group_mirror.rs:593:9
+    |
+593 | /         forall |lb: bool, vp: bool, vs: bool, vid: u64|
+594 | |             release_missing_spec(lb, vp, vs, vid).len() <= 2
+595 | |                 && (in_seq_missing(release_missing_spec(lb, vp, vs, vid),
+596 | |                         MissingM::LineVersionNotBound)
+...   |
+599 | |                 && (release_missing_spec(lb, vp, vs, vid).len() == 2
+600 | |                     ==> is_voucher_err(release_missing_spec(lb, vp, vs, vid)[1])),
+    | |_________________________________________________________________________________^
+
+note:   trigger 1 of 1:
+   --> state_group_mirror.rs:594:13
+    |
+594 |             release_missing_spec(lb, vp, vs, vid).len() <= 2
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> state_group_mirror.rs:631:9
+    |
+631 |         forall |t: Transition| !can_apply_spec(to_state_spec(t), t),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note:   trigger 1 of 1:
+   --> state_group_mirror.rs:631:48
+    |
+631 |         forall |t: Transition| !can_apply_spec(to_state_spec(t), t),
+    |                                                ^^^^^^^^^^^^^^^^
+
+note: Verus printed one or more automatically chosen quantifier triggers
+      because it had low confidence in the chosen triggers.
+      To suppress these messages, do one of the following:
+        (1) manually annotate a single desired trigger using #[trigger]
+            (example: forall|i: int, j: int| f(i) && #[trigger] g(i) && #[trigger] h(j)),
+        (2) manually annotate multiple desired triggers using #![trigger ...]
+            (example: forall|i: int| #![trigger f(i)] #![trigger g(i)] f(i) && g(i)),
+        (3) accept the automatically chosen trigger using #![auto]
+            (example: forall|i: int, j: int| #![auto] f(i) && g(i) && h(j))
+        (4) use the --triggers-mode silent command-line option to suppress all printing of triggers.
+      (Note: triggers are used by the underlying SMT theorem prover to instantiate quantifiers;
+      the theorem prover instantiates a quantifier whenever some expression matches the
+      pattern specified by one of the quantifier's triggers.)
+   --> state_group_mirror.rs:631:9
+    |
+631 |         forall |t: Transition| !can_apply_spec(to_state_spec(t), t),
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+verification results:: 29 verified, 0 errors
+warning: 1 warning emitted
+

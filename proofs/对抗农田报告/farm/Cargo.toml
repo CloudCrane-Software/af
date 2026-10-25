@@ -1,0 +1,13 @@
+[package]
+name = "afv1-farm"
+version = "0.1.0"
+edition = "2021"
+
+# 对抗样本农田 harness（2026-10-24）：只读依赖 af-dsl 工作树，逐样本
+# load_str + validate 裁定。本 crate 不入任何 workspace；target 外置。
+# 与 g3gate 的差别：①每个样本在独立子进程里跑（栈溢出/abort 不连坐）；
+# ②load_str / validate 各自包 catch_unwind，panic 归一为记录而非进程死亡；
+# ③输出机器可读 TSV，供农田报告聚合。
+
+[dependencies]
+af-dsl = { path = "/home/pan-ding/workspace/af-wt-g4/crates/af-dsl" }
