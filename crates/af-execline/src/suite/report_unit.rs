@@ -1,11 +1,13 @@
 //! ReportExecuteUnit——研究报告包 v1 执行单元（G4 报告包设计 §5；
 //! swev_unit 分相骨架同构：setup→run→gate→verify→行落盘，零容器）。
 //!
-//! 真实现分级（裁决17）：本批 = 装载期三核对（planbind 复用，**不另写第二套
+//! 真实现分级（裁决17）：G4 批 = 装载期三核对（planbind 复用，**不另写第二套
 //! digest 核对**——裁决9）+ ingest 快照面 + 判分链（两独立验证器子进程，
-//! judge.rs 三原则报告面平行件）+ 行落盘双轨，全部真实可测；**真实模型执行
-//! 端到端=铺单批 F-第五单**——起草面以 [`DraftFn`] 缝承载（v1 口径，RESULT
-//! 登记），F-第五单换真 harness 环（reader→writer 循环 + ToolRegistry）。
+//! judge.rs 三原则报告面平行件）+ 行落盘双轨；**真实模型执行端到端 = F-第五单
+//! （本批已接线）**：[`draft_fn_real_ring`]——reader→writer 双节点经
+//! AgentRunner 真调用（uses.model 档位 + llm.cents 预算记账，swev 同款），
+//! 节点间工件按 paper_report 计划 types 表走 envelope 校验，cite_check
+//! 判分失败回喂 writer（study 环）。测试缝（DraftFn 假实现）照留。
 //!
 //! 快照落盘归属（裁决5 三说归一）：快照文件由工具副作用落
 //! `attempt_dir/sources/`（fetcher 写），图上以 reader 节点 artifact_contract
@@ -14,7 +16,7 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use af_workorder::WorkArtifact;
 use serde_json::{json, Value};
@@ -161,26 +163,51 @@ impl FetchedDoc {
     }
 }
 
-/// 摄取缝：url/路径 → 文档（web 面的真实现=铺单批 F-第五单——出网/代理/
-/// robots 未实测，设计 §10-6 如实边界；本批 LocalFileFetcher 承载本地/缓存面）。
+/// 摄取缝：url/路径 → 文档（快照契约地基，裁决5「谁写、写哪」的 fetcher 半体）。
 pub trait SourceFetcher {
     fn fetch(&self, source: &str) -> Result<FetchedDoc, String>;
 }
 
-/// 本地文件摄取（`file://` 或裸路径；文本文件——PDF 抽取=能力缺口，回退
-/// HTML/文本面，设计 §9-4/§10-7 如实登记）。
+/// 本地文件摄取（`file://` 或裸路径）：文本文件直读；`.pdf` 走 pdftotext
+/// 抽取（设计 §2.3 pdf_extract——同快照契约两路同构；抽取器=本机 poppler
+/// 子进程，判分子进程同款纪律，缺失即 fail-loud 点名）。
 #[derive(Debug, Clone, Copy, Default)]
 pub struct LocalFileFetcher;
+
+impl LocalFileFetcher {
+    /// PDF 抽取核心（pdftotext -q <file> -）：文本规范化（去尾空白）后走
+    /// FetchedDoc 快照契约（sha256=抽取文本指纹）。
+    fn pdf_to_text(path: &Path) -> Result<String, String> {
+        let out = Command::new("pdftotext")
+            .arg("-q")
+            .arg(path)
+            .arg("-")
+            .output()
+            .map_err(|err| format!("拉起 pdftotext 失败（本机需 poppler）: {err}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "pdftotext 退出 {}: {}",
+                out.status,
+                String::from_utf8_lossy(&out.stderr)
+            ));
+        }
+        Ok(String::from_utf8_lossy(&out.stdout).trim_end().to_string())
+    }
+}
 
 impl SourceFetcher for LocalFileFetcher {
     fn fetch(&self, source: &str) -> Result<FetchedDoc, String> {
         if source.starts_with("http://") || source.starts_with("https://") {
             return Err(format!(
-                "web 摄取面（{source}）= 铺单批 F-第五单（出网/代理未实测，设计 §10-6）；v1 用本地路径/file:// 面"
+                "LocalFileFetcher 只承载本地/file:// 面（{source}）；web 摄取走 ArxivWebFetcher"
             ));
         }
         let path = source.strip_prefix("file://").unwrap_or(source);
-        let text = std::fs::read_to_string(path).map_err(|err| format!("读 {path} 失败: {err}"))?;
+        let text = if path.to_lowercase().ends_with(".pdf") {
+            Self::pdf_to_text(Path::new(path))?
+        } else {
+            std::fs::read_to_string(path).map_err(|err| format!("读 {path} 失败: {err}"))?
+        };
         let title = Path::new(path)
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -194,10 +221,296 @@ impl SourceFetcher for LocalFileFetcher {
 }
 
 // ============================================================
-// 起草缝（v1 口径：真实模型环=铺单批 F-第五单——裁决17）
+// web 摄取面（F-第五单）：arXiv 域白名单 + curl 子进程 + HTML 剥除
 // ============================================================
 
-/// 起草输入（reader/writer 模板正文 + 论文文本头 + 研读焦点）。
+/// arXiv 域白名单（设计 §2.2：v1 限 arxiv.org/www.arxiv.org/export.arxiv.org）。
+const ARXIV_HOSTS: [&str; 3] = ["arxiv.org", "www.arxiv.org", "export.arxiv.org"];
+
+/// 出网探针/抓取超时（秒）——abs 页实测 ~2.6s，给足余量但不无限等。
+const WEB_FETCH_TIMEOUT_SECS: u64 = 45;
+
+/// HTML → 纯文本（零依赖剥除：script/style 块整段丢弃，标签换空格，五个
+/// 常见实体解码，空白折叠）。citation_unit 的 quote_hit 本就规范化空白比对，
+/// 此处的折叠不破坏引用核验。
+pub fn html_to_text(html: &str) -> String {
+    // ASCII 小写镜像（字节布局与原文逐位对齐——to_lowercase 对非 ASCII 会
+    // 变长移位，不可用于索引）。
+    let lower: String = html.chars().map(|c| c.to_ascii_lowercase()).collect();
+    // ① script/style 块整段丢弃（取先出现者，未闭合则尾部全丢）。
+    let mut cleaned = String::with_capacity(html.len());
+    let mut pos = 0usize;
+    while pos < html.len() {
+        let script = lower[pos..].find("<script").map(|i| pos + i);
+        let style = lower[pos..].find("<style").map(|i| pos + i);
+        match script.into_iter().chain(style).min() {
+            Some(start) => {
+                cleaned.push_str(&html[pos..start]);
+                let end_tag = if lower[start..].starts_with("<script") {
+                    "</script>"
+                } else {
+                    "</style>"
+                };
+                match lower[start..].find(end_tag) {
+                    Some(end) => pos = start + end + end_tag.len(),
+                    None => pos = html.len(),
+                }
+            }
+            None => {
+                cleaned.push_str(&html[pos..]);
+                pos = html.len();
+            }
+        }
+    }
+    // ② 标签 → 空格。
+    let mut no_tags = String::with_capacity(cleaned.len());
+    let mut in_tag = false;
+    for ch in cleaned.chars() {
+        match ch {
+            '<' => {
+                in_tag = true;
+                no_tags.push(' ');
+            }
+            '>' => {
+                in_tag = false;
+                no_tags.push(' ');
+            }
+            _ if !in_tag => no_tags.push(ch),
+            _ => {}
+        }
+    }
+    // ③ 实体解码（五个高频件）。
+    let decoded = no_tags
+        .replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'");
+    // ④ 空白折叠（quote_hit 规范化空白比对，此处折叠不破坏核验）。
+    decoded.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// arXiv web 摄取（F-第五单真实出网面；anolis 出网预检 2026-10-25：
+/// export.arxiv.org abs/api HTTPS 200 直连可用、PDF 200 但慢）。
+///
+/// 域白名单外一律拒（不静默放行、不经代理绕行）；抓取用 curl 子进程
+/// （判分子进程同款纪律——argv 直传不经 shell，无注入面）。host 统一改写
+/// export.arxiv.org（arXiv 官方导出面），路径原样保留。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ArxivWebFetcher;
+
+impl ArxivWebFetcher {
+    /// 出网前域名核对（https + 白名单）。
+    fn normalize_url(source: &str) -> Result<String, String> {
+        let rest = source
+            .strip_prefix("https://")
+            .ok_or_else(|| format!("web 摄取仅支持 https（{source}）"))?;
+        let (host, path) = match rest.find('/') {
+            Some(pos) => (&rest[..pos], &rest[pos..]),
+            None => (rest, "/"),
+        };
+        if !ARXIV_HOSTS.contains(&host) {
+            return Err(format!(
+                "web 摄取域白名单（设计 §2.2：v1 限 arxiv.org 域）拒绝 {host}——{source}"
+            ));
+        }
+        Ok(format!("https://export.arxiv.org{path}"))
+    }
+
+    /// 抓取核心：白名单核对 → curl → title/html_to_text → FetchedDoc。
+    pub fn fetch_to_doc(source: &str) -> Result<FetchedDoc, String> {
+        let url = Self::normalize_url(source)?;
+        let out = Command::new("curl")
+            .arg("-sSL")
+            .arg("--max-redirs")
+            .arg("5")
+            .arg("-m")
+            .arg(WEB_FETCH_TIMEOUT_SECS.to_string())
+            .arg(&url)
+            .output()
+            .map_err(|err| format!("拉起 curl 失败（web 摄取需本机 curl）: {err}"))?;
+        if !out.status.success() {
+            return Err(format!(
+                "curl 退出 {}: {}",
+                out.status,
+                String::from_utf8_lossy(&out.stderr)
+            ));
+        }
+        let body = String::from_utf8_lossy(&out.stdout).into_owned();
+        if body.trim().is_empty() {
+            return Err(format!("抓取 {url} 空响应体"));
+        }
+        let title = extract_html_title(&body).unwrap_or_else(|| url.clone());
+        Ok(FetchedDoc::from_text(source, title, &html_to_text(&body)))
+    }
+}
+
+impl SourceFetcher for ArxivWebFetcher {
+    fn fetch(&self, source: &str) -> Result<FetchedDoc, String> {
+        Self::fetch_to_doc(source)
+    }
+}
+
+/// `<title>…</title>` 抽取（大小写不敏感；剥实体）。
+fn extract_html_title(html: &str) -> Option<String> {
+    let lower: String = html.chars().map(|c| c.to_ascii_lowercase()).collect();
+    let start = lower.find("<title")?;
+    let content_start = start + html[start..].find('>')? + 1;
+    let end = lower[content_start..].find("</title>")? + content_start;
+    Some(
+        html_to_text(&html[content_start..end])
+            .chars()
+            .take(200)
+            .collect::<String>(),
+    )
+}
+
+/// 摄取分派器（任务包 source 形状选路）：https → arXiv web 面；其余 →
+/// 本地面（文本/PDF）。CLI/驱动层统一注入件。
+#[derive(Debug, Clone, Copy, Default)]
+pub struct IngestFetcher;
+
+impl SourceFetcher for IngestFetcher {
+    fn fetch(&self, source: &str) -> Result<FetchedDoc, String> {
+        if source.starts_with("https://") {
+            ArxivWebFetcher.fetch(source)
+        } else if source.starts_with("http://") {
+            Err("web 摄取仅支持 https（明文 http 拒绝）".to_string())
+        } else {
+            LocalFileFetcher.fetch(source)
+        }
+    }
+}
+
+// ============================================================
+// 起草环（F-第五单：真实模型环——reader→writer 经 AgentRunner 真调用）
+// ============================================================
+
+/// ingest 产物信封（plan 类型 `paper_doc` 的执行面镜像：url/title/sha256 +
+/// 快照相对路径——writer 的 paper 字段必须逐字取自此）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct PaperEnvelope {
+    pub url: String,
+    pub title: String,
+    pub sha256: String,
+    pub snapshot_ref: String,
+}
+
+impl PaperEnvelope {
+    pub fn from_doc(doc: &FetchedDoc) -> Self {
+        Self {
+            url: doc.url.clone(),
+            title: doc.title.clone(),
+            sha256: doc.sha256.clone(),
+            snapshot_ref: doc.snapshot_ref.clone(),
+        }
+    }
+}
+
+/// 环面计划类型（从装订计划的 types 表取正本——envelope 校验按真计划驱动，
+/// 不内置第二套 schema）。
+#[derive(Debug, Clone, PartialEq)]
+pub struct RingTypes {
+    /// reader→writer 边的工件类型（`list<note_item>` 之元素）。
+    pub note_item: Value,
+    /// writer 产出工件类型（research_report）。
+    pub research_report: Value,
+}
+
+impl RingTypes {
+    /// 从计划 types 表提取（IR 形状：name → schema 直连，lower.rs:103）；
+    /// 缺任一 → Err（测试直测面：真计划必带）。
+    pub fn from_plan_types(
+        types: &std::collections::BTreeMap<String, Value>,
+    ) -> Result<Self, String> {
+        let note_item = types
+            .get("note_item")
+            .cloned()
+            .ok_or_else(|| "计划 types 缺 note_item（reader→writer 边工件类型）".to_string())?;
+        let research_report = types
+            .get("research_report")
+            .cloned()
+            .ok_or_else(|| "计划 types 缺 research_report（writer 产出工件类型）".to_string())?;
+        Ok(Self {
+            note_item,
+            research_report,
+        })
+    }
+
+    /// 缺类型计划的宽容档（Null schema = 无约束）：DraftFn 缝假实现不消费
+    /// envelope，不受影响；**真环自检见 Null 即拒跑**（不静默免检）。
+    pub fn permissive() -> Self {
+        Self {
+            note_item: Value::Null,
+            research_report: Value::Null,
+        }
+    }
+
+    /// 真环装载自检：计划未携带环面类型 → 拒跑（envelope 校验不可静默省略）。
+    fn require_real(&self) -> Result<(), String> {
+        if self.note_item.is_null() || self.research_report.is_null() {
+            return Err(
+                "真环需要计划 types 携 note_item/research_report（paper_report 图）——\
+                 envelope 校验不可省略，拒跑"
+                    .to_string(),
+            );
+        }
+        Ok(())
+    }
+}
+
+/// envelope 校验（JSON Schema 子集：type/required/properties/items——计划
+/// types 表实际使用的约束集；payload 违反即 Err 点名路径与字段）。
+pub fn validate_envelope(schema: &Value, payload: &Value) -> Result<(), String> {
+    validate_node(schema, payload, "$")
+}
+
+fn validate_node(schema: &Value, payload: &Value, path: &str) -> Result<(), String> {
+    let Some(obj) = schema.as_object() else {
+        return Ok(()); // 非 schema 节点（无约束）
+    };
+    if let Some(want) = obj.get("type").and_then(Value::as_str) {
+        let ok = match want {
+            "object" => payload.is_object(),
+            "array" => payload.is_array(),
+            "string" => payload.is_string(),
+            "integer" => payload.is_i64() || payload.is_u64(),
+            "number" => payload.is_number(),
+            "boolean" => payload.is_boolean(),
+            _ => true, // 未知类型词：不判（子集语义）
+        };
+        if !ok {
+            return Err(format!("envelope {path}: 类型应为 {want}，实为 {payload}"));
+        }
+    }
+    if let (Some(required), Some(map)) = (
+        obj.get("required").and_then(Value::as_array),
+        payload.as_object(),
+    ) {
+        for key in required {
+            if let Some(name) = key.as_str() {
+                if !map.contains_key(name) {
+                    return Err(format!("envelope {path}: 缺 required 字段 {name}"));
+                }
+            }
+        }
+    }
+    if let (Some(props), Some(map)) = (obj.get("properties"), payload.as_object()) {
+        for (name, sub) in props.as_object().into_iter().flatten() {
+            if let Some(value) = map.get(name) {
+                validate_node(sub, value, &format!("{path}.{name}"))?;
+            }
+        }
+    }
+    if let (Some(items_schema), Some(list)) = (obj.get("items"), payload.as_array()) {
+        for (index, item) in list.iter().enumerate() {
+            validate_node(items_schema, item, &format!("{path}[{index}]"))?;
+        }
+    }
+    Ok(())
+}
+
+/// 起草输入（reader/writer 模板正文 + 论文文本头 + 研读焦点 + 环上下文）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct DraftInput {
     pub focus: String,
@@ -205,21 +518,495 @@ pub struct DraftInput {
     pub min_citations: usize,
     pub reader_prompt: String,
     pub writer_prompt: String,
+    /// ingest 产物信封（paper_doc envelope——writer 的 paper 字段正本）。
+    pub paper: PaperEnvelope,
+    /// run 目录（sources/、ring/ 子目录）。
+    pub attempt_dir: PathBuf,
+    /// cite_check argv[0]（任务包正本）。
+    pub task_json: PathBuf,
+    /// 计划 types 表提取的环面类型（envelope 校验正本）。
+    pub plan_types: RingTypes,
 }
 
-/// v1 未接线档：真实模型起草环=铺单批 F-第五单（裁决17）——路由面已通，
-/// 驱动即如实失败（EX3001 文案点名），不假装配。
-pub fn draft_fn_unwired() -> DraftFn {
-    Arc::new(|_input: &DraftInput| {
-        Err("真实模型起草环=铺单批 F-第五单（裁决17：施工批产出可执行计划+干跑+组件实测；真实模型执行不在批内）".to_string())
+/// 起草产出：报告 JSON + 环用量（reader/writer 双节点聚合——进行落盘 usage）。
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct DraftOutput {
+    pub report_json: String,
+    pub turns: u32,
+    pub model_calls: u64,
+    pub tokens: af_harness::TokenTotals,
+    pub http_retries: u64,
+    /// study 环实际跑的 writer 轮数（plan max_iterations 3 内）。
+    pub iterations: u32,
+}
+
+impl DraftOutput {
+    /// 缝测试便捷件（报告正文 + 零用量——v1 前测试缝同语义）。
+    pub fn from_report_json(report_json: impl Into<String>) -> Self {
+        Self {
+            report_json: report_json.into(),
+            ..Default::default()
+        }
+    }
+}
+
+/// 起草缝：输入 → 报告 JSON + 环用量（Err = 起草失败文案）。
+/// 测试注入 Fake 环闭包；生产 = [`draft_fn_real_ring`]（真 harness 环：
+/// reader→writer 循环 + ToolRegistry 注册 web_fetch/submit_*，agent.rs
+/// registry.register 面）——单元其余分相零改动（G4 缝契约）。
+pub type DraftFn = Arc<dyn Fn(&DraftInput) -> Result<DraftOutput, String> + Send + Sync>;
+
+/// study 环 writer 轮上限（plan `loop.study.max_iterations: 3` 的执行面常量）。
+const RING_MAX_ITERATIONS: u32 = 3;
+
+/// reader 节点工具声明（web_fetch：external_once 面，设计 §2.2）。
+fn web_fetch_decl() -> af_harness::ToolDecl {
+    af_harness::ToolDecl {
+        name: "web_fetch".into(),
+        description: "Fetch an arXiv page (arxiv.org domain only) and land a verifiable \
+snapshot; returns {ok,url,title,text,snapshot_ref,sha256}."
+            .into(),
+        parameters: json!({
+            "type": "object",
+            "required": ["url"],
+            "properties": {
+                "url": { "type": "string", "description": "https URL, arxiv.org domain only" }
+            }
+        }),
+        effect: af_harness::EffectClass::ExternalOnce,
+    }
+}
+
+/// submit 类工具声明（参数单字段；effect pure——本地记账）。`payload_hint`
+/// 进参数 description（点名载荷形状，防模型双重包裹）。
+fn submit_decl(name: &str, what: &str, payload_hint: &str) -> af_harness::ToolDecl {
+    af_harness::ToolDecl {
+        name: name.into(),
+        description: format!("Submit the final {what}; this is the only completion path."),
+        parameters: json!({
+            "type": "object",
+            "required": [what],
+            "properties": {
+                what: { "type": "object", "description": payload_hint }
+            }
+        }),
+        effect: af_harness::EffectClass::Pure,
+    }
+}
+
+/// submit 互载荷解包：模型偶发双重包裹（`{"notes": {"notes": [...]}}`——照
+/// 提示词字面把整体再包一层）。归一规则：字段值若恰含同名子键，解一层；
+/// 至多一层，不递归（递归会掩盖真错形）。
+fn unwrap_payload(args: &Value, field: &str) -> Option<Value> {
+    let outer = args.get(field)?;
+    match outer.get(field) {
+        Some(inner) if !inner.is_null() => Some(inner.clone()),
+        _ => Some(outer.clone()),
+    }
+}
+
+/// notes 载荷三形归一（真模型实测变体）：数组（正形）/ 同名包裹
+/// （{"notes":[...]}）/ 单条对象（{"point","anchor"}——仅一条笔记时模型
+/// 直接给对象）。其余错形不猜，交上层报错。
+fn normalize_notes(raw: &Value) -> Option<Value> {
+    if raw.is_array() {
+        return Some(raw.clone());
+    }
+    if let Some(inner) = raw.get("notes") {
+        if inner.is_array() {
+            return Some(inner.clone());
+        }
+    }
+    if raw.get("point").is_some() && raw.get("anchor").is_some() {
+        return Some(json!([raw]));
+    }
+    None
+}
+
+/// 真实模型环（F-第五单兑现 G4 裁决17 的铺单批项）：
+///
+/// - **reader 节点**（uses.model route.main）：系统提示 = 装订模板
+///   `pkg.reportkit.reader_system`；上下文 = 焦点 + paper_doc 信封 + 快照
+///   截头；工具 = web_fetch（arXiv 白名单真出网，快照副作用落
+///   `attempt_dir/sources/` 并入 reader artifact_contract 记账）+ submit_notes
+///   （完成信号唯一通路——工具输出首行 = 信号词）。
+/// - **writer 节点**（uses.model route.main）：上下文 = paper 信封逐字 +
+///   notes 边（envelope 校验过）+ 快照登记表 + cite_check 反馈；工具 =
+///   submit_report。产出过 `research_report` envelope 校验。
+/// - **cite_check 反馈环**：每轮草稿落 `ring/draft-i<N>.json`，真判分子进程
+///   （argv 契约 [task.json, report.json, sources_dir]）核验；failures 回喂
+///   writer 下一轮（plan `study` 循环 `cite_feedback` 边的执行面兑现）；
+///   轮上限 = plan max_iterations 3，耗尽返回末轮草稿交 verify 判（判分有
+///   结论优于无结论——G4 判分纪律；与 plan `on_exhausted: fail` 的差异在
+///   RESULT 登记）。
+/// - **预算记账**（复用 swev 环）：llm.cents 每 turn 1 分（
+///   [`crate::agent::llm_cents_policy`]），spend cap/tool cap/账本总额随
+///   spec；采样覆写（temperature/top_p/max_tokens）同 swev agent_spec 面。
+/// - **节点工件走 envelope**：reader notes 按 plan types `note_item` 校验、
+///   writer 草稿按 `research_report` 校验（types 从装订计划提取，不内置
+///   第二套 schema）。
+///
+/// Err 语义：供给面失败（模型/网络/装载）→ 单元 EX3001 可重试；判分失败
+/// 不走 Err（交 verify 记 verdict=false）。
+pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) -> DraftFn {
+    Arc::new(move |input: &DraftInput| {
+        input.plan_types.require_real()?;
+        let profile = crate::profile::profile(&spec.profile)
+            .map_err(|err| format!("环内档案解析失败（{0}）: {err}", spec.profile))?;
+        let mut usage = DraftOutput::default();
+
+        // ---- reader 节点 ----
+        let notes_slot: Arc<Mutex<Option<Value>>> = Arc::new(Mutex::new(None));
+        let sources_ledger: Arc<Mutex<Vec<Value>>> = Arc::new(Mutex::new(Vec::new()));
+        sources_ledger
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(json!({
+                "url": input.paper.url,
+                "title": input.paper.title,
+                "sha256": input.paper.sha256,
+                "snapshot_ref": input.paper.snapshot_ref,
+            }));
+        let reader_dir = input.attempt_dir.join("ring/reader");
+        std::fs::create_dir_all(&reader_dir)
+            .map_err(|err| format!("建 reader run 目录失败: {err}"))?;
+
+        // web_fetch 工具体：arXiv 白名单真抓取 + 快照副作用 + artifact_contract 记账。
+        let web_sources = sources_ledger.clone();
+        let web_attempt = input.attempt_dir.to_path_buf();
+        let web_fetch_tool = Arc::new(move |args: &Value| -> Result<Value, String> {
+            let url = args
+                .get("url")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "web_fetch 缺 url 参数".to_string())?;
+            let doc = ArxivWebFetcher::fetch_to_doc(url)?;
+            doc.write_snapshot(&web_attempt)
+                .map_err(|err| format!("web_fetch 快照落盘失败: {err}"))?;
+            let payload = json!({
+                "ok": true,
+                "url": doc.url,
+                "title": doc.title,
+                "text": doc.text.chars().take(4000).collect::<String>(),
+                "snapshot_ref": doc.snapshot_ref,
+                "sha256": doc.sha256,
+            });
+            web_sources
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(json!({
+                    "url": doc.url, "sha256": doc.sha256, "snapshot_ref": doc.snapshot_ref,
+                }));
+            Ok(payload)
+        }) as crate::agent::ToolFn;
+        let signal = spec.completion_signal.clone();
+        let notes_submit_slot = notes_slot.clone();
+        let submit_notes_tool = Arc::new(move |args: &Value| -> Result<Value, String> {
+            let notes = args
+                .get("notes")
+                .and_then(normalize_notes)
+                .ok_or_else(|| {
+                    "submit_notes 载荷应是笔记数组 list<note_item>（[{point,anchor}, ...]）"
+                        .to_string()
+                })?;
+            *notes_submit_slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(notes);
+            Ok(Value::String(signal.clone()))
+        }) as crate::agent::ToolFn;
+
+        let reader_user = format!(
+            "研究焦点：{focus}\n\n论文（摄取快照 paper_doc）：\n- url: {url}\n- title: {title}\n\
+             - sha256: {sha}\n- snapshot_ref: {snap}\n\n论文快照正文（截头）：\n{head}\n\n\
+             任务：按系统提示研读，产出带锚点的笔记。完成后调用 submit_notes 工具提交 \
+             {{\"notes\": [{{\"point\", \"anchor\"}}, ...]}}——这是唯一的完成通路。\n\
+             如需补充材料可调用 web_fetch（url 限 arxiv.org 域）；每次抓取会落快照并返回 \
+             snapshot_ref/sha256，笔记锚点须取自快照原文。",
+            focus = input.focus,
+            url = input.paper.url,
+            title = input.paper.title,
+            sha = input.paper.sha256,
+            snap = input.paper.snapshot_ref,
+            head = input.paper_text_head,
+        );
+        let reader_launch = crate::agent::AgentLaunch {
+            attempt_dir: &reader_dir,
+            run_id: "report-reader".into(),
+            user_message: reader_user,
+            spec: af_harness::AgentSpec {
+                endpoint: ring_endpoint(&profile.endpoint, &spec),
+                context_template: af_harness::ContextTemplate {
+                    system: input.reader_prompt.clone(),
+                    slots: Vec::new(),
+                },
+                toolset: vec![
+                    web_fetch_decl(),
+                    submit_decl(
+                        "submit_notes",
+                        "notes",
+                        "The notes array itself: [{\"point\": string, \"anchor\": string}, ...] — \
+                         pass the array as this parameter's value, do not wrap it again",
+                    ),
+                ],
+                policy: crate::agent::llm_cents_policy(
+                    spec.max_turns,
+                    &spec.completion_signal,
+                    spec.tool_free_turn_limit,
+                ),
+            },
+            bash: Arc::new(|_command| {
+                "[harness] bash 不在报告环工具集——用 submit_notes 提交".to_string()
+            }),
+            key_cmd: profile.key_cmd,
+            spend_cap_cents: spec.spend_cap_cents,
+            tool_spend_cents: spec.tool_spend_cents,
+            budget_ledger_cents: spec.spend_cap_cents,
+            extra_tools: vec![
+                crate::agent::ToolBinding {
+                    name: "web_fetch".into(),
+                    handler: web_fetch_tool,
+                },
+                crate::agent::ToolBinding {
+                    name: "submit_notes".into(),
+                    handler: submit_notes_tool,
+                },
+            ],
+        };
+        let reader_report = match runner.run(reader_launch) {
+            Ok(crate::agent::AgentRunOutcome {
+                report,
+                http_retries,
+            }) => {
+                usage.http_retries += http_retries;
+                report
+            }
+            Err(crate::agent::AgentRunFailure {
+                message,
+                http_retries,
+            }) => {
+                return Err(format!(
+                    "reader 节点失败（http_retries={http_retries}）: {message}"
+                ))
+            }
+        };
+        usage.turns += reader_report.turns;
+        usage.model_calls += reader_report.model_calls;
+        usage.tokens.input += reader_report.tokens.input;
+        usage.tokens.output += reader_report.tokens.output;
+        usage.tokens.cache_read += reader_report.tokens.cache_read;
+        if !matches!(
+            reader_report.status,
+            af_harness::RunStatus::Completed { .. }
+        ) {
+            return Err(format!(
+                "reader 节点未正常完成（状态 {:?}）——笔记未提交",
+                reader_report.status
+            ));
+        }
+        let notes = notes_slot
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .ok_or_else(|| "reader 未经 submit_notes 提交笔记".to_string())?;
+        let notes_list = notes
+            .as_array()
+            .cloned()
+            .ok_or_else(|| "submit_notes 载荷应是笔记数组（list<note_item>）".to_string())?;
+        for (index, note) in notes_list.iter().enumerate() {
+            validate_envelope(&input.plan_types.note_item, note).map_err(|err| {
+                format!("reader→writer 边（note_item[{index}]）envelope 拒绝: {err}")
+            })?;
+        }
+
+        // reader artifact_contract 记账落盘（sources 工件口——裁决5 进图记账）。
+        let ledger_snapshot = sources_ledger
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        std::fs::create_dir_all(input.attempt_dir.join("ring"))
+            .map_err(|err| format!("建 ring 目录失败: {err}"))?;
+        std::fs::write(
+            input.attempt_dir.join("ring/sources_ledger.json"),
+            serde_json::to_string(&ledger_snapshot).unwrap_or_else(|_| "[]".into()),
+        )
+        .map_err(|err| format!("写 sources_ledger 失败: {err}"))?;
+
+        // ---- study 环：writer → cite_check（反馈回喂，max_iterations 内） ----
+        let ledger_text =
+            serde_json::to_string_pretty(&ledger_snapshot).unwrap_or_else(|_| "[]".into());
+        let mut cite_feedback: Option<String> = None;
+        let mut last_draft: Option<String> = None;
+        for round in 1..=RING_MAX_ITERATIONS {
+            usage.iterations = round;
+            let report_slot: Arc<Mutex<Option<Value>>> = Arc::new(Mutex::new(None));
+            let slot = report_slot.clone();
+            let signal = spec.completion_signal.clone();
+            let submit_report_tool = Arc::new(move |args: &Value| -> Result<Value, String> {
+                let report = unwrap_payload(args, "report")
+                    .ok_or_else(|| "submit_report 缺 report 参数".to_string())?;
+                *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(report);
+                Ok(Value::String(signal.clone()))
+            }) as crate::agent::ToolFn;
+
+            let feedback_section = cite_feedback
+                .as_ref()
+                .map(|text| {
+                    format!(
+                        "\n上一轮 cite_check 判分失败（逐条修复，勿整体重写无关部分）：\n{text}\n"
+                    )
+                })
+                .unwrap_or_default();
+            let writer_user = format!(
+                "论文（report.paper 字段必须逐字使用以下值）：\n- url: {url}\n- title: {title}\n\
+                 - sha256: {sha}\n\n研究焦点：{focus}\n\n\
+                 可用快照登记表（citations 的 snapshot_ref/snapshot_sha256 必须取自本表）：\n\
+                 {ledger}\n\nreader 笔记（notes 边，锚点为快照连续原文）：\n{notes}\n\n\
+                 要求：引用数 ≥ min_citations={min}；每条引用五字段齐全\
+                 （n,url,quote,snapshot_sha256,snapshot_ref），quote 为对应快照的连续原文\
+                 片段（20-600 字符）；正文标记 [n] 与引用双向对齐。\n\
+                 research_report 骨架（sections/citations 均为数组，元素形如骨架——\
+                 勿以 id 为键构对象）：\n\
+                 {{\"paper\": {{\"url\",\"title\",\"sha256\"}}, \"sections\": \
+                 [{{\"id\",\"title\",\"body_md\"}}], \"citations\": \
+                 [{{\"n\",\"url\",\"quote\",\"snapshot_sha256\",\"snapshot_ref\"}}]}}\n\n\
+                 完成后调用 submit_report 工具提交 {{\"report\": <research_report JSON>}}\
+                 ——这是唯一的完成通路。{feedback}",
+                url = input.paper.url,
+                title = input.paper.title,
+                sha = input.paper.sha256,
+                focus = input.focus,
+                ledger = ledger_text,
+                notes = serde_json::to_string_pretty(&notes).unwrap_or_default(),
+                min = input.min_citations,
+                feedback = feedback_section,
+            );
+            let writer_dir = input.attempt_dir.join(format!("ring/writer-i{round}"));
+            std::fs::create_dir_all(&writer_dir)
+                .map_err(|err| format!("建 writer run 目录失败: {err}"))?;
+            let writer_launch = crate::agent::AgentLaunch {
+                attempt_dir: &writer_dir,
+                run_id: format!("report-writer-i{round}"),
+                user_message: writer_user,
+                spec: af_harness::AgentSpec {
+                    endpoint: ring_endpoint(&profile.endpoint, &spec),
+                    context_template: af_harness::ContextTemplate {
+                        system: input.writer_prompt.clone(),
+                        slots: Vec::new(),
+                    },
+                    toolset: vec![submit_decl(
+                        "submit_report",
+                        "report",
+                        "The research_report JSON object itself: {paper, sections, citations} — \
+                         pass the object as this parameter's value, do not wrap it again",
+                    )],
+                    policy: crate::agent::llm_cents_policy(
+                        spec.max_turns,
+                        &spec.completion_signal,
+                        spec.tool_free_turn_limit,
+                    ),
+                },
+                bash: Arc::new(|_command| {
+                    "[harness] bash 不在报告环工具集——用 submit_report 提交".to_string()
+                }),
+                key_cmd: profile.key_cmd,
+                spend_cap_cents: spec.spend_cap_cents,
+                tool_spend_cents: spec.tool_spend_cents,
+                budget_ledger_cents: spec.spend_cap_cents,
+                extra_tools: vec![crate::agent::ToolBinding {
+                    name: "submit_report".into(),
+                    handler: submit_report_tool,
+                }],
+            };
+            let writer_report = match runner.run(writer_launch) {
+                Ok(crate::agent::AgentRunOutcome {
+                    report,
+                    http_retries,
+                }) => {
+                    usage.http_retries += http_retries;
+                    report
+                }
+                Err(crate::agent::AgentRunFailure {
+                    message,
+                    http_retries,
+                }) => {
+                    return Err(format!(
+                        "writer 节点失败（第 {round} 轮，http_retries={http_retries}）: {message}"
+                    ))
+                }
+            };
+            usage.turns += writer_report.turns;
+            usage.model_calls += writer_report.model_calls;
+            usage.tokens.input += writer_report.tokens.input;
+            usage.tokens.output += writer_report.tokens.output;
+            usage.tokens.cache_read += writer_report.tokens.cache_read;
+            if !matches!(
+                writer_report.status,
+                af_harness::RunStatus::Completed { .. }
+            ) {
+                return Err(format!(
+                    "writer 节点未正常完成（第 {round} 轮，状态 {:?}）——报告未提交",
+                    writer_report.status
+                ));
+            }
+            let report_value = report_slot
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
+                .ok_or_else(|| format!("writer 未经 submit_report 提交报告（第 {round} 轮）"))?;
+            validate_envelope(&input.plan_types.research_report, &report_value)
+                .map_err(|err| format!("writer 产出（research_report）envelope 拒绝: {err}"))?;
+
+            // cite_check：真判分子进程（argv 契约三位置参数；零 LLM 零网络）。
+            let draft_text = serde_json::to_string(&report_value)
+                .map_err(|err| format!("草稿序列化失败: {err}"))?;
+            let draft_path = input.attempt_dir.join(format!("ring/draft-i{round}.json"));
+            std::fs::write(&draft_path, &draft_text).map_err(|err| format!("写草稿失败: {err}"))?;
+            last_draft = Some(draft_text);
+            let cite_out = invoke_citation(
+                &spec.judges,
+                &input.task_json,
+                &draft_path,
+                &input.attempt_dir.join("sources"),
+            )
+            .map_err(|err| format!("环内 citation 判分器拉起失败: {err}"))?;
+            if !cite_out.status.success() {
+                return Err(format!(
+                    "环内 citation 判分器退出 {}: {}",
+                    cite_out.status,
+                    String::from_utf8_lossy(&cite_out.stderr)
+                ));
+            }
+            let verdict: Value = serde_json::from_slice(&cite_out.stdout)
+                .map_err(|err| format!("环内 citation 判定不是 JSON: {err}"))?;
+            if verdict["passed"].as_bool().unwrap_or(false) {
+                usage.report_json = last_draft.expect("末轮草稿在案");
+                return Ok(usage);
+            }
+            let failures: Vec<String> = verdict["failures"]
+                .as_array()
+                .map(|list| {
+                    list.iter()
+                        .map(|f| f.as_str().unwrap_or_default().to_string())
+                        .collect()
+                })
+                .unwrap_or_default();
+            cite_feedback = Some(failures.join("\n"));
+        }
+        // 轮耗尽：返回末轮草稿交 verify 判（判分有结论优于无结论；与 plan
+        // on_exhausted: fail 的差异在 RESULT 登记）。
+        usage.report_json = last_draft.expect("至少一轮 writer 在案");
+        Ok(usage)
     })
 }
 
-/// 起草缝：输入 → research_report JSON 文本（Err = 起草失败文案）。
-/// v1 由测试/驱动层注入；F-第五单以真 harness 环（reader→writer 循环 +
-/// ToolRegistry 注册 web_search/web_fetch——agent.rs registry.register 面）
-/// 换入同型闭包，单元其余分相零改动。
-pub type DraftFn = Arc<dyn Fn(&DraftInput) -> Result<String, String> + Send + Sync>;
+/// 环面 endpoint 组装（swev agent_spec 同面：采样覆写随 spec——换档=换spec）。
+fn ring_endpoint(
+    endpoint: &af_harness::EndpointSpec,
+    spec: &ReportUnitSpec,
+) -> af_harness::EndpointSpec {
+    let mut endpoint = endpoint.clone();
+    endpoint.temperature_milli = Some(spec.temperature_milli);
+    endpoint.top_p_milli = Some(spec.top_p_milli);
+    endpoint.max_tokens = Some(spec.max_tokens);
+    endpoint
+}
 
 // ============================================================
 // 单元静态声明（§5.1；档位差异化兑现点——裁决11 单元 spec 覆写正本机制）
@@ -402,7 +1189,9 @@ impl ExecuteUnit for ReportExecuteUnit {
         )
         .map_err(|err| self.fail(format!("登记摄取面失败: {err}")))?;
 
-        // ---- run 相（v1 缝）：起草 ----
+        // ---- run 相（真模型环/缝）：起草 ----
+        let plan_types = RingTypes::from_plan_types(&bound.plan.body.types)
+            .unwrap_or_else(|_| RingTypes::permissive());
         let draft_input = DraftInput {
             focus: task.focus.clone(),
             paper_text_head: doc.text.chars().take(4000).collect(),
@@ -413,10 +1202,14 @@ impl ExecuteUnit for ReportExecuteUnit {
             writer_prompt: bound.templates[&self.spec.writer_template_ref]
                 .content
                 .clone(),
+            paper: PaperEnvelope::from_doc(&doc),
+            attempt_dir: attempt_dir.to_path_buf(),
+            task_json: task_json.clone(),
+            plan_types,
         };
-        let draft_text =
+        let draft =
             (self.draft)(&draft_input).map_err(|err| self.fail(format!("起草失败: {err}")))?;
-        let report: Value = serde_json::from_str(draft_text.trim())
+        let report: Value = serde_json::from_str(draft.report_json.trim())
             .map_err(|err| self.fail(format!("起草产物不是合法 report JSON: {err}")))?;
         std::fs::write(attempt_dir.join("report.json"), report.to_string())
             .map_err(|err| self.fail(format!("写 report.json 失败: {err}")))?;
@@ -505,10 +1298,10 @@ impl ExecuteUnit for ReportExecuteUnit {
             eval_sha256: None,
             gate: if verdict { "ok" } else { "verify_failed" }.into(),
             attempts: 1,
-            http_retries: 0,
-            turns: 0,
-            model_calls: 0,
-            tokens: Default::default(),
+            http_retries: draft.http_retries,
+            turns: draft.turns,
+            model_calls: draft.model_calls,
+            tokens: draft.tokens,
             agent_wall_ms: started.elapsed().as_millis() as u64,
             verifier_note: note.clone(),
         };

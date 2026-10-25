@@ -33,6 +33,18 @@ use crate::profile::resolve_key;
 /// af-bench main.rs:704-735 的语义在单元内，本缝只收成品）。
 pub type BashFn = Arc<dyn Fn(&str) -> String + Send + Sync>;
 
+/// 通用工具体（F-第五单报告环）：参数 JSON → 工具输出 JSON；Err = 工具失败
+/// 文案（HarnessRunner 映射 ToolFailure{E_TOOL}，进止损事件不进执行器故障）。
+pub type ToolFn = Arc<dyn Fn(&Value) -> Result<Value, String> + Send + Sync>;
+
+/// 节点级工具注册件（name + 函数体）。报告环的 web_fetch/submit_notes/
+/// submit_report 经 [`AgentLaunch::extra_tools`] 进 HarnessRunner 的
+/// ToolRegistry（run.rs registry.register 面）；swev/tb 不携带（空集）。
+pub struct ToolBinding {
+    pub name: String,
+    pub handler: ToolFn,
+}
+
 /// 缝输入：单元控制的全部模型执行材料（af-bench main.rs:736-798 的可搬运面）。
 /// 凭证（root）与 harness 侧账面工单由真实现自持——那是订单门/harness 材料，
 /// 不是单元参数（方案 §2.2 凭证纪律同款解读）。
@@ -55,6 +67,8 @@ pub struct AgentLaunch<'a> {
     pub tool_spend_cents: i64,
     /// 预算账本总额（main.rs:790：BudgetLedger::new(300)）。
     pub budget_ledger_cents: i64,
+    /// 节点级额外工具（F-第五单报告环；swev/tb 空集——bash 仍是唯一内置件）。
+    pub extra_tools: Vec<ToolBinding>,
 }
 
 /// 成功侧产出：harness 报告 + HTTP 层退避重试计数（main.rs:800）。
@@ -71,8 +85,9 @@ pub struct AgentRunFailure {
 }
 
 /// 模型执行缝（方案 §2.3 原语义：`run(launch) → Result<RunReport, String>`，
-/// Err 侧升结构化以保 http_retries）。
-pub trait AgentRunner {
+/// Err 侧升结构化以保 http_retries）。Send + Sync 超 trait：报告环经
+/// DraftFn（Send + Sync 闭包）捕获 Arc<dyn AgentRunner> 进 harness 工具面。
+pub trait AgentRunner: Send + Sync {
     fn run(&self, launch: AgentLaunch<'_>) -> Result<AgentRunOutcome, AgentRunFailure>;
 }
 
@@ -177,8 +192,14 @@ impl AgentRunner for HarnessRunner {
     ///   Breakpoint::None）；
     /// - http_retries 双路径累计 ← main.rs:800/819。
     fn run(&self, launch: AgentLaunch<'_>) -> Result<AgentRunOutcome, AgentRunFailure> {
+        // 根凭证工具事实 = bash + 节点级额外工具（authz 白名单 = 规格工具名 ∩
+        // 父凭证事实——report 环的 web_fetch/submit_* 必须进父事实，否则交集
+        // 空、模型侧工具不可见（ToolFreeLimit 假象）；swev/tb 无 extra_tools，
+        // 行为不变）。
+        let mut root_tools = vec!["bash".to_string()];
+        root_tools.extend(launch.extra_tools.iter().map(|t| t.name.clone()));
         let root = af_credential::issue_root(&af_credential::RootSpec {
-            tools: vec!["bash".to_string()],
+            tools: root_tools,
             namespace: "bench".into(),
             budget_cents: 10_000,
         })
@@ -198,6 +219,19 @@ impl AgentRunner for HarnessRunner {
                 .to_string();
             Ok(Value::String(bash(&command)))
         });
+        // 节点级额外工具（报告环：web_fetch/submit_*）：同 registry.register 面，
+        // Err(String) 映射 ToolFailure（工具失败=止损事件，非执行器故障）。
+        for binding in &launch.extra_tools {
+            let name = binding.name.clone();
+            let handler = binding.handler.clone();
+            registry.register(name.clone(), move |call| match handler(call) {
+                Ok(value) => Ok(value),
+                Err(message) => Err(af_harness::ToolFailure {
+                    error_code: "E_TOOL".into(),
+                    message,
+                }),
+            });
+        }
         // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻
         // run 现取（401 竞态实证，main.rs:767）。
         let key = resolve_key(launch.key_cmd).map_err(|err| AgentRunFailure {
