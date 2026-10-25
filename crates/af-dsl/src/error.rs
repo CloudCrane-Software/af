@@ -39,6 +39,13 @@ pub enum ErrorCode {
     CelNonSubset,
     /// E1053 CEL 谓词求值非布尔（承 af-graph `PredicateError::NotBoolean`）。
     CelNotBoolean,
+    /// E1054 CEL 表达式超限（前置闸：括号嵌套深度 >1000 或字节长 >64KiB 即
+    /// 拒，不进解析——antlr4rust 递归下降对深嵌套是**栈溢出 SIGABRT**，
+    /// `catch_unwind` 兜不住，必须下潜前拒。阈值农田实测标定：8MB 主栈深
+    /// 1000 优雅过/2000 起 abort；golden 语料最长 CEL 155 字节。E1xxx 表达式
+    /// 段（E1051-E1099）新增，提案-B §6 预算余量内登记——见
+    /// RESULT-农田修复-20261025.md 码位登记表）。
+    CelLimitExceeded,
 
     // ---- E2xxx 语义：引用闭包（M1）----
     /// E2001 悬空引用（与 af-graph 共享码位）：节点 / store / 入口 / 写者路径 /
@@ -146,6 +153,7 @@ impl ErrorCode {
             Self::CelParse => "E1051",
             Self::CelNonSubset => "E1052",
             Self::CelNotBoolean => "E1053",
+            Self::CelLimitExceeded => "E1054",
             Self::DanglingReference => "E2001",
             Self::ValueOutOfRange => "E2002",
             Self::DuplicateId => "E2003",
@@ -194,6 +202,7 @@ impl ErrorCode {
             Self::CelParse => "cel_parse",
             Self::CelNonSubset => "cel_non_subset",
             Self::CelNotBoolean => "cel_not_boolean",
+            Self::CelLimitExceeded => "cel_limit_exceeded",
             Self::DanglingReference => "dangling_reference",
             Self::ValueOutOfRange => "value_out_of_range",
             Self::DuplicateId => "duplicate_id",

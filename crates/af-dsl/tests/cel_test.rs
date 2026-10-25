@@ -320,3 +320,74 @@ fn every_whitelisted_operator_is_accepted() {
         check(src, &e).unwrap_or_else(|err| panic!("{src} 应放行：{err:?}"));
     }
 }
+
+// ---------- E1054 前置闸（农田修复批 P0-CEL，ANOMALIES.md A-2） ----------
+
+/// 深度边界：>1000（农田实测 8MB 栈深 1000 优雅过/2000 abort，上限取实测
+/// 过界值）在下潜解析前拒绝——超限侧在任何栈上都安全（闸先于 antlr）；
+/// 边界内样本的完整解析须在大栈线程跑（antlr 递归下降每层吃数 KB 栈，
+/// libtest 默认线程栈更小）。
+fn on_big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    std::thread::Builder::new()
+        .stack_size(256 * 1024 * 1024)
+        .spawn(f)
+        .expect("spawn 256MB-stack thread")
+        .join()
+        .expect("big-stack thread panicked")
+}
+
+#[test]
+fn nesting_depth_over_limit_rejected_as_e1054() {
+    let over = format!("{}1{}", "(".repeat(1001), ")".repeat(1001));
+    let err = err_of(&over, &CelEnv::new());
+    assert_eq!(err.code.code(), "E1054", "深 1001 应前置闸拒绝：{err:?}");
+    // 边界内最深（1000）不触闸：32MB 栈上完整走 parse（结果 E1053 非布尔——
+    // `(((1)))` 是 Int——恰恰证明它过了闸、进了判定管道）。
+    let at_limit = format!("{}1{}", "(".repeat(1000), ")".repeat(1000));
+    let code = on_big_stack(move || err_of(&at_limit, &CelEnv::new()).code.code().to_string());
+    assert_ne!(code, "E1054", "深恰 1000 不触闸（应走到 E1053 非布尔）：{code}");
+    assert_eq!(code, "E1053", "深 1000 完整解析后按非布尔判（闸外无异常）：{code}");
+}
+
+/// 长度边界：>64 KiB 拒（崩溃样本 400KB/900KB 量级、常规表达式 ≤155 字节，
+/// 两侧各两个数量级余量）；恰在上限内的合法表达式（单字符串字面量比较，
+/// antlr 单 token、栈安全）照常通过全判定。
+#[test]
+fn expr_bytes_over_limit_rejected_as_e1054() {
+    let e = CelEnv::new();
+    let over = format!("\"{}\" != \"\"", "x".repeat(af_dsl::cel::MAX_EXPR_BYTES - 7));
+    assert!(over.len() == af_dsl::cel::MAX_EXPR_BYTES + 1);
+    let err = err_of(&over, &e);
+    assert_eq!(err.code.code(), "E1054", "超一字节应前置闸拒绝：{err:?}");
+
+    let at_limit = format!("\"{}\" != \"\"", "x".repeat(af_dsl::cel::MAX_EXPR_BYTES - 8));
+    assert!(at_limit.len() == af_dsl::cel::MAX_EXPR_BYTES);
+    check(&at_limit, &e).unwrap_or_else(|err| panic!("恰在上限内应通过：{err:?}"));
+}
+
+/// 字符串字面量内的括号不计嵌套深度（字面量感知扫描）。
+#[test]
+fn brackets_inside_string_literals_do_not_count_depth() {
+    let e = CelEnv::new();
+    let src = format!("\"{}\" != \"\"", "(".repeat(2000));
+    // 长度也在限内（2001 < 64KiB），字面量括号不计 → 过闸，解析比较为布尔。
+    check(&src, &e).unwrap_or_else(|err| panic!("字面量内括号不计深：{err:?}"));
+}
+
+// ---------- ②' has() 宏补位（农田修复批 P1-HAS-MACRO，ANOMALIES.md B-3） ----------
+
+/// has() 经 cel-parser 宏展开为 Select{test:true}，AST 不登记函数名——
+/// functions() 白名单拦不住，词法补位拦（E1052，码位不变）。
+#[test]
+fn has_macro_rejected_as_e1052() {
+    let e = env(&[("input", vmap(&[("q", vstr("x"))]))]);
+    for src in ["has(input.q)", "has (input.q)", "input.q == \"has(x)\" && has(input.q)"] {
+        let err = err_of(src, &e);
+        assert_eq!(err.code.code(), "E1052", "{src} 应拦宏：{err:?}");
+    }
+    // 对照：字符串字面量里的 "has(" 不是宏调用，不误伤。
+    check("\"has(input.q)\" != \"\"", &e)
+        .unwrap_or_else(|err| panic!("字面量内 has( 不误伤：{err:?}"));
+    // 对照：标识符仅以 has 结尾（非裸 has）不是宏。
+    check("input.q == \"x\"", &e).unwrap_or_else(|err| panic!("常规表达式不误伤：{err:?}"));
+}
