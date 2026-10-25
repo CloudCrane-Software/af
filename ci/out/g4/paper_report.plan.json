@@ -1,0 +1,658 @@
+{
+  "v": 1,
+  "body": {
+    "plan_id": "plan.paper_report@1.0+13a1799adc04",
+    "compiled_from": {
+      "dsl_digest": "13a1799adc046cd2e24f8256d6bfc9762ca77d327f0aac58023d6c1419d68d6f",
+      "compiler_version": "0.1.0",
+      "graph_version": "1.0",
+      "registry_digest": "63c3478e9321e1c58318620a592e9953ef34cee3a5d19ea4c3300a722fafe15b"
+    },
+    "line": {
+      "line_id": null,
+      "line_version": null,
+      "domain_pack_digest": null
+    },
+    "order": {
+      "id": "",
+      "stable_id": "",
+      "run_id": "",
+      "state": "Created",
+      "graph_version": "1.0",
+      "line": null,
+      "budget_voucher": null,
+      "artifacts": [],
+      "sla": {
+        "deadline": null,
+        "priority": "Normal"
+      },
+      "supersedes": null,
+      "history": []
+    },
+    "graph": {
+      "graph_version": "1.0",
+      "name": "paper_report",
+      "entry": "ingest",
+      "nodes": [
+        {
+          "id": "ingest",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "study",
+          "kind": "task",
+          "loop_spec": {
+            "body": "paper_report/study",
+            "max_iterations": 3,
+            "carried": [
+              {
+                "store": "notes",
+                "max_items": 64
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "cite_check",
+                "kind": "check"
+              }
+            ],
+            "args": {
+              "paper": "ingest.paper"
+            },
+            "exit_when": {
+              "source": "rubric_check.passed == true",
+              "roots": [
+                "rubric_check"
+              ],
+              "digest": "5bfb7e03a0211af1f142fff5d1dc8e38ef74d221a50c58092fb5dde7ed2b74ec"
+            },
+            "on_exhausted": "fail"
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "ingest",
+          "output": "paper",
+          "to": "study",
+          "input": "paper",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "paper_report/study": {
+          "graph_version": "1.0",
+          "entry": "reader",
+          "nodes": [
+            {
+              "id": "cite_check",
+              "kind": "check",
+              "capability_refs": []
+            },
+            {
+              "id": "reader",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "rubric_check",
+              "kind": "check",
+              "capability_refs": []
+            },
+            {
+              "id": "writer",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "cite_check",
+              "output": "verified",
+              "to": "rubric_check",
+              "input": "verified",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((cite_check.passed == false))",
+                "roots": [
+                  "cite_check"
+                ],
+                "digest": "503266aa8702300c291f78d71e224f44feac03b5b4564085247f4ca757f17f00"
+              }
+            },
+            {
+              "from": "cite_check",
+              "output": "verified",
+              "to": "writer",
+              "input": "cite_feedback",
+              "checkpoint": false,
+              "guard": {
+                "source": "(cite_check.passed == false)",
+                "roots": [
+                  "cite_check"
+                ],
+                "digest": "918d5c204295508c66f53f4dfab00d76649bffb839c02529b896234deba9a306"
+              }
+            },
+            {
+              "from": "reader",
+              "output": "notes_out",
+              "to": "writer",
+              "input": "notes_in",
+              "checkpoint": false
+            },
+            {
+              "from": "rubric_check",
+              "output": "report",
+              "to": "writer",
+              "input": "rubric_feedback",
+              "checkpoint": false,
+              "guard": {
+                "source": "(rubric_check.passed == false)",
+                "roots": [
+                  "rubric_check"
+                ],
+                "digest": "0ebb026e6802f140921e74908ed25cd24e03a70333439c9fdd3ea15e39191029"
+              }
+            },
+            {
+              "from": "writer",
+              "output": "draft",
+              "to": "cite_check",
+              "input": "draft",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "paper_input",
+      "output_type": "research_report",
+      "output_from": "study",
+      "intent": "研究报告包 v1：论文摄取（URL/PDF 双工具）→ 受控研读环（reader→writer→引用核验→rubric，验证面安全点）→ 结构化报告工件（机器可解析、引用逐条可核验）；判定零 LLM 自评"
+    },
+    "types": {
+      "note_item": {
+        "properties": {
+          "anchor": {
+            "type": "string"
+          },
+          "point": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "point",
+          "anchor"
+        ],
+        "type": "object"
+      },
+      "paper_doc": {
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "source_url": {
+            "type": "string"
+          },
+          "text_ref": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_url",
+          "title",
+          "text_ref",
+          "sha256"
+        ],
+        "type": "object"
+      },
+      "paper_input": {
+        "properties": {
+          "focus": {
+            "type": "string"
+          },
+          "local_path": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "focus"
+        ],
+        "type": "object"
+      },
+      "research_report": {
+        "properties": {
+          "citations": {
+            "items": {
+              "properties": {
+                "n": {
+                  "type": "integer"
+                },
+                "quote": {
+                  "type": "string"
+                },
+                "snapshot_ref": {
+                  "type": "string"
+                },
+                "snapshot_sha256": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "n",
+                "url",
+                "quote",
+                "snapshot_sha256",
+                "snapshot_ref"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "paper": {
+            "properties": {
+              "sha256": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "url",
+              "title",
+              "sha256"
+            ],
+            "type": "object"
+          },
+          "sections": {
+            "items": {
+              "properties": {
+                "body_md": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "title",
+                "body_md"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "paper",
+          "sections",
+          "citations"
+        ],
+        "type": "object"
+      },
+      "source_snapshot": {
+        "properties": {
+          "sha256": {
+            "type": "string"
+          },
+          "snapshot_ref": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "url",
+          "snapshot_ref",
+          "sha256"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "notes": {
+        "name": "notes",
+        "kind": "message_log",
+        "writer": "study.reader",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "sources": {
+        "name": "sources",
+        "kind": "collection",
+        "item": "source_snapshot",
+        "writer": "ingest",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 32
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": [
+      {
+        "node_id": "ingest",
+        "unit": null,
+        "components": {
+          "model_route": null,
+          "loop_policy": null,
+          "memory": [],
+          "tools": [
+            {
+              "reference": "pkg.report.pdf_extract@1",
+              "effect_class": "pure"
+            },
+            {
+              "reference": "pkg.report.web_fetch@1",
+              "effect_class": "external_once"
+            }
+          ],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "paper",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": {
+              "envelope_of": "paper_doc"
+            }
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "study",
+        "unit": null,
+        "components": {
+          "model_route": null,
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "report",
+            "is_final": true,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "study.cite_check",
+        "unit": {
+          "unit_id": "pkg.report.citation_unit",
+          "unit_version": "1"
+        },
+        "components": {
+          "model_route": null,
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "verified",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "study.reader",
+        "unit": null,
+        "components": {
+          "model_route": "route.main@1",
+          "loop_policy": null,
+          "memory": [
+            "pkg.report.mem.notes@1"
+          ],
+          "tools": [
+            {
+              "reference": "pkg.report.web_fetch@1",
+              "effect_class": "external_once"
+            },
+            {
+              "reference": "pkg.report.web_search@1",
+              "effect_class": "external_once"
+            }
+          ],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "notes_out",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          },
+          {
+            "name": "sources",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": {
+              "envelope_of": "source_snapshot"
+            }
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "study.rubric_check",
+        "unit": {
+          "unit_id": "pkg.report.rubric_unit",
+          "unit_version": "1"
+        },
+        "components": {
+          "model_route": null,
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "report",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "study.writer",
+        "unit": null,
+        "components": {
+          "model_route": "route.main@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "draft",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      }
+    ],
+    "budget": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 300
+        },
+        {
+          "id": "study_turns",
+          "dimension": "turns",
+          "scope": "loop:study",
+          "cap": 40
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 400000
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "resources": {
+      "gates": [],
+      "limits": []
+    },
+    "observation": {
+      "span_tree": [
+        "invoke_workflow",
+        "invoke_agent",
+        "chat",
+        "execute_tool"
+      ],
+      "ctx_propagation": "env",
+      "otel": {
+        "enabled": false,
+        "endpoint": null,
+        "batch_size": 512
+      },
+      "events": {
+        "root_env": "AF_OBS_ROOT",
+        "line": "",
+        "index": true,
+        "manifest": true
+      },
+      "mes": {
+        "endpoint_ref": "env:MES_CH_URL",
+        "database": "af_mes",
+        "line_id": "",
+        "station_id": ""
+      }
+    },
+    "recovery": {
+      "node_retry": null,
+      "resume_source": [
+        "run_store",
+        "record_stream",
+        "mes_events"
+      ],
+      "safety_points": [
+        {
+          "loop_node": "study",
+          "node": "cite_check",
+          "kind": "check"
+        }
+      ],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {}
+  }
+}

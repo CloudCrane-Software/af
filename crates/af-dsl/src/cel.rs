@@ -1,6 +1,10 @@
-//! CEL 保守子集静态判定（提案 B §1.4 + §6 E1051-E1053/E2203）。
+//! CEL 保守子集静态判定（提案 B §1.4 + §6 E1051-E1054/E2203）。
 //!
-//! 三项判定（零手写解析器——两条集合包含 + 一次合成求值）：
+//! 四项判定（零手写解析器——两条集合包含 + 一次合成求值 + 一道前置闸）：
+//! ⓪ 前置闸（→ E1054）：嵌套深度/字节长超限即拒，**不进解析**——cel-parser
+//!    0.10.1（antlr4rust 递归下降）对深嵌套是栈溢出 SIGABRT，非 unwind
+//!    panic，`catch_unwind` 兜不住（农田 C_CE15/16/19/B89 四样本实测；
+//!    阈值 8MB 主栈标定：深 1000 优雅过、2000 起 abort）。
 //! ① `Program::compile` 可解析（失败或解析器内部 panic → E1051）。cel-parser
 //!    0.10.1 对尾部运算符/空输入等畸形串触发 antlr4rust 错误恢复路径的内部
 //!    panic 而非返回 `ParseErrors`（af-graph `predicate.rs:11-14` 实测注记）；
@@ -8,7 +12,10 @@
 //! ② `references().functions() ⊆ OPERATOR_WHITELIST`（→ E1052）：函数/方法
 //!    调用一律拒绝；`in` 在 cel-parser 0.10.1 的 `functions()` 里登记为 `@in`
 //!    （提案 §4.7 实测修正，白名单收 `@in` 不收 `_in_`）。条件表达式/负号/
-//!    下标/宏不在保守子集内。
+//!    下标/宏不在保守子集内。**has() 宏例外补位**：cel-parser 把 has() 展开
+//!    为 `Select{test:true}`，AST 无函数名、`functions()` 不登记——白名单面
+//!    拦不住（农田 C_CE04），词法扫描补拦；all/exists/exists_one/map/filter
+//!    展开为 Comprehension，内部 `@not_strictly_false` 调用已被 ② 拦。
 //! ③ `references().variables() ⊆ 位置词表`（→ E2203）且在合成绑定上下文上
 //!    求值为布尔（→ E1053，承 af-graph `PredicateError::NotBoolean`）。
 //!
@@ -86,9 +93,121 @@ fn run_captured<R>(f: impl FnOnce() -> R) -> Result<R, ()> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|_| ())
 }
 
-/// 三项静态判定。判定序固定：解析（E1051）→ 算子（E1052）→ 根（E2203）→
-/// 布尔（E1053），首个违例即返（§1.4 草图同款单错出口）。通过 → [`CelCheck`]。
+/// 前置闸阈值（农田实测标定，ANOMALIES.md A-2：本机 8MB 主栈括号深 1000
+/// 优雅 PASS、深 2000 起 SIGABRT；对齐稿 15 + 样例 6 的最长 CEL 表达式
+/// 155 字节）：深度上限取实测过界 1000（>1000 拒），长度上限 64 KiB
+/// （>65536 字节拒，崩溃样本 400KB/900KB 量级、常规表达式 155 字节，
+/// 两侧各两个数量级余量）。
+pub const MAX_NESTING_DEPTH: usize = 1000;
+/// 同上——表达式字节长上限。
+pub const MAX_EXPR_BYTES: usize = 64 * 1024;
+
+/// 字符串字面量感知的一次线性词法扫描产出。
+struct LexScan {
+    /// 括号/方括号/花括号最大嵌套深度（字符串字面量内的括号不计）。
+    max_depth: usize,
+    /// `has` 标识符后随 `(`（含中间空白）——has() 宏调用形态。
+    has_macro: bool,
+}
+
+/// 字符串字面量感知的词法扫描：跳过 `'…'`/`"…"` 字面量（含 `\` 转义），
+/// 统计括号最大嵌套深度与 has() 宏调用形态。O(n) 单遍、零递归、零分配
+/// 到路径热区之外——深/长表达式在此闸住，不进 antlr4rust 递归下降。
+fn lex_scan(source: &str) -> LexScan {
+    let mut out = LexScan {
+        max_depth: 0,
+        has_macro: false,
+    };
+    let mut depth: usize = 0;
+    let mut in_quote: Option<char> = None;
+    let mut escaped = false;
+    let mut ident = String::new();
+    // 上一个完整标识符恰为 `has`，等待确认后随 `(`（允许中间空白）。
+    let mut pending_has = false;
+    for c in source.chars() {
+        if let Some(q) = in_quote {
+            if escaped {
+                escaped = false;
+            } else if c == '\\' {
+                escaped = true;
+            } else if c == q {
+                in_quote = None;
+            }
+            continue;
+        }
+        match c {
+            '\'' | '"' => {
+                in_quote = Some(c);
+                ident.clear();
+                pending_has = false;
+            }
+            '(' | '[' | '{' => {
+                if !ident.is_empty() {
+                    pending_has = ident == "has";
+                    ident.clear();
+                }
+                if pending_has {
+                    out.has_macro = true;
+                    pending_has = false;
+                }
+                depth += 1;
+                out.max_depth = out.max_depth.max(depth);
+            }
+            ')' | ']' | '}' => {
+                ident.clear();
+                pending_has = false;
+                depth = depth.saturating_sub(1);
+            }
+            c if c.is_alphanumeric() || c == '_' => {
+                ident.push(c);
+            }
+            c if c.is_whitespace() => {
+                // 标识符结束；`has` 悬置等 `(`，`has (x)` 与 `has(x)` 同判。
+                if !ident.is_empty() {
+                    pending_has = ident == "has";
+                    ident.clear();
+                }
+            }
+            _ => {
+                ident.clear();
+                pending_has = false;
+            }
+        }
+    }
+    out
+}
+
+/// 前置闸（E1054）：超限返回违例描述，否则 None。
+fn limit_violation(source: &str, scan: &LexScan) -> Option<String> {
+    if source.len() > MAX_EXPR_BYTES {
+        return Some(format!(
+            "表达式 {} 字节超上限 {}（64 KiB）——超长表达式在下潜解析前置闸拒绝",
+            source.len(),
+            MAX_EXPR_BYTES
+        ));
+    }
+    if scan.max_depth > MAX_NESTING_DEPTH {
+        return Some(format!(
+            "括号嵌套深度 {} 超上限 {MAX_NESTING_DEPTH}——深嵌套在下潜解析前置闸拒绝\
+             （栈溢出为 abort 非 unwind panic，catch_unwind 兜不住）",
+            scan.max_depth
+        ));
+    }
+    None
+}
+
+/// 四项静态判定。判定序固定：前置闸（E1054）→ 解析（E1051）→ 算子（E1052，
+/// 含 has() 宏词法补位）→ 根（E2203）→ 布尔（E1053），首个违例即返
+/// （§1.4 草图同款单错出口）。通过 → [`CelCheck`]。
 pub fn check(source: &str, env: &CelEnv) -> Result<CelCheck, CelError> {
+    // ⓪ 前置闸：深/长表达式不进 antlr4rust 递归下降（SIGABRT 面）。
+    let scan = lex_scan(source);
+    if let Some(detail) = limit_violation(source, &scan) {
+        return Err(CelError {
+            code: ErrorCode::CelLimitExceeded,
+            detail,
+        });
+    }
     // ① 解析：Err → 编译错误；panic → antlr4rust 错误恢复路径，兜底归一。
     let program = match run_captured(|| Program::compile(source)) {
         Ok(Ok(p)) => p,
@@ -120,6 +239,18 @@ pub fn check(source: &str, env: &CelEnv) -> Result<CelCheck, CelError> {
                 detail: format!("非算子函数/方法调用 {f:?}（函数与方法调用一律拒绝）"),
             });
         }
+    }
+
+    // ②' has() 宏补位：cel-parser 0.10.1 将 has() 展开为 Select{test:true}，
+    //     AST 无函数名、functions() 不登记——白名单面漏网（农田 C_CE04），
+    //     词法扫描补拦（字符串字面量内的 "has(" 不误伤）。
+    if scan.has_macro {
+        return Err(CelError {
+            code: ErrorCode::CelNonSubset,
+            detail: "宏调用 has(…)（宏不在保守子集内；has 经宏展开后 AST 不登记\
+                     函数名，词法面拦）"
+                .to_string(),
+        });
     }
 
     // ③ 根 ⊆ 位置词表。

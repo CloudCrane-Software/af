@@ -30,6 +30,14 @@ pub enum ErrorCode {
     /// E1004 枚举值非法（serde `unknown variant` + 手写闭环词表：ops 算子名、
     /// section 来源名等）。
     InvalidEnumValue,
+    /// E1008 节点 id 含点号（词法拒）：点号是构造体**路径分隔符**（提案-B
+    /// §1.2 writer「节点 id **或**点号路径」、safety_points「点号路径」两类
+    /// 语法范畴），id 段本不含点号——「根节点 a.b」与「a 的体节点 b」路径
+    /// 同形导致语义索引键覆盖无侦测，单文档致盲 INV-2 多写者/E2312/E2321/
+    /// E2331/E2322 五防线（农田 B-1 路径别名族）+ entry/output.from 双口径
+    /// 误杀（C 类 4 份）。E1xxx 形状段（E1001-E1099；E1005-E1007 为提案-B
+    /// §6 保留码位）新增，预算余量内登记——RESULT-农田修复-20261025.md。
+    DottedNodeId,
     /// E1051 CEL 解析失败（含 cel-parser 0.10.1 内部 panic 的 catch_unwind
     /// 兜底归一——尾部运算符/空输入触发 antlr4rust 错误恢复 panic，承 af-graph
     /// `predicate.rs:11-14` 实测注记）。
@@ -39,6 +47,13 @@ pub enum ErrorCode {
     CelNonSubset,
     /// E1053 CEL 谓词求值非布尔（承 af-graph `PredicateError::NotBoolean`）。
     CelNotBoolean,
+    /// E1054 CEL 表达式超限（前置闸：括号嵌套深度 >1000 或字节长 >64KiB 即
+    /// 拒，不进解析——antlr4rust 递归下降对深嵌套是**栈溢出 SIGABRT**，
+    /// `catch_unwind` 兜不住，必须下潜前拒。阈值农田实测标定：8MB 主栈深
+    /// 1000 优雅过/2000 起 abort；golden 语料最长 CEL 155 字节。E1xxx 表达式
+    /// 段（E1051-E1099）新增，提案-B §6 预算余量内登记——见
+    /// RESULT-农田修复-20261025.md 码位登记表）。
+    CelLimitExceeded,
 
     // ---- E2xxx 语义：引用闭包（M1）----
     /// E2001 悬空引用（与 af-graph 共享码位）：节点 / store / 入口 / 写者路径 /
@@ -143,9 +158,11 @@ impl ErrorCode {
             Self::MissingField => "E1002",
             Self::TypeMismatch => "E1003",
             Self::InvalidEnumValue => "E1004",
+            Self::DottedNodeId => "E1008",
             Self::CelParse => "E1051",
             Self::CelNonSubset => "E1052",
             Self::CelNotBoolean => "E1053",
+            Self::CelLimitExceeded => "E1054",
             Self::DanglingReference => "E2001",
             Self::ValueOutOfRange => "E2002",
             Self::DuplicateId => "E2003",
@@ -191,9 +208,11 @@ impl ErrorCode {
             Self::MissingField => "missing_field",
             Self::TypeMismatch => "type_mismatch",
             Self::InvalidEnumValue => "invalid_enum_value",
+            Self::DottedNodeId => "dotted_node_id",
             Self::CelParse => "cel_parse",
             Self::CelNonSubset => "cel_non_subset",
             Self::CelNotBoolean => "cel_not_boolean",
+            Self::CelLimitExceeded => "cel_limit_exceeded",
             Self::DanglingReference => "dangling_reference",
             Self::ValueOutOfRange => "value_out_of_range",
             Self::DuplicateId => "duplicate_id",

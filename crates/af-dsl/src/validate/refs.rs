@@ -34,6 +34,11 @@ fn check_meta(doc: &Document, ix: &Index<'_>, report: &mut Report) {
             format!("meta.entry 指向未声明节点 {:?}", doc.meta.entry),
         );
     }
+    // output.from：根图 id 或点号路径（体内解析——inv1_test 既有契约，
+    // n1.lp.leaf 形）。entry 为根图精确 id（上行）——两口径在点号 id 场景
+    // 曾分裂误杀（农田 C_AL04：同一节点可作入口、不可作输出来源）；点号
+    // id 词法拒（E1008，shape 层先于索引）后分裂面消亡：合法文档 id 无
+    // 点号，单段 from 与 entry 同命中，多段 from 是真体内路径。
     let from = match ix.resolve_root_path(&doc.meta.output.from) {
         Some(f) => f,
         None => {
@@ -53,9 +58,19 @@ fn check_meta(doc: &Document, ix: &Index<'_>, report: &mut Report) {
         );
     }
     // E2202：from 节点必须发射 output.ref 所指类型。
-    // 抑制：ref 或 from 的任一 emit 类型未登记（E2205 域）或 from_body 不可解析
+    // 抑制：from 的任一 emit 类型未登记（E2205 域）或 from_body 不可解析
     // （E2106 域）时不判——无法证明「不发射」。
+    // output.ref 自身未登记：报 E2205（农田 B-2/M001——此前此处静默 return，
+    // 全链路无一处核对 output.ref 类型名，零违例过审）后同样抑制 E2202
+    //（比较对象不可信，不重复定罪）。
     if !type_resolves(ix, &doc.meta.output.r#ref) {
+        report_unresolved(
+            ix,
+            &doc.meta.output.r#ref,
+            report,
+            "meta",
+            "meta.output.ref",
+        );
         return;
     }
     let Some(emits) = &from.node.emits else {
@@ -595,12 +610,16 @@ fn check_policies(doc: &Document, ix: &Index<'_>, report: &mut Report) {
     for f in &doc.policies.failures {
         for (kind, target) in [("route", &f.route), ("fallback_route", &f.fallback_route)] {
             if let Some(t) = target {
-                if !ROUTE_KEYWORDS.contains(&t.as_str()) && !ix.nodes.contains_key(t) {
+                // 根图限定（农田 B-4/C_AL08）：路由目标从根图 policies 发出，
+                // 只认根图节点 id——此前 ix.nodes.contains_key 含全部体内
+                // 路径键（"c.b" 命中 c 的 loop 体内节点），失败重路由可指
+                // 进构造体内部。scope_id("root", ·) 为根图精确 id 匹配。
+                if !ROUTE_KEYWORDS.contains(&t.as_str()) && ix.scope_id("root", t).is_none() {
                     report.push(
                         ErrorCode::FailureRouteDangling,
                         "policies.failures",
                         format!(
-                            "失败类 {:?} 的 {kind} 目标 {t:?} 既非关键词 {ROUTE_KEYWORDS:?} 也非已声明节点",
+                            "失败类 {:?} 的 {kind} 目标 {t:?} 既非关键词 {ROUTE_KEYWORDS:?} 也非根图节点",
                             f.class
                         ),
                     );

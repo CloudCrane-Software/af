@@ -1,0 +1,50 @@
+version: 1
+meta:
+  name: farm_g
+  graph_version: '1'
+  entry: chk
+  input: T_in
+  output:
+    ref: T_out
+    from: chk
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+stores: []
+nodes:
+- id: chk
+  kind: check
+  consumes:
+    p: T_in
+  emits:
+    mid: T_out
+- id: t
+  kind: task
+  consumes:
+    go: T_out
+  emits:
+    o: T_in
+edges:
+- from: chk
+  output: mid
+  to: t
+  input: go
+- from: t
+  output: o
+  to: chk
+  input: p
+policies: {}
