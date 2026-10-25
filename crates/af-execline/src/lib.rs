@@ -39,6 +39,7 @@ pub mod judge;
 pub mod ledger;
 pub mod mes;
 pub mod mes_ch;
+pub mod pkg;
 pub mod profile;
 pub mod record;
 pub mod shadow;

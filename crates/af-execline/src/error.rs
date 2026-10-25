@@ -33,6 +33,15 @@ pub enum ErrorCode {
     /// 判分脚本指纹门失败：脚本 sha256 ≠ 声明锚，或脚本不可读（无法验真）。
     /// 吸收方案 §3.2-2 fail-loud——拒跑、不降级、不跳判、不静默换脚本。
     JudgeFingerprintMismatch,
+    /// 计划装订-模板引用语法非法（template_ref 不合 `pkg.<包>.<名>[@<版本>]`）。
+    /// EX4xxx 段首例（G4 设计 §2.5：计划装订是新失败类别；E9004→EX4004 码位
+    /// 留给 planbind 通用装订器的 digest 核对，数字只增——ADR-007）。
+    TemplateRefInvalid,
+    /// 计划装订-模板未登记/MANIFEST.sha256 清单不可读（装载期门，fail-loud）。
+    TemplateUnregistered,
+    /// 计划装订-模板漂移：文件 sha256 ≠ 清单登记值，或 template_ref 版本段
+    /// ≠ 清单版本（同 E9004 的拒绝式纪律——不降级、不静默换模板）。
+    TemplateDrift,
 }
 
 impl ErrorCode {
@@ -50,6 +59,9 @@ impl ErrorCode {
             Self::MesCh => "EX2003",
             Self::UnitFailed => "EX3001",
             Self::JudgeFingerprintMismatch => "EX3002",
+            Self::TemplateRefInvalid => "EX4001",
+            Self::TemplateUnregistered => "EX4002",
+            Self::TemplateDrift => "EX4003",
         }
     }
 
@@ -67,6 +79,9 @@ impl ErrorCode {
             Self::MesCh => "MES_CH",
             Self::UnitFailed => "UNIT_FAILED",
             Self::JudgeFingerprintMismatch => "JUDGE_FINGERPRINT_MISMATCH",
+            Self::TemplateRefInvalid => "TEMPLATE_REF_INVALID",
+            Self::TemplateUnregistered => "TEMPLATE_UNREGISTERED",
+            Self::TemplateDrift => "TEMPLATE_DRIFT",
         }
     }
 }
@@ -112,6 +127,12 @@ pub enum ExeclineError {
         expected: String,
         actual: String,
     },
+    #[error("EX4001: 计划装订-模板引用非法: {reference}: {detail}")]
+    TemplateRefInvalid { reference: String, detail: String },
+    #[error("EX4002: 计划装订-模板未登记/清单不可读: {reference}: {detail}")]
+    TemplateUnregistered { reference: String, detail: String },
+    #[error("EX4003: 计划装订-模板漂移（sha256/版本不符）: {reference}: {detail}")]
+    TemplateDrift { reference: String, detail: String },
 }
 
 impl ExeclineError {
@@ -129,6 +150,9 @@ impl ExeclineError {
             Self::MesCh { .. } => ErrorCode::MesCh,
             Self::UnitFailed { .. } => ErrorCode::UnitFailed,
             Self::JudgeFingerprintMismatch { .. } => ErrorCode::JudgeFingerprintMismatch,
+            Self::TemplateRefInvalid { .. } => ErrorCode::TemplateRefInvalid,
+            Self::TemplateUnregistered { .. } => ErrorCode::TemplateUnregistered,
+            Self::TemplateDrift { .. } => ErrorCode::TemplateDrift,
         }
     }
 }
@@ -164,6 +188,11 @@ mod tests {
             ErrorCode::JudgeFingerprintMismatch.name(),
             "JUDGE_FINGERPRINT_MISMATCH"
         );
+        // EX4xxx 段开段（G4 计划装订-模板机制）：EX4001-4003。
+        assert_eq!(ErrorCode::TemplateRefInvalid.as_str(), "EX4001");
+        assert_eq!(ErrorCode::TemplateUnregistered.as_str(), "EX4002");
+        assert_eq!(ErrorCode::TemplateDrift.as_str(), "EX4003");
+        assert_eq!(ErrorCode::TemplateDrift.name(), "TEMPLATE_DRIFT");
     }
 
     #[test]
