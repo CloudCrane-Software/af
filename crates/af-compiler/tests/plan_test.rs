@@ -388,3 +388,96 @@ fn plan_node_exec_projects_context_sections() {
     let decoded = decode_plan(&legacy.to_string()).expect("旧计划（无 context 键）应可 decode");
     assert!(decoded.body.node_exec.iter().all(|n| n.context.is_empty()));
 }
+
+/// 图执行器 B 席嫁接（合流批）：emits 类型表达式投影 `artifact_contract[].type`
+/// 与入边消费契约投影 `node_exec[].consumes`（端口名 → 类型表达式串）。
+/// 载体 = 仓库正本 sop_full@1.0.afb（planner emits task_plan；coder emits
+/// list&lt;code_file&gt;；coder·reviewer·tester 各带 consumes）。两者均
+/// serde(default) + skip_serializing_if——旧计划（无此键）仍可 decode，与
+/// context 投影同一向后兼容方针。
+#[test]
+fn plan_projects_emits_types_and_consumes_contracts() {
+    let src = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../af/packages/sweng/graphs/sop_full@1.0.afb"),
+    )
+    .expect("sop_full@1.0.afb 仓库正本应在盘");
+    let doc = af_dsl::load_str(&src).expect("sop_full 应装载");
+    assert!(af_dsl::validate(&doc).is_ok());
+    let ir = lower(&doc).unwrap();
+    let report = bind(&ir, &repo_registry());
+    assert!(report.is_ok());
+    let plan = generate_plan(&ir, &report).unwrap();
+    let node = |id: &str| {
+        plan.body
+            .node_exec
+            .iter()
+            .find(|n| n.node_id == id)
+            .unwrap_or_else(|| panic!("node_exec 应含 {id}"))
+    };
+
+    // 上游面：emits 类型表达式（含 list<T> 形）。
+    let planner = node("planner");
+    assert_eq!(
+        planner
+            .artifact_contract
+            .iter()
+            .find(|a| a.name == "plan")
+            .and_then(|a| a.r#type.as_deref()),
+        Some("task_plan"),
+        "planner emits plan: task_plan"
+    );
+    let coder = node("coder");
+    assert_eq!(
+        coder
+            .artifact_contract
+            .iter()
+            .find(|a| a.name == "files")
+            .and_then(|a| a.r#type.as_deref()),
+        Some("list<code_file>"),
+        "coder emits files: list<code_file>"
+    );
+
+    // 下游面：consumes 契约（端口名 → 类型表达式）。
+    assert_eq!(
+        coder.consumes.get("plan").map(String::as_str),
+        Some("task_plan")
+    );
+    let reviewer = node("reviewer");
+    assert_eq!(
+        reviewer.consumes.get("plan").map(String::as_str),
+        Some("task_plan")
+    );
+    assert_eq!(
+        reviewer.consumes.get("files").map(String::as_str),
+        Some("list<code_file>")
+    );
+    let tester = node("tester");
+    assert_eq!(
+        tester.consumes.get("files").map(String::as_str),
+        Some("list<code_file>")
+    );
+    assert_eq!(
+        tester.consumes.get("review").map(String::as_str),
+        Some("review_report")
+    );
+
+    // 向后兼容：删掉 type/consumes 键的旧计划 JSON 仍可 decode（缺省空）。
+    let mut legacy: serde_json::Value =
+        serde_json::from_str(&serde_json::to_string(&plan).unwrap()).unwrap();
+    for node in legacy["body"]["node_exec"].as_array_mut().unwrap() {
+        node.as_object_mut().unwrap().remove("consumes");
+        for artifact in node["artifact_contract"].as_array_mut().unwrap() {
+            artifact.as_object_mut().unwrap().remove("type");
+        }
+    }
+    let decoded =
+        decode_plan(&legacy.to_string()).expect("旧计划（无 type/consumes 键）应可 decode");
+    assert!(decoded.body.node_exec.iter().all(|n| n.consumes.is_empty()));
+    assert!(decoded
+        .body
+        .node_exec
+        .iter()
+        .flat_map(|n| n.artifact_contract.iter())
+        .all(|a| a.r#type.is_none()));
+}

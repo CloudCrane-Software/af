@@ -169,8 +169,17 @@ pub enum ExeclineError {
     #[error("EX4006: 计划消费-envelope 交接违例: {detail}")]
     EnvelopeMismatch { detail: String },
     /// EX4007：plan 级预算熔断（cost_cap/token_cap；llm.cents 口径 1 模型调用 = 1¢）。
-    #[error("EX4007: 计划消费-预算熔断: {detail}")]
-    BudgetCapExceeded { detail: String },
+    /// B 席嫁接（合流批）：detail 字符串升结构化字段 budget_id/dimension/
+    /// spent/cap——诊断面可机读（harness BudgetExhausted 归并同形）。
+    #[error(
+        "EX4007: 计划消费-预算熔断: {budget_id} 累计 {spent} ≥ 帽 {cap}（{dimension}，下游节点不再启动）"
+    )]
+    BudgetCapExceeded {
+        budget_id: String,
+        dimension: String,
+        spent: u64,
+        cap: u64,
+    },
     /// EX4008：图形态超 v1 线性链范围（loop/map/环拓扑；登记后续）。
     #[error("EX4008: 计划消费-图形态超 v1 线性链范围: {detail}")]
     GraphShapeUnsupported { detail: String },
@@ -240,11 +249,19 @@ mod tests {
         assert_eq!(ErrorCode::TemplateDrift.as_str(), "EX4003");
         assert_eq!(ErrorCode::PlanDigestMismatch.as_str(), "EX4004");
         assert_eq!(ErrorCode::PlanBindMismatch.as_str(), "EX4005");
-        // 图执行器计划消费段续增（ADR-007 数字只增不改）。
+        // 图执行器计划消费段续增（ADR-007 数字只增不改）。合流批约定同步：
+        // 两席全部新码（A 席 EX4006-4008 + B 席同码位）as_str 与 name 双面
+        // 锁定——B 席缺口（锁止步 EX4005）在此补齐。
         assert_eq!(ErrorCode::EnvelopeMismatch.as_str(), "EX4006");
         assert_eq!(ErrorCode::BudgetCapExceeded.as_str(), "EX4007");
         assert_eq!(ErrorCode::GraphShapeUnsupported.as_str(), "EX4008");
         assert_eq!(ErrorCode::TemplateDrift.name(), "TEMPLATE_DRIFT");
+        assert_eq!(ErrorCode::EnvelopeMismatch.name(), "ENVELOPE_MISMATCH");
+        assert_eq!(ErrorCode::BudgetCapExceeded.name(), "BUDGET_CAP_EXCEEDED");
+        assert_eq!(
+            ErrorCode::GraphShapeUnsupported.name(),
+            "GRAPH_SHAPE_UNSUPPORTED"
+        );
     }
 
     #[test]

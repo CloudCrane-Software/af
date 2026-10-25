@@ -12,7 +12,8 @@
 //!   production 锚自检）、判定只取 stdout JSON。
 //! - **判别力五反例**（§5.2-5/裁决6 判据 9）：篡改 quote/删快照/未登记
 //!   标记/手改 md/篡改脚本各恰触发其断言，无串扰。
-//! - **ReportExecuteUnit 分相**（§5.4）：setup 三核对（planbind）→ ingest
+//! - **ReportExecuteUnit 分相**（§5.4）：setup 装载期四核对（planbind 唯一
+//!   正本口径——合流批术语勘误）→ ingest
 //!   快照落盘 → draft（缝）→ verify 双判分器 → 行落盘双轨（DraftFn 缝 =
 //!   v1 口径；真实模型环=铺单批 F-第五单，裁决17）。
 
@@ -762,7 +763,7 @@ fn report_unit_tampered_draft_yields_false_verdict_not_null() {
 
 #[test]
 fn report_unit_setup_rejects_plan_registry_drift_with_e9004() {
-    // setup 三核对走 planbind：任务包携带的计划与本地注册表漂移 → E9004 拒跑。
+    // setup 四核对走 planbind：任务包携带的计划与本地注册表漂移 → E9004 拒跑。
     let (base, task_dir, _, unit) = report_unit("drift", draft_fn_ok());
     // 篡改任务包里的计划 digest。
     let plan_path = task_dir.join("plan.json");

@@ -160,6 +160,12 @@ pub struct PlanNodeExec {
     pub context: Vec<SectionSpec>,
     /// 该节点的预算（IR budgets 中 `scope == "node:<路径>"` 者，按 id 序）。
     pub budget: Vec<NodeBudget>,
+    /// 入边端口消费契约（端口名 → 类型表达式串；typed envelope 校验的
+    /// **下游面**——图执行器在节点起动前按此复核入边工件）。B 席嫁接
+    /// （合流批）：IR `NodeExec.consumes` 投影；`#[serde(default)]` = 旧计划
+    /// （无此键）仍可 decode，向后兼容（context 投影同一方针）。
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub consumes: BTreeMap<String, String>,
     pub artifact_contract: Vec<PlanArtifact>,
     /// 节点级重试（失败分类账是类级非节点级——v0.1 恒 None，位占住）。
     pub retry: Option<PlanRetry>,
@@ -210,6 +216,12 @@ pub struct NodeBudget {
 pub struct PlanArtifact {
     pub name: String,
     pub is_final: bool,
+    /// 直接声明的类型表达式（`emits: {端口: 类型}`，含 `list<T>` 形；typed
+    /// envelope 校验的**上游面**）。B 席嫁接（合流批）：IR `ArtifactSpec.r#type`
+    /// 投影——此前类型表达式只住 IR，计划不自带执行面；`#[serde(default)]` =
+    /// 旧计划（无此键）仍可 decode，向后兼容。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
     /// close 门材料（`node:<check id>`——v0.1 无静态推导源，恒 None 位占住）。
     pub qualified_by: Option<String>,
     /// ADR-010 provenance（envelope_of 已回填；eval_sha256 运行期落）。
@@ -413,12 +425,14 @@ pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePl
                     cap: e.cap,
                 })
                 .collect(),
+            consumes: b.consumes.clone(),
             artifact_contract: b
                 .artifacts
                 .iter()
                 .map(|(port, a)| PlanArtifact {
                     name: port.clone(),
                     is_final: a.is_final,
+                    r#type: a.r#type.clone(),
                     qualified_by: None, // v0.1 无静态推导源（close 门材料执行面回填）
                     provenance: a.provenance.clone(),
                 })

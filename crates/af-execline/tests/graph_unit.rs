@@ -1,7 +1,8 @@
 //! 图执行器 v1 验收测试（F-第四单执行长缺口销项；TDD 先红后绿——本文件先于
 //! `src/graph_unit.rs` 落地，模块缺席时编译红）。
 //!
-//! v1 范围 = sop_full 线性链形态：planbind 三核对（EX4004 口径）通过后按
+//! v1 范围 = sop_full 线性链形态：planbind 装载期四核对（EX4004 口径；
+//! planbind.rs 唯一正本口径——合流批术语勘误）通过后按
 //! 拓扑序逐节点驱动——
 //! - task 节点 = 模型节点运行时环（swev 环模式：template_ref 装载的节点
 //!   system、uses.model 注册表档位、节点级工具面、按节点 turns 预算帽）；
@@ -260,7 +261,7 @@ impl af_execline::AgentRunner for GraphFakeRunner {
 
 fn graph_unit(
     root: &Path,
-    runner: Arc<GraphFakeRunner>,
+    runner: Arc<dyn af_execline::AgentRunner>,
 ) -> (GraphExecuteUnit, Arc<FakeBridge>, PathBuf, PathBuf) {
     let bridge = Arc::new(FakeBridge::new());
     let spec = GraphUnitSpec::v1(PROFILE, repo_packages());
@@ -553,7 +554,7 @@ fn linearize_rejects_loop_map_and_cycle_with_ex4008() {
 }
 
 // ============================================================
-// ⑤ planbind 三核对先行：digest 漂移 → EX4004（E9004 口径透传）
+// ⑤ planbind 装载期四核对先行：digest 漂移 → EX4004（E9004 口径透传）
 // ============================================================
 
 #[test]
@@ -570,7 +571,7 @@ fn graph_unit_runs_planbind_checks_before_any_node() {
 
     assert_eq!(err.code(), ErrorCode::PlanDigestMismatch, "{err}");
     assert!(err.to_string().contains("E9004"), "共用语义码：{err}");
-    // 三核对先行：零节点驱动、零容器。
+    // 四核对先行：零节点驱动、零容器。
     assert!(runner.launches().is_empty());
     assert!(bridge.calls().is_empty(), "装订失败不起容器");
 }
@@ -681,4 +682,440 @@ fn sop_minimal_bare_declare_derives_patch_from_workspace_ground_truth() {
     assert_eq!(output.verdict, Some(true));
     assert!(output.artifacts[0].is_final && output.artifacts[0].qualified);
     assert_eq!(*runner.calls.lock().unwrap(), 1, "单节点恰一次模型环");
+}
+
+// ============================================================
+// ⑦ typed envelope 上游面（B 席嫁接）：非终态端口 emits 类型校验
+// ============================================================
+
+/// planner 的 plan 端口 declares task_plan——steps 项缺 id（plan_step
+/// required）→ commit 相 check_typed 拒收，EX4006 点名节点/端口/类型；
+/// 下游 coder 不再起动（违例不落工件、不进交接账）。
+#[test]
+fn typed_emission_face_validates_nonfinal_ports_with_ex4006() {
+    let root = temp_root("typed-up");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    // steps 项缺 id：命名类型 plan_step 的 required 递归面（SchemaValidator
+    // 对 plan.types 解析——B 席整件）。
+    let scripted = |node: &str| -> Option<String> {
+        match node {
+            "planner" => Some(
+                json!({"plan": {"instance_id": TASK, "steps": [
+                    {"action": "locate", "target": "django/db/models"}
+                ]}})
+                .to_string(),
+            ),
+            "coder" => sop_full_payloads("coder"),
+            "reviewer" => sop_full_payloads("reviewer"),
+            _ => None,
+        }
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("emits 类型违例应拒");
+
+    assert_eq!(err.code(), ErrorCode::EnvelopeMismatch, "{err}");
+    for token in ["EX4006", "planner", "plan", "task_plan", "id"] {
+        assert!(err.to_string().contains(token), "点名 {token}: {err}");
+    }
+    assert_eq!(runner.order(), ["planner"], "违例即停，coder 不起动");
+    assert!(
+        !attempt
+            .join("artifacts")
+            .join("planner.plan.json")
+            .is_file(),
+        "违例 envelope 不落工件面"
+    );
+}
+
+// ============================================================
+// ⑧ typed envelope 下游面（B 席嫁接）：consumes 契约复核入边
+// ============================================================
+
+/// 上游 emissions 与下游 consumes 是**两道独立正门**：本例上游 planner 的
+/// task_plan 声明合法过门，但 coder 的 consumes.plan 改绑 code_file——
+/// 同一载荷在下游面被拒（缺 path/content_ref required），EX4006 点名
+/// coder/plan/code_file。证明双面各自独立核（非只核上游）。
+#[test]
+fn downstream_consumes_face_revalidates_incoming_edges() {
+    let root = temp_root("typed-down");
+    // 计划级改写（编译后 JSON 面）：coder 的 consumes.plan: task_plan →
+    // code_file。注意图源级改写会被 af-dsl E2201 edge_port_type_mismatch 在
+    // 编译期拒（上游端口类型 ≠ 消费者声明）——下游面正是对「计划文件即编排
+    // 真相、执行器不信任编译器曾核过」的独立防线（planbind 四核对不含边
+    // 类型等值面，手改计划可达执行器）。
+    let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+    let coder = plan["body"]["node_exec"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|n| n["node_id"] == json!("coder"))
+        .expect("coder 在 node_exec");
+    coder["consumes"]["plan"] = json!("code_file");
+    let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("consumes 违例应拒");
+
+    assert_eq!(err.code(), ErrorCode::EnvelopeMismatch, "{err}");
+    for token in ["EX4006", "coder", "plan", "code_file"] {
+        assert!(err.to_string().contains(token), "点名 {token}: {err}");
+    }
+    assert_eq!(
+        runner.order(),
+        ["planner"],
+        "下游面在 coder 起动前拒收（planner 已跑、coder 未跑）"
+    );
+    assert!(
+        attempt
+            .join("artifacts")
+            .join("planner.plan.json")
+            .is_file(),
+        "上游合法 envelope 照常落盘（双面独立）"
+    );
+}
+
+// ============================================================
+// ⑨ token_cap 定向例（B 席嫁接）：cache_read 计入 tokens_total 口径
+// ============================================================
+
+/// FakeRunner 每节点 tokens = in 100 + out 50 + cache_read 10 = 160
+/// （tokens_total 口径计 cache_read——B 席嫁接）。token_cap=310：
+/// planner(160) 过、coder 后累计 320 ≥ 310 → reviewer 熔断不起动。
+/// （若 cache_read 不计：150×2=300 < 310，reviewer 会跑——本例即红。）
+#[test]
+fn plan_token_cap_fuses_before_downstream_nodes() {
+    let root = temp_root("tokfuse");
+    let src = sop_full_src().replace(
+        "{ id: token_cap, dimension: tokens_total, scope: plan, cap: 400000 }",
+        "{ id: token_cap, dimension: tokens_total, scope: plan, cap: 310 }",
+    );
+    assert!(src != sop_full_src(), "夹具改写应生效");
+    let data_root = task_package(&root, &compile_plan(&src));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("超 token_cap 应熔断");
+
+    assert_eq!(err.code(), ErrorCode::BudgetCapExceeded, "{err}");
+    assert!(
+        err.to_string().contains("EX4007") && err.to_string().contains("token_cap"),
+        "熔断点名预算条目：{err}"
+    );
+    assert!(
+        err.to_string().contains("tokens_total"),
+        "结构化字段带维度名：{err}"
+    );
+    assert_eq!(
+        runner.order(),
+        ["planner", "coder"],
+        "planner+coder 已跑（160+320），reviewer 被熔断"
+    );
+    assert!(
+        !bridge
+            .calls()
+            .iter()
+            .any(|s| s.contains("docker exec") && s.contains("pytest")),
+        "熔断后零下游执行"
+    );
+}
+
+// ============================================================
+// ⑩ harness 预算耗尽归并（B 席嫁接）：BudgetExhausted → EX4007
+// ============================================================
+
+/// 单节点环的 harness 侧预算耗尽（RunStatus::BudgetExhausted）不得静默当
+/// 成功——归并为 EX4007 结构化熔断（budget_id=llm.cents，点名 spent/cap）。
+#[test]
+fn harness_budget_exhausted_maps_to_ex4007() {
+    struct ExhaustedRunner;
+    impl af_execline::AgentRunner for ExhaustedRunner {
+        fn run(
+            &self,
+            launch: af_execline::AgentLaunch<'_>,
+        ) -> Result<af_execline::AgentRunOutcome, af_execline::AgentRunFailure> {
+            let _ = launch;
+            Ok(af_execline::AgentRunOutcome {
+                report: af_harness::RunReport {
+                    run_id: format!("{TASK}-planner"),
+                    status: af_harness::RunStatus::BudgetExhausted {
+                        fault: af_harness::BudgetFault::OverCap {
+                            spend_cents: 600,
+                            spend_cap_cents: 600,
+                        },
+                    },
+                    turns: 3,
+                    model_calls: 3,
+                    effect_replays: 0,
+                    effect_fresh: 0,
+                    transcript: Vec::new(),
+                    whitelist: vec!["bash".into()],
+                    tokens: af_harness::TokenTotals {
+                        input: 10,
+                        output: 5,
+                        cache_read: 0,
+                    },
+                },
+                http_retries: 0,
+            })
+        }
+    }
+    let root = temp_root("exhausted");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, Arc::new(ExhaustedRunner));
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("harness 预算耗尽应归并 EX4007");
+
+    assert_eq!(err.code(), ErrorCode::BudgetCapExceeded, "{err}");
+    assert!(
+        err.to_string().contains("EX4007") && err.to_string().contains("llm.cents"),
+        "归并点名 llm.cents 预算维：{err}"
+    );
+    assert!(
+        err.to_string().contains("600"),
+        "结构化字段带 spent/cap 数值：{err}"
+    );
+}
+
+// ============================================================
+// ⑪ check 分发表广度（B 席嫁接）：aci_schema / human_gate 直调面
+// ============================================================
+
+/// check 节点分发表 v1.1（B 席嫁接）：test_unit 之外接线
+/// pkg.sweagent.aci_schema（入边工件结构校验，纯函数）与
+/// pkg.sweagent.human_gate（fail-closed 恒 ask:false）。两 unit 均在根级
+/// af/packages/components.json 注册（executor:builtin@af-execline）。
+#[test]
+fn check_dispatch_runs_aci_schema_and_human_gate_units() {
+    let graph_src = r#"
+version: 1
+meta:
+  name: sweng_g4_dispatch
+  graph_version: "1.0"
+  entry: actor
+  input: swe_task_input
+  output: { ref: gate_verdict, from: gate }
+  intent: "check 分发表广度验收（B 席嫁接）：aci_schema 结构校验 + human_gate fail-closed 直调链"
+
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: agent_action
+    schema:
+      type: object
+      required: [thought, command, submit]
+      properties:
+        thought: { type: string }
+        command: { type: string }
+        submit: { type: boolean }
+  - name: schema_verdict
+    schema:
+      type: object
+      required: [error, submit]
+      properties:
+        error: { type: string }
+        submit: { type: boolean }
+  - name: gate_verdict
+    schema:
+      type: object
+      required: [ask]
+      properties:
+        ask: { type: boolean }
+
+nodes:
+  - id: actor
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { action: agent_action }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 400 }
+        - { from: input, fields: [repo, instance_id, problem_statement], policy: project, quota_tokens: 800 }
+
+  - id: verifier
+    kind: check
+    uses: { unit: pkg.sweagent.aci_schema@1 }
+    consumes: { action: agent_action }
+    emits: { verdict: schema_verdict }
+
+  - id: gate
+    kind: check
+    uses: { unit: pkg.sweagent.human_gate@1 }
+    consumes: { verdict: schema_verdict }
+    emits: { out: gate_verdict }
+
+edges:
+  - { from: actor, output: action, to: verifier, input: action }
+  - { from: verifier, output: verdict, to: gate, input: verdict }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 100 }
+  stop:
+    - { when: "last_tool.first_line in ['TASK_COMPLETE']", outcome: completed }
+    - { when: "steps.tool_free >= 3", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed
+"#;
+    let root = temp_root("g4dispatch");
+    let data_root = task_package(&root, &compile_plan(graph_src));
+    // actor 走终态消息 JSON 声明（非 DECLARE_NODES 面）。
+    let scripted = |node: &str| -> Option<String> {
+        let text = match node {
+            "actor" => json!({"action": {
+                "thought": "run the tests", "command": "python -m pytest -q", "submit": false
+            }}),
+            _ => return None,
+        };
+        Some(text.to_string())
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let output = drive(&unit, &data_root, &attempt, &out).expect("aci_schema+human_gate 链应走通");
+
+    assert_eq!(
+        runner.order(),
+        ["actor"],
+        "唯一 LLM 节点；check 节点零模型调用"
+    );
+    // aci_schema 直调产物：error 空 + submit 透传（sweng::aci_schema 纯函数面）。
+    let verdict: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("verifier.verdict.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        verdict["payload"]["error"],
+        json!(""),
+        "合法 agent_action 过结构校验"
+    );
+    assert_eq!(verdict["payload"]["submit"], json!(false));
+    // human_gate 直调产物：v1 fail-closed 恒 ask:false。
+    let gate: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("gate.out.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        gate["payload"]["ask"],
+        json!(false),
+        "human_gate fail-closed 面"
+    );
+    // 终态（gate_verdict 无 pass 判定字段）→ 非判定型产出即合格。
+    assert_eq!(output.verdict, Some(true));
+}
+
+/// swebench_eval 分派面 fail-loud：spec.judge 未配置（None）时拒载点名
+/// 「判分锚」——不静默跳判（B 席嫁接口径）。
+#[test]
+fn swebench_eval_without_judge_fails_loud() {
+    let graph_src = r#"
+version: 1
+meta:
+  name: sweng_g4_sweeval
+  graph_version: "1.0"
+  entry: actor
+  input: swe_task_input
+  output: { ref: eval_verdict, from: evaluator }
+  intent: "swebench_eval 分派面 fail-loud 验收（B 席嫁接）：judge 缺席拒载"
+
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: agent_action
+    schema:
+      type: object
+      required: [thought, command, submit]
+      properties:
+        thought: { type: string }
+        command: { type: string }
+        submit: { type: boolean }
+  - name: eval_verdict
+    schema:
+      type: object
+      properties:
+        resolved: { type: string }
+
+nodes:
+  - id: actor
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { action: agent_action }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 400 }
+        - { from: input, fields: [repo, instance_id, problem_statement], policy: project, quota_tokens: 800 }
+
+  - id: evaluator
+    kind: check
+    uses: { unit: pkg.sweagent.swebench_eval@1 }
+    consumes: { action: agent_action }
+    emits: { verdict: eval_verdict }
+
+edges:
+  - { from: actor, output: action, to: evaluator, input: action }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 100 }
+  stop:
+    - { when: "last_tool.first_line in ['TASK_COMPLETE']", outcome: completed }
+    - { when: "steps.tool_free >= 3", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed
+"#;
+    let root = temp_root("g4sweeval");
+    let data_root = task_package(&root, &compile_plan(graph_src));
+    let scripted = |node: &str| -> Option<String> {
+        match node {
+            "actor" => Some(
+                json!({"action": {
+                    "thought": "t", "command": "c", "submit": false
+                }})
+                .to_string(),
+            ),
+            _ => None,
+        }
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    // spec.judge 缺省 None（graph_unit 构造面）——swebench_eval 应拒载。
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("judge 缺席应 fail-loud 拒载");
+
+    assert_eq!(err.code(), ErrorCode::UnitFailed, "{err}");
+    assert!(
+        err.to_string().contains("swebench_eval") && err.to_string().contains("判分锚"),
+        "拒载点名单元与判分锚：{err}"
+    );
+    assert_eq!(runner.order(), ["actor"], "actor 已跑、evaluator 拒载");
 }

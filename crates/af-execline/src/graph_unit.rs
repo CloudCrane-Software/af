@@ -91,6 +91,10 @@ pub struct GraphUnitSpec {
     pub spend_cap_cents: i64,
     /// 工具单次开销（swev 环同款记账面）。
     pub tool_spend_cents: i64,
+    /// swebench_eval 判定单元的判分锚（B 席嫁接，合流批；None = 该单元
+    /// 分派时 fail-loud 拒载——不静默跳判）。装配面（swev 环 spec.judge
+    /// 同源）：订单层 wiring 或测试注入。
+    pub judge: Option<crate::judge::JudgeLocator>,
     /// 单元版本。
     pub unit_version: &'static str,
 }
@@ -104,6 +108,7 @@ impl GraphUnitSpec {
             default_node_turns: DEFAULT_NODE_TURNS,
             spend_cap_cents: DEFAULT_NODE_SPEND_CAP_CENTS,
             tool_spend_cents: 1,
+            judge: None,
             unit_version: "0.1.0",
         }
     }
@@ -253,6 +258,27 @@ impl ExecuteUnit for GraphExecuteUnit {
                 .expect("node_exec 投影必归属 graph 节点（planbind ③ 已对齐）")
                 .kind
                 .clone();
+            // 入边工件集齐 + consumes 契约复核（下游面，B 席嫁接）：节点起动前
+            // 对入边载荷按 node.consumes 类型表达式过同一 check_typed 正门——
+            // 与上游 emissions 面互不替代（双声明各自独立核）。无 consumes
+            // 声明 = 不核（如实口径；旧计划缺省空）。
+            let mut inputs: BTreeMap<String, Value> = BTreeMap::new();
+            for edge in &plan.body.graph.edges {
+                if &edge.to == node_id {
+                    let payload = stage.payload(&edge.from, &edge.output).ok_or_else(|| {
+                        Self::envelope_err(format!(
+                            "节点 {node_id} 入边端口 {} 无上游工件（拓扑序断裂或产者缺席）",
+                            edge.input
+                        ))
+                    })?;
+                    inputs.insert(edge.input.clone(), payload);
+                }
+            }
+            for (port, type_expr) in &node.consumes {
+                if let Some(value) = inputs.get(port) {
+                    check_typed(&plan.body.types, node_id, port, type_expr, value)?;
+                }
+            }
             let envelopes = match kind.as_str() {
                 "task" => self.drive_task_node(
                     ctx,
@@ -265,7 +291,9 @@ impl ExecuteUnit for GraphExecuteUnit {
                     env.clone(),
                     &budget,
                 )?,
-                "check" => self.drive_check_node(&task, &registry, node, env.clone())?,
+                "check" => {
+                    self.drive_check_node(ctx, &task, &registry, node, env.clone(), &inputs)?
+                }
                 other => {
                     return Err(ExeclineError::GraphShapeUnsupported {
                         detail: format!("节点 {node_id} kind={other} 超v1分派面（task|check）"),
@@ -273,7 +301,7 @@ impl ExecuteUnit for GraphExecuteUnit {
                 }
             };
             // envelope 结构校验 + 落工件面 + 入交接账。
-            stage.commit(node_id, node, envelopes, &artifacts_dir)?;
+            stage.commit(plan, node_id, node, envelopes, &artifacts_dir)?;
         }
 
         // ---- 收尾相：终态工件 schema 校验 + 订单面产出 ----
@@ -523,9 +551,19 @@ impl GraphExecuteUnit {
             }
         };
         stage.account_node(&report);
+        // harness 侧预算耗尽归并（B 席嫁接）：RunStatus::BudgetExhausted 不当
+        // 成功静默——EX4007 结构化熔断（launch 硬顶 = plan cost_cap 收敛面）。
+        if let af_harness::RunStatus::BudgetExhausted { .. } = &report.status {
+            return Err(ExeclineError::BudgetCapExceeded {
+                budget_id: "llm.cents".into(),
+                dimension: "cents".into(),
+                spent: stage.cents_used,
+                cap: spend_cap.max(0) as u64,
+            });
+        }
         // envelope 声明三源（同一契约）：①declare 工具参数（端口键控对象，
         // 优先）；②裸 declare（参数空）→ 端口 schema 全 required 可推导
-        // （diff/files，ground truth 容器取证）时按推导交付；③终态 assistant
+        //（diff/files，ground truth 容器取证）时按推导交付；③终态 assistant
         // 消息 JSON（回退——FakeRunner/守规模型面）。端口键集校验在 commit 相。
         let declared = declaration
             .lock()
@@ -605,13 +643,20 @@ impl GraphExecuteUnit {
         })
     }
 
-    /// check 节点 = unit 直调（uses.unit 经注册表 impl 解析）。
+    /// check 节点 = unit 直调（uses.unit 经注册表 impl 解析）。分发表 v1.1
+    /// （B 席嫁接，合流批）：pkg.sweng.test_unit 之外接线
+    /// pkg.sweagent.aci_schema（入边工件结构校验纯函数）、
+    /// pkg.sweagent.human_gate（fail-closed 恒 ask:false）、
+    /// pkg.sweagent.swebench_eval（判分链；spec.judge 缺席 fail-loud 拒载）。
+    #[allow(clippy::too_many_arguments)]
     fn drive_check_node(
         &self,
+        ctx: &ExecContext<'_>,
         task: &GraphTask,
         registry: &ComponentRegistry,
         node: &af_compiler::plan::PlanNodeExec,
         env: Arc<TbEnv>,
+        inputs: &BTreeMap<String, Value>,
     ) -> Result<NodeEnvelopes, ExeclineError> {
         let unit = node
             .unit
@@ -641,18 +686,55 @@ impl GraphExecuteUnit {
                 sweng::BUILTIN_HOST_CRATE
             )));
         }
-        // v1 已接线判定单元：pkg.sweng.test_unit（容器内跑测试命令，判定零 LLM）。
-        if name != sweng::name_of(sweng::REF_SWENG_TEST_UNIT) {
-            return Err(self.fail(format!(
-                "uses.unit {name} 无 v1 直调面（15 件表内已接线：pkg.sweng.test_unit）"
-            )));
-        }
-        let value = sweng::test_unit(
-            self.bridge.as_ref(),
-            &env,
-            task.test_command.as_deref().unwrap_or(DEFAULT_TEST_COMMAND),
-            None,
-        );
+        // v1.1 分发表：四件 builtin 判定单元（B 席嫁接面）。
+        let value = match name.as_str() {
+            n if n == sweng::name_of(sweng::REF_SWENG_TEST_UNIT) => sweng::test_unit(
+                self.bridge.as_ref(),
+                &env,
+                task.test_command.as_deref().unwrap_or(DEFAULT_TEST_COMMAND),
+                None,
+            ),
+            "pkg.sweagent.aci_schema" => {
+                let Some(action) = inputs.values().next() else {
+                    return Err(self.fail(format!(
+                        "节点 {} aci_schema 需要入边工件（agent_action）",
+                        node.node_id
+                    )));
+                };
+                sweng::aci_schema(action)
+            }
+            "pkg.sweagent.human_gate" => {
+                sweng::human_gate(&sweng::HumanGateConfig::default(), &Value::Null)
+            }
+            "pkg.sweagent.swebench_eval" => {
+                let Some(judge) = self.spec.judge.as_ref() else {
+                    return Err(self.fail(format!(
+                        "节点 {} swebench_eval 需要判分锚（spec.judge 未配置，fail-loud 拒载——不静默跳判）",
+                        node.node_id
+                    )));
+                };
+                let swev_task = task.as_swev_task();
+                let work_dir = ctx.attempt_dir.join("nodes").join(&node.node_id);
+                let task_json = ctx.data_root.join(ctx.task_id).join("task.json");
+                std::fs::create_dir_all(&work_dir)
+                    .map_err(|err| self.fail(format!("建节点目录失败: {err}")))?;
+                sweng::swebench_eval(
+                    self.bridge.as_ref(),
+                    &env,
+                    judge,
+                    &swev_task,
+                    &work_dir,
+                    &task_json,
+                )
+                .verdict
+            }
+            other => {
+                return Err(self.fail(format!(
+                    "uses.unit {other} 无直调面（分发表内：pkg.sweng.test_unit + \
+                     pkg.sweagent.aci_schema/human_gate/swebench_eval）"
+                )))
+            }
+        };
         let port = node
             .artifact_contract
             .first()
@@ -814,25 +896,27 @@ impl PlanBudgets {
         b
     }
 
-    /// 熔断门：节点起动前对账（llm.cents 口径 1 模型调用 = 1¢）。
+    /// 熔断门：节点起动前对账（llm.cents 口径 1 模型调用 = 1¢）。B 席嫁接
+    /// （合流批）：EX4007 结构化字段（budget_id/dimension/spent/cap）——
+    /// tokens_total 口径计 cache_read（account_node 面）。
     fn gate(&self, stage: &Drive) -> Result<(), ExeclineError> {
         if let Some(cap) = self.cost_cap {
             if stage.cents_used >= cap {
                 return Err(ExeclineError::BudgetCapExceeded {
-                    detail: format!(
-                        "cost_cap {cap}¢ 已耗尽（已用 {}¢ = {} 次模型调用），拒起下一节点",
-                        stage.cents_used, stage.model_calls
-                    ),
+                    budget_id: "cost_cap".into(),
+                    dimension: "cents".into(),
+                    spent: stage.cents_used,
+                    cap,
                 });
             }
         }
         if let Some(cap) = self.token_cap {
             if stage.tokens_used >= cap {
                 return Err(ExeclineError::BudgetCapExceeded {
-                    detail: format!(
-                        "token_cap {cap} 已耗尽（已用 {}），拒起下一节点",
-                        stage.tokens_used
-                    ),
+                    budget_id: "token_cap".into(),
+                    dimension: "tokens_total".into(),
+                    spent: stage.tokens_used,
+                    cap,
                 });
             }
         }
@@ -871,16 +955,20 @@ impl Drive {
             .cloned()
     }
 
-    /// 模型环报告累账（llm.cents 口径：1 次模型调用 = 1¢；token = in+out）。
+    /// 模型环报告累账（llm.cents 口径：1 次模型调用 = 1¢；token = in+out+
+    /// cache_read——tokens_total 口径计 cache_read，B 席嫁接）。
     fn account_node(&mut self, report: &af_harness::RunReport) {
         self.model_calls += report.model_calls;
         self.cents_used += report.model_calls;
-        self.tokens_used += report.tokens.input + report.tokens.output;
+        self.tokens_used += report.tokens.input + report.tokens.output + report.tokens.cache_read;
     }
 
-    /// envelope 结构校验（键集=端口名）+ 落工件面 + 入账。
+    /// envelope 结构校验（键集=端口名 + emits 类型正门）+ 落工件面 + 入账。
+    /// 上游面（B 席嫁接，合流批）：artifact_contract 带 r#type 的端口逐件
+    /// check_typed——无类型声明 = 不核（如实口径；旧计划缺省 None）。
     fn commit(
         &mut self,
+        plan: &ExecutablePlan,
         node_id: &str,
         node: &af_compiler::plan::PlanNodeExec,
         envelopes: NodeEnvelopes,
@@ -898,6 +986,18 @@ impl Drive {
                     "节点 {node_id} envelope 端口不符：契约 {ports:?} ≠ 产出 {produced:?}"
                 ),
             });
+        }
+        for artifact in node.artifact_contract.iter().filter(|a| a.r#type.is_some()) {
+            let port = artifact.name.as_str();
+            if let Some(payload) = envelopes.ports.get(port) {
+                check_typed(
+                    &plan.body.types,
+                    node_id,
+                    port,
+                    artifact.r#type.as_deref().unwrap_or_default(),
+                    payload,
+                )?;
+            }
         }
         for (port, payload) in envelopes.ports {
             let file = artifacts_dir.join(format!("{node_id}.{port}.json"));
@@ -1244,52 +1344,48 @@ fn node_tool_fn(
         "pkg.sweagent.env" => {
             let bash = Arc::new(sweng::EnvBash::new(bridge, env));
             Some(Arc::new(move |args: &Value| {
-                Ok(Value::String(bash.call(
-                    args.get("command").and_then(Value::as_str).unwrap_or(""),
-                    args.get("timeout_sec")
-                        .and_then(Value::as_u64)
-                        .map(|t| t as u32),
-                )))
+                Ok(Value::String(
+                    bash.call(
+                        args.get("command").and_then(Value::as_str).unwrap_or(""),
+                        args.get("timeout_sec")
+                            .and_then(Value::as_u64)
+                            .map(|t| t as u32),
+                    ),
+                ))
             }))
         }
-        "pkg.sweng.locate" | "pkg.sweagent.aci.search" => {
-            Some(Arc::new(move |args: &Value| {
-                let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
-                let n = |k: &str| args.get(k).and_then(Value::as_u64).map(|x| x as u32);
-                Ok(Value::String(sweng::aci_search(
-                    bridge.as_ref(),
-                    &env,
-                    s("query").or(s("pattern")).as_deref().unwrap_or(""),
-                    s("path").as_deref(),
-                    n("max_hits"),
-                )))
-            }))
-        }
-        "pkg.sweng.view" | "pkg.sweagent.aci.open" => {
-            Some(Arc::new(move |args: &Value| {
-                let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
-                let n = |k: &str| args.get(k).and_then(Value::as_u64).map(|x| x as u32);
-                Ok(Value::String(sweng::aci_open(
-                    bridge.as_ref(),
-                    &env,
-                    s("path").as_deref().unwrap_or(""),
-                    n("start_line").or(n("start")),
-                    n("end_line").or(n("end")),
-                )))
-            }))
-        }
-        "pkg.sweng.edit" | "pkg.sweagent.aci.edit" => {
-            Some(Arc::new(move |args: &Value| {
-                let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
-                Ok(Value::String(sweng::aci_edit(
-                    bridge.as_ref(),
-                    &env,
-                    s("path").as_deref().unwrap_or(""),
-                    s("old_text").as_deref().unwrap_or(""),
-                    s("new_text").as_deref().unwrap_or(""),
-                )))
-            }))
-        }
+        "pkg.sweng.locate" | "pkg.sweagent.aci.search" => Some(Arc::new(move |args: &Value| {
+            let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
+            let n = |k: &str| args.get(k).and_then(Value::as_u64).map(|x| x as u32);
+            Ok(Value::String(sweng::aci_search(
+                bridge.as_ref(),
+                &env,
+                s("query").or(s("pattern")).as_deref().unwrap_or(""),
+                s("path").as_deref(),
+                n("max_hits"),
+            )))
+        })),
+        "pkg.sweng.view" | "pkg.sweagent.aci.open" => Some(Arc::new(move |args: &Value| {
+            let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
+            let n = |k: &str| args.get(k).and_then(Value::as_u64).map(|x| x as u32);
+            Ok(Value::String(sweng::aci_open(
+                bridge.as_ref(),
+                &env,
+                s("path").as_deref().unwrap_or(""),
+                n("start_line").or(n("start")),
+                n("end_line").or(n("end")),
+            )))
+        })),
+        "pkg.sweng.edit" | "pkg.sweagent.aci.edit" => Some(Arc::new(move |args: &Value| {
+            let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
+            Ok(Value::String(sweng::aci_edit(
+                bridge.as_ref(),
+                &env,
+                s("path").as_deref().unwrap_or(""),
+                s("old_text").as_deref().unwrap_or(""),
+                s("new_text").as_deref().unwrap_or(""),
+            )))
+        })),
         _ => None,
     }
 }
@@ -1361,9 +1457,292 @@ fn validate_schema(value: &Value, schema: &Value) -> Result<(), String> {
     Ok(())
 }
 
+// ============================================================
+// typed envelope 校验（B 席整件嫁接，合流批）：逐边/逐端口类型正门
+// ============================================================
+
+/// 最小 JSON Schema 校验器（type/required/properties/items；`type` 段的
+/// 非原始关键字串 = **命名类型引用**——对 plan.types 递归解析，深度帽 16
+/// 防自引用环）。其余 schema 关键字忽略（如实口径，登记 RESULT 边界）。
+struct SchemaValidator<'a> {
+    types: &'a BTreeMap<String, Value>,
+}
+
+const PRIMITIVES: [&str; 6] = ["object", "array", "string", "boolean", "integer", "number"];
+
+impl SchemaValidator<'_> {
+    fn validate(&self, value: &Value, schema: &Value, path: &str, errors: &mut Vec<String>) {
+        self.walk(value, schema, path, errors, 0);
+    }
+
+    fn walk(
+        &self,
+        value: &Value,
+        schema: &Value,
+        path: &str,
+        errors: &mut Vec<String>,
+        depth: usize,
+    ) {
+        if depth > 16 {
+            errors.push(format!("{path}: 类型引用链超过 16 层（疑似自引用）"));
+            return;
+        }
+        let Some(obj) = schema.as_object() else {
+            errors.push(format!("{path}: schema 不是对象"));
+            return;
+        };
+        if let Some(ty) = obj.get("type").and_then(Value::as_str) {
+            if PRIMITIVES.contains(&ty) {
+                let ok = match ty {
+                    "object" => value.is_object(),
+                    "array" => value.is_array(),
+                    "string" => value.is_string(),
+                    "boolean" => value.is_boolean(),
+                    "integer" => value.is_i64() || value.is_u64(),
+                    _ => value.is_number(),
+                };
+                if !ok {
+                    errors.push(format!("{path}: 应为 {ty}，实为 {}", kind_of(value)));
+                    return;
+                }
+            } else if let Some(named) = self.types.get(ty) {
+                // 命名类型引用：对正本 schema 递归（引用 schema 自身无其他
+                // 约束关键字时即纯转发；有则合并语义——type 段替换为正本，
+                // 其余关键字覆写）。
+                let merged = if obj.len() == 1 {
+                    named.clone()
+                } else {
+                    let mut m = obj.clone();
+                    m.remove("type");
+                    let mut base = named.as_object().cloned().unwrap_or_default();
+                    for (k, v) in m {
+                        base.insert(k, v);
+                    }
+                    Value::Object(base)
+                };
+                self.walk(value, &merged, path, errors, depth + 1);
+                return;
+            } else {
+                errors.push(format!("{path}: 不支持的 schema type {ty}"));
+                return;
+            }
+        }
+        if let Some(required) = obj.get("required").and_then(Value::as_array) {
+            if let Some(map) = value.as_object() {
+                for name in required.iter().filter_map(Value::as_str) {
+                    if !map.contains_key(name) {
+                        errors.push(format!("{path}: 缺 required 字段 {name}"));
+                    }
+                }
+            }
+        }
+        if let (Some(props), Some(map)) = (
+            obj.get("properties").and_then(Value::as_object),
+            value.as_object(),
+        ) {
+            for (name, sub) in props {
+                if let Some(v) = map.get(name) {
+                    self.walk(v, sub, &format!("{path}.{name}"), errors, depth + 1);
+                }
+            }
+        }
+        if let (Some(items), Some(arr)) = (obj.get("items"), value.as_array()) {
+            for (i, v) in arr.iter().enumerate() {
+                self.walk(v, items, &format!("{path}[{i}]"), errors, depth + 1);
+            }
+        }
+    }
+}
+
+fn kind_of(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(_) => "number",
+        Value::String(_) => "string",
+        Value::Array(_) => "array",
+        Value::Object(_) => "object",
+    }
+}
+
+/// 命名类型对 plan.types 解析后的整值校验（EX4006 点名节点/端口/类型）。
+fn envelope_check(
+    types: &BTreeMap<String, Value>,
+    node: &str,
+    port: &str,
+    value: &Value,
+    schema: &Value,
+) -> Result<(), ExeclineError> {
+    let mut errors = Vec::new();
+    SchemaValidator { types }.validate(value, schema, "$", &mut errors);
+    if errors.is_empty() {
+        return Ok(());
+    }
+    let type_expr = types
+        .iter()
+        .find(|(_, s)| *s == schema)
+        .map(|(name, _)| name.clone())
+        .unwrap_or_default();
+    Err(GraphExecuteUnit::envelope_err(format!(
+        "节点 {node} 端口 {port} 不符类型 {type_expr}：{}",
+        errors.join("；")
+    )))
+}
+
+/// 类型表达式核对（envelope 正门）：list<T> 拆包逐项、命名类型对 plan.types
+/// 解析；值不符 = EX4006 点名节点/端口/类型。types 词典单参（plan.body.types
+/// 的投影）——校验器可独立单测。
+fn check_typed(
+    types: &BTreeMap<String, Value>,
+    node_id: &str,
+    port: &str,
+    type_expr: &str,
+    value: &Value,
+) -> Result<(), ExeclineError> {
+    let (inner, is_list) = match type_expr
+        .strip_prefix("list<")
+        .and_then(|t| t.strip_suffix('>'))
+    {
+        Some(inner) => (inner, true),
+        None => (type_expr, false),
+    };
+    let Some(schema) = types.get(inner) else {
+        return Err(GraphExecuteUnit::envelope_err(format!(
+            "节点 {node_id} 端口 {port}：类型表达式 {type_expr} 的基名 {inner} 不在 plan.types"
+        )));
+    };
+    if !is_list {
+        return envelope_check(types, node_id, port, value, schema);
+    }
+    let Some(items) = value.as_array() else {
+        return Err(GraphExecuteUnit::envelope_err(format!(
+            "节点 {node_id} 端口 {port}：{type_expr} 应为 array，实为 {}",
+            kind_of(value)
+        )));
+    };
+    for (i, item) in items.iter().enumerate() {
+        let mut errors = Vec::new();
+        SchemaValidator { types }.validate(item, schema, &format!("$[{i}]"), &mut errors);
+        if !errors.is_empty() {
+            return Err(GraphExecuteUnit::envelope_err(format!(
+                "节点 {node_id} 端口 {port} 不符类型 {type_expr}：{}",
+                errors.join("；")
+            )));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// B 席嫁接（合流批）——SchemaValidator 命名类型递归：required/类型/
+    /// 嵌套 properties/items/**命名类型引用**（task_plan.steps → plan_step）。
+    #[test]
+    fn schema_validator_resolves_named_types_recursively() {
+        let types: BTreeMap<String, Value> = [
+            (
+                "plan_step".to_string(),
+                serde_json::json!({"type": "object", "required": ["id"],
+                       "properties": {"id": {"type": "string"}}}),
+            ),
+            (
+                "task_plan".to_string(),
+                serde_json::json!({"type": "object", "required": ["instance_id", "steps"],
+                       "properties": {"instance_id": {"type": "string"},
+                                      "steps": {"type": "array", "items": {"type": "plan_step"}}}}),
+            ),
+        ]
+        .into_iter()
+        .collect();
+        let validator = SchemaValidator { types: &types };
+        let schema = &types["task_plan"];
+        let ok = serde_json::json!({"instance_id": "i", "steps": [{"id": "s1"}]});
+        let mut errors = Vec::new();
+        validator.validate(&ok, schema, "$", &mut errors);
+        assert!(errors.is_empty(), "{errors:?}");
+        // 缺 steps / 步进项缺 id（命名引用递归面）。
+        let bad = serde_json::json!({"instance_id": "i"});
+        let mut errors = Vec::new();
+        validator.validate(&bad, schema, "$", &mut errors);
+        assert!(errors.iter().any(|e| e.contains("steps")), "{errors:?}");
+        let bad = serde_json::json!({"instance_id": "i", "steps": [{"action": "x"}]});
+        let mut errors = Vec::new();
+        validator.validate(&bad, schema, "$", &mut errors);
+        assert!(errors.iter().any(|e| e.contains("id")), "{errors:?}");
+    }
+
+    /// B 席嫁接——深度帽 16：自引用命名类型（type 段指回自身）不无限递归，
+    /// 以「超过 16 层」诊断拒收。
+    #[test]
+    fn schema_validator_depth_caps_named_reference_chains() {
+        let types: BTreeMap<String, Value> = [(
+            "recurse".to_string(),
+            serde_json::json!({"type": "recurse"}),
+        )]
+        .into_iter()
+        .collect();
+        let validator = SchemaValidator { types: &types };
+        let mut errors = Vec::new();
+        validator.validate(
+            &serde_json::json!({"anything": 1}),
+            &serde_json::json!({"type": "recurse"}),
+            "$",
+            &mut errors,
+        );
+        assert!(
+            errors.iter().any(|e| e.contains("16 层")),
+            "深度帽诊断：{errors:?}"
+        );
+    }
+
+    /// B 席嫁接——check_typed 的 list<T> 拆包：数组逐项按元素类型核；
+    /// 非数组值与基名缺席各按口径拒。
+    #[test]
+    fn check_typed_unpacks_list_element_type() {
+        let types: BTreeMap<String, Value> = [(
+            "code_file".to_string(),
+            serde_json::json!({"type": "object", "required": ["path", "content_ref"],
+                   "properties": {"path": {"type": "string"},
+                                  "content_ref": {"type": "string"}}}),
+        )]
+        .into_iter()
+        .collect();
+        let ok = serde_json::json!([{"path": "a.py", "content_ref": "ws#1"}]);
+        assert!(check_typed(&types, "coder", "files", "list<code_file>", &ok).is_ok());
+        // 元素缺 required 字段：EX4006 点名节点/端口/类型。
+        let bad_item = serde_json::json!([{"path": "a.py"}]);
+        let err = check_typed(&types, "coder", "files", "list<code_file>", &bad_item).unwrap_err();
+        assert_eq!(
+            err.code(),
+            crate::error::ErrorCode::EnvelopeMismatch,
+            "{err}"
+        );
+        for token in ["coder", "files", "list<code_file>", "content_ref"] {
+            assert!(err.to_string().contains(token), "点名 {token}: {err}");
+        }
+        // 非数组值。
+        let err = check_typed(
+            &types,
+            "coder",
+            "files",
+            "list<code_file>",
+            &serde_json::json!({"path": "a.py"}),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("应为 array"), "{err}");
+        // 基名不在词典。
+        let err = check_typed(
+            &types,
+            "coder",
+            "files",
+            "list<ghost>",
+            &serde_json::json!([]),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("ghost"), "{err}");
+    }
 
     /// schema 子集校验：正例过 / 缺 required 键拒 / 类型不符拒 / items 递归拒。
     #[test]
