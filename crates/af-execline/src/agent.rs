@@ -185,8 +185,15 @@ impl AgentRunner for HarnessRunner {
     ///   Breakpoint::None）；
     /// - http_retries 双路径累计 ← main.rs:800/819。
     fn run(&self, launch: AgentLaunch<'_>) -> Result<AgentRunOutcome, AgentRunFailure> {
+        // 根凭证工具集 = bash ∪ launch.tools 名（图执行器声明工具等命名面；
+        // 短期凭证再与 AgentSpec.toolset 求交——swev/tb 的 launch.tools 为空，
+        // 根凭证与既有完全一致 ["bash"]，行为零变化）。
+        let mut cred_tools: Vec<String> = vec!["bash".to_string()];
+        cred_tools.extend(launch.tools.iter().map(|(name, _)| name.clone()));
+        cred_tools.sort();
+        cred_tools.dedup();
         let root = af_credential::issue_root(&af_credential::RootSpec {
-            tools: vec!["bash".to_string()],
+            tools: cred_tools,
             namespace: "bench".into(),
             budget_cents: 10_000,
         })

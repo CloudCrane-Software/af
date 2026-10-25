@@ -106,6 +106,12 @@ impl af_execline::HostBridge for FakeBridge {
             .push(script.to_string());
         if script.starts_with("docker rm -f") || script.starts_with("docker run") {
             Ok((true, String::new()))
+        } else if script.contains("git -c core.fileMode=false diff") {
+            // 裸 declare 工作区取证（capture_diff 面）。
+            Ok((
+                true,
+                "diff --git a/astropy/sampler.py b/astropy/sampler.py\n--- a/a\n+++ b/b\n".into(),
+            ))
         } else if script.contains("docker exec") {
             // check 节点（test_unit）与工具面的容器执行：退出 0。
             Ok((true, "Ran 12 tests in 3s\n\nOK\n__AF_RC=0".into()))
@@ -130,11 +136,16 @@ struct CapturedLaunch {
 }
 
 /// 图 FakeRunner：run_id 形 `{instance}-{node}`，按节点名派发脚本化终态消息。
+/// DECLARE_NODES 内的节点走 declare 工具面（真模型收敛路径），其余走终态
+/// 消息 JSON（回退源）——双源在 happy path 各覆盖至少一节点。
 struct GraphFakeRunner {
     launches: Mutex<Vec<CapturedLaunch>>,
     /// 节点名 → 终态 assistant 文本（envelope 载荷）。未列节点 → 空轮失败。
     scripted: fn(&str) -> Option<String>,
 }
+
+/// 走 declare 工具面的节点集。
+const DECLARE_NODES: &[&str] = &["planner", "coder"];
 
 impl GraphFakeRunner {
     fn new(scripted: fn(&str) -> Option<String>) -> Self {
@@ -193,6 +204,12 @@ impl af_execline::AgentRunner for GraphFakeRunner {
             message: format!("FakeRunner 无节点 {node} 脚本"),
             http_retries: 0,
         })?;
+        // declare 工具面（真模型收敛路径）：DECLARE_NODES 节点以工具调用交付声明。
+        if DECLARE_NODES.contains(&node.as_str()) {
+            if let Some((_, declare)) = launch.tools.iter().find(|(n, _)| n == "declare") {
+                declare(&final_text);
+            }
+        }
         self.launches
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -306,7 +323,11 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
         &launches[0].system[..80.min(launches[0].system.len())]
     );
     assert_eq!(launches[0].model, "GLM-5.3", "route.plan@1 档位");
-    assert!(launches[0].tool_names.is_empty(), "planner 无工具面");
+    assert_eq!(
+        launches[0].tool_names,
+        ["declare"],
+        "planner 无节点工具面，仅环组装 declare"
+    );
     assert_eq!(launches[0].max_turns, 60, "未声明 turns 帽 → 缺省");
     assert_eq!(
         launches[0].spend_cap_cents, 600,
@@ -318,8 +339,8 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     assert_eq!(launches[1].model, "GLM-5.3", "route.main@1 档位");
     assert_eq!(
         launches[1].tool_names,
-        ["sweng.edit", "sweng.locate", "sweng.view"],
-        "节点级工具面（模型面名 = 组件名去 pkg. 前缀）"
+        ["sweng.edit", "sweng.locate", "sweng.view", "declare"],
+        "节点级工具面（模型面名 = 组件名去 pkg. 前缀）+ 环组装 declare"
     );
     assert_eq!(launches[1].max_turns, 60, "coder_turns 声明帽");
     assert!(
@@ -549,4 +570,107 @@ fn graph_unit_runs_planbind_checks_before_any_node() {
     // 三核对先行：零节点驱动、零容器。
     assert!(runner.launches().is_empty());
     assert!(bridge.calls().is_empty(), "装订失败不起容器");
+}
+
+// ============================================================
+// ⑥ 裸 declare 推导路径：sop_minimal patch 工件 = 工作区 ground truth
+// ============================================================
+
+/// sop_minimal 图源（仓库正本）。
+fn sop_minimal_src() -> String {
+    std::fs::read_to_string(
+        repo_packages()
+            .join("sweng")
+            .join("graphs")
+            .join("sop_minimal@1.0.afb"),
+    )
+    .expect("sop_minimal@1.0.afb 仓库正本应在盘")
+}
+
+/// 裸 declare FakeRunner：repair 节点调 declare() 零参数（四跑真模型判例的
+/// 稳定形态——模型修完按完成按钮，参数重述被拒绝）。
+struct BareDeclareRunner {
+    calls: Mutex<usize>,
+}
+
+impl af_execline::AgentRunner for BareDeclareRunner {
+    fn run(
+        &self,
+        launch: af_execline::AgentLaunch<'_>,
+    ) -> Result<af_execline::AgentRunOutcome, af_execline::AgentRunFailure> {
+        *self.calls.lock().unwrap_or_else(|e| e.into_inner()) += 1;
+        let declare = launch
+            .tools
+            .iter()
+            .find(|(n, _)| n == "declare")
+            .expect("环组装面必带 declare")
+            .1
+            .clone();
+        let signal = declare("{}"); // 裸调：完成按钮
+        assert_eq!(signal, "TASK_COMPLETE", "declare 输出即完成信号");
+        Ok(af_execline::AgentRunOutcome {
+            report: af_harness::RunReport {
+                run_id: launch.run_id,
+                status: af_harness::RunStatus::Completed {
+                    signal: "TASK_COMPLETE".into(),
+                },
+                turns: 5,
+                model_calls: 5,
+                effect_replays: 0,
+                effect_fresh: 3,
+                transcript: Vec::new(),
+                whitelist: vec!["bash".into()],
+                tokens: af_harness::TokenTotals {
+                    input: 80,
+                    output: 40,
+                    cache_read: 0,
+                },
+            },
+            http_retries: 0,
+        })
+    }
+}
+
+#[test]
+fn sop_minimal_bare_declare_derives_patch_from_workspace_ground_truth() {
+    let root = temp_root("minimal");
+    let data_root = task_package(&root, &compile_plan(&sop_minimal_src()));
+    let runner = Arc::new(BareDeclareRunner {
+        calls: Mutex::new(0),
+    });
+    let spec = GraphUnitSpec::v1(PROFILE, repo_packages());
+    let bridge = Arc::new(FakeBridge::new());
+    let unit = GraphExecuteUnit::new(spec, bridge.clone(), runner.clone()).expect("单元装载");
+    let attempt = root.join("attempt");
+    let out = root.join("out");
+
+    let output = drive(&unit, &data_root, &attempt, &out).expect("裸 declare 应推导交付");
+
+    // envelope：repair.patch = 工作区 diff + 触碰文件（FakeBridge 的 git diff
+    // 分支返回 astropy/sampler.py 二段 diff），落盘披露 derived 面。
+    let file = attempt.join("artifacts").join("repair.patch.json");
+    assert!(file.is_file(), "patch envelope 应落盘");
+    let envelope: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(envelope["port"], json!("patch"));
+    assert_eq!(
+        envelope["derived"],
+        json!(["diff", "files"]),
+        "推导面披露在案，不冒充模型声明"
+    );
+    assert!(
+        envelope["payload"]["diff"]
+            .as_str()
+            .unwrap()
+            .contains("diff --git a/astropy/sampler.py"),
+        "diff = 容器工作区取证"
+    );
+    assert_eq!(
+        envelope["payload"]["files"],
+        json!(["astropy/sampler.py"]),
+        "files = diff 解析触碰集"
+    );
+    // patch 型终态（无 pass 判定字段）：产出合格终态工件，订单面可 close。
+    assert_eq!(output.verdict, Some(true));
+    assert!(output.artifacts[0].is_final && output.artifacts[0].qualified);
+    assert_eq!(*runner.calls.lock().unwrap(), 1, "单节点恰一次模型环");
 }

@@ -352,7 +352,7 @@ impl GraphExecuteUnit {
         stage: &mut Drive,
         env: Arc<TbEnv>,
         budget: &PlanBudgets,
-    ) -> Result<BTreeMap<String, Value>, ExeclineError> {
+    ) -> Result<NodeEnvelopes, ExeclineError> {
         // uses.model 档位：注册表 model_route 端点（无声明 → 环缺模型面，拒）。
         let route_ref =
             node.components.model_route.as_deref().ok_or_else(|| {
@@ -413,12 +413,14 @@ impl GraphExecuteUnit {
             .iter()
             .map(|a| a.name.as_str())
             .collect();
-        // 输出契约**前置**（两跑真模型判例：尾部注记被工作惯性淹没——模型以
-        // prose + `echo TASK_COMPLETE` 收尾，envelope 载荷缺席）。两步收尾例式：
-        // ①声明轮（消息=恰一个 JSON 对象、零工具调用）→ ②bash echo TASK_COMPLETE。
+        // 输出契约**前置**（三跑真模型判例：声明轮消息面被 20-60 轮 bash 工作
+        // 惯性稳定淹没——模型以 prose 总结 + `echo TASK_COMPLETE` 收尾）。
+        // 收敛机制 = **声明工具**（`pkg.sweagent.aci.submit` 同款完成载体先例）：
+        // 模型调 `declare({<端口>: <载荷>})`——工具输出首行 TASK_COMPLETE 即环
+        // 完成信号，参数即 envelope 声明（优先源）；终态消息 JSON 为回退源
+        // （两源同一契约，EX4006 对双源违例如实拒收）。
         // 终态端口（is_final）的载荷 schema 计划可推导（interface.output_type）
-        // ——一并写进契约（EX4006 面的供给侧防线；非终态端口类型不在计划投影，
-        // v0.2 登记）。
+        // ——一并写进契约；非终态端口类型不在计划投影，v0.2 登记。
         let final_schema_note = {
             let note = node
                 .artifact_contract
@@ -439,28 +441,22 @@ impl GraphExecuteUnit {
                 format!("The value of each key must match:\n{note}")
             }
         };
-        let example = serde_json::to_string_pretty(&serde_json::json!({
-            "__note__": "exactly these keys (no extra, no missing)",
-        }))
-        .unwrap_or_default();
         let contract = format!(
             "[OUTPUT CONTRACT — your work is NOT complete until you do this]\n\
              1. Do the task below with bash tool calls.\n\
-             2. When done, send a DECLARATION message: the whole message is exactly ONE JSON \
-             object with these keys: {} — no prose, no markdown fence, no tool call in that \
-             message.\n{}\n\
-             Shape reminder (keys only): {}\n\
-             3. After the declaration, finish by calling bash `echo TASK_COMPLETE` (a tool \
-             output reading TASK_COMPLETE is the only way this runtime stops with success).",
+             2. When done, call the `declare` tool with ONE argument — a JSON object keyed by \
+             artifact port name: {}. Calling `declare` ends the run (its tool output is the \
+             completion signal).\n{}",
             serde_json::to_string(&ports).unwrap_or_default(),
             if final_schema_note.is_empty() {
                 String::new()
             } else {
                 format!("   {final_schema_note}\n")
             },
-            example,
         );
         let user = format!("{contract}\n\n[task]\n{user}");
+        // declare 工具（环组装面）：声明落共享单元 + 返回完成信号。
+        let (declare_decl, declare_fn, declaration) = declare_tool(&ports);
         let spend_cap = budget.node_spend_cap(self.spec.spend_cap_cents, stage.cents_used);
         let node_dir = ctx.attempt_dir.join("nodes").join(&node.node_id);
         std::fs::create_dir_all(&node_dir)
@@ -477,18 +473,20 @@ impl GraphExecuteUnit {
                 endpoint,
                 context_template: ContextTemplate {
                     // 环组装面附加声明纪律（模板正文不动字节——包资产是正本，
-                    // 环拥有的装配段另起一段；两跑真模型判例：仅 user 面契约
-                    // 注记会被 45+ 轮 bash 工作惯性淹没）。
+                    // 环拥有的装配段另起一段）。
                     system: format!(
-                        "{system}\n\n[artifact protocol] Your finished work is delivered as a \
-                         DECLARATION message: the entire message is one JSON object keyed by \
-                         artifact port name(s) — nothing else in that message. The user message \
-                         carries the exact keys and schemas. After declaring, finish with bash \
-                         `echo TASK_COMPLETE`."
+                        "{system}\n\n[artifact protocol] Your finished work is delivered by \
+                         calling the `declare` tool with one JSON object keyed by artifact port \
+                         name(s); that call also ends the run. The user message carries the \
+                         exact keys and schemas."
                     ),
                     slots: Vec::new(),
                 },
-                toolset,
+                toolset: {
+                    let mut set = toolset;
+                    set.push(declare_decl);
+                    set
+                },
                 policy: crate::agent::llm_cents_policy(
                     max_turns,
                     COMPLETION_SIGNAL,
@@ -496,7 +494,11 @@ impl GraphExecuteUnit {
                 ),
             },
             bash,
-            tools,
+            tools: {
+                let mut set = tools;
+                set.push(("declare".to_string(), declare_fn));
+                set
+            },
             key_cmd,
             spend_cap_cents: spend_cap,
             tool_spend_cents: self.spec.tool_spend_cents,
@@ -509,12 +511,70 @@ impl GraphExecuteUnit {
             }
         };
         stage.account_node(&report);
-        // 终态消息 → 端口载荷（envelope 结构校验在 commit 相统一做）。
-        let text = final_assistant_text(&report)
-            .ok_or_else(|| self.fail(format!("节点 {} 无终态 assistant 消息", node.node_id)))?;
-        let parsed: Value = parse_declaration(&text).map_err(|err| {
+        // envelope 声明三源（同一契约）：①declare 工具参数（端口键控对象，
+        // 优先）；②裸 declare（参数空）→ 端口 schema 全 required 可推导
+        // （diff/files，ground truth 容器取证）时按推导交付；③终态 assistant
+        // 消息 JSON（回退——FakeRunner/守规模型面）。端口键集校验在 commit 相。
+        let declared = declaration
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(value) = declared {
+            let bare = value.as_object().is_some_and(|obj| obj.is_empty());
+            if !bare {
+                let obj = value.as_object().ok_or_else(|| {
+                    Self::envelope_err(format!(
+                        "节点 {} declare 参数不是 JSON 对象（须按端口名键控）",
+                        node.node_id
+                    ))
+                })?;
+                return Ok(NodeEnvelopes {
+                    ports: obj.clone().into_iter().collect(),
+                    derived: Vec::new(),
+                });
+            }
+            // 裸 declare = 提交工作区：唯一工件端口且 required ⊆ {diff, files}
+            // 才可推导（其余形状裸调 = 声明缺失，EX4006）。
+            if node.artifact_contract.len() == 1 {
+                let port = &node.artifact_contract[0].name;
+                let schema = plan
+                    .body
+                    .types
+                    .get(&plan.body.interface.output_type)
+                    .cloned();
+                if let Some(schema) = schema.filter(|sc| derivable_port_fields(sc)) {
+                    let diff =
+                        swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &node_dir)
+                            .map_err(|err| {
+                            self.fail(format!(
+                                "节点 {} 裸 declare 工作区取证失败: {err}",
+                                node.node_id
+                            ))
+                        })?;
+                    let payload =
+                        serde_json::json!({ "diff": diff, "files": files_of_diff(&diff) });
+                    let mut ports = BTreeMap::new();
+                    ports.insert(port.clone(), payload);
+                    return Ok(NodeEnvelopes {
+                        ports,
+                        derived: vec!["diff".into(), "files".into()],
+                    });
+                }
+            }
+            return Err(Self::envelope_err(format!(
+                "节点 {} 裸 declare 但端口形状不可 ground-truth 推导（须端口键控参数声明）",
+                node.node_id
+            )));
+        }
+        let text = final_assistant_text(&report).ok_or_else(|| {
             Self::envelope_err(format!(
-                "节点 {} 终态消息不是合法 JSON 声明（envelope<T> 契约）：{err}",
+                "节点 {} 无 declare 调用且无终态 assistant 声明消息（envelope<T> 契约）",
+                node.node_id
+            ))
+        })?;
+        let parsed = parse_declaration(&text).map_err(|err| {
+            Self::envelope_err(format!(
+                "节点 {} 声明缺失：declare 未调用，终态消息也非合法 JSON 声明：{err}",
                 node.node_id
             ))
         })?;
@@ -522,12 +582,15 @@ impl GraphExecuteUnit {
             .as_object()
             .ok_or_else(|| {
                 Self::envelope_err(format!(
-                    "节点 {} 终态消息不是 JSON 对象（须按端口名键控）",
+                    "节点 {} 声明不是 JSON 对象（须按端口名键控）",
                     node.node_id
                 ))
             })?
             .clone();
-        Ok(obj.into_iter().collect())
+        Ok(NodeEnvelopes {
+            ports: obj.into_iter().collect(),
+            derived: Vec::new(),
+        })
     }
 
     /// check 节点 = unit 直调（uses.unit 经注册表 impl 解析）。
@@ -537,7 +600,7 @@ impl GraphExecuteUnit {
         registry: &ComponentRegistry,
         node: &af_compiler::plan::PlanNodeExec,
         env: Arc<TbEnv>,
-    ) -> Result<BTreeMap<String, Value>, ExeclineError> {
+    ) -> Result<NodeEnvelopes, ExeclineError> {
         let unit = node
             .unit
             .as_ref()
@@ -588,9 +651,12 @@ impl GraphExecuteUnit {
                     node.node_id
                 ))
             })?;
-        let mut out = BTreeMap::new();
-        out.insert(port, value);
-        Ok(out)
+        let mut ports = BTreeMap::new();
+        ports.insert(port, value);
+        Ok(NodeEnvelopes {
+            ports,
+            derived: Vec::new(),
+        })
     }
 }
 
@@ -805,7 +871,7 @@ impl Drive {
         &mut self,
         node_id: &str,
         node: &af_compiler::plan::PlanNodeExec,
-        envelopes: BTreeMap<String, Value>,
+        envelopes: NodeEnvelopes,
         artifacts_dir: &Path,
     ) -> Result<(), ExeclineError> {
         let ports: BTreeSet<&str> = node
@@ -813,7 +879,7 @@ impl Drive {
             .iter()
             .map(|a| a.name.as_str())
             .collect();
-        let produced: BTreeSet<&str> = envelopes.keys().map(String::as_str).collect();
+        let produced: BTreeSet<&str> = envelopes.ports.keys().map(String::as_str).collect();
         if ports != produced {
             return Err(ExeclineError::EnvelopeMismatch {
                 detail: format!(
@@ -821,14 +887,25 @@ impl Drive {
                 ),
             });
         }
-        for (port, payload) in envelopes {
+        for (port, payload) in envelopes.ports {
             let file = artifacts_dir.join(format!("{node_id}.{port}.json"));
-            let envelope = serde_json::json!({
-                "envelope": "v1",
-                "from": node_id,
-                "port": port,
-                "payload": payload,
-            });
+            let envelope = if envelopes.derived.is_empty() {
+                serde_json::json!({
+                    "envelope": "v1",
+                    "from": node_id,
+                    "port": port,
+                    "payload": payload,
+                })
+            } else {
+                serde_json::json!({
+                    "envelope": "v1",
+                    "from": node_id,
+                    "port": port,
+                    "payload": payload,
+                    // 披露：裸 declare 推导面（ground truth），不冒充模型声明。
+                    "derived": envelopes.derived,
+                })
+            };
             std::fs::write(
                 &file,
                 serde_json::to_string(&envelope).map_err(|err| ExeclineError::UnitFailed {
@@ -850,6 +927,105 @@ impl Drive {
 // ============================================================
 // 提示词装配 / 模型路由 / 工具面 / schema 校验
 // ============================================================
+
+/// 节点 envelope 产出（端口载荷 + 裸 declare 推导面披露）。
+#[derive(Debug, Default)]
+struct NodeEnvelopes {
+    ports: BTreeMap<String, Value>,
+    /// ground-truth 推导字段（裸 declare 路径；envelope 落盘披露，不冒充模型声明）。
+    derived: Vec<String>,
+}
+
+/// 声明共享单元（declare 工具闭包 → 驱动面读取）。
+type DeclarationCell = Arc<std::sync::Mutex<Option<Value>>>;
+
+/// declare 工具（环组装面，`pkg.sweagent.aci.submit` 完成载体先例）：
+/// 模型以工具调用交付 envelope 声明——参数 = 端口键控 JSON 对象，工具输出
+/// 首行 = TASK_COMPLETE 即环完成信号。返回 (声明, 执行闭包, 共享单元)。
+fn declare_tool(ports: &[&str]) -> (ToolDecl, ToolFn, DeclarationCell) {
+    let cell: DeclarationCell = Arc::new(std::sync::Mutex::new(None));
+    let sink = cell.clone();
+    let on_call: ToolFn = Arc::new(move |args: &str| {
+        let parsed: Value = serde_json::from_str(args).unwrap_or(Value::Null);
+        *sink.lock().unwrap_or_else(|e| e.into_inner()) = Some(parsed);
+        "TASK_COMPLETE".to_string()
+    });
+    // harness 面不设 required（裸 declare 必须能到达闭包——四跑真模型判例：
+    // 模型把 declare 当完成按钮按，参数重述被稳定拒绝；裸调语义=提交工作区，
+    // 由驱动面按端口 schema 判可推导性）。端口键集校验在 commit 相（EX4006）。
+    let decl = serde_json::from_value::<ToolDecl>(serde_json::json!({
+        "name": "declare",
+        "description": format!(
+            "Deliver your finished artifact and end the run. Preferred: ONE argument — a JSON \
+             object keyed by artifact port name ({ports:?}), each value that port's payload. \
+             For patch-shaped ports you may call it bare ({{}}): the workspace diff and touched \
+             files are then captured from the container automatically. This is the only \
+             completion path."
+        ),
+        "parameters": {
+            "type": "object",
+        },
+        "effect": "pure",
+    }))
+    .expect("declare ToolDecl 静态构造必须合法（af-harness spec.rs 契约）");
+    (decl, on_call, cell)
+}
+
+/// 裸 declare 的可推导判定：端口 schema 的 required 字段 ⊆ {diff(string),
+/// files(array<string>)}——diff ← 容器工作区取证（swev::capture_diff 先例），
+/// files ← diff 解析（`diff --git a/x b/y` 路径集）。两源皆 ground truth，
+/// 与模型声明互不混用（envelope 记 derived 面，披露不冒充）。
+fn derivable_port_fields(schema: &Value) -> bool {
+    let required = schema
+        .get("required")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if required.is_empty() {
+        return false;
+    }
+    let ok_shape = |name: &str| match name {
+        "diff" => {
+            schema
+                .get("properties")
+                .and_then(|p| p.get("diff"))
+                .and_then(|d| d.get("type"))
+                .and_then(Value::as_str)
+                == Some("string")
+        }
+        "files" => {
+            schema
+                .get("properties")
+                .and_then(|p| p.get("files"))
+                .and_then(|d| d.get("type"))
+                .and_then(Value::as_str)
+                == Some("array")
+        }
+        _ => false,
+    };
+    required.iter().all(|f| ok_shape(f))
+}
+
+/// 从 diff 文本解析触碰文件集（`diff --git a/<path> b/<path>` 行）。
+fn files_of_diff(diff: &str) -> Vec<String> {
+    let mut files = Vec::new();
+    for line in diff.lines() {
+        if let Some(rest) = line.strip_prefix("diff --git a/") {
+            if let Some((path, _)) = rest.split_once(" b/") {
+                let path = path.trim();
+                if !path.is_empty() && !files.iter().any(|f: &String| f == path) {
+                    files.push(path.to_string());
+                }
+            }
+        }
+    }
+    files
+}
 
 /// 声明轮消息解析：整体 JSON；容忍首尾 markdown 围栏（```json … ```）——
 /// 围栏内仍是同一声明载荷，非替代源。
