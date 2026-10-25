@@ -57,6 +57,24 @@
   路径在案）。目录按路径序处理，确定性装载；全量声明的规范序列化取
   SHA-256 即 `registry_digest`（计划对象携带，执行面核对——E9004 面）。
 
+- `impl_ref` **双形态合法**（G4 裁决13，2026-10-25 入契约）：
+  ①包路径形态 `packages/<pkg>@<ver>/...`（预留路径，装载期只登记）；
+  ②执行面 builtin 形态 `executor:builtin/<组件名>@<crate>`（无版本段——
+  版本面住组件声明本身；`<crate>` = 实现宿主 crate 名）。装订器按前缀
+  `executor:builtin/` 判别；既有 15 稿计划全为包路径形态，golden 零影响
+  （impl_ref 不入计划投影，`plan.rs` `PlanComponents` 只携带
+  reference+effect_class）。首批 builtin 锚 = sweng 域 15 件（根级
+  `pkg.sweagent.*` 十件 + sweng 包级 `pkg.sweng.*` 五件，G4 Phase 1
+  锚改写；实现住 `af-execline/src/pkg/sweng.rs` 进程内注册表）。
+
+- 包内提示词资产（G4 裁决10）：`<包>/prompts/<名>.md` +
+  `MANIFEST.sha256` 清单（头行 `# manifest_version: <版本>`；数据行
+  `<sha256>  prompts/<名>.md`，与 `sha256sum` 输出同形）。DSL 图的
+  `context.sections[].template_ref`（`pkg.<包>.<名>[@<版本>]`，版本段
+  可选）由执行面装载期解析到该文件并逐件 sha256 核对，不符拒绝启动
+  （EX4001-4003；版本段给出时与清单版本核对）。首包 = sweng
+  （swev_system/swev_instance_protocol/aci_system）。
+
 首批声明 = golden 源 sample2 / sample3 / GPTSwarm 三稿 `uses.*` 引用闭包：
 `route.main@1`、`route.cheap@1`（根级）；`pkg.sweng.locate/view/edit`、
 `pkg.sweng.test_unit@1`（sweng）；`pkg.swarmkit.tools@1`（swarmkit）。

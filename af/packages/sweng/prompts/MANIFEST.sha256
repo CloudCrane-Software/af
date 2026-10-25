@@ -1,0 +1,5 @@
+# sweng prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+0675f95168c745c9e9327ad5260cd7a063ab637db5dc7260d3380d7cd90f2b4a  prompts/swev_system.md
+10d277edf1819ce04635fa259d77946276d38dfb82f877491f8eaaa93f83ba6b  prompts/swev_instance_protocol.md
+f56b3ab47391eb820456e463cccb2a8cb2a8f5b2f5101896c8bfe0c1a2f9fee2  prompts/aci_system.md

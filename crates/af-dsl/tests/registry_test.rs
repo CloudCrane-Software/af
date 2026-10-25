@@ -255,6 +255,16 @@ const DRAFT_REFS: &[&str] = &[
     "pkg.sweng.sop_minimal@1.0",
 ];
 
+/// G4 任务图白名单（裁决§二：14 图闭包测试扩展为「草稿引用 ∪ G4 任务图
+/// 白名单」常量形式——注册表卫生语义保留：清单仍不得夹带闭包外图，只是
+/// 闭包定义从「草稿引用」扩为「草稿引用 ∪ G4 落地任务图」）。Phase 1 =
+/// sweng fix_swe_task；Phase 2 reportkit paper_report 随其包落地同 commit
+/// 追加于此。
+const G4_TASK_GRAPH_WHITELIST: &[&str] = &[
+    // sweng/manifest.json:9（G4 软件工程包 E2E 图，设计 §4.2）
+    "pkg.sweng.fix_swe_task@1.0",
+];
+
 #[test]
 fn repo_packages_registry_covers_all_four_draft_refs() {
     let r = Registry::load(repo_packages()).expect("仓库正本 af/packages 应装载（4 示例包）");
@@ -269,10 +279,20 @@ fn repo_packages_registry_covers_all_four_draft_refs() {
 
 #[test]
 fn repo_packages_registry_strictly_matches_draft_refs() {
-    // 首版四包=清单闭包：除 4 稿引用外不夹带未引用图（防止清单与草稿漂移）。
+    // 清单闭包（G4 裁决§二扩展）：草稿引用 ∪ G4 任务图白名单——除两者外
+    // 不夹带未引用图（注册表卫生语义保留；计数同步与包落地同 commit）。
     let r = Registry::load(repo_packages()).unwrap();
-    let expected: BTreeSet<&str> = DRAFT_REFS.iter().copied().collect();
+    let expected: BTreeSet<&str> = DRAFT_REFS
+        .iter()
+        .chain(G4_TASK_GRAPH_WHITELIST)
+        .copied()
+        .collect();
     let declared: BTreeSet<&str> = r.declared_graphs().iter().map(|s| s.as_str()).collect();
-    assert_eq!(declared, expected, "清单应恰为 4 稿候选图闭包（14 条）");
-    assert_eq!(declared.len(), 14);
+    assert_eq!(
+        declared,
+        expected,
+        "清单应恰为草稿闭包（14 条）∪ G4 任务图白名单（{} 条）",
+        G4_TASK_GRAPH_WHITELIST.len()
+    );
+    assert_eq!(declared.len(), 14 + G4_TASK_GRAPH_WHITELIST.len());
 }
