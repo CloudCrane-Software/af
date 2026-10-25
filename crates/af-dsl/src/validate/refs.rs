@@ -73,47 +73,92 @@ fn check_meta(doc: &Document, ix: &Index<'_>, report: &mut Report) {
         );
         return;
     }
-    let Some(emits) = &from.node.emits else {
+    // E2202 判定面接入内建端口表（红队 W1-C22）：端口面与 port_exists/
+    // emit_type 同源——emits ∪ 内建端口（loop/map 的 done:signal、
+    // check/gate 的 passed:boolean）。此前判定面只看 emits：同一内建端口
+    // 在边核对面存在、在 output 判定面「不存在」，两判定面端口模型矛盾，
+    // 合法文档被假拒（fail-closed 误拒方向）。
+    let mut matched: Vec<&str> = Vec::new();
+    let mut undecidable = false;
+    if let Some(emits) = &from.node.emits {
+        for (port, spec) in emits {
+            match spec {
+                EmitSpec::Type(t) => {
+                    if !type_resolves(ix, t) {
+                        undecidable = true;
+                    } else if *t == doc.meta.output.r#ref {
+                        matched.push(port);
+                    }
+                }
+                EmitSpec::FromBody { .. } => match ix.emit_type(from, port, TYPE_DEPTH) {
+                    Some(t) if t == doc.meta.output.r#ref => matched.push(port),
+                    Some(_) => {}
+                    None => undecidable = true,
+                },
+            }
+        }
+    }
+    for port in builtin_ports(from) {
+        if let Some(t) = ix.emit_type(from, port, TYPE_DEPTH) {
+            if t == doc.meta.output.r#ref {
+                matched.push(port);
+            }
+        }
+    }
+    // 匹配端口须恰一（红队 W1-C28）：多端口同型 ⇒ 终态工件不可单义识别
+    //（lower 面按「类型相等」逐端口推导 is_final，双匹配即双终态工件）。
+    if matched.len() > 1 && !undecidable {
         report.push(
             ErrorCode::OutputNotEmitted,
             "root",
             format!(
-                "meta.output.from {:?} 无任何 emits 端口，无法发射 {}",
+                "meta.output.from {:?} 有 {} 个端口（{:?}）同发射类型 {}——终态工件不可单义识别，须恰一端口匹配",
                 from.path,
+                matched.len(),
+                matched,
                 doc.meta.output.r#ref.display()
             ),
         );
         return;
-    };
-    let mut matched = false;
-    let mut undecidable = false;
-    for (port, spec) in emits {
-        match spec {
-            EmitSpec::Type(t) => {
-                if !type_resolves(ix, t) {
-                    undecidable = true;
-                } else if *t == doc.meta.output.r#ref {
-                    matched = true;
-                }
-            }
-            EmitSpec::FromBody { .. } => match ix.emit_type(from, port, TYPE_DEPTH) {
-                Some(t) if t == doc.meta.output.r#ref => matched = true,
-                Some(_) => {}
-                None => undecidable = true,
-            },
+    }
+    if matched.is_empty() {
+        if from.node.emits.is_none() && builtin_ports(from).is_empty() {
+            report.push(
+                ErrorCode::OutputNotEmitted,
+                "root",
+                format!(
+                    "meta.output.from {:?} 无任何输出端口（emits 与内建端口均无），无法发射 {}",
+                    from.path,
+                    doc.meta.output.r#ref.display()
+                ),
+            );
+            return;
+        }
+        if !undecidable {
+            report.push(
+                ErrorCode::OutputNotEmitted,
+                "root",
+                format!(
+                    "meta.output.from {:?} 不发射类型 {}（其端口类型均不等）",
+                    from.path,
+                    doc.meta.output.r#ref.display()
+                ),
+            );
         }
     }
-    if !matched && !undecidable {
-        report.push(
-            ErrorCode::OutputNotEmitted,
-            "root",
-            format!(
-                "meta.output.from {:?} 不发射类型 {}（其端口类型均不等）",
-                from.path,
-                doc.meta.output.r#ref.display()
-            ),
-        );
+}
+
+/// 节点的内建输出端口名（与 [`Index::port_exists`]/[`Index::emit_type`]
+/// 同一端口模型：loop/map 的 done、check/gate 的 passed）。
+fn builtin_ports(node: &NodeRef<'_>) -> Vec<&'static str> {
+    let mut out = Vec::new();
+    if node.node.loop_spec.is_some() || node.node.map.is_some() {
+        out.push("done");
     }
+    if matches!(node.node.kind.as_str(), "check" | "gate") {
+        out.push("passed");
+    }
+    out
 }
 
 /// 类型引用是否全部可解析（names 表内；内建 signal 与内联原始类型恒真）。

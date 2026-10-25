@@ -110,9 +110,15 @@ struct LexScan {
     has_macro: bool,
 }
 
-/// 字符串字面量感知的词法扫描：跳过 `'…'`/`"…"` 字面量（含 `\` 转义），
-/// 统计括号最大嵌套深度与 has() 宏调用形态。O(n) 单遍、零递归、零分配
-/// 到路径热区之外——深/长表达式在此闸住，不进 antlr4rust 递归下降。
+/// 字符串字面量与注释感知的词法扫描：跳过 `'…'`/`"…"` 字面量（含 `\`
+/// 转义）与 `//` 行注释（cel-parser 0.10.1 文法唯一注释形：
+/// `COMMENT : '//' (~'\n')* -> channel(HIDDEN)`——词法面与解析器同口径；
+/// 此前注释文本里的 `has(` 误报 E1052、注释内括号误计深度，红队 W1-C23。
+/// 块注释 `/* */` **不跳过**：文法不收（解析必拒 E1051），且若词法跳过
+/// 而解析器按真词元下潜，深括号会绕过 E1054 前置闸直击 antlr4rust
+/// SIGABRT 面——跳过即不安全），统计括号最大嵌套深度与 has() 宏调用
+/// 形态。O(n) 单遍、零递归、零分配到路径热区之外——深/长表达式在此
+/// 闸住，不进 antlr4rust 递归下降。
 fn lex_scan(source: &str) -> LexScan {
     let mut out = LexScan {
         max_depth: 0,
@@ -124,7 +130,16 @@ fn lex_scan(source: &str) -> LexScan {
     let mut ident = String::new();
     // 上一个完整标识符恰为 `has`，等待确认后随 `(`（允许中间空白）。
     let mut pending_has = false;
+    // `/` 悬置：等下一字符判 `//`（行注释）或按除号放行。
+    let mut slash_pending = false;
+    let mut line_comment = false;
     for c in source.chars() {
+        if line_comment {
+            if c == '\n' {
+                line_comment = false;
+            }
+            continue;
+        }
         if let Some(q) = in_quote {
             if escaped {
                 escaped = false;
@@ -134,6 +149,15 @@ fn lex_scan(source: &str) -> LexScan {
                 in_quote = None;
             }
             continue;
+        }
+        if slash_pending {
+            slash_pending = false;
+            if c == '/' {
+                line_comment = true;
+                continue;
+            }
+            // 非注释：`/` 本身按普通符号（除号）处理——ident/pending_has
+            // 已清，当前字符继续走正常分支。
         }
         match c {
             '\'' | '"' => {
@@ -157,6 +181,11 @@ fn lex_scan(source: &str) -> LexScan {
                 ident.clear();
                 pending_has = false;
                 depth = depth.saturating_sub(1);
+            }
+            '/' => {
+                ident.clear();
+                pending_has = false;
+                slash_pending = true;
             }
             c if c.is_alphanumeric() || c == '_' => {
                 ident.push(c);

@@ -442,3 +442,49 @@ fn store_retention_unbounded_is_e2208() {
     );
     assert_eq!(check(&src), ["E2208"]);
 }
+
+// ---------- 红队修复批（W1）：E2202 判定面与内建端口表同源 ----------
+
+#[test]
+fn builtin_done_port_satisfies_output_ref() {
+    // meta.output.from = loop 构造节点（无 emits）、ref = signal：内建
+    // done:signal 端口在 E2202 判定面应被承认（与 port_exists/emit_type
+    // 同一口径——此前边核对面存在、output 判定面「不存在」，合法文档假拒）。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: signal, from: l1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}
+
+#[test]
+fn builtin_passed_port_satisfies_output_ref() {
+    // meta.output.from = gate 节点（无 emits）、ref 内联 boolean：内建
+    // passed:boolean 端口同理应被承认。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: { type: boolean }, from: c1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}
+
+#[test]
+fn dual_same_type_emit_ports_ambiguate_output() {
+    // 同节点 emits 两个同类型端口（answer + shadow 同为 a）：output.ref 无法
+    // 单义指认终态端口 → E2202（恰一端口类型匹配收紧；多匹配即歧义）。
+    let src = base().replace(
+        "emits: { answer: a }",
+        "emits: { answer: a, shadow: a }",
+    );
+    assert_eq!(check(&src), ["E2202"]);
+}

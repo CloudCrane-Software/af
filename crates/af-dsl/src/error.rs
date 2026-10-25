@@ -99,6 +99,12 @@ pub enum ErrorCode {
     BudgetCapOrScopeInvalid,
     /// E2208 store retention 无上界（max_items / max_bytes 至少其一）。
     StoreRetentionUnbounded,
+    /// E2209 构造×构造并存（同一节点同时携带 loop 与 map）：解析面
+    /// （construct_body_scope）取 loop 体而类型面（emit_type）因 map 在场
+    /// 一律包 list<>——同一 from_body 的类型推导取决于无关字段在场与否，
+    /// 两判定面自相矛盾，故组合非法、fail-closed 拒绝（红队 W1-C25；
+    /// E2xxx 语义段预算余量内登记，承 E1008/E1054 先例）。
+    ConstructConflict,
     /// E2211 loop.carried 未覆盖「体内（含嵌套体）写入的、体外声明的 store」。
     CarriedNotCovering,
 
@@ -181,6 +187,7 @@ impl ErrorCode {
             Self::UnknownTypeName => "E2205",
             Self::BudgetCapOrScopeInvalid => "E2207",
             Self::StoreRetentionUnbounded => "E2208",
+            Self::ConstructConflict => "E2209",
             Self::CarriedNotCovering => "E2211",
             Self::ContextSourceUnresolvable => "E2301",
             Self::QuotaNotPositive => "E2302",
@@ -231,6 +238,7 @@ impl ErrorCode {
             Self::UnknownTypeName => "unknown_type_name",
             Self::BudgetCapOrScopeInvalid => "budget_cap_or_scope_invalid",
             Self::StoreRetentionUnbounded => "store_retention_unbounded",
+            Self::ConstructConflict => "construct_conflict",
             Self::CarriedNotCovering => "carried_not_covering",
             Self::ContextSourceUnresolvable => "context_source_unresolvable",
             Self::QuotaNotPositive => "quota_not_positive",

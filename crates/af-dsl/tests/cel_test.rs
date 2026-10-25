@@ -407,3 +407,33 @@ fn has_macro_rejected_as_e1052() {
     // 对照：标识符仅以 has 结尾（非裸 has）不是宏。
     check("input.q == \"x\"", &e).unwrap_or_else(|err| panic!("常规表达式不误伤：{err:?}"));
 }
+
+// ---------- 红队修复批（W1）：词法扫描跳过 CEL 注释 ----------
+
+#[test]
+fn comments_are_skipped_by_lex_scan() {
+    // cel-parser 0.10.1 文法只收 // 行注释（CEL.g4：COMMENT : '//' …）；
+    // 词法扫描（括号深度与 has() 宏补位）须与解析器同口径跳过——注释
+    // 文本中的 has( 与括号不得计入（此前中文注释里 has( 误报 E1052、
+    // 注释括号误计深度）。
+    let e = env(&[("input", vmap(&[("q", vstr("x"))]))]);
+    for src in [
+        "true // nothing here",
+        "true // has(input.q)",
+        "true // (((((",
+        "input.q == \"x\" // 中文注释里有 has( 与 (((( 括号",
+    ] {
+        check(src, &e).unwrap_or_else(|err| panic!("行注释内词法不误伤 {src:?}：{err:?}"));
+    }
+    // 对照：除号不是注释起点；字符串字面量里的 // 不是注释。
+    check("1 / 2 == 0", &e).unwrap_or_else(|err| panic!("除号不误伤：{err:?}"));
+    check("input.q == \"// has(\"", &e)
+        .unwrap_or_else(|err| panic!("字面量内 // 不误伤：{err:?}"));
+    err_of("input.q == \"// has(\" && has(input.q)", &e);
+    // 对照：真宏调用仍拦（E1052）；块注释不在文法内（解析必拒 E1051，
+    // 词法面不得跳过——跳过即给深括号绕过 E1054 前置闸开门）。
+    let err = err_of("has(input.q) // 尾注", &e);
+    assert_eq!(err.code.code(), "E1052");
+    let err = err_of("/* has(input.q) */ true", &e);
+    assert_eq!(err.code.code(), "E1051");
+}

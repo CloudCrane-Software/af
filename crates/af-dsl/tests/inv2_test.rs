@@ -207,3 +207,33 @@ fn collect_all_doc() -> String {
     .join("\n")
         + "\n"
 }
+
+// ---------- 红队修复批（W1）：E2311 单写者不匹配分支文案 ----------
+
+#[test]
+fn sole_writer_mismatch_message_says_mismatch_not_multi() {
+    // 唯一实际写者 ≠ 声明写者：文案应说「写者与声明不符」（写者集合恰一，
+    // 断言「不唯一」与事实不符、误导排障方向）；码仍为 E2311。
+    let src = doc_with_store(
+        "n1",
+        "  - { id: n1, kind: task, uses: { model: route.main@1 }, emits: { answer: a } }\n  - { id: n2, kind: task, writes: [s] }\n",
+    );
+    let doc: Document = load_str(&src).unwrap_or_else(|e| panic!("解析失败：{e}"));
+    let r = validate(&doc);
+    assert_eq!(codes_of(&r), ["E2311"]);
+    let msg = &r.violations[0].message;
+    assert!(msg.contains("写者与声明不符"), "文案应为「写者与声明不符」：{msg}");
+    assert!(!msg.contains("不唯一"), "单写者分支不得断言「不唯一」：{msg}");
+}
+
+#[test]
+fn multi_writer_message_still_says_not_sole() {
+    let src = doc_with_store(
+        "n1",
+        "  - { id: n1, kind: task, uses: { model: route.main@1 }, writes: [s], emits: { answer: a } }\n  - { id: n2, kind: task, writes: [s] }\n",
+    );
+    let doc: Document = load_str(&src).unwrap_or_else(|e| panic!("解析失败：{e}"));
+    let r = validate(&doc);
+    assert_eq!(codes_of(&r), ["E2311"]);
+    assert!(r.violations[0].message.contains("不唯一"));
+}

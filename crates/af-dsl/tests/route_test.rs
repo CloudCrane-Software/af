@@ -416,3 +416,41 @@ fn bare_passed_is_legal_on_verification_node_route() {
         run(&src)
     );
 }
+
+// ---------- 红队修复批（W1）：default:exit 产出否定析取 exit 守卫 ----------
+
+#[test]
+fn default_exit_produces_negated_disjunction_exit_guard() {
+    // default:exit 本就是 exit 分支：其守卫 ¬(when₁∨…) 并入 exit_guard——
+    // 此前被整体丢弃，非 loop（无 exit_when 兜底）文档静默丢失默认分支
+    // 守卫，破坏「分支守卫析取永真」性质。
+    let norm = normalize(&route(&[("input.x", "b")], "exit"), &targets(&["b"]))
+        .expect("合法 route 应归一化成功");
+    assert_eq!(
+        guards_of(&norm),
+        vec![("b".to_string(), "(input.x)".to_string())]
+    );
+    assert_eq!(norm.exit_guard.as_deref(), Some("!((input.x))"));
+}
+
+#[test]
+fn default_exit_with_exit_rules_joins_disjunction() {
+    // 规则型 exit 分支（文档序）+ default:exit 的否定析取联合。
+    let norm = normalize(
+        &route(&[("a", "exit"), ("b", "c")], "exit"),
+        &targets(&["c"]),
+    )
+    .expect("合法 route 应归一化成功");
+    assert_eq!(
+        norm.exit_guard.as_deref(),
+        Some("(a) || !((a) || (b))")
+    );
+}
+
+#[test]
+fn default_exit_without_rules_is_true_guard() {
+    let norm = normalize(&route(&[], "exit"), &targets(&[]))
+        .expect("合法 route 应归一化成功");
+    assert!(norm.edges.is_empty());
+    assert_eq!(norm.exit_guard.as_deref(), Some("true"));
+}

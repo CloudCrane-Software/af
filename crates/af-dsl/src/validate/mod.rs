@@ -134,6 +134,21 @@ impl<'a> Index<'a> {
         // 收齐」契约——空文档应报 E2001 而非崩溃）。
         self.scopes.entry(label.to_string()).or_default();
         for n in nodes {
+            // E2209 构造×构造并存（红队 W1-C25）：loop+map 同节点此前不被
+            // 任何判定拒绝，而 emit_type 对其 emits.from_body 因 map 在场
+            // 一律包 list<>（loop 单独在场不包）——类型推导取决于无关字段
+            // 在场与否；fail-closed 拒绝组合本身。
+            if n.loop_spec.is_some() && n.map.is_some() {
+                report.push(
+                    ErrorCode::ConstructConflict,
+                    label,
+                    format!(
+                        "节点 {:?} 同时携带 loop 与 map 双构造（构造×构造组合非法；二构造必须分节点——\
+                         解析面取 loop 体而类型面因 map 包 list<>，端口类型推导自相矛盾）",
+                        n.id
+                    ),
+                );
+            }
             let path = if parent_path.is_empty() {
                 n.id.clone()
             } else {

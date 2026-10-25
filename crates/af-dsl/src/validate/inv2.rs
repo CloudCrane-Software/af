@@ -38,14 +38,25 @@ pub(crate) fn check(ix: &Index<'_>, report: &mut Report) {
                 );
             }
         }
-        // ① 写者集合势 = 1 且等于声明值。
+        // ① 写者集合势 = 1 且等于声明值。文案按违例实况分叉（红队 W1-C26）：
+        // 多写者 = 「不唯一」；恰一写者但不匹配 = 「与声明不符」（该分支实际
+        // 写者集恰一个，断言「不唯一」与事实不符、误导排障方向）。
         let paths: Vec<&str> = actual.iter().map(|n| n.path.as_str()).collect();
-        if paths.len() > 1 || (paths.len() == 1 && paths[0] != declared.path) {
+        if paths.len() > 1 {
             report.push(
                 ErrorCode::StoreMultiWriter,
                 "stores",
                 format!(
                     "store {name:?} 写者不唯一：声明 {:?}，实际写者 {paths:?}",
+                    declared.path
+                ),
+            );
+        } else if paths.len() == 1 && paths[0] != declared.path {
+            report.push(
+                ErrorCode::StoreMultiWriter,
+                "stores",
+                format!(
+                    "store {name:?} 写者与声明不符：声明 {:?}，实际写者 {paths:?}",
                     declared.path
                 ),
             );
