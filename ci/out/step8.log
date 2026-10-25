@@ -1,5 +1,5 @@
-== step8 neutrality 门开始 2026-10-25 15:26:03
-[PASS] Z0-pre 沙箱 /home/pan-ding/afb-neut-sbx（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，9.9M）；target=/home/pan-ding/afbuild-neutrality
+== step8 neutrality 门开始 2026-10-25 16:58:06
+[PASS] Z0-pre 沙箱 /home/pan-ding/afb-neut-sbx（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，10M）；target=/home/pan-ding/afbuild-neutrality
 -- 阶段1 对照臂（包原样）
   对照臂 af-dsl exit=0
   对照臂 af-compiler exit=0
@@ -7,10 +7,10 @@
 -- 阶段2 隔离臂（清空保留空目录）
   af/packages 已清空（保留空目录）：0 项残留
   隔离臂 af-dsl 失败 2 项（exit 码不作判据，失败集才是）
-  隔离臂 af-compiler 失败 17 项（exit 码不作判据，失败集才是）
-[PASS] I1 隔离臂失败集 ⊆ 预期红名单（19 项）——核心测试无一意外失败
+  隔离臂 af-compiler 失败 19 项（exit 码不作判据，失败集才是）
+[PASS] I1 隔离臂失败集 ⊆ 预期红名单（21 项）——核心测试无一意外失败
 [PASS] I2 预期红名单 ⊆ 隔离臂失败集——fail-closed 有牙齿
-[PASS] I3 集合精确相等（19 项，无漂移）
+[PASS] I3 集合精确相等（21 项，无漂移）
 [PASS] I4 g3_golden_corpus_byte_exact（17 语料含 sample1-6）隔离臂通过——非领域 golden 照常（L3 口径，裁决14）
 -- 阶段3 探针 P-A/P-B/P-C
 [PASS] P-A sample1 快照链 exit=0 且与 golden 逐字节一致（cmp）
