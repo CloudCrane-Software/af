@@ -128,6 +128,11 @@ impl<'a> Index<'a> {
         report: &mut Report,
     ) {
         self.edges.insert(label.to_string(), edges);
+        // 作用域条目无条件建立（含 nodes:[] 的空体）——作用域标签先于节点
+        // 存在是索引不变量；否则 refs 层 `scopes["root"]` 直接索引在零节点
+        // 文档上 panic（农田 B60：`no entry found for key`，违反「违例一次
+        // 收齐」契约——空文档应报 E2001 而非崩溃）。
+        self.scopes.entry(label.to_string()).or_default();
         for n in nodes {
             let path = if parent_path.is_empty() {
                 n.id.clone()
