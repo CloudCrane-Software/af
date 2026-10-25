@@ -542,7 +542,7 @@ impl GraphExecuteUnit {
                     .types
                     .get(&plan.body.interface.output_type)
                     .cloned();
-                if let Some(schema) = schema.filter(|sc| derivable_port_fields(sc)) {
+                if schema.as_ref().is_some_and(derivable_port_fields) {
                     let diff =
                         swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &node_dir)
                             .map_err(|err| {
