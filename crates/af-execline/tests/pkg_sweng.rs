@@ -76,7 +76,7 @@ fn swev_task() -> SwevTask {
         instance_id: "django__django-11099".into(),
         repo: "django/django".into(),
         problem_statement: "Fix the thing".into(),
-        image: "swebench/sweb.eval.x86_64.django_1776.django-11099:latest".into(),
+        image: "swebench/sweb.eval.x86_64.django_1776_django-11099:latest".into(),
         eval_script: "echo eval".into(),
         hints_text: String::new(),
     }
@@ -1010,13 +1010,23 @@ fn real_container_sampling_tools_and_units() {
         "T1: {out}"
     );
 
-    // T2 只读检索（pure）：/testbed 下真命中。
-    let out = sweng::aci_search(&bridge, &tb, "def get_version", Some("django"), Some(5));
-    assert!(out.contains("django/__init__.py:"), "T2 真命中：{out}");
+    // T2 只读检索（pure）：/testbed 下真命中（django/utils/version.py 实存
+    // get_version 定义，镜像内置）。
+    let out = sweng::aci_search(
+        &bridge,
+        &tb,
+        "def get_version",
+        Some("django/utils"),
+        Some(5),
+    );
+    assert!(out.contains("django/utils/version.py:"), "T2 真命中：{out}");
 
     // T3 只读取片段（pure）：行号投影。
     let out = sweng::aci_open(&bridge, &tb, "django/__init__.py", Some(1), Some(3));
-    assert!(out.contains("1\t"), "T3 行号制：{out}");
+    assert!(
+        out.contains("1\t") && out.contains("VERSION"),
+        "T3 行号制：{out}"
+    );
 
     // T5→T4→T9 链：新建 → 软对齐编辑 → 只读复核（persist/pure 逐件）。
     let scratch = "/tmp/af-g4-sweng-sampling.py";
@@ -1105,6 +1115,11 @@ fn real_swebench_eval_full_chain() {
         &task_json,
     );
     // 判据口径（设计 §4.4-4）：verdict ∈ {true,false} 非 null；eval_sha256 在盘。
+    eprintln!("[U1-real] verdict = {}", out.verdict);
+    eprintln!(
+        "[U1-real] note head = {}",
+        out.note.chars().take(300).collect::<String>()
+    );
     let resolved = out.verdict["resolved"].as_bool();
     assert!(
         resolved == Some(false) || resolved == Some(true),
