@@ -185,8 +185,10 @@ step 7 "cargo deny --offline check" -- bash -c "cd '$AF_ROOT' && cargo deny --of
 # 挂门前置断言（裁决15）：挂门时对照臂（沙箱 cp 集含 rust-toolchain.toml——
 # 裁决19）cargo test -p af-dsl -p af-compiler 实测 exit=0。2026-10-25 挂门时点
 # 实测 CONTROL_EXIT=0（全绿）；此后该断言由门内 C1 判据常态化复测。
-# 环境开关：AF_NEUT_SANDBOX_DIR / AF_NEUT_TARGET_DIR（磁盘受限主机外置沙箱
-# target；缺省沙箱自含 $SBX/target=每跑冷建）。详见 ci/neutrality_gate.sh 头注。
+# 环境开关：AF_NEUT_SANDBOX_DIR / AF_NEUT_TARGET_DIR（复核修正 2026-10-25：
+# 缺省=家目录外置 $HOME/afb-neut-sbx + $HOME/afbuild-neutrality——/tmp 每用户
+# 配额会使内建 target 冷建撞 os error 122 连锁判据红；门内另有 128MB 配额
+# 探针 fail-fast）。详见 ci/neutrality_gate.sh 头注。
 echo "== step8 neutrality 删包自洽+领域词扫描+golden 登记"
 step 8 "neutrality 删包自洽+领域词扫描+golden 登记" -- \
   bash "$CI_DIR/neutrality_gate.sh"

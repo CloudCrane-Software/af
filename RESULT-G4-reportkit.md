@@ -14,7 +14,7 @@
 | 六位点终态 | 组件 57→**63**（bind_test+registry_decl_test）、package_count 4→**5**（registry_test:261/bind_test:66/golden_test）、图闭包 14→**16**（白名单 +fix_swe_task +paper_report）——**全部与包落地同 commit（5c887a1）** |
 | 15 稿快照（裁决8） | 重跑 15/15 恰 `registry_digest` 一行变化（d5f3bd3a…→63c3478e… **全同**）、plan_id 逐字不变；**快照文件已更新**（字节级单串替换，备份 /tmp/g4r-snapbak）且与重编译产物 cmp 逐字节全等；合流农田修复后复验 15/15 仍逐字节全等 |
 | 测试 | `cargo test -j4 --workspace` **1197 passed / 0 failed**（合流后）；新增 pkg_reportkit 14 + pkg_reportkit_package 5 + af-order unit_route 5 |
-| 七门 | fmt/clippy（0 警告）/test/cue/scrub/cosign/deny = **7/7 PASS exit 0**（§6） |
+| 门 | 本批时点七门 7/7 PASS；复核修正批后原样 `bash ci/run.sh` **八门 8/8 PASS exit 0**（§6） |
 | 主线 | phase2 前进至 e0836dd（农田修复批合入）——已 merge（f63e700，冲突仅 ci/out 产物），终门全部在合流后跑（§6） |
 
 ## 1. 包落地（C2' 5c887a1）
@@ -87,15 +87,16 @@ stub 与三件套互斥（OR1001）。report 臂：任务包材料（v1 约定
 
 | 位点 | G4 前 | 终态 | 同 commit |
 |---|---|---|---|
-| af-dsl registry_test.rs:261 package_count | 4 | **5** | 5c887a1 |
-| af-dsl registry_test 图闭包（白名单常量） | 14 | **16**（+fix_swe_task+paper_report） | 5c887a1 |
-| af-compiler bind_test:66 package_count | 4 | **5** | 5c887a1 |
-| af-compiler bind_test:68 图计数 | 14 | **16** | 5c887a1 |
-| af-compiler bind_test 组件计数 | 57 | **63** | 5c887a1 |
-| af-compiler registry_decl_test 组件总量 | 57 | **63**（测试名保留历史口径——中立性预期红名单按名引用） | 5c887a1 |
+| af-dsl registry_test.rs:274 package_count（裁决书 §二 引 :261 为 G4 前锚点） | 4 | **5** | 5c887a1 |
+| af-dsl registry_test.rs:290-303 图闭包（白名单常量；裁决书引 :271-277 为前锚点） | 14 | **16**（+fix_swe_task+paper_report） | 5c887a1 |
+| af-compiler bind_test.rs:73 package_count | 4 | **5** | 5c887a1 |
+| af-compiler bind_test.rs:81 图计数 | 14 | **16** | 5c887a1 |
+| af-compiler bind_test.rs:44 组件计数 | 57 | **63** | 5c887a1 |
+| af-compiler registry_decl_test.rs:144 组件总量（裁决书 §二 误标 af-dsl——实位 af-compiler/tests；测试名保留历史口径——中立性预期红名单按名引用） | 57 | **63** | 5c887a1 |
 
-golden_test package_count 4→5 同批。DECLS_50 表计数保留 P2-L12 历史闭包
-（50 名类计数 5/28/13/4 不动——G4 增量只入总量断言）。
+golden_test.rs:553 package_count 4→5 同批（裁决书引 :449-450 为 dsl 树前锚点）。
+DECLS_50 表计数保留 P2-L12 历史闭包（50 名类计数 5/28/13/4 不动——G4 增量
+只入总量断言）。行号锚点为 G4 后实位（独立复核 2026-10-25 亲测一致）。
 
 ## 4. 15 稿 digest 联动（裁决8，G4 终态）
 
@@ -127,13 +128,21 @@ golden_test package_count 4→5 同批。DECLS_50 表计数保留 P2-L12 历史�
 6. `DEFAULT_REGISTRY_ROOT` 机器本地常量（judge.rs production 同款 R2 口径）；
    F-第五单任务包显式声明 registry_root。
 
-## 6. 七门复跑记录（合流后终态）
+## 6. 门复跑记录（合流后终态 + 复核修正批）
 
-`bash ci/run.sh` @ merge f63e700：**7/7 PASS，exit 0**——step1 fmt / step2
-clippy+基线门（0 警告 0 签名）/ step3 `cargo test -j4 --workspace` 1197/0 /
-step4 cue / step5 scrub / step6 cosign 断网验签 / step7 cargo deny。产物
-`ci/out/`（含 g4/ 干跑归档：paper_report.plan.json + 两包 digest 核对记）。
-merge 冲突面=ci/out 产物文件（双方各跑过门），取主线侧后由本次复跑重生成。
+- 本批时点（@f63e700）：`bash ci/run.sh` 七门 **7/7 PASS，exit 0**——step1
+  fmt / step2 clippy+基线门（0 警告 0 签名）/ step3 `cargo test -j4
+  --workspace` 1197/0 / step4 cue / step5 scrub / step6 cosign 断网验签 /
+  step7 cargo deny。merge 冲突面=ci/out 产物文件，取主线侧后由复跑重生成。
+- **复核修正批（[主要]项修复）**：独立复核实测 step8 中立性门在**本机缺省
+  配置**（原样 `bash ci/run.sh`）不可复现绿——缺省沙箱 target
+  /tmp/afb-neutrality/target 冷建撞 /tmp 每用户配额（os error 122）→ 对照臂
+  exit=101 连锁 C1/I2/I3/I4/P-A/P-B/P-C 红；入档绿跑均依赖外置 target 环境开关。
+  修复：门缺省改家目录外置（$HOME/afb-neut-sbx + $HOME/afbuild-neutrality）
+  + 阶段0 增 128MB 配额探针 fail-fast（点名开关，不把磁盘问题误报成中立性
+  问题）。修复后原样 `bash ci/run.sh` = **八门 8/8 PASS，exit 0**（§0 表同批
+  更新；ci/out/SUMMARY.txt 在案）。门逻辑本身未动（12 判据），仅缺省路径与
+  预检——复核外置 12/12 绿与修复后缺省 8 门绿互证。
 
 ## 7. 提交清单（Phase 2 本批）
 

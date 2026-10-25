@@ -22,10 +22,13 @@
 #   CONTROL_EXIT=0 全绿——断言通过后本门随同 commit 挂入。此后 C1 判据即该断言
 #   的常态化：每次门跑都实测对照臂（非一次性背书）。
 #
-# 环境开关（磁盘受限主机用；CI 默认全内建）：
-#   AF_NEUT_SANDBOX_DIR  沙箱父目录（默认 /tmp；tmpfs 配额小的主机可指到大盘）
-#   AF_NEUT_TARGET_DIR   沙箱 cargo target 目录（默认 $SBX/target=每跑全冷建；
-#                        外置可跨臂/跨跑复用——臂间零重建，注意多跑并发不共址）
+# 环境开关与缺省（复核修正 2026-10-25：/tmp 每用户配额可使缺省冷建撞
+# os error 122 → 对照臂 exit≠0 连锁七判据红——缺省改家目录外置大盘，
+# 原样 `bash ci/run.sh` 即可复现绿；阶段0 另有配额探针 fail-fast）：
+#   AF_NEUT_SANDBOX_DIR  沙箱目录（默认 $HOME/afb-neut-sbx；可改 /tmp 等
+#                        任意可写位置——路径固定非随机，理由见下）
+#   AF_NEUT_TARGET_DIR   沙箱 cargo target 目录（默认 $HOME/afbuild-neutrality
+#                        外置共享：跨臂/跨跑复用、臂间零重建；多跑并发不共址）
 # =============================================================================
 set -u -o pipefail
 
@@ -63,14 +66,26 @@ GIT_PRE="$(snap_status)"
 # 「指向旧沙箱路径」的陈旧二进制直接复用（2026-10-25 挂门批实测复现：对照臂
 # 读到旧沙箱被清空的包根）。固定路径 + 每跑重建 = 烙印路径恒有效；换沙箱根
 # 须清空配对 target（下方守卫自动兜底）。
-SBX="${AF_NEUT_SANDBOX_DIR:-/tmp}/afb-neutrality"
+SBX="${AF_NEUT_SANDBOX_DIR:-$HOME/afb-neut-sbx}"
 rm -rf "$SBX"
 mkdir -p "$SBX"
 # EXIT trap 仅主壳执行（$$==BASHPID 判别）：管道/子壳继承 trap，其内若因 set -u
 # 等崩溃会误删沙箱（2026-10-25 首跑实测复现）——判别后子壳退出不再引爆清理。
 trap '[ "$$" -eq "$BASHPID" ] && rm -rf "$SBX"' EXIT
 cp -a "$SRC/Cargo.toml" "$SRC/Cargo.lock" "$SRC/rust-toolchain.toml" "$SRC/crates" "$SRC/af" "$SBX/"
-export CARGO_TARGET_DIR="${AF_NEUT_TARGET_DIR:-$SBX/target}"
+export CARGO_TARGET_DIR="${AF_NEUT_TARGET_DIR:-$HOME/afbuild-neutrality}"
+
+# 配额/可写性探针（复核修正新增）：冷建两臂 target 需数百 MB 连续写——/tmp
+# 每用户配额小的主机会在建到一半时 os error 122（Disk quota exceeded），
+# 连锁 C1/I2/I3/I4/P-A/P-B/P-C 红。预写 128MB 探针文件提前拦截，fail-fast
+# 点名开关（不把磁盘问题误报成中立性问题）。
+mkdir -p "$CARGO_TARGET_DIR"
+QUOTA_PROBE="$CARGO_TARGET_DIR/.afb-neut-quota-probe"
+if ! dd if=/dev/zero of="$QUOTA_PROBE" bs=1M count=128 >/dev/null 2>"$SBX/quota-probe.err"; then
+  echo "[FAIL] Z0-pre target 目录 $CARGO_TARGET_DIR 128MB 预写失败（磁盘/配额不足；$(tail -1 "$SBX/quota-probe.err" 2>/dev/null)）——请以 AF_NEUT_TARGET_DIR（及必要时 AF_NEUT_SANDBOX_DIR）指向可写大盘后重跑" | tee -a "$LOG"
+  exit 1
+fi
+rm -f "$QUOTA_PROBE"
 
 # 陈旧二进制守卫：若 target 缓存里的 af-dsl 测试二进制不含本沙箱路径（跨沙箱
 # 复用 target 的陈旧烙印），清掉两 crate 工件强制重编（依赖缓存保留）。

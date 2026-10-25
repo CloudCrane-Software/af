@@ -32,10 +32,11 @@ fn repo_registry() -> ComponentRegistry {
         .unwrap_or_else(|e| panic!("仓库正本 af/packages 组件清单应装载：{e}"))
 }
 
-/// 装载面：五份清单文件（根级 routes+扩容 + adaskit + autogen + sweng +
-/// swarmkit）共 57 条声明（P2-L11 首批 7 + P2-L12 扩容 50——闸门 §⑤ 清款，
-/// 逐名断言见 `registry_decl_test.rs`）；两次装载 digest 逐位一致（确定性）；
-/// 版本表按名字可达。
+/// 装载面：六份清单文件（根级 routes+扩容 + adaskit + autogen + sweng +
+/// swarmkit + reportkit）共 63 条声明（P2-L11 首批 7 + P2-L12 扩容 50 + G4
+/// reportkit 6——57→63 与包落地同 commit，裁决§二；闸门 §⑤ 清款，逐名断言
+/// 见 `registry_decl_test.rs`）；两次装载 digest 逐位一致（确定性）；版本表
+/// 按名字可达。
 #[test]
 fn repo_components_registry_loads_deterministically() {
     let reg = repo_registry();
@@ -61,9 +62,9 @@ fn repo_components_registry_loads_deterministically() {
     );
 }
 
-/// af-dsl 侧零感知：manifest.json 四包闭包不受 components.json 影响
-/// （`package_count()==4` 是 af-dsl registry_test 的既有断言，此处复核
-/// 组件清单文件不进图清单装载面——两套清单解耦的证据）。
+/// af-dsl 侧零感知：manifest.json 包闭包不受 components.json 影响
+/// （af-dsl registry_test 断言 package_count==5——G4 终态，裁决§二；此处
+/// 复核组件清单文件不进图清单装载面——两套清单解耦的证据）。
 #[test]
 fn components_files_do_not_touch_graph_manifest_surface() {
     let graph_reg = af_dsl::registry::Registry::load(repo_packages_root())

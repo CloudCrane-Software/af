@@ -367,6 +367,12 @@ warning[duplicate]: found 2 duplicate entries for crate 'digest'
           └── ed25519 v2.2.3
               └── ed25519-dalek v2.2.0 (*)
 
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/af-wt-g4/deny.toml:28:4
+   │
+28 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
 warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
     ┌─ /home/pan-ding/workspace/af-wt-g4/Cargo.lock:132:1
     │  
@@ -683,12 +689,6 @@ warning[duplicate]: found 3 duplicate entries for crate 'itertools'
       │   └── cedar-policy-formatter v4.14.0
       │       └── cedar-policy v4.14.0 (*)
       └── cedar-policy-formatter v4.14.0 (*)
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/af-wt-g4/deny.toml:28:4
-   │
-28 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 2 duplicate entries for crate 'phf_shared'
     ┌─ /home/pan-ding/workspace/af-wt-g4/Cargo.lock:212:1

@@ -65,12 +65,15 @@
 
 | 位点 | G4 前 | Phase 1 后 | 终态（Phase 2 后） | 本批动作 |
 |---|---|---|---|---|
-| af-dsl registry_test.rs:261 package_count | 4 | **4（不动）** | 5（reportkit） | 无 |
-| af-dsl registry_test.rs:271-277 declared_graphs | 14 | **15**（+fix_swe_task） | 16（+paper_report） | 扩 `G4_TASK_GRAPH_WHITELIST` 常量（草稿 ∪ 白名单），**同 commit b77705f** |
-| af-compiler bind_test.rs:66 package_count | 4 | **4（不动）** | 5 | 无 |
-| af-compiler bind_test.rs:68 图计数 | 14 | **15** | 16 | 同 commit 同步 |
-| af-compiler bind_test 组件计数 | 57 | **57（不动）** | 63（+6 reportkit） | 无 |
-| af-compiler registry_decl_test 组件计数 | 57 | **57（不动）** | 63 | 无 |
+| af-dsl registry_test.rs:274 package_count（裁决书 §二 引 :261 为 G4 前锚点） | 4 | **4（不动）** | 5（reportkit） | 无 |
+| af-dsl registry_test.rs:290-303 declared_graphs（裁决书引 :271-277 为前锚点） | 14 | **15**（+fix_swe_task） | 16（+paper_report） | 扩 `G4_TASK_GRAPH_WHITELIST` 常量（草稿 ∪ 白名单），**同 commit b77705f** |
+| af-compiler bind_test.rs:73 package_count | 4 | **4（不动）** | 5 | 无 |
+| af-compiler bind_test.rs:81 图计数 | 14 | **15** | 16 | 同 commit 同步 |
+| af-compiler bind_test.rs:44 组件计数 | 57 | **57（不动）** | 63（+6 reportkit） | 无 |
+| af-compiler registry_decl_test.rs:144 组件计数（裁决书 §二 误标 af-dsl——实位 af-compiler/tests） | 57 | **57（不动）** | 63 | 无 |
+
+（行号锚点为 G4 后实位——独立复核 2026-10-25 亲测；本表写作时点引用的
+:261/:271-277/:66/:68 为当时锚点，数值与结论不变。）
 
 实跑证据：`cargo test -p af-dsl -p af-compiler` 302/0；`cargo test -j4
 --workspace` 1156/0。图闭包「注册表卫生语义」保留——白名单常量形式，清单

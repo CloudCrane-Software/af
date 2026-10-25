@@ -1,5 +1,6 @@
-== step8 neutrality 门开始 2026-10-25 11:18:24
-[PASS] Z0-pre 沙箱 /tmp/afb-neutrality（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，9.2M）；target=/home/pan-ding/afbuild-neutrality
+== step8 neutrality 门开始 2026-10-25 11:44:29
+  [守卫] target 缓存含跨沙箱陈旧测试二进制（烙印路径≠/home/pan-ding/afb-neut-sbx）——cargo clean -p 两 crate 强制重编
+[PASS] Z0-pre 沙箱 /home/pan-ding/afb-neut-sbx（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，9.7M）；target=/home/pan-ding/afbuild-neutrality
 -- 阶段1 对照臂（包原样）
   对照臂 af-dsl exit=0
   对照臂 af-compiler exit=0
