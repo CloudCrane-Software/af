@@ -14,7 +14,8 @@ fn farm(name: &str) -> Report {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("testdata/farm-anomalies")
         .join(name);
-    let src = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
     let doc = load_str(&src).unwrap_or_else(|e| panic!("load_str {name}: {e}"));
     validate(&doc)
 }
@@ -86,7 +87,6 @@ fn cel_threshold_passers_still_pass() {
         assert!(ok.0, "{name} 深 500/1000 在阈值内，应保持 PASS：\n{}", ok.1);
     }
 }
-
 
 // ---------- P1-REF-SHORTCIRCUIT：output.ref 未登记类型名不得静默（裁决 §三-③） ----------
 

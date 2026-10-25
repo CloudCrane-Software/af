@@ -345,8 +345,14 @@ fn nesting_depth_over_limit_rejected_as_e1054() {
     // `(((1)))` 是 Int——恰恰证明它过了闸、进了判定管道）。
     let at_limit = format!("{}1{}", "(".repeat(1000), ")".repeat(1000));
     let code = on_big_stack(move || err_of(&at_limit, &CelEnv::new()).code.code().to_string());
-    assert_ne!(code, "E1054", "深恰 1000 不触闸（应走到 E1053 非布尔）：{code}");
-    assert_eq!(code, "E1053", "深 1000 完整解析后按非布尔判（闸外无异常）：{code}");
+    assert_ne!(
+        code, "E1054",
+        "深恰 1000 不触闸（应走到 E1053 非布尔）：{code}"
+    );
+    assert_eq!(
+        code, "E1053",
+        "深 1000 完整解析后按非布尔判（闸外无异常）：{code}"
+    );
 }
 
 /// 长度边界：>64 KiB 拒（崩溃样本 400KB/900KB 量级、常规表达式 ≤155 字节，
@@ -355,12 +361,18 @@ fn nesting_depth_over_limit_rejected_as_e1054() {
 #[test]
 fn expr_bytes_over_limit_rejected_as_e1054() {
     let e = CelEnv::new();
-    let over = format!("\"{}\" != \"\"", "x".repeat(af_dsl::cel::MAX_EXPR_BYTES - 7));
+    let over = format!(
+        "\"{}\" != \"\"",
+        "x".repeat(af_dsl::cel::MAX_EXPR_BYTES - 7)
+    );
     assert!(over.len() == af_dsl::cel::MAX_EXPR_BYTES + 1);
     let err = err_of(&over, &e);
     assert_eq!(err.code.code(), "E1054", "超一字节应前置闸拒绝：{err:?}");
 
-    let at_limit = format!("\"{}\" != \"\"", "x".repeat(af_dsl::cel::MAX_EXPR_BYTES - 8));
+    let at_limit = format!(
+        "\"{}\" != \"\"",
+        "x".repeat(af_dsl::cel::MAX_EXPR_BYTES - 8)
+    );
     assert!(at_limit.len() == af_dsl::cel::MAX_EXPR_BYTES);
     check(&at_limit, &e).unwrap_or_else(|err| panic!("恰在上限内应通过：{err:?}"));
 }
@@ -381,7 +393,11 @@ fn brackets_inside_string_literals_do_not_count_depth() {
 #[test]
 fn has_macro_rejected_as_e1052() {
     let e = env(&[("input", vmap(&[("q", vstr("x"))]))]);
-    for src in ["has(input.q)", "has (input.q)", "input.q == \"has(x)\" && has(input.q)"] {
+    for src in [
+        "has(input.q)",
+        "has (input.q)",
+        "input.q == \"has(x)\" && has(input.q)",
+    ] {
         let err = err_of(src, &e);
         assert_eq!(err.code.code(), "E1052", "{src} 应拦宏：{err:?}");
     }

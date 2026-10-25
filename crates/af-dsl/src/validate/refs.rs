@@ -614,9 +614,7 @@ fn check_policies(doc: &Document, ix: &Index<'_>, report: &mut Report) {
                 // 只认根图节点 id——此前 ix.nodes.contains_key 含全部体内
                 // 路径键（"c.b" 命中 c 的 loop 体内节点），失败重路由可指
                 // 进构造体内部。scope_id("root", ·) 为根图精确 id 匹配。
-                if !ROUTE_KEYWORDS.contains(&t.as_str())
-                    && ix.scope_id("root", t).is_none()
-                {
+                if !ROUTE_KEYWORDS.contains(&t.as_str()) && ix.scope_id("root", t).is_none() {
                     report.push(
                         ErrorCode::FailureRouteDangling,
                         "policies.failures",
