@@ -32,14 +32,19 @@ fn repo_registry() -> ComponentRegistry {
         .unwrap_or_else(|e| panic!("仓库正本 af/packages 组件清单应装载：{e}"))
 }
 
-/// 装载面：五份清单文件（根级 routes+扩容 + adaskit + autogen + sweng +
-/// swarmkit）共 57 条声明（P2-L11 首批 7 + P2-L12 扩容 50——闸门 §⑤ 清款，
-/// 逐名断言见 `registry_decl_test.rs`）；两次装载 digest 逐位一致（确定性）；
-/// 版本表按名字可达。
+/// 装载面：六份清单文件（根级 routes+扩容 + adaskit + autogen + sweng +
+/// swarmkit + reportkit）共 63 条声明（P2-L11 首批 7 + P2-L12 扩容 50 + G4
+/// reportkit 6——57→63 与包落地同 commit，裁决§二；闸门 §⑤ 清款，逐名断言
+/// 见 `registry_decl_test.rs`）；两次装载 digest 逐位一致（确定性）；版本表
+/// 按名字可达。
 #[test]
 fn repo_components_registry_loads_deterministically() {
     let reg = repo_registry();
-    assert_eq!(reg.component_count(), 57, "P2-L11 首批 7 + P2-L12 扩容 50");
+    assert_eq!(
+        reg.component_count(),
+        63,
+        "P2-L11 首批 7 + P2-L12 扩容 50 + G4 reportkit 6（57→63，裁决§二同 commit）"
+    );
 
     let again = repo_registry();
     assert_eq!(reg.digest(), again.digest(), "两次装载 digest 逐位一致");
@@ -57,15 +62,26 @@ fn repo_components_registry_loads_deterministically() {
     );
 }
 
-/// af-dsl 侧零感知：manifest.json 四包闭包不受 components.json 影响
-/// （`package_count()==4` 是 af-dsl registry_test 的既有断言，此处复核
-/// 组件清单文件不进图清单装载面——两套清单解耦的证据）。
+/// af-dsl 侧零感知：manifest.json 包闭包不受 components.json 影响
+/// （af-dsl registry_test 断言 package_count==5——G4 终态，裁决§二；此处
+/// 复核组件清单文件不进图清单装载面——两套清单解耦的证据）。
 #[test]
 fn components_files_do_not_touch_graph_manifest_surface() {
     let graph_reg = af_dsl::registry::Registry::load(repo_packages_root())
         .expect("af-dsl 图清单装载不受 components.json 影响");
-    assert_eq!(graph_reg.package_count(), 4);
-    assert_eq!(graph_reg.declared_graphs().len(), 14, "14 条图引用闭包原样");
+    assert_eq!(
+        graph_reg.package_count(),
+        5,
+        "+reportkit（G4 终态，裁决§二）"
+    );
+    // G4 裁决§二：14 草稿闭包 ∪ G4 任务图白名单（Phase 1 +sweng
+    // fix_swe_task、Phase 2 +reportkit paper_report；白名单常量正本在
+    // af-dsl registry_test——计数同步与包落地同 commit）。
+    assert_eq!(
+        graph_reg.declared_graphs().len(),
+        16,
+        "14 草稿闭包 + sweng fix_swe_task + reportkit paper_report"
+    );
 }
 
 // ============================================================

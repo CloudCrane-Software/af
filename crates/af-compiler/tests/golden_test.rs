@@ -551,8 +551,8 @@ fn g3p2_selector_injection_is_load_bearing() {
         .expect("仓库正本 af/packages 应装载（4 示例包）");
     assert_eq!(
         reg.package_count(),
-        4,
-        "af/packages 应恰有 adaskit/autogen/swarmkit/sweng 四包"
+        5,
+        "af/packages 应恰有 adaskit/autogen/swarmkit/sweng/reportkit 五包（G4 终态，裁决§二）"
     );
     for name in G3_SELECTOR_CORPUS {
         let src = std::fs::read_to_string(corpus_src_path(name))

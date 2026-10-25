@@ -1,8 +1,25 @@
 {
   "package": "sweng",
   "graphs": [
-    { "name": "sop_full", "version": "1.0", "source": "packages/sweng/graphs/sop_full@1.0.afb" },
-    { "name": "sop_no_qa", "version": "1.0", "source": "packages/sweng/graphs/sop_no_qa@1.0.afb" },
-    { "name": "sop_minimal", "version": "1.0", "source": "packages/sweng/graphs/sop_minimal@1.0.afb" }
+    {
+      "name": "sop_full",
+      "version": "1.0",
+      "source": "packages/sweng/graphs/sop_full@1.0.afb"
+    },
+    {
+      "name": "sop_no_qa",
+      "version": "1.0",
+      "source": "packages/sweng/graphs/sop_no_qa@1.0.afb"
+    },
+    {
+      "name": "sop_minimal",
+      "version": "1.0",
+      "source": "packages/sweng/graphs/sop_minimal@1.0.afb"
+    },
+    {
+      "name": "fix_swe_task",
+      "version": "1.0",
+      "source": "packages/sweng/graphs/fix_swe_task@1.0.afb"
+    }
   ]
 }

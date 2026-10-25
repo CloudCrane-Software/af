@@ -19,7 +19,10 @@ use af_workorder::{Priority, Sla, StableId};
 use serde_json::{json, Value};
 
 use crate::error::OrderError;
-use crate::exec::{parse_exec_flags, swev_unit_spec_for, RealExec, DEFAULT_HOST, EXEC_FLAGS};
+use crate::exec::{
+    parse_exec_flags, parse_unit_choice, report_unit_for, resolve_unit, swev_unit_spec_for,
+    RealExec, SelectedUnit, UnitChoice, DEFAULT_HOST, EXEC_FLAGS,
+};
 use crate::spec::parse_spec;
 use crate::state::{self, StateDir};
 use crate::voucher;
@@ -42,6 +45,8 @@ pub enum Command {
         target_dir: Option<PathBuf>,
         /// 真实执行参数（消债 B① 正式契约；None = 冒烟档）。
         exec: Option<RealExec>,
+        /// 单元路由（裁决7：swev|report|stub；Auto=缺省现行为）。
+        unit: UnitChoice,
         /// MES CH 目标（"auto" 或显式 URL；None = 只落文件正本）。
         mes_ch: Option<String>,
     },
@@ -60,6 +65,7 @@ pub fn run(args: &[String]) -> Result<String, OrderError> {
             workspace,
             target_dir,
             exec,
+            unit,
             mes_ch,
         } => run_submit(
             &spec,
@@ -67,6 +73,7 @@ pub fn run(args: &[String]) -> Result<String, OrderError> {
             workspace.as_deref(),
             target_dir.as_deref(),
             exec.as_ref(),
+            unit,
             mes_ch.as_deref(),
         ),
         Command::List { state } => run_list(&state),
@@ -85,6 +92,7 @@ pub fn parse_args(args: &[String]) -> Result<Command, OrderError> {
         "submit" => {
             let mut allowed: Vec<&str> = vec!["--spec", "--state", "--workspace", "--target-dir"];
             allowed.extend_from_slice(EXEC_FLAGS);
+            allowed.push("--unit"); // 裁决7 单元路由（缺省现行为）
             allowed.push("--mes-ch");
             let (flags, positional) = split_flags(rest, &allowed)?;
             forbid_positional(&positional, "submit")?;
@@ -97,6 +105,10 @@ pub fn parse_args(args: &[String]) -> Result<Command, OrderError> {
                 workspace: flag_value(&flags, "--workspace").map(PathBuf::from),
                 target_dir: flag_value(&flags, "--target-dir").map(PathBuf::from),
                 exec,
+                unit: match flag_value(&flags, "--unit") {
+                    Some(raw) => parse_unit_choice(raw)?,
+                    None => UnitChoice::Auto,
+                },
                 mes_ch: flag_value(&flags, "--mes-ch").map(str::to_string),
             })
         }
@@ -196,6 +208,7 @@ fn run_submit(
     workspace: Option<&Path>,
     target_dir: Option<&Path>,
     exec: Option<&RealExec>,
+    unit: UnitChoice,
     mes_ch: Option<&str>,
 ) -> Result<String, OrderError> {
     let text = fs::read_to_string(spec_path).map_err(|err| OrderError::SpecRead {
@@ -254,17 +267,34 @@ fn run_submit(
     // 执行单元：真实路径 = SwevExecuteUnit（SshBridge + HarnessRunner 真模型
     // 调用环 + 冻结判分指纹门）；冒烟档 = StubExecuteUnit（明示非生产路径）。
     // 预算硬顶由执行面注入（B①：--max-turns/--spend-cap-cents 覆写 fix2 缺省）。
-    let report = if let Some(exec) = exec {
-        let unit_spec = swev_unit_spec_for(exec);
-        let runner = HarnessRunner::new().map_err(|err| OrderError::State {
-            detail: format!("HarnessRunner 装载失败: {err}"),
-        })?;
-        let unit = SwevExecuteUnit::new(unit_spec, Arc::new(SshBridge), Arc::new(runner))
+    // 单元路由（裁决7：--unit swev|report|stub；缺省=现行为）。报告臂装载期
+    // 即过 planbind 三重门（指纹/模板/档案）+ 任务包材料核对（fail-loud）。
+    let report = match resolve_unit(unit, exec)? {
+        SelectedUnit::Swev => {
+            let exec = exec.expect("resolve 已保证 Swev 携三件套");
+            let unit_spec = swev_unit_spec_for(exec);
+            let runner = HarnessRunner::new().map_err(|err| OrderError::State {
+                detail: format!("HarnessRunner 装载失败: {err}"),
+            })?;
+            let unit = SwevExecuteUnit::new(unit_spec, Arc::new(SshBridge), Arc::new(runner))
+                .map_err(OrderError::from)?;
+            driver.drive(&unit)?
+        }
+        SelectedUnit::Report => {
+            let exec = exec.expect("resolve 已保证 Report 携三件套");
+            let unit_spec = report_unit_for(exec)?;
+            let unit = af_execline::ReportExecuteUnit::new(
+                unit_spec,
+                af_execline::suite::report_unit::draft_fn_unwired(),
+                Arc::new(af_execline::LocalFileFetcher),
+            )
             .map_err(OrderError::from)?;
-        driver.drive(&unit)?
-    } else {
-        let artifact_id = format!("fa-{}", spec.order_id);
-        driver.drive(&StubExecuteUnit::qualified_final(artifact_id.clone()))?
+            driver.drive(&unit)?
+        }
+        SelectedUnit::Stub => {
+            let artifact_id = format!("fa-{}", spec.order_id);
+            driver.drive(&StubExecuteUnit::qualified_final(artifact_id.clone()))?
+        }
     };
     // drive 收尾已含 MES 对账面（CH sink：读侧 event_id 对账 + 差量送批；
     // Parked = EX2003 fail-loud 透传）。
@@ -485,8 +515,9 @@ mod tests {
                 workspace: None,
                 target_dir: None,
                 // 消债 B①：Submit 增 exec 执行面（None = stub 冒烟档）与
-                // mes_ch 记账声明（正交）
+                // mes_ch 记账声明（正交）；裁决7：unit 单元路由缺省 Auto
                 exec: None,
+                unit: UnitChoice::Auto,
                 mes_ch: None,
             }
         );

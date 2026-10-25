@@ -39,6 +39,8 @@ pub mod judge;
 pub mod ledger;
 pub mod mes;
 pub mod mes_ch;
+pub mod pkg;
+pub mod planbind;
 pub mod profile;
 pub mod record;
 pub mod shadow;
@@ -60,6 +62,11 @@ pub use mes::{MesFileWriter, MesSink, MesSyncKind, MesSyncReport};
 pub use mes_ch::{
     resolve_mes_ch_endpoint, resolve_mes_ch_endpoint_with, MesChEndpoint, MesChSink, MesChTarget,
 };
+pub use planbind::{bind as planbind_bind, BindExpectations, PlanBind};
 pub use record::{ExecutionFacts, FileRecordSink, PendingRecordSink, RecordSink, TbExecutionFacts};
+pub use suite::report_unit::{
+    invoke_citation, invoke_rubric, DraftFn, DraftInput, FetchedDoc, LocalFileFetcher,
+    ReportExecuteUnit, ReportJudgeLocator, ReportTask, ReportUnitSpec, SourceFetcher,
+};
 pub use suite::swev_unit::{SwevExecuteUnit, SwevUnitSpec};
 pub use suite::tb_unit::{TbExecuteUnit, TbUnitSpec};

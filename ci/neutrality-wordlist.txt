@@ -1,0 +1,94 @@
+# =============================================================================
+# N2 核心领域词黑名单+白名单合册（正本）——《G4-任务中立性机器检查方案.md》§2
+# 挂门批：G4 施工批 Phase 3（中立性门员），2026-10-25；基线重测于本 commit 的 HEAD。
+#
+# 机械源（可脚本重演；方案 §2.1 修订后口径）：
+#   ① 21 份 testdata/src/*.yaml 文件名分词（剔除 team/json/yaml/stategraph/
+#      multi/agent/sample1-6——agent 是 af 核心词绝不入表，sample* 是机制语料名）
+#   ② af/packages 全部 components.json 与 manifest.json 的 pkg.<包>.<名> 拆段
+#      （剔除通用名段 inspect/search/calc/verify/env/submit/edit/create/view/
+#      open/locate/list/fetch/notes/mem/tool(s)/unit/…——通用英语词入表即噪声；
+#      route 段名 alt/cheap/judge/main/manager/plan/reflect 为 DSL 核心词，rule-1 剔除）
+#   ③ ADR-006 两包领域词（git/终端/测试/代码工件 + rubric/引用/web 检索）
+#   ④ DSL-语法提案-B.md:24 点名例子（核心七段不出现 git/终端/代码/视频）——与③交叉验证
+#
+# 人工收敛三规则（方案 §2.1；收敛结果=本表正本，变更须走白名单同款流程）：
+#   1. 核心语法词表成员一律不得入表：route/budget/store/task/gate/check/
+#      transform/plan/envelope/signal——terminal 与 code/report 同形异义：
+#      terminal 入表标 homonym（failures[].terminal 终态义，提案 B §1.2 policies
+#      表）；code/report 不入表（ErrorCode/BindReport 词边界安全，且校验报告/
+#      绑定报告是核心机制词）。
+#   2. 一词一行登记：词 <TAB> 来源 <TAB> 处置 <TAB> 理由。
+#   3. 表冻结：本文件 SHA-256 随门日志落 ci/out/step8-neutrality.log，diff 即审计面。
+#
+# 【移交登记·裁决19】「G4 后词表再生成+重收敛」（G4 收官后执行，非本批范围）：
+#   reportkit 6 名已入册（pkg.report.web_search/web_fetch/pdf_extract/
+#   citation_unit/rubric_unit/mem.notes + manifest 图 pkg.reportkit.paper_report），
+#   机械源②再生成将新增候选段：report(kit)/paper/web_fetch/pdf_extract/
+#   doc_render/notes/render/citation_unit/rubric_unit——须按 §2.4 白名单流程
+#   重收敛（report 规范词不入表、render/notes 类通用词按剔除规则裁定）；
+#   同时补登 reflectkit（机械源②既有段，方案 §2.1 收敛正本未收录——历史收敛
+#   决策沿袭，随再收敛一并复核）。漏登记新包名=流程违约（方案 §4.3）。
+#
+# 基线实测（2026-10-25 本 commit HEAD，ci/neutrality_scan.py）：
+#   核心 src（af-dsl+af-compiler，含 src/bin）全量命中 14 条，全部入白名单段——
+#   可执行标识符零领域词；code/repo/patch/diff/commit/rubric/citation/video/
+#   web_search 两包敏感词 0 命中。
+# =============================================================================
+# ==== 黑名单段（41 词：① 17 + ② 14 + ③④ 10；人工收敛正本） ====
+# 词	来源	处置	理由
+adas	①	黑名单	对齐稿域名（ADAS.yaml 分词）
+aflow	①	黑名单	对齐稿域名（AFlow.yaml）
+agensh	①②	黑名单	对齐稿域名/包段（Agensh-DeLM.yaml；pkg.agensh.*）
+delm	①	黑名单	对齐稿域名（Agensh-DeLM.yaml 第二段）
+autogen	①②	黑名单	对齐稿域名/包段（AutoGen-Team-JSON.yaml；pkg.autogen.*）
+camel	①	黑名单	对齐稿域名（CAMEL.yaml；camelkit 已单列）
+crewai	①	黑名单	对齐稿域名（CrewAI-YAML.yaml）
+gptswarm	①	黑名单	对齐稿域名（GPTSwarm.yaml）
+langgraph	①②	黑名单	对齐稿域名/组件段（LangGraph-StateGraph.yaml；pkg.langgraph.*）
+memgpt	①	黑名单	对齐稿域名（MemGPT.yaml）
+metagpt	①	黑名单	对齐稿域名（MetaGPT.yaml）
+debate	①	黑名单	对齐稿域名（Multi-Agent-Debate.yaml；multi/agent 剔除）
+react	①	黑名单	对齐稿域名（ReAct.yaml）
+reflexion	①	黑名单	对齐稿域名（Reflexion.yaml）
+swe	①	黑名单	对齐稿域名（SWE-agent.yaml；agent 剔除；sweagent 另列）
+voyager	①	黑名单	对齐稿域名（Voyager.yaml）
+swarm	①②	黑名单	对齐稿域名段（GPTSwarm 分词）/图段（pkg.autogen.team.swarm）
+sweng	②	黑名单	包段（pkg.sweng.*；软件工程包）
+adaskit	②	黑名单	包段（pkg.adaskit.*）
+swarmkit	②	黑名单	包段（pkg.swarmkit.*）
+aflowkit	②	黑名单	包段（pkg.aflowkit.*）
+camelkit	②	黑名单	包段（pkg.camelkit.*）
+crewkit	②	黑名单	包段（pkg.crewkit.*）
+debatekit	②	黑名单	包段（pkg.debatekit.*）
+reactkit	②	黑名单	包段（pkg.reactkit.*）
+sweagent	②	黑名单	包段（pkg.sweagent.*；G3 §⑥-1 暂驻根级——裁决12）
+openworld	②	黑名单	包段（pkg.openworld.*；Voyager 域）
+searchkit	②	黑名单	包段（pkg.searchkit.*）
+hopqa	②	黑名单	专有名段（pkg.reactkit.hopqa_api 截段）
+swebench	②	黑名单	专有名段（pkg.sweagent.swebench_eval 截段）
+aci	②	黑名单	专有名段（pkg.sweagent.aci.*；ADR-006 裁决1 点名）
+git	③④	黑名单·homonym	ADR-006 软件工程包领域词；同形 .git VCS 目录名（见白名单 registry.rs:228）
+terminal	③④	黑名单·homonym	ADR-006「终端」领域词；同形 DSL 语法词 failures[].terminal（提案 B §1.2 policies 表）
+video	③④	黑名单	ADR-006 点名领域词（视频）
+repo	③④	黑名单	软件工程包领域词（代码仓）
+patch	③④	黑名单	软件工程包领域词（代码工件）
+diff	③④	黑名单	软件工程包领域词（代码工件）
+commit	③④	黑名单	软件工程包领域词（git 语义）
+rubric	③④	黑名单	研究报告包领域词（判分 rubric）
+citation	③④	黑名单	研究报告包领域词（引用）
+web_search	③④	黑名单	研究报告包领域词（web 检索）
+# ==== 白名单段（§2.4 条目级豁免：文件:行+次数；禁文件级豁免——开放问题 6 裁定维持） ====
+# 词	处置	命中位置	次数	出处	理由	登记日期
+terminal	白名单	crates/af-dsl/src/model.rs:637	1	规范词	failures[].terminal 终态义字段（提案 B §1.2），非「终端机」域	2026-10-25
+adas	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制注释	registry.rs 模块头记述四稿 E2001 失败分类账裁决背景	2026-10-25
+autogen	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制注释	同上（AutoGen-Team-JSON）	2026-10-25
+gptswarm	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制注释	同上（GPTSwarm）	2026-10-25
+metagpt	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制注释	同上（MetaGPT）	2026-10-25
+adaskit	白名单	crates/af-dsl/src/registry.rs:92	2	组件名·挂载机制注释	pkg.adaskit.* 组合引用示例（注释文本+代码示例串各 1 处）	2026-10-25
+git	白名单	crates/af-dsl/src/registry.rs:228	1	VCS 目录名·homonym	.git 隐藏目录跳过（目录名非 git 工具域）	2026-10-25
+sweng	白名单	crates/af-compiler/src/components.rs:59	1	组件名·挂载机制注释	pkg.sweng.locate 引用形示例（装载器 doc 注释）	2026-10-25
+langgraph	白名单	crates/af-compiler/src/ir.rs:121	1	出处注记	checkpoint 语义出处（提案 B 互译表引注）	2026-10-25
+langgraph	白名单	crates/af-compiler/src/ir.rs:151	1	出处注记	interrupt(response_schema) 对应物语义出处	2026-10-25
+terminal	白名单	crates/af-compiler/src/ir.rs:578	1	规范词	failures[].terminal 终态义投影字段	2026-10-25
+terminal	白名单	crates/af-compiler/src/lower.rs:523	2	规范词	lowering 投影行 terminal: f.terminal 行内 2 处（字段名+访问表达式）	2026-10-25

@@ -23,6 +23,7 @@ description = "统一执行面 PoC：订单生命周期驱动（af-engine 门控
 #   af-meter：BudgetLedger（Launch.budget 的 Cents 账本，main.rs:789-793）；
 #   af-stop：StopPolicy（Launch.stop_policy，main.rs:796）。
 [dependencies]
+af-compiler = { path = "../af-compiler" }
 af-credential = { path = "../af-credential" }
 af-harness = { path = "../af-harness" }
 af-meter = { path = "../af-meter" }
@@ -35,6 +36,8 @@ sha2 = "=0.10.9"
 thiserror = { workspace = true }
 
 [dev-dependencies]
+# G4 报告包：pkg_reportkit 夹具走真编译器全链产计划（load→validate→plan_json）。
+af-dsl = { path = "../af-dsl" }
 # 集成测试构造 WorkOrder 快照与断言门控错误。版本随 workspace，不另引。
 af-mes = { path = "../af-mes" }
 af-workorder = { path = "../af-workorder" }

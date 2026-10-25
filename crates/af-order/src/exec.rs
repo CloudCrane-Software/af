@@ -21,7 +21,7 @@
 
 use std::path::PathBuf;
 
-use af_execline::{JudgeLocator, SwevUnitSpec};
+use af_execline::{JudgeLocator, ReportUnitSpec, SwevUnitSpec};
 
 use crate::error::OrderError;
 
@@ -130,4 +130,101 @@ pub fn swev_unit_spec_for(exec: &RealExec) -> SwevUnitSpec {
     spec.max_turns = exec.max_turns;
     spec.spend_cap_cents = exec.spend_cap_cents;
     spec
+}
+
+// ============================================================
+// --unit 单元路由（裁决7：--unit swev|report|stub，缺省保持现行为）
+// ============================================================
+
+/// 单元选择（CLI `--unit` 值；Auto = 编译期缺省——现行为）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum UnitChoice {
+    /// 缺省：三件套在 → Swev；缺 → stub 冒烟（既有行为，零变化）。
+    Auto,
+    Swev,
+    Report,
+    Stub,
+}
+
+/// 路由解析产物（run_submit 分派面）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SelectedUnit {
+    Stub,
+    Swev,
+    Report,
+}
+
+/// `--unit` 值解析（swev|report|stub；其余 OR1001）。
+pub fn parse_unit_choice(raw: &str) -> Result<UnitChoice, OrderError> {
+    match raw {
+        "swev" => Ok(UnitChoice::Swev),
+        "report" => Ok(UnitChoice::Report),
+        "stub" => Ok(UnitChoice::Stub),
+        other => Err(OrderError::Usage {
+            detail: format!(
+                "OR1001: 未知 --unit {other:?}（可选 swev | report | stub；不给 = 现行为：三件套在=swev、缺=stub 冒烟）"
+            ),
+        }),
+    }
+}
+
+/// 路由矩阵（裁决7）：Auto=现行为；swev/report 需三件套；stub 与三件套互斥。
+pub fn resolve_unit(
+    choice: UnitChoice,
+    exec: Option<&RealExec>,
+) -> Result<SelectedUnit, OrderError> {
+    match (choice, exec) {
+        (UnitChoice::Auto, Some(_)) => Ok(SelectedUnit::Swev),
+        (UnitChoice::Auto, None) => Ok(SelectedUnit::Stub),
+        (UnitChoice::Swev, Some(_)) | (UnitChoice::Report, Some(_)) => Ok(match choice {
+            UnitChoice::Swev => SelectedUnit::Swev,
+            _ => SelectedUnit::Report,
+        }),
+        (UnitChoice::Swev, None) | (UnitChoice::Report, None) => Err(OrderError::Usage {
+            detail: "OR1001: --unit swev/report 需要 --task/--profile/--data-root 三件套".into(),
+        }),
+        (UnitChoice::Stub, Some(_)) => Err(OrderError::Usage {
+            detail: "OR1001: --unit stub 与执行三件套互斥（冒烟档不带执行参数）".into(),
+        }),
+        (UnitChoice::Stub, None) => Ok(SelectedUnit::Stub),
+    }
+}
+
+/// report 单元的 registry_root 缺省（机器本地常量——judge.rs production 同款
+/// R2 口径；任务包 task.json 的 registry_root 声明优先，F-第五单显式给出）。
+pub const DEFAULT_REGISTRY_ROOT: &str = "/home/pan-ding/workspace/af-wt-g4/af/packages";
+
+/// report 单元材料面（v1 约定：任务包目录 `<data_root>/<task>/` 携
+/// task.json + plan.json——submit 级 `--plan` 档形态=开放问题 8，不预判；
+/// registry_root 取 task.json 声明，缺省机器本地常量）。
+pub fn report_unit_for(exec: &RealExec) -> Result<ReportUnitSpec, OrderError> {
+    let task_dir = exec.data_root.join(&exec.task);
+    let task_json = task_dir.join("task.json");
+    let raw = std::fs::read_to_string(&task_json).map_err(|err| OrderError::Usage {
+        detail: format!(
+            "OR1001: report 任务包缺 task.json（约定布局 {}/task.json）: {err}",
+            task_dir.display()
+        ),
+    })?;
+    let task: serde_json::Value = serde_json::from_str(&raw).map_err(|err| OrderError::Usage {
+        detail: format!("OR1001: task.json 不是合法 JSON: {err}"),
+    })?;
+    if !task_dir.join("plan.json").is_file() {
+        return Err(OrderError::Usage {
+            detail: format!(
+                "OR1001: report 任务包缺 plan.json（v1 约定：计划随任务包；submit 级 --plan 档形态=开放问题 8 待裁决）: {}",
+                task_dir.display()
+            ),
+        });
+    }
+    let registry_root = task
+        .get("registry_root")
+        .and_then(|v| v.as_str())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(DEFAULT_REGISTRY_ROOT));
+    Ok(ReportUnitSpec::v1(
+        exec.profile.clone(),
+        af_execline::ReportJudgeLocator::production(),
+        registry_root,
+    ))
 }

@@ -90,6 +90,8 @@ const DECLS_50: &[(&str, &str, ComponentClass)] = &[
 #[test]
 fn decls_table_matches_gate_coverage_counts() {
     let count = |want: ComponentClass| DECLS_50.iter().filter(|(_, _, c)| *c == want).count();
+    // 50 名表是 P2-L12 历史闭包（类计数不随 G4 增量变——G4 +6 件的注册表
+    // 总量在 repo_registry_total_is_57_after_p2l12_expansion 断言 63）。
     assert_eq!(count(ComponentClass::ModelRoute), 5);
     assert_eq!(count(ComponentClass::Tool), 28);
     assert_eq!(count(ComponentClass::Unit), 13);
@@ -132,14 +134,16 @@ fn all_50_p2l12_declarations_resolve_with_expected_version_and_class() {
     }
 }
 
-/// 注册表总量：P2-L11 首批 7 + P2-L12 扩容 50 = 57 条声明。
+/// 注册表总量：P2-L11 首批 7 + P2-L12 扩容 50 + G4 reportkit 6 = 63 条声明。
+/// （测试名保留 P2-L12 历史口径——中立性预期红名单按名引用，不随计数演进
+/// 改名；计数同步与包落地同 commit——裁决§二。）
 #[test]
 fn repo_registry_total_is_57_after_p2l12_expansion() {
     let reg = repo_registry();
     assert_eq!(
         reg.component_count(),
-        57,
-        "7（P2-L11 首批）+ 50（P2-L12 扩容）"
+        63,
+        "7（P2-L11 首批）+ 50（P2-L12 扩容）+ 6（G4 reportkit）"
     );
 }
 

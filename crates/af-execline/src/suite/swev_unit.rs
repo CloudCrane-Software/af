@@ -53,10 +53,12 @@ pub struct SwevUnitSpec {
     pub top_p_milli: u32,
     /// max_tokens 32000（审计 D3：不吃协议默认）。
     pub max_tokens: u32,
-    /// system 一行角色（main.rs:543）。
-    pub system_prompt: &'static str,
-    /// instance 纪律模板（main.rs:548-566）。
-    pub instance_protocol: &'static str,
+    /// system 一行角色（main.rs:543；G4 §3.2-3 装载化：从 &'static str 改
+    /// String 持有——包资产 `pkg.sweng.swev_system` 经 pkg::prompts 装载后
+    /// 整体替换，fix2 缺省仍字节等于冻结常量）。
+    pub system_prompt: String,
+    /// instance 纪律模板（main.rs:548-566；装载化同上）。
+    pub instance_protocol: String,
     /// Policy：1 turn = 1 模型调用，250 步（main.rs:748）。
     pub max_turns: u32,
     /// 完成信号词（main.rs:750）。
@@ -85,8 +87,8 @@ impl SwevUnitSpec {
             temperature_milli: 0,
             top_p_milli: 1_000,
             max_tokens: 32_000,
-            system_prompt: crate::suite::swev::SWEV_SYSTEM_PROMPT,
-            instance_protocol: crate::suite::swev::SWEV_INSTANCE_PROTOCOL,
+            system_prompt: crate::suite::swev::SWEV_SYSTEM_PROMPT.into(),
+            instance_protocol: crate::suite::swev::SWEV_INSTANCE_PROTOCOL.into(),
             max_turns: 250,
             completion_signal: "TASK_COMPLETE",
             tool_free_turn_limit: 3,
@@ -342,7 +344,7 @@ impl SwevExecuteUnit {
         Ok(AgentSpec {
             endpoint,
             context_template: ContextTemplate {
-                system: self.spec.system_prompt.into(),
+                system: self.spec.system_prompt.clone(),
                 slots: Vec::new(),
             },
             toolset: vec![tool_decl],

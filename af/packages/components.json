@@ -222,49 +222,49 @@
       "name": "pkg.sweagent.aci.search",
       "version": "1",
       "effect_class": "pure",
-      "impl_ref": "packages/sweagent@1.0.0/tools/aci_search.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.search@af-execline"
     },
     {
       "class": "tool",
       "name": "pkg.sweagent.aci.open",
       "version": "1",
       "effect_class": "pure",
-      "impl_ref": "packages/sweagent@1.0.0/tools/aci_open.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.open@af-execline"
     },
     {
       "class": "tool",
       "name": "pkg.sweagent.aci.edit",
       "version": "1",
       "effect_class": "persist",
-      "impl_ref": "packages/sweagent@1.0.0/tools/aci_edit.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.edit@af-execline"
     },
     {
       "class": "tool",
       "name": "pkg.sweagent.aci.create",
       "version": "1",
       "effect_class": "persist",
-      "impl_ref": "packages/sweagent@1.0.0/tools/aci_create.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.create@af-execline"
     },
     {
       "class": "tool",
       "name": "pkg.sweagent.aci.run_test",
       "version": "1",
       "effect_class": "external_once",
-      "impl_ref": "packages/sweagent@1.0.0/tools/aci_run_test.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.run_test@af-execline"
     },
     {
       "class": "tool",
       "name": "pkg.sweagent.aci.submit",
       "version": "1",
       "effect_class": "persist",
-      "impl_ref": "packages/sweagent@1.0.0/tools/aci_submit.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.submit@af-execline"
     },
     {
       "class": "tool",
       "name": "pkg.sweagent.env",
       "version": "1",
       "effect_class": "external_once",
-      "impl_ref": "packages/sweagent@1.0.0/tools/env.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
     },
     {
       "class": "tool",
@@ -319,19 +319,19 @@
       "class": "unit",
       "name": "pkg.sweagent.aci_schema",
       "version": "1",
-      "impl_ref": "packages/sweagent@1.0.0/units/aci_schema.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.aci_schema@af-execline"
     },
     {
       "class": "unit",
       "name": "pkg.sweagent.human_gate",
       "version": "1",
-      "impl_ref": "packages/sweagent@1.0.0/units/human_gate.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.human_gate@af-execline"
     },
     {
       "class": "unit",
       "name": "pkg.sweagent.swebench_eval",
       "version": "1",
-      "impl_ref": "packages/sweagent@1.0.0/units/swebench_eval.py"
+      "impl_ref": "executor:builtin/pkg.sweagent.swebench_eval@af-execline"
     },
     {
       "class": "memory",
