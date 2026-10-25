@@ -605,12 +605,18 @@ fn check_policies(doc: &Document, ix: &Index<'_>, report: &mut Report) {
     for f in &doc.policies.failures {
         for (kind, target) in [("route", &f.route), ("fallback_route", &f.fallback_route)] {
             if let Some(t) = target {
-                if !ROUTE_KEYWORDS.contains(&t.as_str()) && !ix.nodes.contains_key(t) {
+                // 根图限定（农田 B-4/C_AL08）：路由目标从根图 policies 发出，
+                // 只认根图节点 id——此前 ix.nodes.contains_key 含全部体内
+                // 路径键（"c.b" 命中 c 的 loop 体内节点），失败重路由可指
+                // 进构造体内部。scope_id("root", ·) 为根图精确 id 匹配。
+                if !ROUTE_KEYWORDS.contains(&t.as_str())
+                    && ix.scope_id("root", t).is_none()
+                {
                     report.push(
                         ErrorCode::FailureRouteDangling,
                         "policies.failures",
                         format!(
-                            "失败类 {:?} 的 {kind} 目标 {t:?} 既非关键词 {ROUTE_KEYWORDS:?} 也非已声明节点",
+                            "失败类 {:?} 的 {kind} 目标 {t:?} 既非关键词 {ROUTE_KEYWORDS:?} 也非根图节点",
                             f.class
                         ),
                     );

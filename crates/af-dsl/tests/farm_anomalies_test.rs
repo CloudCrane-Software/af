@@ -132,3 +132,19 @@ fn ce04_has_macro_rejected_as_e1052() {
         "has() 宏应按非保守子集拒（E1052）：\n{report}"
     );
 }
+
+// ---------- P1-SCOPE-LEAK：failures.route 根图限定（裁决 §三-⑤ route 半项） ----------
+
+/// C_AL08（failures[].route: "c.b"——c 的 loop 体内节点路径）：E2204 判定
+/// 用 ix.nodes.contains_key（含全部体内路径键），失败重路由可指向体内深层
+/// 节点（ANOMALIES.md B-4）。路由目标从根图 policies 发出，须止步于根图
+/// 节点（关键词 same_node/next_iteration 或根图节点 id）。
+#[test]
+fn al08_failures_route_into_body_rejected_as_e2204() {
+    let report = farm("C_AL08_failures_route_to_body_node.yaml");
+    assert_eq!(
+        codes(&report),
+        vec!["E2204"],
+        "failures.route 指向体内节点：按根图限定拒（E2204）：\n{report}"
+    );
+}
