@@ -87,3 +87,31 @@ fn cel_threshold_passers_still_pass() {
     }
 }
 
+
+// ---------- P1-REF-SHORTCIRCUIT：output.ref 未登记类型名不得静默（裁决 §三-③） ----------
+
+/// M001（最小化探针：output.ref = "Ghost"，types 表无此名）：refs.rs 对
+/// `!type_resolves(output.ref)` 静默 return——全链路无一处核对 output.ref
+/// 类型名（E2205 只对 meta.input/stores/consumes/emits 上报），零违例过审
+/// （ANOMALIES.md B-2）。应报既有码 E2205 并维持 E2202 抑制（比较对象不可信
+/// 不重复定罪）。
+#[test]
+fn m001_output_ref_unregistered_reports_e2205() {
+    let report = farm("M001_output_ref_unregistered_min.yaml");
+    assert_eq!(
+        codes(&report),
+        vec!["E2205"],
+        "output.ref 未登记类型名：报 E2205，E2202 因比较对象不可信抑制：\n{report}"
+    );
+}
+
+/// D_209（爆破命中样本，output.ref = "map" 未登记）：同根因的原始样本，
+/// E2205 必须在场（其余违例按文档实际一次收齐）。
+#[test]
+fn d209_blast_reports_e2205() {
+    let report = farm("D_209_blast.yaml");
+    assert!(
+        codes(&report).contains(&"E2205"),
+        "D_209 output.ref=\"map\" 未登记，E2205 必须在场：\n{report}"
+    );
+}

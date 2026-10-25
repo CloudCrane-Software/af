@@ -53,9 +53,19 @@ fn check_meta(doc: &Document, ix: &Index<'_>, report: &mut Report) {
         );
     }
     // E2202：from 节点必须发射 output.ref 所指类型。
-    // 抑制：ref 或 from 的任一 emit 类型未登记（E2205 域）或 from_body 不可解析
+    // 抑制：from 的任一 emit 类型未登记（E2205 域）或 from_body 不可解析
     // （E2106 域）时不判——无法证明「不发射」。
+    // output.ref 自身未登记：报 E2205（农田 B-2/M001——此前此处静默 return，
+    // 全链路无一处核对 output.ref 类型名，零违例过审）后同样抑制 E2202
+    //（比较对象不可信，不重复定罪）。
     if !type_resolves(ix, &doc.meta.output.r#ref) {
+        report_unresolved(
+            ix,
+            &doc.meta.output.r#ref,
+            report,
+            "meta",
+            "meta.output.ref",
+        );
         return;
     }
     let Some(emits) = &from.node.emits else {
