@@ -83,8 +83,17 @@ $FARM detail ~/.cache/afv1-farm/anomalies/<样本>.yaml # 逐条违例/panic 文
 ### B-4 语义目标解析到构造体内（码位缺口，复核存档）
 - `C_AL08_failures_route_to_body_node.yaml` — PASS：`policies.failures[].route: "c.b"`
   命中 `ix.nodes` 体内路径键（`refs.rs:597` contains_key），失败重路由可指向体内深层节点。
+  **[修复批处置 2026-10-25]** 已修：route/fallback_route 根图限定（`scope_id("root",·)`
+  精确 id），体内路径拒 E2204（对齐稿 route 目标全为关键词/根图 id，零回归）。
 - `C_AL09_budget_scope_into_body.yaml` — PASS：预算 scope `node:c.b` 解析进体内
   （`refs.rs:569` resolve_root_path），作用域未限定根图。
+  **[编排者裁决 2026-10-25：FALSE-POSITIVE-SEMANTIC（语义确认，非缺陷）]** 预算 scope
+  允许「构造节点.体内节点」点号路径穿体——G3 放行裁决锁定的过稿语义（11/15 对齐稿
+  14 处在用：ADAS `node:mas_loop.meta_agent`、AFlow `map:search.exec_map` 等），体内节点
+  按迭代计费是预算面核心用途；C_AL09 与过稿用法结构同形，农场误报。不改码；语义钉死
+  测试在档（farm_anomalies_test::al09_budget_scope_into_body_is_confirmed_semantics，
+  含悬空穿体路径照报 E2207 反例）；提案-B §1.2 budgets.scope `<id>` 记法歧义消解记入
+  规范 v0.2 议程。
 
 ### B-5 阈值类/口径类（复核存档，均按现有代码口径「合理」，列给人工裁决）
 - `C_RT06_exit_named_node.yaml` PASS — 节点真的叫 `exit` 时，route 归一化把出边目标

@@ -288,3 +288,66 @@ fn documented_boundaries_stay_pass() {
         );
     }
 }
+
+// ---------- C_AL09 语义钉死（编排者裁决 2026-10-25：农田误报，FALSE-POSITIVE-SEMANTIC） ----------
+
+/// 裁决要点：预算 scope 允许点号路径穿体（「构造节点.体内节点」）——
+/// G3 放行裁决锁定的过稿语义（11/15 对齐稿 14 处在用：ADAS
+/// node:mas_loop.meta_agent、AFlow map:search.exec_map 等），体内节点按迭代
+/// 计费是预算面核心用途；提案-B §1.2 budgets.scope `<id>` 记法的歧义消解
+/// 记入规范 v0.2 议程。C_AL09（node:c.b）与过稿用法结构同形——农场误报，
+/// 改判文档化边界，语义钉死防回归。
+#[test]
+fn al09_budget_scope_into_body_is_confirmed_semantics() {
+    // C_AL09 原样本：点号穿体预算 scope 必须过审（既定语义）。
+    let report = farm("C_AL09_budget_scope_into_body.yaml");
+    assert!(
+        report.is_ok(),
+        "预算 scope 点号穿体 = G3 锁定语义（裁决 2026-10-25 a），C_AL09 为误报：\n{report}"
+    );
+
+    // 相邻反例：穿体路径悬空（体内无该节点）仍须 E2207——确认语义 ≠ 不查。
+    let src = "\
+version: 1
+meta:
+  name: pin
+  graph_version: '1'
+  entry: n1
+  input: T_in
+  output: { ref: T_out, from: n1 }
+types:
+- name: T_in
+  schema: { type: object, properties: { q: { type: string } } }
+- name: T_out
+  schema: { type: object, properties: { r: { type: string } } }
+nodes:
+- id: n1
+  kind: task
+  uses: { model: m@1 }
+  emits: { out: T_out }
+  context:
+    sections: [{ from: input, fields: [q], quota_tokens: 10 }]
+- id: c
+  kind: task
+  loop:
+    body:
+      nodes:
+      - id: b
+        kind: check
+        uses: { unit: g@1 }
+      edges: []
+    max_iterations: 1
+    safety_points: [{ node: b, kind: check }]
+edges: []
+policies:
+  budgets:
+  - { id: bad, dimension: turns, scope: node:c.ghost, cap: 3 }
+";
+    let doc = af_dsl::load_str(src).unwrap();
+    let report = validate(&doc);
+    assert_eq!(
+        codes(&report),
+        vec!["E2207"],
+        "穿体路径悬空照报 E2207（确认的是解析语义，不是免检）：\n{report}"
+    );
+}
