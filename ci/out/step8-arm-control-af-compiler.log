@@ -21,19 +21,19 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 17 tests
 test registry_rejects_name_containing_at_sign ... ok
+test registry_rejects_endpoint_discipline_violations ... ok
 test registry_rejects_tool_without_effect_class ... ok
 test registry_rejects_model_route_without_endpoint ... ok
-test registry_rejects_duplicate_refs_across_files ... ok
-test registry_rejects_endpoint_discipline_violations ... ok
 test components_files_do_not_touch_graph_manifest_surface ... ok
-test e9001_unregistered_reference_is_rejected ... ok
-test e9001_malformed_reference_string_is_rejected ... ok
+test registry_rejects_duplicate_refs_across_files ... ok
 test empty_registry_binds_doc_without_uses_refs ... ok
-test e9003_class_mismatch_is_rejected ... ok
-test escape_injection_point_passes_escape_spec_through ... ok
 test violations_are_collected_not_first_stopped ... ok
+test e9001_malformed_reference_string_is_rejected ... ok
+test e9001_unregistered_reference_is_rejected ... ok
 test e9002_version_mismatch_is_rejected ... ok
+test escape_injection_point_passes_escape_spec_through ... ok
 test e9002_unversioned_ref_on_multi_version_name_is_rejected ... ok
+test e9003_class_mismatch_is_rejected ... ok
 test repo_components_registry_loads_deterministically ... ok
 test sample2_binds_all_uses_refs_with_first_class_fills ... ok
 test sample3_binds_nested_body_node_to_shared_route ... ok
@@ -72,8 +72,8 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 8 tests
 test envelope_version_is_one ... ok
 test envelope_rejects_unknown_top_key ... ok
-test envelope_rejects_missing_version ... ok
 test envelope_rejects_non_integer_version ... ok
+test envelope_rejects_missing_version ... ok
 test first_class_placeholder_values_are_empty_defaults ... ok
 test envelope_rejects_version_not_one ... ok
 test envelope_rejects_unknown_body_field_and_nested_field ... ok
@@ -100,14 +100,14 @@ test plan_envelope_is_rejecting ... ok
 test plan_json_pretty_entry_matches_stepwise ... ok
 test gate_samples_ir_and_plan_deterministic_bitwise ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
 
      Running tests/registry_decl_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/registry_decl_test-d25c44f9620a8b9d)
 
 running 5 tests
 test decls_table_matches_gate_coverage_counts ... ok
-test repo_registry_total_is_57_after_p2l12_expansion ... ok
 test unversioned_referenced_names_declare_exactly_one_version ... ok
+test repo_registry_total_is_57_after_p2l12_expansion ... ok
 test all_50_p2l12_declarations_resolve_with_expected_version_and_class ... ok
 test class_mismatch_against_repo_registry_is_rejected ... ok
 
