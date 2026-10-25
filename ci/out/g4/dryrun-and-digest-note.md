@@ -18,3 +18,14 @@ plan bytes     = 8748
 plan_id 与其余字段逐位相同（digest 不入 plan_id 派生——G3 §① 先例复现）
 快照文件物理更新与 N3 登记表联动：G4 终态（Phase 2 后）一次到位（RESULT §4/§7）
 ```
+
+## G4 收尾批档存刷新（2026-10-25，@a837c89 后；复核意见 1 处置）
+
+上方 Phase 1 记录的 `fix_swe_task.plan.json` 档存件为 @b77705f 时点产物
+（registry_digest `d507bf61…`，57 条注册面）；Phase 2 注册面进 63 条终态
+（`63c3478e…`）后该档存件未随刷新——今日 cmp 档存 vs 新鲜干跑恰差
+`compiled_from.registry_digest` 一字段（复核员实测）。收尾批已将档存件
+重刷为当前注册面新鲜干跑产物：plan_id `plan.sweng_fix_swe@1.0+535e358b13cb`
+不变、digest=`63c3478e…`、双跑 cmp 逐字节一致——档存与新鲜干跑自此
+逐字节同相。Phase 1 历史数值保留于本 note 上方原样（时点记录）。
+

@@ -35,6 +35,13 @@ prompts/template_ref 机制（裁决10）；组件引用全部在 63 条既有�
 - 绑定复核（计划 node_exec 亲读）：coder=route.main+sweng 三工具（persist/pure×2）、
   planner=route.plan、reviewer=route.judge、tester unit=`pkg.sweng.test_unit@1`、
   repair tools=`pkg.sweagent.env@1`（external_once）。
+- **多 agent 差异化机理如实登记（复核观察 3a）**：三 route（plan/main/judge）在
+  components.json 声明中绑定**同一底层模型 GLM-5.3、同一端点、同参数**
+  （reasoning off/非流式——根级 route.* 七条同端点面，P2-L12 扩容登记）；
+  三 agent 的差异化靠 system 模板（planner/engineer/reviewer_system）/
+  工具面（sweng 三件 vs 零工具）/预算（node 级 turns）实现，**非异构模型**。
+  『多 agent』判定的成立面=角色分化（独立节点+独立提示词+独立工具面+typed
+  工件交接），模型异构化属档位面（route 声明扩展），后者非本批口径。
 - 新增测试 `sop_graphs_materialized_with_resolvable_template_refs`
   （pkg_sweng_package.rs，与资产同 commit——TDD 语义）：三图在盘 + template_ref
   全解析；pkg_sweng_package 6/6 绿。
@@ -56,6 +63,13 @@ prompts/template_ref 机制（裁决10）；组件引用全部在 63 条既有�
 （`components.rs:209-285`），digest=全量声明规范序列化 SHA-256——图源 .afb、
 prompts/*.md、MANIFEST.sha256 均不在装载面。**无 15 稿快照联动更新需求
 （无双态）**。
+
+**档存件对齐（复核观察 1 处置，2026-10-25 复核后补）**：`ci/out/g4/
+fix_swe_task.plan.json` 为 Phase 1 时点档存（digest `d507bf61…`，57 条面），
+落后 63 条终态——已重刷为当前注册面新鲜干跑产物（plan_id 不变、digest=
+`63c3478e…`、双跑 cmp 逐字节一致）；刷新缘由与 Phase 1 历史数值登记于
+`ci/out/g4/dryrun-and-digest-note.md`。`paper_report.plan.json` 与 sop 三件
+档存复核 cmp 已逐字节同相（无需动）。
 
 ## 3. 15 稿快照终态核（裁决8；逐位核对登记）
 
@@ -120,10 +134,25 @@ Voyager      plan.voyager_curriculum@1.0+c3aa4b53250d
 - `bash ci/run.sh`：**八门全绿 exit 0**（step1 fmt 596ms / step2 clippy 458ms /
   step3 test 9904ms / step4 cue 59ms / step5 scrub 237ms / step6 cosign 135ms /
   step7 deny 641ms / step8 neutrality 2925ms；ci/out/SUMMARY.txt）。
+  计时为单跑采样，跑次间正常波动（独立复核 2026-10-25 12:17 亲跑八门亦
+  全绿 exit 0，计时 579/294/9989/36/234/70/547/2882ms——两组数值均登记，
+  结论以全绿为准，不以下沉到毫秒的门时为判据）。
 - commit + push origin phase2（本批单 commit，含全部资产/登记/门日志）。
+
+## 6.1 独立复核记录（2026-10-25 12:17，复核员）
+
+八门亲跑全绿 exit 0；step3 计数 1198/0 独立复算一致；digest 抽 3 稿
+（ADAS/MetaGPT/SWE-agent）整文件 cmp 快照 3/3 逐字节全等；五图干跑
+exit 0×5、四件档存 cmp 逐字节一致；63 条声明清点（根 44+adaskit 2+
+autogen 5+reportkit 6+swarmkit 1+sweng 5）、MANIFEST 6/6 闭集、词表 46 词条
++SHA `70970efc…` 门内一致、N3 21 行含收尾再核头注——全部与本文登记相符。
+三条如实观察（档存 fix_swe_task digest 落后/门时波动/三 route 同模型）
+已逐项处置于 §2（档存重刷）、§6（计时波动登记）、§1（差异化机理登记）。
 
 ## 7. 范围外（如实）
 
 - sop 三图的真实模型执行端到端 = 铺单批 F-第四单（多 agent）——本批止于
-  可执行计划 + 干跑验证（裁决 §五-17 口径）。
+  可执行计划 + 干跑验证（裁决 §五-17 口径）；**『多 agent 形态成立』的判定
+  面止于声明+编译计划层**（角色分化见 §1；真实模型下的运行时行为不在本批
+  证据面——复核观察 3b 如实保留）。
 - proofs/ 目录为仓内既有未跟踪目录（非本批产物），未纳入本批 commit。
