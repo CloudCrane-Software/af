@@ -88,8 +88,10 @@ $FARM detail ~/.cache/afv1-farm/anomalies/<样本>.yaml # 逐条违例/panic 文
 - `C_AL09_budget_scope_into_body.yaml` — PASS：预算 scope `node:c.b` 解析进体内
   （`refs.rs:569` resolve_root_path），作用域未限定根图。
   **[编排者裁决 2026-10-25：FALSE-POSITIVE-SEMANTIC（语义确认，非缺陷）]** 预算 scope
-  允许「构造节点.体内节点」点号路径穿体——G3 放行裁决锁定的过稿语义（11/15 对齐稿
-  14 处在用：ADAS `node:mas_loop.meta_agent`、AFlow `map:search.exec_map` 等），体内节点
+  允许「构造节点.体内节点」点号路径穿体——G3 放行裁决锁定的过稿语义（9/15 对齐稿
+  12 处在用，剔除注释假命中后的逐行解析口径：ADAS 1、AFlow 1、Agensh-DeLM 2、CAMEL 2、
+  CrewAI-YAML 1、GPTSwarm 2、MemGPT 1、Reflexion 1、SWE-agent 1；例证 ADAS
+  `node:mas_loop.meta_agent`、AFlow `map:search.exec_map` 等），体内节点
   按迭代计费是预算面核心用途；C_AL09 与过稿用法结构同形，农场误报。不改码；语义钉死
   测试在档（farm_anomalies_test::al09_budget_scope_into_body_is_confirmed_semantics，
   含悬空穿体路径照报 E2207 反例）；提案-B §1.2 budgets.scope `<id>` 记法歧义消解记入

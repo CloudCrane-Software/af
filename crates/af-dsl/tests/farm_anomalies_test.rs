@@ -292,7 +292,9 @@ fn documented_boundaries_stay_pass() {
 // ---------- C_AL09 语义钉死（编排者裁决 2026-10-25：农田误报，FALSE-POSITIVE-SEMANTIC） ----------
 
 /// 裁决要点：预算 scope 允许点号路径穿体（「构造节点.体内节点」）——
-/// G3 放行裁决锁定的过稿语义（11/15 对齐稿 14 处在用：ADAS
+/// G3 放行裁决锁定的过稿语义（9/15 对齐稿 12 处在用，剔除注释假命中后的逐行解析
+/// 口径：ADAS 1、AFlow 1、Agensh-DeLM 2、CAMEL 2、CrewAI-YAML 1、GPTSwarm 2、
+/// MemGPT 1、Reflexion 1、SWE-agent 1；例证 ADAS
 /// node:mas_loop.meta_agent、AFlow map:search.exec_map 等），体内节点按迭代
 /// 计费是预算面核心用途；提案-B §1.2 budgets.scope `<id>` 记法的歧义消解
 /// 记入规范 v0.2 议程。C_AL09（node:c.b）与过稿用法结构同形——农场误报，
