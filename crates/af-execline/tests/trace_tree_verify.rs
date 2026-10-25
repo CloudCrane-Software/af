@@ -1,0 +1,515 @@
+//! G5 前置：OTel GenAI span 树核对工具（[`af_execline::tracetree`]）测试。
+//!
+//! 数据源口径 = 落地契约-v0 §4.2「events.jsonl 是真相源，OTel 是派生非关键
+//! 车道」——OTel 字面 span 投影未实现（F-第三单交付 §trace 如实申报），四层
+//! 语义树的权威载体为：L1 invoke_workflow=ledger+MES、L2 invoke_agent=
+//! harness.db run_row+critical harness.stop、L3 chat=normal `harness.model`、
+//! L4 execute_tool=normal `harness.tool`+effects.db effect_intent。夹具形状
+//! 逐字段对照 af-state/orders/F1-F3b 真实订单实读（2026-10-25）。
+
+use std::path::{Path, PathBuf};
+
+/// 夹具参数：默认 = 全绿最小单（1 模型轮 + 1 工具 + 完整 close 链）。
+struct Fixture {
+    order_id: String,
+    /// (op, ok, state_after)
+    ledger: Vec<(&'static str, bool, &'static str)>,
+    /// MES kind 序列（work_order_id 一律 = stable_id）
+    mes_kinds: Vec<&'static str>,
+    /// 记录行 quota（None = 不写 records.jsonl）
+    quota: Option<(u64, u64, u64)>,
+    /// (turn, in, out, cache) 模型轮
+    models: Vec<(u64, u64, u64, u64)>,
+    /// 工具调用的 turn 序列
+    tool_turns: Vec<u64>,
+    /// run_row 终态（None = terminal_json NULL）
+    terminal: Option<&'static str>,
+    /// critical harness.stop 的 status JSON（None = 不写 critical.jsonl）
+    stop_status: Option<String>,
+    /// effects.db executed 行数（默认 = 工具数）
+    effects: Option<usize>,
+    /// 额外的旁路 run 目录名
+    side_run: Option<&'static str>,
+}
+
+impl Default for Fixture {
+    fn default() -> Self {
+        Fixture {
+            order_id: "T1-order".to_string(),
+            ledger: vec![
+                ("create_order", true, "Created"),
+                ("bind_line", true, "Created"),
+                ("attach_voucher", true, "Created"),
+                ("release", true, "Released"),
+                ("start", true, "InProgress"),
+                ("attach_artifact", true, "InProgress"),
+                ("complete", true, "Completed"),
+                ("close", true, "Closed"),
+            ],
+            mes_kinds: vec!["release", "start", "complete", "close"],
+            quota: Some((100, 20, 40)),
+            models: vec![(0, 60, 12, 24), (1, 40, 8, 16)],
+            tool_turns: vec![0, 1],
+            terminal: Some(r#"{"kind":"completed","signal":"TASK_COMPLETE"}"#),
+            stop_status: Some(r#"{"kind":"completed","signal":"TASK_COMPLETE"}"#.into()),
+            effects: None,
+            side_run: None,
+        }
+    }
+}
+
+fn sid(f: &Fixture) -> String {
+    format!("sid-{}", f.order_id)
+}
+
+fn run_name(f: &Fixture) -> String {
+    format!("{}-a1", f.order_id)
+}
+
+fn run_id(f: &Fixture) -> String {
+    format!("{}-run", f.order_id)
+}
+
+fn write_order(f: &Fixture) -> PathBuf {
+    // 父目录带 pid 防并发撞名；订单目录名恰 = order_id（真实 af-state 形态：
+    // verify_order_dir 以目录名为订单 id 与 records.plan_id 对账）。
+    let parent = std::env::temp_dir().join(format!("af-tracetree-test-{}", std::process::id()));
+    std::fs::create_dir_all(&parent).unwrap();
+    let dir = parent.join(&f.order_id);
+    let _ = std::fs::remove_dir_all(&dir);
+    let run_dir = dir.join("runs").join(run_name(f));
+    std::fs::create_dir_all(&run_dir).unwrap();
+
+    // ledger.jsonl
+    let stable = sid(f);
+    let ledger: Vec<String> = f
+        .ledger
+        .iter()
+        .enumerate()
+        .map(|(i, (op, ok, state))| {
+            format!(
+                concat!(
+                    r#"{{"seq":{seq},"ts_ms":1,"order_id":"{oid}","stable_id":"{sid}","op":"{op}","#,
+                    r#""idem_key":"{sid}/{op}","ok":{ok},"state_after":"{state}","order_after":{{}}}}"#
+                ),
+                seq = i + 1,
+                oid = f.order_id,
+                sid = stable,
+                op = op,
+                ok = ok,
+                state = state,
+            )
+        })
+        .collect();
+    std::fs::write(dir.join("ledger.jsonl"), ledger.join("\n") + "\n").unwrap();
+
+    // mes-events.jsonl
+    let mes: Vec<String> = f
+        .mes_kinds
+        .iter()
+        .enumerate()
+        .map(|(i, k)| {
+            format!(
+                concat!(
+                    r#"{{"work_order_id":"{sid}","occurred_at":{ts},"event_id":"{sid}:{k}:{i}","#,
+                    r#""line_id":"line-A","station_id":"af-order-cli","kind":"{k}","quantity":1}}"#
+                ),
+                sid = stable,
+                ts = i + 1,
+                k = k,
+                i = i,
+            )
+        })
+        .collect();
+    std::fs::write(dir.join("mes-events.jsonl"), mes.join("\n") + "\n").unwrap();
+
+    // records.jsonl（单行；evidence.run_dir = 真实订单同款相对路径形态）
+    if let Some((qi, qo, qc)) = f.quota {
+        let rec = serde_json::json!({
+            "plan_id": f.order_id,
+            "node_id": "line-A",
+            "item_id": "i",
+            "attempt": 1,
+            "host_alias": "h",
+            "unit_id": "u",
+            "unit_version": "0.1.0",
+            "status": "completed",
+            "verdict": true,
+            "evidence": {
+                "run_dir": format!("af-state/orders/{}/runs/{}", f.order_id, run_name(f)),
+                "evidence_digest": "d",
+            },
+            "gate": "ok",
+            "usage": {
+                "turns": 1,
+                "unit_calls": 1,
+                "http_retries": 0,
+                "quota": {"input": qi, "output": qo, "cache_read": qc},
+            },
+        });
+        std::fs::write(dir.join("records.jsonl"), format!("{rec}\n")).unwrap();
+    }
+
+    // normal.jsonl：model 轮 + tool 轮（run_id 统一）
+    let mut normal: Vec<String> = Vec::new();
+    for (idx, (t, i, o, c)) in f.models.iter().enumerate() {
+        normal.push(format!(
+            concat!(
+                r#"{{"seq":{seq},"level":"normal","kind":"harness.model","payload":{{"run_id":"{rid}","#,
+                r#""turn":{t},"model":"m","finish":"tool_use","usage":{{"input_tokens":{i},"output_tokens":{o},"cache_read_tokens":{c}}}}},"ts_ms":{ts}}}"#
+            ),
+            seq = idx,
+            ts = idx + 1,
+            rid = run_id(f),
+            t = t,
+            i = i,
+            o = o,
+            c = c,
+        ));
+    }
+    let n_models = f.models.len();
+    for (idx, t) in f.tool_turns.iter().enumerate() {
+        normal.push(format!(
+            concat!(
+                r#"{{"seq":{seq},"level":"normal","kind":"harness.tool","payload":{{"run_id":"{rid}","#,
+                r#""turn":{t},"tool":"bash","effect":"external_once","is_error":false,"error_code":""}},"ts_ms":{ts}}}"#
+            ),
+            seq = n_models + idx,
+            ts = n_models + idx + 1,
+            rid = run_id(f),
+            t = t,
+        ));
+    }
+    std::fs::write(run_dir.join("normal.jsonl"), normal.join("\n") + "\n").unwrap();
+
+    // critical.jsonl：harness.stop（status 与 run_row 终态交叉一致）
+    if let Some(status) = &f.stop_status {
+        let crit = format!(
+            concat!(
+                r#"{{"seq":0,"level":"critical","kind":"harness.stop","payload":{{"run_id":"{rid}","#,
+                r#""turn":9,"status":{status}}},"ts_ms":99}}"#
+            ),
+            rid = run_id(f),
+            status = status,
+        );
+        std::fs::write(run_dir.join("critical.jsonl"), crit + "\n").unwrap();
+    }
+
+    // harness.db：run_row 单行（工具只查 run_id/terminal_json/order_id 三列，
+    // 真实 schema 其余列不参与断言）
+    let hdb = rusqlite::Connection::open(run_dir.join("harness.db")).unwrap();
+    hdb.execute(
+        "CREATE TABLE run_row (run_id TEXT, terminal_json TEXT, order_id TEXT)",
+        [],
+    )
+    .unwrap();
+    hdb.execute(
+        "INSERT INTO run_row VALUES (?1, ?2, ?3)",
+        rusqlite::params![run_id(f), f.terminal, format!("{}-run", f.order_id)],
+    )
+    .unwrap();
+
+    // effects.db：effect_intent（工具只查 state/order_id 两列）
+    let edb = rusqlite::Connection::open(run_dir.join("effects.db")).unwrap();
+    edb.execute(
+        "CREATE TABLE effect_intent (workorder_id TEXT, seq INTEGER, payload_json TEXT, \
+         payload_sha256 TEXT, state TEXT, order_id TEXT)",
+        [],
+    )
+    .unwrap();
+    let n_eff = f.effects.unwrap_or(f.tool_turns.len());
+    for i in 0..n_eff {
+        edb.execute(
+            "INSERT INTO effect_intent VALUES (?1, ?2, '{}', 'sha', 'executed', ?3)",
+            rusqlite::params![format!("wo-{i}"), i as i64, run_id(f)],
+        )
+        .unwrap();
+    }
+
+    // 旁路 run 目录（有 normal.jsonl 无 harness.db —— 半途中断形态）
+    if let Some(side) = f.side_run {
+        let sdir = dir.join("runs").join(side);
+        std::fs::create_dir_all(&sdir).unwrap();
+        std::fs::write(
+            sdir.join("normal.jsonl"),
+            format!(
+                concat!(
+                    r#"{{"seq":0,"level":"normal","kind":"harness.model","payload":{{"run_id":"{rid}-x","#,
+                    r#""turn":0,"model":"m","finish":"x","usage":{{"input_tokens":1,"output_tokens":1,"cache_read_tokens":1}}}},"ts_ms":1}}"#
+                ),
+                rid = run_id(f),
+            ),
+        )
+        .unwrap();
+    }
+    dir
+}
+
+fn findings(dir: &Path) -> Vec<String> {
+    af_execline::tracetree::verify_order_dir(dir).findings
+}
+
+#[test]
+fn happy_path_full_tree_ok() {
+    let dir = write_order(&Fixture::default());
+    let r = af_execline::tracetree::verify_order_dir(&dir);
+    assert!(
+        r.findings.is_empty(),
+        "全绿单不应有 findings：{:#?}",
+        r.findings
+    );
+    assert_eq!(r.order_id, "T1-order");
+    assert_eq!(r.final_state, "Closed");
+    assert_eq!(r.ledger_entries, 8);
+    assert_eq!(r.mes_kinds, vec!["release", "start", "complete", "close"]);
+    assert_eq!(r.agent.as_ref().unwrap().chat_events, 2);
+    assert_eq!(r.agent.as_ref().unwrap().tool_events, 2);
+    assert_eq!(r.agent.as_ref().unwrap().effect_intents, 2);
+    assert_eq!(r.agent.as_ref().unwrap().tokens, (100, 20, 40));
+    assert_eq!(r.agent.as_ref().unwrap().terminal_kind, "completed");
+}
+
+/// F3a2 形态（真实失败订单）：close ok=false、终态 Completed、MES 无 close、
+/// 终态 max_turns——四层树仍完整，应零 findings。
+#[test]
+fn failed_order_shape_still_full_tree() {
+    let f = Fixture {
+        order_id: "T2-failed".to_string(),
+        ledger: vec![
+            ("create_order", true, "Created"),
+            ("bind_line", true, "Created"),
+            ("attach_voucher", true, "Created"),
+            ("release", true, "Released"),
+            ("start", true, "InProgress"),
+            ("attach_artifact", true, "InProgress"),
+            ("complete", true, "Completed"),
+            ("close", false, "Completed"),
+        ],
+        mes_kinds: vec!["release", "start", "complete"],
+        quota: Some((60, 12, 24)),
+        models: vec![(0, 60, 12, 24)],
+        tool_turns: vec![0],
+        terminal: Some(r#"{"kind":"max_turns"}"#),
+        stop_status: Some(r#"{"kind":"max_turns"}"#.into()),
+        effects: None,
+        side_run: None,
+    };
+    let dir = write_order(&f);
+    let r = af_execline::tracetree::verify_order_dir(&dir);
+    assert!(
+        r.findings.is_empty(),
+        "失败订单四层仍应全过：{:#?}",
+        r.findings
+    );
+    assert_eq!(r.final_state, "Completed");
+    assert_eq!(r.agent.as_ref().unwrap().terminal_kind, "max_turns");
+}
+
+/// L1 拦截：ledger 有 ok=true 的 close，但 MES 缺 close 行。
+#[test]
+fn l1_close_ok_but_mes_close_missing() {
+    let f = Fixture {
+        order_id: "T3-mes".to_string(),
+        mes_kinds: vec!["release", "start", "complete"],
+        ..Fixture::default()
+    };
+    let fs = findings(&write_order(&f));
+    assert!(
+        fs.iter().any(|x| x.contains("close") && x.contains("MES")),
+        "应点名 MES 缺 close：{fs:#?}"
+    );
+}
+
+/// L1 拦截：start op 失败（ok=false）——驱动面不完整。
+#[test]
+fn l1_start_op_not_ok() {
+    let f = Fixture {
+        order_id: "T4-start".to_string(),
+        ledger: vec![
+            ("create_order", true, "Created"),
+            ("bind_line", true, "Created"),
+            ("attach_voucher", true, "Created"),
+            ("release", true, "Released"),
+            ("start", false, "Released"),
+        ],
+        mes_kinds: vec!["release"],
+        quota: None,
+        models: vec![],
+        tool_turns: vec![],
+        terminal: None,
+        stop_status: None,
+        effects: Some(0),
+        side_run: None,
+    };
+    let fs = findings(&write_order(&f));
+    assert!(
+        fs.iter().any(|x| x.contains("start") && x.contains("ok")),
+        "应点名 start 未 ok：{fs:#?}"
+    );
+}
+
+/// L1 拦截：MES 行的 work_order_id 与 ledger stable_id 不一致（父子断链）。
+#[test]
+fn l1_mes_work_order_id_mismatch() {
+    let f = Fixture {
+        order_id: "TD-mes".to_string(),
+        mes_kinds: vec!["release", "start", "complete", "close"],
+        ..Fixture::default()
+    };
+    let dir = write_order(&f);
+    let mes = std::fs::read_to_string(dir.join("mes-events.jsonl")).unwrap();
+    std::fs::write(
+        dir.join("mes-events.jsonl"),
+        mes.replace("sid-TD-mes", "sid-someone-else"),
+    )
+    .unwrap();
+    let fs = findings(&dir);
+    assert!(
+        fs.iter().any(|x| x.contains("work_order_id")),
+        "应点名 MES work_order_id 断链：{fs:#?}"
+    );
+}
+
+/// L2 拦截：run_row 终态与 critical harness.stop 的 status 不一致。
+#[test]
+fn l2_terminal_stop_mismatch() {
+    let f = Fixture {
+        order_id: "T5-stop".to_string(),
+        stop_status: Some(r#"{"kind":"max_turns"}"#.into()),
+        ..Fixture::default()
+    };
+    let fs = findings(&write_order(&f));
+    assert!(
+        fs.iter().any(|x| x.contains("harness.stop")),
+        "应点名 stop 与终态不一致：{fs:#?}"
+    );
+}
+
+/// L2 拦截：run_row terminal_json 为 NULL（run 无终态）。
+#[test]
+fn l2_terminal_missing() {
+    let f = Fixture {
+        order_id: "T6-term".to_string(),
+        terminal: None,
+        stop_status: None,
+        ..Fixture::default()
+    };
+    let fs = findings(&write_order(&f));
+    assert!(
+        fs.iter().any(|x| x.contains("terminal")),
+        "应点名终态缺失：{fs:#?}"
+    );
+}
+
+/// L3 拦截：事件流里出现不属于 run_row.run_id 的事件（chat 脱离 invoke_agent）。
+#[test]
+fn l3_event_run_id_mismatch() {
+    let f = Fixture {
+        order_id: "TC-rid".to_string(),
+        ..Fixture::default()
+    };
+    let dir = write_order(&f);
+    let normal_path = dir.join("runs").join("TC-rid-a1").join("normal.jsonl");
+    let normal = std::fs::read_to_string(&normal_path).unwrap();
+    std::fs::write(&normal_path, normal.replace("TC-rid-run", "other-run")).unwrap();
+    let fs = findings(&dir);
+    assert!(
+        fs.iter().any(|x| x.contains("run_id")),
+        "应点名事件 run_id 脱链：{fs:#?}"
+    );
+}
+
+/// L3 拦截：chat token 三和 ≠ records.quota（记账断链，F-第三单口径的逐位核对）。
+#[test]
+fn l3_token_sum_mismatch() {
+    let f = Fixture {
+        order_id: "T7-token".to_string(),
+        quota: Some((101, 20, 40)), // 实际模型和 = 100
+        ..Fixture::default()
+    };
+    let fs = findings(&write_order(&f));
+    assert!(
+        fs.iter().any(|x| x.contains("quota")),
+        "应点名 token 和与 quota 不一致：{fs:#?}"
+    );
+}
+
+/// L4 拦截：effects.db executed 行数少于 harness.tool 事件数。
+#[test]
+fn l4_effect_count_mismatch() {
+    let f = Fixture {
+        order_id: "T8-eff".to_string(),
+        effects: Some(1), // 工具事件 2 条
+        ..Fixture::default()
+    };
+    let fs = findings(&write_order(&f));
+    assert!(
+        fs.iter().any(|x| x.contains("effect")),
+        "应点名 effect_intent 数不齐：{fs:#?}"
+    );
+}
+
+/// L4 拦截：工具事件的 turn 没有对应 chat 轮（execute_tool 脱离 chat）。
+#[test]
+fn l4_tool_turn_without_chat() {
+    let f = Fixture {
+        order_id: "T9-turn".to_string(),
+        tool_turns: vec![0, 7], // turn 7 无模型轮
+        ..Fixture::default()
+    };
+    let fs = findings(&write_order(&f));
+    assert!(
+        fs.iter().any(|x| x.contains("turn")),
+        "应点名工具轮脱离 chat：{fs:#?}"
+    );
+}
+
+/// 旁路 run（半途中断的历史 attempt）不计入树、不产生 findings。
+#[test]
+fn side_run_ignored_without_findings() {
+    let f = Fixture {
+        order_id: "TA-side".to_string(),
+        side_run: Some("TA-side-a0"),
+        ..Fixture::default()
+    };
+    let dir = write_order(&f);
+    let r = af_execline::tracetree::verify_order_dir(&dir);
+    assert!(
+        r.findings.is_empty(),
+        "旁路 run 不应产生 findings：{:#?}",
+        r.findings
+    );
+    assert_eq!(r.side_runs, vec!["TA-side-a0".to_string()]);
+}
+
+/// 缺 records.jsonl：L1→L2 父子边无法建立，应点名。
+#[test]
+fn missing_records_breaks_l1_l2_edge() {
+    let f = Fixture {
+        order_id: "TB-rec".to_string(),
+        quota: None,
+        ..Fixture::default()
+    };
+    let fs = findings(&write_order(&f));
+    assert!(
+        fs.iter().any(|x| x.contains("records")),
+        "应点名 records.jsonl 缺失：{fs:#?}"
+    );
+}
+
+/// 渲染包含四层 span 名与计数（供人读的树形输出）。
+#[test]
+fn render_contains_span_tree() {
+    let f = Fixture {
+        order_id: "TE-render".to_string(),
+        ..Fixture::default()
+    };
+    let dir = write_order(&f);
+    let r = af_execline::tracetree::verify_order_dir(&dir);
+    let out = r.render();
+    for layer in ["invoke_workflow", "invoke_agent", "chat", "execute_tool"] {
+        assert!(out.contains(layer), "渲染应含 {layer}：\n{out}");
+    }
+    assert!(out.contains("chat ×2"), "渲染应含 chat 计数：\n{out}");
+    assert!(out.contains("execute_tool ×2"), "渲染应含工具计数：\n{out}");
+}
