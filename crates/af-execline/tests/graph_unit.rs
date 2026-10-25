@@ -134,6 +134,12 @@ struct CapturedLaunch {
     max_turns: u32,
     spend_cap_cents: i64,
     tool_names: Vec<String>,
+    /// declare 工具的 ToolDecl.parameters（declare 契约面断言：非可推导端口
+    /// 的 API 面 schema 注入——required/properties）。
+    declare_parameters: Value,
+    /// declare 工具的 ToolDecl.description（措辞面断言：worked example、
+    /// 裸调拒绝/许可的分端口措辞）。
+    declare_description: String,
 }
 
 /// 图 FakeRunner：run_id 形 `{instance}-{node}`，按节点名派发脚本化终态消息。
@@ -225,6 +231,20 @@ impl af_execline::AgentRunner for GraphFakeRunner {
                 max_turns: launch.spec.policy.max_turns,
                 spend_cap_cents: launch.spend_cap_cents,
                 tool_names: launch.extra_tools.iter().map(|t| t.name.clone()).collect(),
+                declare_parameters: launch
+                    .spec
+                    .toolset
+                    .iter()
+                    .find(|t| t.name == "declare")
+                    .map(|t| t.parameters.clone())
+                    .unwrap_or(Value::Null),
+                declare_description: launch
+                    .spec
+                    .toolset
+                    .iter()
+                    .find(|t| t.name == "declare")
+                    .map(|t| t.description.clone())
+                    .unwrap_or_default(),
             });
         let report = af_harness::RunReport {
             run_id: launch.run_id,
@@ -1118,4 +1138,487 @@ policies:
         "拒载点名单元与判分锚：{err}"
     );
     assert_eq!(runner.order(), ["actor"], "actor 已跑、evaluator 拒载");
+}
+
+// ============================================================
+// ⑨ declare 契约面（2026-10-25 第二结构性缺口立法）：非可推导端口
+//    = API 面 schema 注入 + 闭环内校验门
+// ============================================================
+//
+// F4B/F4B2 判例（变更日志 ㉗）：planner 节点 turn 0 模型首 action 即裸
+// declare({})（16 token/零规划工作）——旧 declare 描述把「裸调=自动取证」
+// 无差别写给一切端口（非可推导端口无此活路），parameters 仅
+// `{"type":"object"}`（API 面零形状信号），校验又只在跑后 commit 相（
+// EX4006 致死、模型零反馈机会）。本节钉新契约：
+// - 非可推导端口：parameters 注入 required=端口集 + properties=该端口
+//   物化 schema（命名类型内联）；描述带 worked example 且明示裸调被拒；
+//   闭环内（工具调用当场）按同一 check_typed 校验——畸形载荷 = 可重试的
+//   工具错误反馈，不再等到跑后 EX4006。
+// - patch 形可推导端口（sop_minimal repair.patch）：permissive 面零动
+//   （裸 declare → 容器取证推导路径行为不变）。
+
+/// 非可推导端口（sop_full 三件）的 declare 工具面：API 级 schema 注入
+/// （required=端口集 + properties=物化 schema）+ 描述带 worked example
+/// 且裸调措辞从「许可」翻转为「拒绝」。
+#[test]
+fn nonderivable_ports_inject_schema_into_declare_tool_face() {
+    let root = temp_root("contract-face");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, _bridge, _attempt, _out) = graph_unit(&root, runner.clone());
+
+    let _ = drive(&unit, &data_root, &_attempt, &_out).expect("sop_full 应走通");
+
+    let launches = runner.launches();
+    // planner（task_plan）：required=["plan"]，properties.plan = task_plan
+    // 物化 schema（命名引用 plan_step 内联——API 面无 plan.types 词典可查）。
+    let planner = &launches[0];
+    assert_eq!(
+        planner.declare_parameters["required"],
+        json!(["plan"]),
+        "planner declare required = 端口集（API 面形状信号）"
+    );
+    assert_eq!(
+        planner.declare_parameters["properties"]["plan"]["required"],
+        json!(["instance_id", "steps"]),
+        "properties.plan = task_plan 物化 schema"
+    );
+    assert_eq!(
+        planner.declare_parameters["properties"]["plan"]["properties"]["steps"]["items"]
+            ["required"],
+        json!(["id", "action", "target"]),
+        "命名类型 plan_step 内联进 items（API 面自含）"
+    );
+    // 描述：worked example（端口键控 + 最小合形载荷）+ 裸调拒绝措辞；
+    // 旧「you may call it bare」诱惑措辞不得再出现于非可推导端口。
+    assert!(
+        planner.declare_description.contains("\"plan\"")
+            && planner.declare_description.contains("instance_id")
+            && planner.declare_description.contains("steps"),
+        "planner declare 描述带端口名与 payload 形状（worked example）：{}",
+        planner.declare_description
+    );
+    assert!(
+        !planner.declare_description.contains("you may call it bare"),
+        "非可推导端口不得保留裸调许可措辞：{}",
+        planner.declare_description
+    );
+    assert!(
+        planner
+            .declare_description
+            .to_lowercase()
+            .contains("reject"),
+        "裸调拒绝措辞在场：{}",
+        planner.declare_description
+    );
+
+    // coder（list<code_file>）：required=["files"]，物化为 array/items。
+    let coder = &launches[1];
+    assert_eq!(coder.declare_parameters["required"], json!(["files"]));
+    assert_eq!(
+        coder.declare_parameters["properties"]["files"]["type"],
+        json!("array"),
+        "list<code_file> 物化为 array 形 schema"
+    );
+    assert_eq!(
+        coder.declare_parameters["properties"]["files"]["items"]["required"],
+        json!(["path", "content_ref"]),
+        "code_file 元素 schema 内联"
+    );
+
+    // reviewer（review_report）：required=["review"]。
+    let reviewer = &launches[2];
+    assert_eq!(reviewer.declare_parameters["required"], json!(["review"]));
+    assert_eq!(
+        reviewer.declare_parameters["properties"]["review"]["required"],
+        json!(["approved", "issues"])
+    );
+}
+
+/// 输出契约段（user 消息）携带**全部**端口的 schema（旧版只带 is_final
+/// 端口——planner/coder/reviewer 的非终态端口零形状信息）。
+#[test]
+fn output_contract_carries_all_port_schemas() {
+    let root = temp_root("contract-prompt");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, _bridge, _attempt, _out) = graph_unit(&root, runner.clone());
+
+    let _ = drive(&unit, &data_root, &_attempt, &_out).expect("sop_full 应走通");
+
+    let launches = runner.launches();
+    // 三节点各断言：端口名 + 该端口 schema 的 required 字段名 + 类型表达式。
+    let cases: [(&CapturedLaunch, &str, &str, &str); 3] = [
+        (&launches[0], "plan", "instance_id", "task_plan"),
+        (&launches[1], "files", "content_ref", "code_file"),
+        (&launches[2], "review", "approved", "review_report"),
+    ];
+    for (launch, port, field, type_expr) in cases {
+        assert!(
+            launch.user_message.contains(port),
+            "节点 {} 契约段点名端口 {}",
+            launch.run_id,
+            port
+        );
+        assert!(
+            launch.user_message.contains(field),
+            "节点 {} 契约段带端口 {} 的 schema（required 字段 {} 可见）",
+            launch.run_id,
+            port,
+            field
+        );
+        assert!(
+            launch.user_message.contains(type_expr),
+            "节点 {} 契约段点名类型表达式 {}（诊断同源措辞）",
+            launch.run_id,
+            type_expr
+        );
+    }
+}
+
+/// 闭环内校验门（declare 工具闭包当场拒畸形 + 采纳合形）：F4B 死因的
+/// 行为面修法——畸形载荷 = 可重试的工具错误（点名缺口），不再存储、
+/// 不再发 TASK_COMPLETE；合形载荷才存储并完成。
+struct DeclareProbeRunner {
+    /// 首个节点依序投喂 declare 的载荷（逐次记录工具结果；仅首节点投喂）。
+    payloads: Mutex<Vec<Value>>,
+    /// (序号, 是否 Err, 文本) 逐次记录。
+    results: Mutex<Vec<(usize, bool, String)>>,
+    /// 单次投喂闸（首节点投完即闭）。
+    fed: Mutex<bool>,
+}
+
+impl af_execline::AgentRunner for DeclareProbeRunner {
+    fn run(
+        &self,
+        launch: af_execline::AgentLaunch<'_>,
+    ) -> Result<af_execline::AgentRunOutcome, af_execline::AgentRunFailure> {
+        let declare = launch
+            .extra_tools
+            .iter()
+            .find(|t| t.name == "declare")
+            .expect("环组装面必带 declare")
+            .handler
+            .clone();
+        let already_fed = *self.fed.lock().unwrap_or_else(|e| e.into_inner());
+        if !already_fed {
+            *self.fed.lock().unwrap_or_else(|e| e.into_inner()) = true;
+            let payloads = self.payloads.lock().unwrap_or_else(|e| e.into_inner());
+            for (i, payload) in payloads.iter().enumerate() {
+                let outcome = (declare)(payload);
+                let record = match outcome {
+                    Ok(v) => (i, false, v.to_string()),
+                    Err(e) => (i, true, e),
+                };
+                self.results
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .push(record);
+            }
+        }
+        Ok(af_execline::AgentRunOutcome {
+            report: af_harness::RunReport {
+                run_id: launch.run_id,
+                status: af_harness::RunStatus::Completed {
+                    signal: "TASK_COMPLETE".into(),
+                },
+                turns: 1,
+                model_calls: 1,
+                effect_replays: 0,
+                effect_fresh: 0,
+                transcript: vec![af_harness::TranscriptItem::Assistant {
+                    // 终态消息留空：声明必须来自 declare 面（回退源缺席）。
+                    text: String::new(),
+                    tool_calls: Vec::new(),
+                    usage: None,
+                }],
+                whitelist: vec!["declare".into()],
+                tokens: af_harness::TokenTotals {
+                    input: 10,
+                    output: 10,
+                    cache_read: 0,
+                },
+            },
+            http_retries: 0,
+        })
+    }
+}
+
+#[test]
+fn strict_declare_gate_rejects_malformed_and_accepts_conforming() {
+    let root = temp_root("contract-gate");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    // 仅驱动 planner（coder/reviewer 无脚本 → 不跑；planner 合形声明后
+    // coder 起动失败即可——本测试只断言 declare 工具面行为，drive 终态
+    // 不作断言面）。
+    let runner = Arc::new(DeclareProbeRunner {
+        payloads: Mutex::new(vec![
+            json!({}),                                         // 裸调（F4B 死因）
+            json!({"instance_id": TASK, "steps": []}),         // 缺端口键（模型直付载荷）
+            json!({"plan": {"instance_id": "x"}, "ghost": 1}), // 未知键 + 缺 steps
+            json!("not-an-object"),                            // 非对象参数
+            json!({"plan": {"instance_id": TASK, "steps": [    // 合形（steps 项齐 required）
+                {"id": "s1", "action": "locate", "target": "django/db"}
+            ]}}),
+        ]),
+        results: Mutex::new(Vec::new()),
+        fed: Mutex::new(false),
+    });
+    let (unit, _bridge, _attempt, _out) = graph_unit(&root, runner.clone());
+
+    // drive 必然失败（coder 无脚本）——只取 declare 工具面的逐次结果。
+    let _ = drive(&unit, &data_root, &_attempt, &_out);
+
+    let results = runner
+        .results
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    assert_eq!(results.len(), 5, "planner 五次 declare 逐一记录");
+    let (i, is_err, text) = &results[0];
+    assert_eq!(*i, 0);
+    assert!(
+        *is_err,
+        "裸 declare({}) 必须闭环内拒（F4B 死因）：{text}",
+        json!({})
+    );
+    assert!(text.contains("plan"), "拒收点名缺失端口键：{text}");
+    let (i, is_err, text) = &results[1];
+    assert_eq!(*i, 1);
+    assert!(*is_err, "缺端口键（载荷直付）必须拒：{text}");
+    assert!(text.contains("plan"), "点名端口键：{text}");
+    let (_, is_err, text) = &results[2];
+    assert!(*is_err, "未知键 + 缺 required 字段必须拒：{text}");
+    assert!(
+        text.contains("ghost") || text.contains("steps"),
+        "点名未知键或缺字段：{text}"
+    );
+    let (_, is_err, text) = &results[3];
+    assert!(*is_err, "非对象参数必须拒：{text}");
+    let (_, is_err, text) = &results[4];
+    assert!(
+        !is_err,
+        "合形载荷必须采纳（TASK_COMPLETE 完成信号）：{text}"
+    );
+    assert!(
+        text.contains("TASK_COMPLETE"),
+        "采纳输出 = 完成信号：{text}"
+    );
+}
+
+/// F4B 复活剧本 e2e：planner 首调裸 declare（拒 + 反馈）→ 按反馈修正重调
+/// （合形采纳）→ 节点交付、envelope 落盘、全链走通。旧代码首调即存 {}
+/// 并 TASK_COMPLETE → 跑后 EX4006 死亡；新契约 = 闭环内纠错。
+#[test]
+fn f4b_resurrection_bare_declare_then_corrected_call_completes() {
+    let root = temp_root("contract-resurrect");
+    // planner-only 最小图（单 task 节点直出 task_plan——非可推导端口）：
+    // 复活剧本不需要 coder/reviewer 下游，独立图最干净。
+    let graph_src = r#"
+version: 1
+meta:
+  name: planner_probe
+  graph_version: "1.0"
+  entry: planner
+  input: swe_task_input
+  output: { ref: task_plan, from: planner }
+  intent: "declare 契约面验证：单 planner 节点直出 task_plan（非可推导端口）"
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: plan_step
+    schema:
+      type: object
+      required: [id, action, target]
+      properties:
+        id: { type: string }
+        action: { type: string }
+        target: { type: string }
+        depends_on: { type: array, items: { type: string } }
+  - name: task_plan
+    schema:
+      type: object
+      required: [instance_id, steps]
+      properties:
+        instance_id: { type: string }
+        steps: { type: array, items: { type: plan_step } }
+nodes:
+  - id: planner
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { plan: task_plan }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 500 }
+        - { from: input, fields: [repo, instance_id, problem_statement], policy: project, quota_tokens: 1500 }
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 10 }
+  stop:
+    - { when: "steps.turns >= 10", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed
+"#;
+    let data_root = task_package(&root, &compile_plan(graph_src));
+    let runner = Arc::new(DeclareProbeRunner {
+        payloads: Mutex::new(vec![
+            json!({}), // turn 0 裸 declare（F4B 判例）
+            json!({"plan": {"instance_id": TASK, "steps": [
+                {"id": "s1", "action": "locate", "target": "django/db/models"}
+            ]}}),
+        ]),
+        results: Mutex::new(Vec::new()),
+        fed: Mutex::new(false),
+    });
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let output = drive(&unit, &data_root, &attempt, &out)
+        .expect("裸 declare 被拒后修正重调应完成（复活剧本）");
+
+    let results = runner
+        .results
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    assert_eq!(results.len(), 2);
+    assert!(
+        results[0].1,
+        "首调裸 declare 拒（反馈进环）：{}",
+        results[0].2
+    );
+    assert!(
+        results[0].2.contains("plan"),
+        "反馈点名端口与形状指引：{}",
+        results[0].2
+    );
+    assert!(!results[1].1, "修正重调采纳：{}", results[1].2);
+    // envelope 落盘：planner.plan.json 携合形 task_plan。
+    let file = attempt.join("artifacts").join("planner.plan.json");
+    assert!(file.is_file(), "planner envelope 应落盘");
+    let envelope: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(envelope["port"], json!("plan"));
+    assert_eq!(envelope["payload"]["instance_id"], json!(TASK));
+    assert_eq!(
+        envelope["payload"]["steps"][0]["id"],
+        json!("s1"),
+        "载荷 = 模型声明原样（非推导面）"
+    );
+    assert_eq!(output.verdict, Some(true), "非判定型终态 = 产出即合格");
+}
+
+/// permissive 面零动守卫（sop_minimal repair.patch = patch 形可推导端口）：
+/// parameters 维持 {"type":"object"}（无 required——裸调必须能到达闭包）、
+/// 描述保留裸调许可措辞（容器自动取证）、裸调 → TASK_COMPLETE。
+#[test]
+fn permissive_declare_face_unchanged_for_patch_shaped_ports() {
+    let root = temp_root("contract-permissive");
+    let data_root = task_package(&root, &compile_plan(&sop_minimal_src()));
+    // 捕获型 runner：取 declare ToolDecl（parameters/description）+ 裸调结果。
+    struct CaptureRunner {
+        parameters: Mutex<Value>,
+        description: Mutex<String>,
+        bare_ok: Mutex<bool>,
+    }
+    impl af_execline::AgentRunner for CaptureRunner {
+        fn run(
+            &self,
+            launch: af_execline::AgentLaunch<'_>,
+        ) -> Result<af_execline::AgentRunOutcome, af_execline::AgentRunFailure> {
+            let decl = launch
+                .spec
+                .toolset
+                .iter()
+                .find(|t| t.name == "declare")
+                .expect("必带 declare");
+            *self.parameters.lock().unwrap_or_else(|e| e.into_inner()) = decl.parameters.clone();
+            *self.description.lock().unwrap_or_else(|e| e.into_inner()) = decl.description.clone();
+            let handler = launch
+                .extra_tools
+                .iter()
+                .find(|t| t.name == "declare")
+                .unwrap()
+                .handler
+                .clone();
+            let outcome = (handler)(&json!({}));
+            *self.bare_ok.lock().unwrap_or_else(|e| e.into_inner()) = outcome
+                .map(|v| v == json!("TASK_COMPLETE"))
+                .unwrap_or(false);
+            Ok(af_execline::AgentRunOutcome {
+                report: af_harness::RunReport {
+                    run_id: launch.run_id,
+                    status: af_harness::RunStatus::Completed {
+                        signal: "TASK_COMPLETE".into(),
+                    },
+                    turns: 2,
+                    model_calls: 2,
+                    effect_replays: 0,
+                    effect_fresh: 1,
+                    transcript: Vec::new(),
+                    whitelist: vec!["bash".into(), "declare".into()],
+                    tokens: af_harness::TokenTotals {
+                        input: 10,
+                        output: 10,
+                        cache_read: 0,
+                    },
+                },
+                http_retries: 0,
+            })
+        }
+    }
+    let capture = Arc::new(CaptureRunner {
+        parameters: Mutex::new(Value::Null),
+        description: Mutex::new(String::new()),
+        bare_ok: Mutex::new(false),
+    });
+    let bridge = Arc::new(FakeBridge::new());
+    let spec = GraphUnitSpec::v1(PROFILE, repo_packages());
+    let unit = GraphExecuteUnit::new(spec, bridge.clone(), capture.clone()).expect("单元装载");
+    let attempt = root.join("attempt");
+    let out = root.join("out");
+
+    let output = drive(&unit, &data_root, &attempt, &out).expect("sop_minimal 应走通");
+
+    let params = capture
+        .parameters
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    assert_eq!(
+        params,
+        json!({"type": "object"}),
+        "patch 形端口 parameters 维持零形状（裸调必须能到达闭包）：{params}"
+    );
+    let desc = capture
+        .description
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    assert!(
+        desc.contains("you may call it bare"),
+        "可推导端口保留裸调许可措辞（容器自动取证）：{desc}"
+    );
+    assert!(
+        *capture.bare_ok.lock().unwrap_or_else(|e| e.into_inner()),
+        "裸 declare 仍即 TASK_COMPLETE（permissive 面零动）"
+    );
+    // 推导路径照旧：envelope 披露 derived 面。
+    let file = attempt.join("artifacts").join("repair.patch.json");
+    assert!(file.is_file());
+    let envelope: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(envelope["derived"], json!(["diff", "files"]));
+    assert_eq!(output.verdict, Some(true));
 }

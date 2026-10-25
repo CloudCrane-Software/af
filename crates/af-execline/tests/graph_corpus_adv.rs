@@ -130,6 +130,9 @@ struct CapturedLaunch {
 struct GraphFakeRunner {
     launches: Mutex<Vec<CapturedLaunch>>,
     scripted: fn(&str) -> Option<String>,
+    /// declare 契约族脚本（None = 纯 plan/task 篡改族——declare 以终态文本
+    /// 解析入参的既有行为）。
+    declare_script: Option<DeclareScript>,
 }
 
 impl GraphFakeRunner {
@@ -137,6 +140,17 @@ impl GraphFakeRunner {
         Self {
             launches: Mutex::new(Vec::new()),
             scripted,
+            declare_script: None,
+        }
+    }
+    fn with_declare_script(
+        scripted: fn(&str) -> Option<String>,
+        declare_script: DeclareScript,
+    ) -> Self {
+        Self {
+            launches: Mutex::new(Vec::new()),
+            scripted,
+            declare_script: Some(declare_script),
         }
     }
     fn launches(&self) -> Vec<CapturedLaunch> {
@@ -172,12 +186,25 @@ impl af_execline::AgentRunner for GraphFakeRunner {
             .strip_prefix(&format!("{TASK}-"))
             .unwrap_or_default()
             .to_string();
-        let final_text = (self.scripted)(&node).ok_or_else(|| af_execline::AgentRunFailure {
+        // declare 契约族覆写：目标节点的终态文本与 declare 入参可分别覆写。
+        let script = self.declare_script.clone();
+        let is_target = script.as_ref().is_some_and(|s| s.target == node);
+        let final_text = if is_target {
+            script.as_ref().unwrap().final_text.clone()
+        } else {
+            None
+        }
+        .or_else(|| (self.scripted)(&node))
+        .ok_or_else(|| af_execline::AgentRunFailure {
             message: format!("FakeRunner 无节点 {node} 脚本"),
             http_retries: 0,
         })?;
         if let Some(binding) = launch.extra_tools.iter().find(|t| t.name == "declare") {
-            let args: Value = serde_json::from_str(&final_text).unwrap_or(Value::Null);
+            let args = if is_target {
+                script.as_ref().unwrap().args.clone()
+            } else {
+                serde_json::from_str(&final_text).unwrap_or(Value::Null)
+            };
             let _ = (binding.handler)(&args);
         }
         self.launches
@@ -239,12 +266,27 @@ enum Expect {
 /// 时直接以 raw 串作为 plan.json 全文（信封层垃圾族）。
 type Mutate = Box<dyn Fn(&mut Value, &mut Value, &mut Lcg) -> Option<String>>;
 
+/// declare 契约面覆写（非可推导端口畸形载荷族，2026-10-25 立法批）：对目标
+/// 节点以给定参数调 declare 工具（畸形载荷主注入面），终态 assistant 文本
+/// 可选覆写（None = 维持脚本化正例；Some("") = 回退源缺席）。
+#[derive(Clone)]
+struct DeclareScript {
+    /// 目标节点（覆写只对该节点生效）。
+    target: &'static str,
+    /// declare 工具调用参数。
+    args: Value,
+    /// 终态 assistant 文本覆写。
+    final_text: Option<String>,
+}
+
 /// 单例语料。
 struct Case {
     family: &'static str,
     name: &'static str,
     mutate: Mutate,
     expect: Expect,
+    /// declare 契约族脚本（None = 纯 plan/task 篡改族）。
+    declare: Option<DeclareScript>,
 }
 
 // ---- Value 寻位小工具（panic = 语料构造 bug，非被测面行为）----------------
@@ -305,6 +347,7 @@ fn corpus() -> Vec<Case> {
             name,
             mutate,
             expect,
+            declare: None,
         });
     };
 
@@ -1042,6 +1085,130 @@ fn corpus() -> Vec<Case> {
         Expect::Ex(ErrorCode::UnitFailed),
     );
 
+    // ---- 族 13：declare 契约面（非可推导端口畸形载荷族，2026-10-25 立法批）--
+    // F4B/F4B2 判例（变更日志 ㉗）：非可推导端口的裸/畸形 declare 载荷必须
+    // fail-loud（EX4006 家族）且不 panic/不静默通过；declare 闭环内拒收后
+    // 合法回退源（终态消息 JSON）仍可交付（fumble-rescue 例）。
+    let mut cd = |name: &'static str,
+                  target: &'static str,
+                  args: Value,
+                  final_text: Option<String>,
+                  expect: Expect| {
+        cases.push(Case {
+            family: "declare",
+            name,
+            mutate: Box::new(|_, _, _| None),
+            expect,
+            declare: Some(DeclareScript {
+                target,
+                args,
+                final_text,
+            }),
+        });
+    };
+    // 裸 declare({})（F4B 判例原样）：闭环内拒 + 无回退源 → 跑后 EX4006。
+    cd(
+        "bare-empty-no-fallback",
+        "planner",
+        json!({}),
+        Some(String::new()),
+        Expect::Ex(ErrorCode::EnvelopeMismatch),
+    );
+    // 裸 declare + 终态消息也是空对象 → 端口集空 ≠ 契约 → EX4006。
+    cd(
+        "bare-empty-empty-final",
+        "planner",
+        json!({}),
+        Some("{}".to_string()),
+        Expect::Ex(ErrorCode::EnvelopeMismatch),
+    );
+    // 载荷直付（缺端口键嵌套——模型最常见混淆形）→ EX4006。
+    let args = json!({"instance_id": TASK, "steps": [
+        {"id": "s1", "action": "locate", "target": "django/db"}
+    ]});
+    cd(
+        "payload-missing-port-key",
+        "planner",
+        args.clone(),
+        Some(args.to_string()),
+        Expect::Ex(ErrorCode::EnvelopeMismatch),
+    );
+    // 未知端口键 → EX4006。
+    let args = json!({"plan": {"instance_id": TASK, "steps": [
+        {"id": "s1", "action": "locate", "target": "django/db"}
+    ]}, "ghost": 1});
+    cd(
+        "unknown-extra-port",
+        "planner",
+        args.clone(),
+        Some(args.to_string()),
+        Expect::Ex(ErrorCode::EnvelopeMismatch),
+    );
+    // 端口载荷缺 required 字段（steps）→ EX4006 点名。
+    cd(
+        "payload-missing-required-field",
+        "planner",
+        json!({"plan": {"instance_id": "x"}}),
+        Some(r#"{"plan": {"instance_id": "x"}}"#.to_string()),
+        Expect::ExAny(&[ErrorCode::EnvelopeMismatch], "steps"),
+    );
+    // steps 项缺 required 字段（plan_step.id，命名类型递归面）→ EX4006 点名。
+    let args = json!({"plan": {"instance_id": TASK, "steps": [
+        {"action": "locate", "target": "django/db"}
+    ]}});
+    cd(
+        "steps-item-missing-id",
+        "planner",
+        args.clone(),
+        Some(args.to_string()),
+        Expect::ExAny(&[ErrorCode::EnvelopeMismatch], "id"),
+    );
+    // 非对象参数 + 无回退源 → EX4006。
+    cd(
+        "non-object-args-no-fallback",
+        "planner",
+        json!("garbage-not-an-object"),
+        Some(String::new()),
+        Expect::Ex(ErrorCode::EnvelopeMismatch),
+    );
+    // 畸形 declare 被闭环拒收后，合法终态消息回退源仍交付（fumble-rescue：
+    // 新契约行为——旧代码 declare 面无条件存储畸形载荷 → EX4006 死亡）。
+    cd(
+        "fumble-rescued-by-valid-final-text",
+        "planner",
+        json!({"plan": {"instance_id": "x"}}),
+        None,
+        Expect::Ok,
+    );
+    // 合形 declare + 终态消息留空（回退源缺席）→ declare 面单独交付。
+    cd(
+        "valid-declare-no-final-text",
+        "planner",
+        json!({"plan": {"instance_id": TASK, "steps": [
+            {"id": "s1", "action": "locate", "target": "django/db"}
+        ]}}),
+        Some(String::new()),
+        Expect::Ok,
+    );
+    // coder（list<code_file>）：非数组载荷 → EX4006。
+    let args = json!({"files": {"path": "django/db/models/foo.py", "content_ref": "ws#1"}});
+    cd(
+        "coder-files-non-array",
+        "coder",
+        args.clone(),
+        Some(args.to_string()),
+        Expect::Ex(ErrorCode::EnvelopeMismatch),
+    );
+    // reviewer（review_report）：approved 非布尔 → EX4006。
+    let args = json!({"review": {"approved": "yes", "issues": []}});
+    cd(
+        "reviewer-approved-non-boolean",
+        "reviewer",
+        args.clone(),
+        Some(args.to_string()),
+        Expect::Ex(ErrorCode::EnvelopeMismatch),
+    );
+
     cases
 }
 
@@ -1091,7 +1258,10 @@ fn run_case(base_plan: &Value, base_task: &Value, case: &Case) -> (Verdict, Vec<
     std::fs::create_dir_all(&out).unwrap();
 
     let bridge = Arc::new(FakeBridge::new());
-    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let runner = Arc::new(match &case.declare {
+        Some(script) => GraphFakeRunner::with_declare_script(sop_full_payloads, script.clone()),
+        None => GraphFakeRunner::new(sop_full_payloads),
+    });
     let unit = GraphExecuteUnit::new(
         GraphUnitSpec::v1(PROFILE, repo_packages()),
         bridge.clone(),
