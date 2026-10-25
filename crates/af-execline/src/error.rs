@@ -48,6 +48,17 @@ pub enum ErrorCode {
     /// 计划装订-一致性核对失败：信封版本/graph_version/line 绑定/node_exec
     /// 与 graph.nodes 对齐（planbind 附带核对面，设计 §2.5）。
     PlanBindMismatch,
+    /// 计划消费-typed envelope 交接违例（图执行器）：节点产物缺 artifact_contract
+    /// 端口 / 载荷非声明的 JSON 形 / 下游边无产者 / 终态工件不符 types schema /
+    /// 图输入不符 interface.input_type（EX4xxx 计划消费段；envelope<T> 契约，
+    /// ADR-010 §5）。
+    EnvelopeMismatch,
+    /// 计划消费-预算熔断（图执行器）：plan 级 cost_cap/token_cap 超限，执行器
+    /// 拒起下一节点（fail-loud，不降级续跑）。
+    BudgetCapExceeded,
+    /// 计划消费-图形态超 v1 线性链范围（图执行器）：loop/map 构造节点或环
+    /// 拓扑——登记后续版本，v1 拒驱动。
+    GraphShapeUnsupported,
 }
 
 impl ErrorCode {
@@ -70,6 +81,9 @@ impl ErrorCode {
             Self::TemplateDrift => "EX4003",
             Self::PlanDigestMismatch => "EX4004",
             Self::PlanBindMismatch => "EX4005",
+            Self::EnvelopeMismatch => "EX4006",
+            Self::BudgetCapExceeded => "EX4007",
+            Self::GraphShapeUnsupported => "EX4008",
         }
     }
 
@@ -92,6 +106,9 @@ impl ErrorCode {
             Self::TemplateDrift => "TEMPLATE_DRIFT",
             Self::PlanDigestMismatch => "PLAN_DIGEST_MISMATCH",
             Self::PlanBindMismatch => "PLAN_BIND_MISMATCH",
+            Self::EnvelopeMismatch => "ENVELOPE_MISMATCH",
+            Self::BudgetCapExceeded => "BUDGET_CAP_EXCEEDED",
+            Self::GraphShapeUnsupported => "GRAPH_SHAPE_UNSUPPORTED",
         }
     }
 }
@@ -148,6 +165,15 @@ pub enum ExeclineError {
     PlanDigestMismatch { expected: String, actual: String },
     #[error("EX4005: 计划装订-一致性核对失败: {detail}")]
     PlanBindMismatch { detail: String },
+    /// EX4006：typed envelope 交接违例（图执行器；envelope<T> 契约）。
+    #[error("EX4006: 计划消费-envelope 交接违例: {detail}")]
+    EnvelopeMismatch { detail: String },
+    /// EX4007：plan 级预算熔断（cost_cap/token_cap；llm.cents 口径 1 模型调用 = 1¢）。
+    #[error("EX4007: 计划消费-预算熔断: {detail}")]
+    BudgetCapExceeded { detail: String },
+    /// EX4008：图形态超 v1 线性链范围（loop/map/环拓扑；登记后续）。
+    #[error("EX4008: 计划消费-图形态超 v1 线性链范围: {detail}")]
+    GraphShapeUnsupported { detail: String },
 }
 
 impl ExeclineError {
@@ -170,6 +196,9 @@ impl ExeclineError {
             Self::TemplateDrift { .. } => ErrorCode::TemplateDrift,
             Self::PlanDigestMismatch { .. } => ErrorCode::PlanDigestMismatch,
             Self::PlanBindMismatch { .. } => ErrorCode::PlanBindMismatch,
+            Self::EnvelopeMismatch { .. } => ErrorCode::EnvelopeMismatch,
+            Self::BudgetCapExceeded { .. } => ErrorCode::BudgetCapExceeded,
+            Self::GraphShapeUnsupported { .. } => ErrorCode::GraphShapeUnsupported,
         }
     }
 }
@@ -211,6 +240,10 @@ mod tests {
         assert_eq!(ErrorCode::TemplateDrift.as_str(), "EX4003");
         assert_eq!(ErrorCode::PlanDigestMismatch.as_str(), "EX4004");
         assert_eq!(ErrorCode::PlanBindMismatch.as_str(), "EX4005");
+        // 图执行器计划消费段续增（ADR-007 数字只增不改）。
+        assert_eq!(ErrorCode::EnvelopeMismatch.as_str(), "EX4006");
+        assert_eq!(ErrorCode::BudgetCapExceeded.as_str(), "EX4007");
+        assert_eq!(ErrorCode::GraphShapeUnsupported.as_str(), "EX4008");
         assert_eq!(ErrorCode::TemplateDrift.name(), "TEMPLATE_DRIFT");
     }
 

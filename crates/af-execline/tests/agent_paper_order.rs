@@ -236,6 +236,7 @@ fn harness_runner_paper_order_passes_real_gateway_declare() {
         user_message: "开始".into(),
         spec: paper_spec(&stub.url()),
         bash: Arc::new(|_command| "TASK_COMPLETE".to_string()),
+        tools: Vec::new(), // 图执行器面；本测试环无附加工具
         key_cmd: FAKE_KEY_CMD,
         spend_cap_cents: 100,
         tool_spend_cents: 1,

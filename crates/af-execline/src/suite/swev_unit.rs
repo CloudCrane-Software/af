@@ -190,6 +190,7 @@ impl ExecuteUnit for SwevExecuteUnit {
             user_message: format!("{}\n\n{}", task.prompt(), self.spec.instance_protocol),
             spec: self.agent_spec(&profile.endpoint, env.workdir())?,
             bash,
+            tools: Vec::new(), // 图执行器面；swev 环无附加工具
             key_cmd: profile.key_cmd,
             spend_cap_cents: self.spec.spend_cap_cents,
             tool_spend_cents: self.spec.tool_spend_cents,

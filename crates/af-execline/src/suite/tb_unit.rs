@@ -166,6 +166,7 @@ impl ExecuteUnit for TbExecuteUnit {
             user_message: task.prompt.clone(),
             spec: self.agent_spec(&profile.endpoint, env.workdir())?,
             bash: self.bash_tool(env.clone()),
+            tools: Vec::new(), // 图执行器面；TB 环无附加工具
             key_cmd: profile.key_cmd,
             spend_cap_cents: self.spec.spend_cap_cents,
             tool_spend_cents: self.spec.tool_spend_cents,

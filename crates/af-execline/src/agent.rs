@@ -33,6 +33,11 @@ use crate::profile::resolve_key;
 /// af-bench main.rs:704-735 的语义在单元内，本缝只收成品）。
 pub type BashFn = Arc<dyn Fn(&str) -> String + Send + Sync>;
 
+/// 命名工具体（图执行器节点工具面）：参数 JSON 全文 → 工具观察文本。
+/// 名字 = `ToolDecl` 模型面名（组件名去 `pkg.` 前缀）；闭包自解析参数
+/// （sweng 工具面签名各异，缝层不做二次分发）。空集 = swev/tb 单元零变化。
+pub type ToolFn = Arc<dyn Fn(&str) -> String + Send + Sync>;
+
 /// 缝输入：单元控制的全部模型执行材料（af-bench main.rs:736-798 的可搬运面）。
 /// 凭证（root）与 harness 侧账面工单由真实现自持——那是订单门/harness 材料，
 /// 不是单元参数（方案 §2.2 凭证纪律同款解读）。
@@ -47,6 +52,9 @@ pub struct AgentLaunch<'a> {
     pub spec: AgentSpec,
     /// bash 工具体（含反考古/重复命令护栏，main.rs:704-735）。
     pub bash: BashFn,
+    /// 命名工具面（图执行器节点级；空 = 无附加工具，swev/tb 单元零变化）。
+    /// bash 仍走 [`Self::bash`] 专缝（swev 环先例）——本面只收非 bash 工具。
+    pub tools: Vec<(String, ToolFn)>,
     /// 密钥解析命令（真实现紧邻 run 现取 + 401 重取；FakeRunner 零凭证消耗）。
     pub key_cmd: &'static str,
     /// 单题成本上限（美分，main.rs:787：swe-v 300 / TB 100）。
@@ -198,6 +206,12 @@ impl AgentRunner for HarnessRunner {
                 .to_string();
             Ok(Value::String(bash(&command)))
         });
+        // 命名工具面（图执行器）：参数 JSON 全文直通货给闭包（各工具自解析），
+        // 观察文本以 Value::String 回给模型——与 bash 面同输出形态。
+        for (name, tool) in &launch.tools {
+            let tool = tool.clone();
+            registry.register(name, move |call| Ok(Value::String(tool(&call.to_string()))));
+        }
         // OAuth 对会被 sidecar 等并发方轮换：构建期可能几十分钟，key 必须紧邻
         // run 现取（401 竞态实证，main.rs:767）。
         let key = resolve_key(launch.key_cmd).map_err(|err| AgentRunFailure {
