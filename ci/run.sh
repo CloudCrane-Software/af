@@ -180,6 +180,17 @@ step 6 "cosign 断网 verify-blob" -- bash -c "$(declare -f cosign_step); cosign
 echo "== step7 cargo deny（四类检查，advisory-db 本地化离线）"
 step 7 "cargo deny --offline check" -- bash -c "cd '$AF_ROOT' && cargo deny --offline check"
 
+# ---- 8. 中立性门（N1 删包自洽 + N2 领域词扫描 + N3 golden 登记；G4 施工批
+#         Phase 3 挂入，裁决15/16/19）------------------------------------------------
+# 挂门前置断言（裁决15）：挂门时对照臂（沙箱 cp 集含 rust-toolchain.toml——
+# 裁决19）cargo test -p af-dsl -p af-compiler 实测 exit=0。2026-10-25 挂门时点
+# 实测 CONTROL_EXIT=0（全绿）；此后该断言由门内 C1 判据常态化复测。
+# 环境开关：AF_NEUT_SANDBOX_DIR / AF_NEUT_TARGET_DIR（磁盘受限主机外置沙箱
+# target；缺省沙箱自含 $SBX/target=每跑冷建）。详见 ci/neutrality_gate.sh 头注。
+echo "== step8 neutrality 删包自洽+领域词扫描+golden 登记"
+step 8 "neutrality 删包自洽+领域词扫描+golden 登记" -- \
+  bash "$CI_DIR/neutrality_gate.sh"
+
 # ---- 汇总 -------------------------------------------------------------------
 echo "== 汇总"
 printf '%s\n' "${SUMMARY[@]}" | tee "$OUT/SUMMARY.txt"

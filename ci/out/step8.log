@@ -1,0 +1,25 @@
+== step8 neutrality 门开始 2026-10-25 11:18:24
+[PASS] Z0-pre 沙箱 /tmp/afb-neutrality（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，9.2M）；target=/home/pan-ding/afbuild-neutrality
+-- 阶段1 对照臂（包原样）
+  对照臂 af-dsl exit=0
+  对照臂 af-compiler exit=0
+[PASS] C1 对照臂 cargo test exit=0（R0：基线本身不绿则本门结论无效；裁决15 挂门前置断言常态化）
+-- 阶段2 隔离臂（清空保留空目录）
+  af/packages 已清空（保留空目录）：0 项残留
+  隔离臂 af-dsl 失败 2 项（exit 码不作判据，失败集才是）
+  隔离臂 af-compiler 失败 17 项（exit 码不作判据，失败集才是）
+[PASS] I1 隔离臂失败集 ⊆ 预期红名单（19 项）——核心测试无一意外失败
+[PASS] I2 预期红名单 ⊆ 隔离臂失败集——fail-closed 有牙齿
+[PASS] I3 集合精确相等（19 项，无漂移）
+[PASS] I4 g3_golden_corpus_byte_exact（17 语料含 sample1-6）隔离臂通过——非领域 golden 照常（L3 口径，裁决14）
+-- 阶段3 探针 P-A/P-B/P-C
+[PASS] P-A sample1 快照链 exit=0 且与 golden 逐字节一致（cmp）
+[PASS] P-B 空包根下 MetaGPT exit=1 + E2001（selector 候选图未声明，×3)
+[PASS] P-C 空包根下 ReAct exit=1 + E9001（uses.* 未注册，注册表共 0 条）
+-- 阶段4 N2 扫描 + N3 登记闭集
+[PASS] S1 领域词扫描白名单外命中 = 0（命中 14 处）
+[PASS] R7 闭集守卫 OK：21 份 IR golden 与登记互为闭集
+词表 SHA-256：302e906e7a5825d7752130aa205b961aba6d2d79246be6ab931180d149cd6edd
+[PASS] Z0 正仓 git status 前后零差（沙箱只读正仓）
+== step8 汇总：PASS=12 FAIL=0（判据 C1/I1/I2/I3/I4/P-A/P-B/P-C/S1/R7/Z0）
+== step8 neutrality 门全绿

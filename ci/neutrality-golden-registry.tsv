@@ -1,0 +1,49 @@
+# =============================================================================
+# N3 golden 分类登记（《G4-任务中立性机器检查方案.md》§3.2/§3.3）
+# 列：文件路径 <TAB> 层 <TAB> 轴A语料 <TAB> 轴B复测链 <TAB> 删包预期 <TAB> 依据
+# 闭集守卫：testdata/golden/*.ir.json 文件集 ⇔ 本表层=IR 行集，互为闭集
+#   （新增 golden 不登记 = 门红 R7；门内只守 testdata/golden——快照目录在
+#    黑灯工厂仓外，PLAN 行为登记面，不进闭集比对）。
+# 非领域 golden 操作定义（裁决14）：轴 B 无耦合、删包后照常逐字节通过；
+#   v1 操作化=L3（IR 级）——sample1-6 删包后 L3 照常通过即达标（I4/P-A 判据）。
+# 裁决8 联动再登记：G4 两包落地后 registry_digest d5f3bd3aa0f7…d57977 →
+#   63c3478e9321e1c58318620a592e9953ef34cee3a5d19ea4c3300a722fafe15b（63 条终态），
+#   15 份快照已重跑更新并逐位一致性登记（RESULT-G4-reportkit.md；本表登记新值）。
+# =============================================================================
+crates/af-compiler/testdata/golden/sample1.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363（g3_golden_corpus_byte_exact）
+crates/af-compiler/testdata/golden/sample2.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/sample3.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/sample4.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/sample5.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/sample6.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/ReAct.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363（11 对齐稿无 topology_selector 字段，不碰 af/packages）
+crates/af-compiler/testdata/golden/Reflexion.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/Voyager.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/SWE-agent.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/MemGPT.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/CAMEL.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/Multi-Agent-Debate.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/AFlow.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/LangGraph-StateGraph.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/CrewAI-YAML.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/Agensh-DeLM.ir.json	IR	领域	裸链	绿	golden_test.rs:267,363
+crates/af-compiler/testdata/golden/ADAS.ir.json	IR	领域	图清单注入	红E2001	golden_test.rs:473,549（g3p2_selector_injection_is_load_bearing；实测 P-B）
+crates/af-compiler/testdata/golden/AutoGen-Team-JSON.ir.json	IR	领域	图清单注入	红E2001	golden_test.rs:473,549
+crates/af-compiler/testdata/golden/GPTSwarm.ir.json	IR	领域	图清单注入	红E2001	golden_test.rs:473,549
+crates/af-compiler/testdata/golden/MetaGPT.ir.json	IR	领域	图清单注入	红E2001	golden_test.rs:473,549
+# ---- PLAN 层（仓外：黑灯工厂 计划/研究组/对齐计划快照/；登记面，不进闭集比对） ----
+计划/研究组/对齐计划快照/ADAS.plan.json	PLAN	领域	组件绑定	红E9001	registry_digest=63c3478e…（15/15 含，实测 grep）；空注册表下 uses.* 必拒（实测 P-C 同理）
+计划/研究组/对齐计划快照/AFlow.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/Agensh-DeLM.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/AutoGen-Team-JSON.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/CAMEL.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/CrewAI-YAML.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/GPTSwarm.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/LangGraph-StateGraph.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/MemGPT.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/MetaGPT.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/Multi-Agent-Debate.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/ReAct.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/Reflexion.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/SWE-agent.plan.json	PLAN	领域	组件绑定	红E9001	同上
+计划/研究组/对齐计划快照/Voyager.plan.json	PLAN	领域	组件绑定	红E9001	同上
