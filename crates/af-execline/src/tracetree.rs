@@ -19,6 +19,18 @@
 //! critical `harness.stop` 交叉一致。失败订单（close 未过、终态 max_turns）
 //! 四层仍应完整——本工具核**树形状**，不核订单成败。
 //!
+//! run 目录两种布局（G5 正式批扩展，实证来源 F-第五单交付差异#1）：
+//!
+//! | 布局 | 形态 | L2 invoke_agent |
+//! |---|---|---|
+//! | swev 扁平 | `runs/<item>-a<n>/harness.db` 直挂 run 根 | 恰 1 个 |
+//! | report 环 | `runs/<item>-a<n>/ring/<成员>/harness.db`（reader/writer-i1…） | 每成员 1 个（多 agent 兄弟） |
+//!
+//! report 环口径（对照 F5c 实测）：plan_id 为注册表编译形态
+//! `plan.<包>@<版本>+<摘要>`（非订单 id）；records.quota 是**全环成员 token
+//! 之和**（reader+writer 逐位闭合）；环成员工具 `effect=pure` 不经效应网关
+//! ——effect_intent 只与非纯（effect≠pure）工具事件对账。
+//!
 //! 半途中断的历史 attempt 目录（无 harness.db / 无终态）视为旁路 run，登记
 //! 不断言。一切读取/解析错误都落 findings，不 panic。
 
@@ -30,11 +42,11 @@ use rusqlite::OpenFlags;
 /// L2 invoke_agent 层的重建结果。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentLayer {
-    /// run 目录名（`<item>-a<attempt>` 形态）。
+    /// run 目录名（扁平布局 `<item>-a<attempt>`；report 环 `ring/<成员>`）。
     pub run_dir_name: String,
     /// harness.db `run_row.run_id`（L3/L4 事件的挂靠键）。
     pub run_id: String,
-    /// records.jsonl 的 node_id。
+    /// records.jsonl 的 node_id（report 环成员 = 环成员名）。
     pub node_id: String,
     /// records.jsonl 的 attempt。
     pub attempt: u64,
@@ -46,6 +58,8 @@ pub struct AgentLayer {
     pub chat_events: usize,
     /// L4 `harness.tool` 事件数。
     pub tool_events: usize,
+    /// L4 非纯（effect≠pure）工具事件数——与 effect_intent 对账的口径。
+    pub impure_tool_events: usize,
     /// effects.db `effect_intent` state=executed 行数。
     pub effect_intents: usize,
     /// L3 token 三和（input, output, cache_read）。
@@ -60,7 +74,10 @@ pub struct TraceTreeReport {
     pub final_state: String,
     pub ledger_entries: usize,
     pub mes_kinds: Vec<String>,
+    /// swev 扁平布局的唯一 invoke_agent（report 环布局为 None）。
     pub agent: Option<AgentLayer>,
+    /// report 环布局的 invoke_agent 成员（`ring/<成员>` 各一；扁平布局空）。
+    pub ring: Vec<AgentLayer>,
     /// 旁路 run 目录名（半途 attempt，不计入树）。
     pub side_runs: Vec<String>,
     /// 非空 = 树有断点（每条点名层级与证据）。
@@ -88,26 +105,40 @@ impl TraceTreeReport {
             self.ledger_entries,
             self.mes_kinds.join(","),
         ));
-        match &self.agent {
-            Some(a) => {
-                let sig = match &a.terminal_signal {
-                    Some(s) => format!("/{s}"),
-                    None => String::new(),
-                };
-                out.push_str(&format!(
-                    "└─ invoke_agent {} a{} [run={} run_id={} terminal={}{}]\n",
-                    a.node_id, a.attempt, a.run_dir_name, a.run_id, a.terminal_kind, sig
-                ));
-                out.push_str(&format!(
-                    "   ├─ chat ×{} [tokens in/out/cache={}/{}/{}]\n",
-                    a.chat_events, a.tokens.0, a.tokens.1, a.tokens.2
-                ));
-                out.push_str(&format!(
-                    "   └─ execute_tool ×{} [effect_intent executed ×{}]\n",
-                    a.tool_events, a.effect_intents
-                ));
+        let agents: Vec<&AgentLayer> = if self.ring.is_empty() {
+            self.agent.iter().collect()
+        } else {
+            self.ring.iter().collect()
+        };
+        match agents.len() {
+            0 => out.push_str("└─ invoke_agent <缺失>\n"),
+            n => {
+                for (i, a) in agents.iter().enumerate() {
+                    let (branch, sub) = if i + 1 < n {
+                        ("├─", "│  ")
+                    } else {
+                        ("└─", "   ")
+                    };
+                    let sig = match &a.terminal_signal {
+                        Some(s) => format!("/{s}"),
+                        None => String::new(),
+                    };
+                    out.push_str(&format!(
+                        "{branch} invoke_agent {} a{} [run={} run_id={} terminal={}{}]\n",
+                        a.node_id, a.attempt, a.run_dir_name, a.run_id, a.terminal_kind, sig
+                    ));
+                    out.push_str(&format!(
+                        "{sub}├─ chat ×{} [tokens in/out/cache={}/{}/{}]\n",
+                        a.chat_events, a.tokens.0, a.tokens.1, a.tokens.2
+                    ));
+                    out.push_str(&format!(
+                        "{sub}└─ execute_tool ×{} [pure={} effect_intent executed ×{}]\n",
+                        a.tool_events,
+                        a.tool_events - a.impure_tool_events,
+                        a.effect_intents
+                    ));
+                }
             }
-            None => out.push_str("└─ invoke_agent <缺失>\n"),
         }
         if !self.side_runs.is_empty() {
             out.push_str(&format!(
@@ -145,6 +176,7 @@ pub fn verify_order_dir(dir: &Path) -> TraceTreeReport {
     let mut mes_kinds: Vec<String> = Vec::new();
     let mut quota: Option<(u64, u64, u64)> = None;
     let mut agent: Option<AgentLayer> = None;
+    let mut ring: Vec<AgentLayer> = Vec::new();
     let mut side_runs: Vec<String> = Vec::new();
     let mut referenced_run: Option<String> = None;
     let mut records_node = String::new();
@@ -288,58 +320,71 @@ pub fn verify_order_dir(dir: &Path) -> TraceTreeReport {
             }
         },
     }
-    if !records_plan_id.is_empty() && !order_id.is_empty() && records_plan_id != order_id {
+    if !records_plan_id.is_empty()
+        && !order_id.is_empty()
+        && records_plan_id != order_id
+        && !is_registry_plan_id(&records_plan_id)
+    {
         findings.push(format!(
-            "L1→L2: records plan_id {records_plan_id} ≠ 订单目录 {order_id}"
+            "L1→L2: records plan_id {records_plan_id} ≠ 订单目录 {order_id}（也非 plan.<包>@<版本>+<摘要> 注册表形态）"
         ));
     }
 
     // ---- L2 invoke_agent + L3 chat + L4 execute_tool（引用 run 内） --------
+    let mut token_sum = (0u64, 0u64, 0u64);
+    let mut chat_total = 0usize;
     if let Some(run_name) = &referenced_run {
         let run_dir = dir.join("runs").join(run_name);
-        let (run_id, terminal) = read_run_row(&run_dir, &mut findings);
-        let rid = run_id.as_deref().unwrap_or("");
-        if let Some((kind, signal)) = &terminal {
-            check_stop_status(&run_dir, rid, kind, signal.as_deref(), &mut findings);
+        // 布局甄别：swev 扁平（harness.db 直挂 run 根）优先；report 环
+        // （ring/<成员>/harness.db）次之；两者皆无按扁平路径走——打开失败
+        // 的 finding 形态与既有行为一致。
+        let members = ring_members(&run_dir);
+        if run_dir.join("harness.db").is_file() || members.is_empty() {
+            let a = verify_agent_unit(
+                &run_dir,
+                run_name.clone(),
+                records_node.clone(),
+                records_attempt,
+                &mut findings,
+            );
+            chat_total = a.chat_events;
+            token_sum = a.tokens;
+            agent = Some(a);
+        } else {
+            // report 环：每成员一个 invoke_agent 兄弟节点（records.node_id 是
+            // 环整体的线位，成员名取自 ring/<成员> 目录名——F5c 实测形态）。
+            for m in members {
+                let display = format!("ring/{m}");
+                let a = verify_agent_unit(
+                    &run_dir.join("ring").join(&m),
+                    display.clone(),
+                    m,
+                    records_attempt,
+                    &mut findings,
+                );
+                chat_total += a.chat_events;
+                token_sum.0 += a.tokens.0;
+                token_sum.1 += a.tokens.1;
+                token_sum.2 += a.tokens.2;
+                ring.push(a);
+            }
+            if ring.is_empty() {
+                findings.push("L2 invoke_agent: ring/ 下无含 harness.db 的成员（层缺失）".into());
+            }
         }
-        let (chat_n, tool_n, tokens, bad_rid_n) = read_normal_events(&run_dir, rid, &mut findings);
-        let eff_n = read_effects(&run_dir, rid, &mut findings);
-        if chat_n == 0 {
+        if chat_total == 0 && agent.is_none() && ring.is_empty() {
+            // 单元一个都没建成（如 run 根与 ring/ 均无 harness.db）——单元级
+            // findings 已点名具体缺失；此处兜底整层缺席。
             findings.push("L3 chat: 零 harness.model 事件（层缺失）".into());
         }
-        if tool_n == 0 {
-            findings.push("L4 execute_tool: 零 harness.tool 事件（层缺失）".into());
-        }
-        if bad_rid_n > 0 {
-            findings.push(format!(
-                "L3/L4: {bad_rid_n} 条事件 run_id ≠ invoke_agent run_id（脱链）"
-            ));
-        }
         if let Some(q) = quota {
-            if chat_n > 0 && tokens != q {
+            if chat_total > 0 && token_sum != q {
                 findings.push(format!(
                     "L3 chat: token 三和 {}/{}/{} ≠ records.quota {}/{}/{}（记账断链）",
-                    tokens.0, tokens.1, tokens.2, q.0, q.1, q.2
+                    token_sum.0, token_sum.1, token_sum.2, q.0, q.1, q.2
                 ));
             }
         }
-        if tool_n != eff_n {
-            findings.push(format!(
-                "L4 execute_tool: effect_intent executed {eff_n} 行 ≠ harness.tool 事件 {tool_n} 条"
-            ));
-        }
-        agent = Some(AgentLayer {
-            run_dir_name: run_name.clone(),
-            run_id: run_id.unwrap_or_default(),
-            node_id: records_node,
-            attempt: records_attempt,
-            terminal_kind: terminal.as_ref().map(|t| t.0.clone()).unwrap_or_default(),
-            terminal_signal: terminal.as_ref().and_then(|t| t.1.clone()),
-            chat_events: chat_n,
-            tool_events: tool_n,
-            effect_intents: eff_n,
-            tokens,
-        });
     } else {
         findings.push("L2 invoke_agent: 引用 run 未建立（见 L1→L2 findings）".into());
     }
@@ -363,8 +408,94 @@ pub fn verify_order_dir(dir: &Path) -> TraceTreeReport {
         ledger_entries,
         mes_kinds,
         agent,
+        ring,
         side_runs,
         findings,
+    }
+}
+
+/// 注册表编译形态 plan_id：`plan.<包名>@<版本>+<摘要>`（report/graph 单元经
+/// af-compiler-plan 编译，plan_id 不等于订单 id——父子边由 evidence.run_dir
+/// 与 token 闭合承担；swev 直发形态 plan_id==订单 id 走相等的旧路径）。
+fn is_registry_plan_id(plan_id: &str) -> bool {
+    let Some(rest) = plan_id.strip_prefix("plan.") else {
+        return false;
+    };
+    match rest.split_once('@') {
+        Some((pkg, ver)) => !pkg.is_empty() && ver.contains('+'),
+        None => false,
+    }
+}
+
+/// report 环成员：`run_dir/ring/` 下含 harness.db 的子目录名（排序稳定）。
+/// ring/ 不存在或无合格成员 → 空 vec（调用方回退扁平路径）。
+fn ring_members(run_dir: &Path) -> Vec<String> {
+    let ring = run_dir.join("ring");
+    if !ring.is_dir() {
+        return Vec::new();
+    }
+    let mut names: Vec<String> = std::fs::read_dir(&ring)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir() && e.path().join("harness.db").is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// 校验一个 invoke_agent 单元（扁平 run 根或 ring/<成员>）：L2 终态交叉 +
+/// L3 chat + L4 execute_tool 的全部单元内断言。跨单元断言（token 闭合、
+/// 零 chat）由调用方做。
+fn verify_agent_unit(
+    agent_dir: &Path,
+    display_name: String,
+    node_id: String,
+    attempt: u64,
+    findings: &mut Vec<String>,
+) -> AgentLayer {
+    let (run_id, terminal) = read_run_row(agent_dir, findings);
+    let rid = run_id.as_deref().unwrap_or("");
+    if let Some((kind, signal)) = &terminal {
+        check_stop_status(agent_dir, rid, kind, signal.as_deref(), findings);
+    }
+    let stats = read_normal_events(agent_dir, rid, findings);
+    let eff_n = read_effects(agent_dir, rid, findings);
+    if stats.chat == 0 {
+        findings.push(format!(
+            "L3 chat: {display_name} 零 harness.model 事件（层缺失）"
+        ));
+    }
+    if stats.tool == 0 {
+        findings.push(format!(
+            "L4 execute_tool: {display_name} 零 harness.tool 事件（层缺失）"
+        ));
+    }
+    if stats.bad_rid > 0 {
+        findings.push(format!(
+            "L3/L4: {display_name} 有 {} 条事件 run_id ≠ invoke_agent run_id（脱链）",
+            stats.bad_rid
+        ));
+    }
+    if stats.impure_tool != eff_n {
+        findings.push(format!(
+            "L4 execute_tool: {display_name} effect_intent executed {eff_n} 行 ≠ 非纯（effect≠pure）工具事件 {} 条",
+            stats.impure_tool
+        ));
+    }
+    AgentLayer {
+        run_dir_name: display_name,
+        run_id: run_id.unwrap_or_default(),
+        node_id,
+        attempt,
+        terminal_kind: terminal.as_ref().map(|t| t.0.clone()).unwrap_or_default(),
+        terminal_signal: terminal.as_ref().and_then(|t| t.1.clone()),
+        chat_events: stats.chat,
+        tool_events: stats.tool,
+        impure_tool_events: stats.impure_tool,
+        effect_intents: eff_n,
+        tokens: stats.tokens,
     }
 }
 
@@ -505,25 +636,35 @@ fn check_stop_status(
     }
 }
 
-/// 读 normal.jsonl：返回 (chat 数, tool 数, token 三和, run_id 脱链数)。
+/// 一个 agent 单元内 normal.jsonl 的 L3/L4 计数。
+struct NormalStats {
+    chat: usize,
+    tool: usize,
+    /// effect≠pure 的工具事件数（effect_intent 对账口径；report 环工具
+    /// `effect=pure` 不经效应网关，不产 intent 行）。
+    impure_tool: usize,
+    tokens: (u64, u64, u64),
+    bad_rid: usize,
+}
+
+/// 读 normal.jsonl：逐事件累计 L3 chat / L4 execute_tool 计数与 token 三和。
 /// 工具轮→chat 轮的父子核对在遍历内逐条完成（事件为追加序，模型轮先于其工具轮）。
-fn read_normal_events(
-    run_dir: &Path,
-    run_id: &str,
-    findings: &mut Vec<String>,
-) -> (usize, usize, (u64, u64, u64), usize) {
+fn read_normal_events(run_dir: &Path, run_id: &str, findings: &mut Vec<String>) -> NormalStats {
+    let mut s = NormalStats {
+        chat: 0,
+        tool: 0,
+        impure_tool: 0,
+        tokens: (0, 0, 0),
+        bad_rid: 0,
+    };
     let rows = match read_jsonl(&run_dir.join("normal.jsonl")) {
         Ok(r) => r,
         Err(e) => {
             findings.push(format!("L3/L4: 读取 normal.jsonl 失败：{e}"));
-            return (0, 0, (0, 0, 0), 0);
+            return s;
         }
     };
-    let mut chat = 0usize;
-    let mut tool = 0usize;
-    let mut tokens = (0u64, 0u64, 0u64);
     let mut model_turns: BTreeSet<u64> = BTreeSet::new();
-    let mut bad_rid = 0usize;
     for r in &rows {
         let kind = r.get("kind").and_then(|v| v.as_str()).unwrap_or("");
         let rid = r
@@ -534,29 +675,32 @@ fn read_normal_events(
             && !run_id.is_empty()
             && rid != run_id
         {
-            bad_rid += 1;
+            s.bad_rid += 1;
         }
         match kind {
             "harness.model" => {
-                chat += 1;
+                s.chat += 1;
                 if let Some(t) = r.pointer("/payload/turn").and_then(|v| v.as_u64()) {
                     model_turns.insert(t);
                 }
-                tokens.0 += r
+                s.tokens.0 += r
                     .pointer("/payload/usage/input_tokens")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(0);
-                tokens.1 += r
+                s.tokens.1 += r
                     .pointer("/payload/usage/output_tokens")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(0);
-                tokens.2 += r
+                s.tokens.2 += r
                     .pointer("/payload/usage/cache_read_tokens")
                     .and_then(|v| v.as_u64())
                     .unwrap_or(0);
             }
             "harness.tool" => {
-                tool += 1;
+                s.tool += 1;
+                if r.pointer("/payload/effect").and_then(|v| v.as_str()) != Some("pure") {
+                    s.impure_tool += 1;
+                }
                 if let Some(t) = r.pointer("/payload/turn").and_then(|v| v.as_u64()) {
                     if !model_turns.contains(&t) {
                         findings.push(format!(
@@ -568,7 +712,7 @@ fn read_normal_events(
             _ => {}
         }
     }
-    (chat, tool, tokens, bad_rid)
+    s
 }
 
 /// 读 effects.db：executed 行数 + order_id 与 run_row 一致性。

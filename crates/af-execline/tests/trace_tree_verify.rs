@@ -513,3 +513,288 @@ fn render_contains_span_tree() {
     assert!(out.contains("chat ×2"), "渲染应含 chat 计数：\n{out}");
     assert!(out.contains("execute_tool ×2"), "渲染应含工具计数：\n{out}");
 }
+
+// ===== report 环布局（runs/<item>-a<n>/ring/<成员>/，F5c 实测形态） ============
+
+/// 环成员参数：（成员名, run_id, 模型轮 (turn,in,out,cache), 工具 effect）。
+type RingMember<'a> = (&'a str, &'a str, (u64, u64, u64, u64), &'a str);
+
+/// report 环订单夹具：两个环成员（reader/writer-i1），工具 effect=pure 不产
+/// effect_intent 行；records.quota = 全环 token 之和；plan_id 为注册表编译形态。
+struct RingFixture {
+    order_id: String,
+    /// 成员（名, run_id, 模型轮, 工具 effect）
+    members: Vec<RingMember<'static>>,
+    /// records.quota（None = 用全环真和）
+    quota: Option<(u64, u64, u64)>,
+    plan_id: String,
+}
+
+impl Default for RingFixture {
+    fn default() -> Self {
+        // F5c 实测值：reader 1893/4835 + writer-i1 1205/10002 → 和 3098/14837
+        RingFixture {
+            order_id: "TR-ring".to_string(),
+            members: vec![
+                ("reader", "report-reader", (0, 1893, 4835, 0), "pure"),
+                ("writer-i1", "report-writer-i1", (0, 1205, 10002, 0), "pure"),
+            ],
+            quota: None,
+            plan_id: "plan.paper_report@1.0+13a1799adc04".to_string(),
+        }
+    }
+}
+
+fn write_ring_order(f: &RingFixture) -> PathBuf {
+    let parent =
+        std::env::temp_dir().join(format!("af-tracetree-ring-test-{}", std::process::id()));
+    std::fs::create_dir_all(&parent).unwrap();
+    let dir = parent.join(&f.order_id);
+    let _ = std::fs::remove_dir_all(&dir);
+    let run_dir = dir.join("runs").join("swev-item-glm-cp-a1");
+    for (name, ..) in &f.members {
+        std::fs::create_dir_all(run_dir.join("ring").join(name)).unwrap();
+    }
+    let stable = format!("sid-{}", f.order_id);
+
+    // ledger.jsonl（8 op 全 ok）
+    let ledger: Vec<String> = [
+        ("create_order", "Created"),
+        ("bind_line", "Created"),
+        ("attach_voucher", "Created"),
+        ("release", "Released"),
+        ("start", "InProgress"),
+        ("attach_artifact", "InProgress"),
+        ("complete", "Completed"),
+        ("close", "Closed"),
+    ]
+    .iter()
+    .enumerate()
+    .map(|(i, (op, st))| {
+        format!(
+            r#"{{"seq":{seq},"ts_ms":{ts},"order_id":"{oid}","stable_id":"{sid}","op":"{op}","idem_key":"k","ok":true,"state_after":"{st}","order_after":{{}}}}"#,
+            seq = i + 1,
+            ts = i + 1,
+            oid = f.order_id,
+            sid = stable,
+            op = op,
+            st = st,
+        )
+    })
+    .collect();
+    std::fs::write(dir.join("ledger.jsonl"), ledger.join("\n") + "\n").unwrap();
+
+    // mes-events.jsonl（四类跃迁）
+    let mes: Vec<String> = ["release", "start", "complete", "close"]
+        .iter()
+        .enumerate()
+        .map(|(i, k)| {
+            format!(
+                r#"{{"work_order_id":"{sid}","occurred_at":{ts},"event_id":"{sid}:{k}:{i}","line_id":"line-A","station_id":"af-order-cli","kind":"{k}","quantity":1}}"#,
+                sid = stable,
+                ts = i + 1,
+                k = k,
+                i = i,
+            )
+        })
+        .collect();
+    std::fs::write(dir.join("mes-events.jsonl"), mes.join("\n") + "\n").unwrap();
+
+    // 环成员产物：harness.db / normal.jsonl / critical.jsonl / effects.db
+    let mut sum = (0u64, 0u64, 0u64);
+    for (name, rid, (t, ti, to, tc), effect) in &f.members {
+        let mdir = run_dir.join("ring").join(name);
+        let model_line = format!(
+            concat!(
+                r#"{{"seq":0,"level":"normal","kind":"harness.model","payload":{{"run_id":"{rid}","#,
+                r#""turn":{t},"model":"m","finish":"tool_use","usage":{{"input_tokens":{ti},"output_tokens":{to},"cache_read_tokens":{tc}}}}},"ts_ms":1}}"#
+            ),
+            rid = rid,
+            t = t,
+            ti = ti,
+            to = to,
+            tc = tc,
+        );
+        let tool_line = format!(
+            concat!(
+                r#"{{"seq":1,"level":"normal","kind":"harness.tool","payload":{{"run_id":"{rid}","#,
+                r#""turn":{t},"tool":"submit_report","effect":"{effect}","is_error":false,"error_code":""}},"ts_ms":2}}"#
+            ),
+            rid = rid,
+            t = t,
+            effect = effect,
+        );
+        std::fs::write(
+            mdir.join("normal.jsonl"),
+            format!("{model_line}\n{tool_line}\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            mdir.join("critical.jsonl"),
+            format!(
+                r#"{{"seq":0,"level":"critical","kind":"harness.stop","payload":{{"run_id":"{rid}","turn":1,"status":{{"kind":"completed","signal":"REPORT_DONE"}}}},"ts_ms":9}}"#
+, rid = rid
+            ),
+        )
+        .unwrap();
+        let hdb = rusqlite::Connection::open(mdir.join("harness.db")).unwrap();
+        hdb.execute(
+            "CREATE TABLE run_row (run_id TEXT, terminal_json TEXT, order_id TEXT)",
+            [],
+        )
+        .unwrap();
+        hdb.execute(
+            "INSERT INTO run_row VALUES (?1, ?2, ?3)",
+            rusqlite::params![
+                rid,
+                r#"{"kind":"completed","signal":"REPORT_DONE"}"#,
+                format!("{}-run", f.order_id)
+            ],
+        )
+        .unwrap();
+        let edb = rusqlite::Connection::open(mdir.join("effects.db")).unwrap();
+        edb.execute(
+            "CREATE TABLE effect_intent (workorder_id TEXT, seq INTEGER, payload_json TEXT, \
+             payload_sha256 TEXT, state TEXT, order_id TEXT)",
+            [],
+        )
+        .unwrap();
+        sum.0 += ti;
+        sum.1 += to;
+        sum.2 += tc;
+    }
+
+    // records.jsonl：plan_id 注册表形态 + 全环 quota 和
+    let (qi, qo, qc) = f.quota.unwrap_or(sum);
+    let rec = serde_json::json!({
+        "plan_id": f.plan_id,
+        "node_id": "line-A",
+        "item_id": "item",
+        "attempt": 1,
+        "host_alias": "h",
+        "unit_id": "report-unit",
+        "unit_version": "0.1.0",
+        "status": "completed",
+        "verdict": true,
+        "evidence": {
+            "run_dir": format!("af-state/orders/{}/runs/swev-item-glm-cp-a1", f.order_id),
+            "evidence_digest": null,
+        },
+        "gate": "ok",
+        "usage": {"turns": 2, "unit_calls": 2, "http_retries": 0,
+                  "quota": {"input": qi, "output": qo, "cache_read": qc}},
+    });
+    std::fs::write(dir.join("records.jsonl"), format!("{rec}\n")).unwrap();
+    dir
+}
+
+/// F5c 形态全绿：两环成员各 1 chat + 1 pure 工具、token 全环闭合、
+/// plan_id 注册表形态放行、effect=pure 不产 intent 不算脱账。
+#[test]
+fn report_ring_layout_full_tree_ok() {
+    let dir = write_ring_order(&RingFixture::default());
+    let r = af_execline::tracetree::verify_order_dir(&dir);
+    assert!(
+        r.findings.is_empty(),
+        "report 环全绿单不应有 findings：{:#?}",
+        r.findings
+    );
+    assert!(r.agent.is_none(), "环布局不应建扁平 agent");
+    assert_eq!(r.ring.len(), 2);
+    assert_eq!(r.ring[0].node_id, "reader");
+    assert_eq!(r.ring[0].run_dir_name, "ring/reader");
+    assert_eq!(r.ring[0].run_id, "report-reader");
+    assert_eq!(r.ring[0].tokens, (1893, 4835, 0));
+    assert_eq!(r.ring[0].impure_tool_events, 0);
+    assert_eq!(r.ring[0].effect_intents, 0);
+    assert_eq!(r.ring[1].tokens, (1205, 10002, 0));
+    let out = r.render();
+    assert!(out.contains("ring/reader"), "渲染应含环成员：\n{out}");
+    assert!(out.contains("ring/writer-i1"), "渲染应含环成员：\n{out}");
+    assert!(out.contains("pure=1"), "渲染应含 pure 工具计数：\n{out}");
+}
+
+/// 环布局 token 闭合是跨成员求和：quota 少 1 也必须点名记账断链。
+#[test]
+fn report_ring_token_sum_must_close_across_members() {
+    let f = RingFixture {
+        order_id: "TR-tok".to_string(),
+        quota: Some((3098, 14837, 1)), // 真和 cache=0，此处错报 1
+        ..RingFixture::default()
+    };
+    let fs = {
+        let dir = write_ring_order(&f);
+        af_execline::tracetree::verify_order_dir(&dir).findings
+    };
+    assert!(
+        fs.iter().any(|x| x.contains("quota")),
+        "应点名跨成员 token 和与 quota 不一致：{fs:#?}"
+    );
+}
+
+/// 非纯工具（effect=external_once）必须与 effect_intent 对账（环内同口径）。
+#[test]
+fn report_ring_impure_tool_needs_intent_row() {
+    let f = RingFixture {
+        order_id: "TR-imp".to_string(),
+        members: vec![
+            ("reader", "report-reader", (0, 100, 200, 0), "pure"),
+            ("planner", "report-planner", (0, 10, 20, 0), "external_once"),
+        ],
+        quota: None,
+        ..RingFixture::default()
+    };
+    let fs = {
+        let dir = write_ring_order(&f);
+        af_execline::tracetree::verify_order_dir(&dir).findings
+    };
+    assert!(
+        fs.iter()
+            .any(|x| x.contains("effect") && x.contains("ring/planner")),
+        "应点名 planner 非纯工具无 intent 行：{fs:#?}"
+    );
+}
+
+/// plan_id 既非订单 id 也非注册表形态仍要拦（父子边检查有牙）。
+#[test]
+fn report_ring_foreign_plan_id_still_flagged() {
+    let f = RingFixture {
+        order_id: "TR-pid".to_string(),
+        plan_id: "someone-elses-order".to_string(),
+        ..RingFixture::default()
+    };
+    let fs = {
+        let dir = write_ring_order(&f);
+        af_execline::tracetree::verify_order_dir(&dir).findings
+    };
+    assert!(
+        fs.iter().any(|x| x.contains("plan_id")),
+        "应点名 plan_id 断链：{fs:#?}"
+    );
+}
+
+/// 环成员 chat 层缺失（零模型轮）必须逐成员点名。
+#[test]
+fn report_ring_member_without_chat_flagged() {
+    let f = RingFixture {
+        order_id: "TR-chat".to_string(),
+        members: vec![
+            ("reader", "report-reader", (0, 100, 200, 0), "pure"),
+            ("writer-i1", "report-writer-i1", (0, 0, 0, 0), "pure"), // 零 token 伪零轮
+        ],
+        quota: None,
+        ..RingFixture::default()
+    };
+    // 直接删 writer-i1 的模型轮事件，保留工具轮 → chat 零 + 工具脱链双 findings
+    let dir = write_ring_order(&f);
+    let nj = dir.join("runs/swev-item-glm-cp-a1/ring/writer-i1/normal.jsonl");
+    let text = std::fs::read_to_string(&nj).unwrap();
+    let tool_line = text.lines().last().unwrap().to_string();
+    std::fs::write(&nj, format!("{tool_line}\n")).unwrap();
+    let fs = af_execline::tracetree::verify_order_dir(&dir).findings;
+    assert!(
+        fs.iter()
+            .any(|x| x.contains("ring/writer-i1") && x.contains("harness.model")),
+        "应点名 writer-i1 零模型轮：{fs:#?}"
+    );
+}
