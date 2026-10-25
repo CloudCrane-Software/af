@@ -26,7 +26,7 @@ fn codes(r: &Report) -> Vec<&'static str> {
 
 /// 深嵌套过闸样本的判定须在大栈线程上跑：antlr4rust 递归下降每层括号吃
 /// 数 KB 栈（农田实测 8MB 主栈深 1000 过/2000 溢出），测试线程栈不定，
-/// 32MB 显式栈把「过闸即真过」的判定与环境解耦（RESULT-农田修复 §阈值）。
+/// 256MB 显式栈把「过闸即真过」的判定与环境解耦（RESULT-农田修复 §2）。
 fn run_on_big_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
     std::thread::Builder::new()
         .stack_size(256 * 1024 * 1024)
@@ -349,5 +349,35 @@ policies:
         codes(&report),
         vec!["E2207"],
         "穿体路径悬空照报 E2207（确认的是解析语义，不是免检）：\n{report}"
+    );
+}
+
+// ---------- 表外差集钉（复核 2026-10-25 农田 500 复裁定发现的 3 份翻转样本） ----------
+
+/// 500 份语料复裁定中不在 36 份立案清单内、但裁定翻转的 3 份——机理均与
+/// 本批修法一致（设计内行为，非缺陷），入仓钉死防回归：
+/// - C_CE18（5 万段 `||` 析取链 ≈400KB）：ANOMALIES A-2 原记「不崩」为
+///   阈值观察；现超 64KiB 长度闸 → E1054（「不崩」升格为「正规拒」）。
+/// - C_CE26（≈1MB 单引号字符串字面量）：长度闸按**总字节**计、无字面量
+///   豁免（深度闸才豁免字面量内括号）——巨型表达式无论内容一律前置拒。
+/// - C_AL05（根节点 `a.b` 双胞胎 + human 变体，output.from 被体遮蔽）：
+///   点号 id 词法拒 E1008（路径别名族第 7 份形态）。
+#[test]
+fn off_table_flips_are_designed_rejections() {
+    for (name, expect) in [
+        ("C_CE18_or_chain_50k.yaml", "E1054"),
+        ("C_CE26_huge_string_literal.yaml", "E1054"),
+    ] {
+        let report = farm(name);
+        assert_eq!(
+            codes(&report),
+            vec![expect],
+            "{name} 超长表达式按长度闸前置拒（总字节计，无字面量豁免）：\n{report}"
+        );
+    }
+    let report = farm("C_AL05_output_from_shadowed_body.yaml");
+    assert!(
+        codes(&report).contains(&"E1008"),
+        "C_AL05 点号 id（根节点 a.b 双胞胎）应词法拒 E1008：\n{report}"
     );
 }

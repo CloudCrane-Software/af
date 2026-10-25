@@ -116,12 +116,6 @@ warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
              └── ed25519 v2.2.3
                  └── ed25519-dalek v2.2.0 (*)
 
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/af-wt-farm/deny.toml:28:4
-   │
-28 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
-
 warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
    ┌─ /home/pan-ding/workspace/af-wt-farm/Cargo.lock:82:1
    │  
@@ -614,6 +608,12 @@ warning[duplicate]: found 2 duplicate entries for crate 'hashbrown'
           │       └── criterion v0.8.2 (*)
           └── serde_yaml v0.9.34+deprecated
               └── af-dsl v0.1.0 (*)
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/af-wt-farm/deny.toml:28:4
+   │
+28 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 3 duplicate entries for crate 'itertools'
     ┌─ /home/pan-ding/workspace/af-wt-farm/Cargo.lock:162:1
