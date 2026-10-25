@@ -9,6 +9,10 @@
 # 裁决8 联动再登记：G4 两包落地后 registry_digest d5f3bd3aa0f7…d57977 →
 #   63c3478e9321e1c58318620a592e9953ef34cee3a5d19ea4c3300a722fafe15b（63 条终态），
 #   15 份快照已重跑更新并逐位一致性登记（RESULT-G4-reportkit.md；本表登记新值）。
+# G4 收尾批再核（2026-10-25，RESULT-G4-收尾.md）：sop_full/sop_no_qa/sop_minimal
+#   三图物化（图源+模板，不触 components.json）后 registry_digest 逐位不变
+#   （63c3478e…复测）；15 份快照以本树 registry 重跑 cmp 15/15 逐字节全等
+#   （plan_id 逐字一致），本表登记值维持现状。
 # =============================================================================
 crates/af-compiler/testdata/golden/sample1.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363（g3_golden_corpus_byte_exact）
 crates/af-compiler/testdata/golden/sample2.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363

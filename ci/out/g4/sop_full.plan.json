@@ -1,0 +1,505 @@
+{
+  "v": 1,
+  "body": {
+    "plan_id": "plan.sweng_sop_full@1.0+7dd9c5aa253b",
+    "compiled_from": {
+      "dsl_digest": "7dd9c5aa253b9f9c702219132656fdf93ffd838c56fbcf4bd65b38db70c469d0",
+      "compiler_version": "0.1.0",
+      "graph_version": "1.0",
+      "registry_digest": "63c3478e9321e1c58318620a592e9953ef34cee3a5d19ea4c3300a722fafe15b"
+    },
+    "line": {
+      "line_id": null,
+      "line_version": null,
+      "domain_pack_digest": null
+    },
+    "order": {
+      "id": "",
+      "stable_id": "",
+      "run_id": "",
+      "state": "Created",
+      "graph_version": "1.0",
+      "line": null,
+      "budget_voucher": null,
+      "artifacts": [],
+      "sla": {
+        "deadline": null,
+        "priority": "Normal"
+      },
+      "supersedes": null,
+      "history": []
+    },
+    "graph": {
+      "graph_version": "1.0",
+      "name": "sweng_sop_full",
+      "entry": "planner",
+      "nodes": [
+        {
+          "id": "coder",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "planner",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "reviewer",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "tester",
+          "kind": "check",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "coder",
+          "output": "files",
+          "to": "reviewer",
+          "input": "files",
+          "checkpoint": true
+        },
+        {
+          "from": "coder",
+          "output": "files",
+          "to": "tester",
+          "input": "files",
+          "checkpoint": false
+        },
+        {
+          "from": "planner",
+          "output": "plan",
+          "to": "coder",
+          "input": "plan",
+          "checkpoint": true
+        },
+        {
+          "from": "planner",
+          "output": "plan",
+          "to": "reviewer",
+          "input": "plan",
+          "checkpoint": false
+        },
+        {
+          "from": "reviewer",
+          "output": "review",
+          "to": "tester",
+          "input": "review",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {}
+    },
+    "interface": {
+      "input_type": "swe_task_input",
+      "output_type": "qa_report",
+      "output_from": "tester",
+      "intent": "软件工程包多 agent SOP 全链（F-第四单载体）：计划员（问题陈述→有序任务计划）→ 工程师（sweng 工具面改码，工作区唯一写者）→ 评审员（LLM 代码评审，route.judge）→ 测试员（容器内仓库测试，判定零 LLM 自评）；typed 工件逐节点交接"
+    },
+    "types": {
+      "code_file": {
+        "properties": {
+          "content_ref": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content_ref"
+        ],
+        "type": "object"
+      },
+      "plan_step": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "target"
+        ],
+        "type": "object"
+      },
+      "qa_report": {
+        "properties": {
+          "failures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pass": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pass",
+          "failures"
+        ],
+        "type": "object"
+      },
+      "review_report": {
+        "properties": {
+          "approved": {
+            "type": "boolean"
+          },
+          "issues": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "approved",
+          "issues"
+        ],
+        "type": "object"
+      },
+      "swe_task_input": {
+        "properties": {
+          "image": {
+            "type": "string"
+          },
+          "instance_id": {
+            "type": "string"
+          },
+          "problem_statement": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo",
+          "instance_id",
+          "problem_statement"
+        ],
+        "type": "object"
+      },
+      "task_plan": {
+        "properties": {
+          "instance_id": {
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "type": "plan_step"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "instance_id",
+          "steps"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "workspace": {
+        "name": "workspace",
+        "kind": "collection",
+        "item": "code_file",
+        "writer": "coder",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 256
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": [
+      {
+        "node_id": "coder",
+        "unit": null,
+        "components": {
+          "model_route": "route.main@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [
+            {
+              "reference": "pkg.sweng.edit@1",
+              "effect_class": "persist"
+            },
+            {
+              "reference": "pkg.sweng.locate@1",
+              "effect_class": "pure"
+            },
+            {
+              "reference": "pkg.sweng.view@1",
+              "effect_class": "pure"
+            }
+          ],
+          "context_compaction": null
+        },
+        "budget": [
+          {
+            "id": "coder_turns",
+            "dimension": "turns",
+            "cap": 60
+          }
+        ],
+        "artifact_contract": [
+          {
+            "name": "files",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "planner",
+        "unit": null,
+        "components": {
+          "model_route": "route.plan@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "plan",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "reviewer",
+        "unit": null,
+        "components": {
+          "model_route": "route.judge@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [
+          {
+            "id": "reviewer_turns",
+            "dimension": "turns",
+            "cap": 12
+          }
+        ],
+        "artifact_contract": [
+          {
+            "name": "review",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "tester",
+        "unit": {
+          "unit_id": "pkg.sweng.test_unit",
+          "unit_version": "1"
+        },
+        "components": {
+          "model_route": null,
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "report",
+            "is_final": true,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      }
+    ],
+    "budget": {
+      "budgets": [
+        {
+          "id": "coder_turns",
+          "dimension": "turns",
+          "scope": "node:coder",
+          "cap": 60
+        },
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 600
+        },
+        {
+          "id": "reviewer_turns",
+          "dimension": "turns",
+          "scope": "node:reviewer",
+          "cap": 12
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 400000
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "steps.turns >= 90",
+            "roots": [
+              "steps"
+            ],
+            "digest": "3acb7de2a1a5ddc3f413cde90f2c14b666c2ae6a231267e4d605a57061b03166"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "environment_failure",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "resources": {
+      "gates": [],
+      "limits": []
+    },
+    "observation": {
+      "span_tree": [
+        "invoke_workflow",
+        "invoke_agent",
+        "chat",
+        "execute_tool"
+      ],
+      "ctx_propagation": "env",
+      "otel": {
+        "enabled": false,
+        "endpoint": null,
+        "batch_size": 512
+      },
+      "events": {
+        "root_env": "AF_OBS_ROOT",
+        "line": "",
+        "index": true,
+        "manifest": true
+      },
+      "mes": {
+        "endpoint_ref": "env:MES_CH_URL",
+        "database": "af_mes",
+        "line_id": "",
+        "station_id": ""
+      }
+    },
+    "recovery": {
+      "node_retry": null,
+      "resume_source": [
+        "run_store",
+        "record_stream",
+        "mes_events"
+      ],
+      "safety_points": [],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "environment_failure",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {}
+  }
+}

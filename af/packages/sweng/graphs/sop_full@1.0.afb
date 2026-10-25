@@ -1,0 +1,139 @@
+version: 1
+meta:
+  name: sweng_sop_full
+  graph_version: "1.0"
+  entry: planner
+  input: swe_task_input
+  output: { ref: qa_report, from: tester }
+  intent: "软件工程包多 agent SOP 全链（F-第四单载体）：计划员（问题陈述→有序任务计划）→ 工程师（sweng 工具面改码，工作区唯一写者）→ 评审员（LLM 代码评审，route.judge）→ 测试员（容器内仓库测试，判定零 LLM 自评）；typed 工件逐节点交接"
+
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: plan_step
+    schema:
+      type: object
+      required: [id, action, target]
+      properties:
+        id: { type: string }
+        action: { type: string }
+        target: { type: string }
+        depends_on: { type: array, items: { type: string } }
+  - name: task_plan
+    schema:
+      type: object
+      required: [instance_id, steps]
+      properties:
+        instance_id: { type: string }
+        steps: { type: array, items: { type: plan_step } }
+  - name: code_file
+    schema:
+      type: object
+      required: [path, content_ref]
+      properties:
+        path: { type: string }
+        content_ref: { type: string }
+  - name: review_report
+    schema:
+      type: object
+      required: [approved, issues]
+      properties:
+        approved: { type: boolean }
+        issues: { type: array, items: { type: string } }
+  - name: qa_report
+    schema:
+      type: object
+      required: [pass, failures]
+      properties:
+        pass: { type: boolean }
+        failures: { type: array, items: { type: string } }
+
+stores:
+  - name: workspace               # 工作区文件系统：coder 唯一写者（INV-2 单写者）
+    type: collection
+    item: code_file
+    writer: coder
+    lifecycle: run
+    retention: { max_items: 256 }
+
+nodes:
+  - id: planner                   # 计划员：问题陈述 → 有序任务计划（结构化工件）
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { plan: task_plan }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 500 }
+        - { from: input, fields: [repo, instance_id, problem_statement], policy: project, quota_tokens: 1500 }
+
+  - id: coder                     # 工程师：按计划改码（sweng 工具面）；迭代环在节点运行时内
+    kind: task
+    uses:
+      model: route.main@1
+      tools: [pkg.sweng.locate@1, pkg.sweng.view@1, pkg.sweng.edit@1]
+    writes: [workspace]
+    consumes: { plan: task_plan }
+    emits: { files: "list<code_file>" }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.engineer_system@1, quota_tokens: 600 }
+        - { from: input, fields: [problem_statement], policy: project, quota_tokens: 1000 }
+        - { from: edge, port: plan, policy: project, quota_tokens: 1800 }
+
+  - id: reviewer                  # 评审员：LLM 代码评审（对计划与变更面）
+    kind: task
+    uses: { model: route.judge@1 }
+    consumes: { plan: task_plan, files: "list<code_file>" }
+    emits: { review: review_report }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.reviewer_system@1, quota_tokens: 500 }
+        - { from: edge, port: plan, policy: project, quota_tokens: 1200 }
+        - { from: edge, port: files, policy: project, quota_tokens: 1800 }
+
+  - id: tester                    # 测试员：容器内跑仓库自带测试（判定零 LLM 自评）
+    kind: check
+    uses: { unit: pkg.sweng.test_unit@1 }
+    reads: [workspace]
+    consumes: { files: "list<code_file>", review: review_report }
+    emits: { report: qa_report }
+
+edges:
+  - { from: planner, output: plan, to: coder, input: plan, checkpoint: true }
+  - { from: planner, output: plan, to: reviewer, input: plan }
+  - { from: coder, output: files, to: reviewer, input: files, checkpoint: true }
+  - { from: coder, output: files, to: tester, input: files }
+  - { from: reviewer, output: review, to: tester, input: review }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 600 }
+    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 400000 }
+    - { id: coder_turns, dimension: turns, scope: node:coder, cap: 60 }
+    - { id: reviewer_turns, dimension: turns, scope: node:reviewer, cap: 12 }
+  stop:
+    - { when: "steps.turns >= 90", outcome: failed }
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: schema_invalid
+      route: same_node
+      feedback: format_reminder
+      retry: { max: 2, backoff_ms: 0 }
+    - class: tool_error
+      route: same_node
+      feedback: error_observation
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

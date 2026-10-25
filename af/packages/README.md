@@ -73,7 +73,15 @@
   `context.sections[].template_ref`（`pkg.<包>.<名>[@<版本>]`，版本段
   可选）由执行面装载期解析到该文件并逐件 sha256 核对，不符拒绝启动
   （EX4001-4003；版本段给出时与清单版本核对）。首包 = sweng
-  （swev_system/swev_instance_protocol/aci_system）。
+  （swev_system/swev_instance_protocol/aci_system + G4 收尾批 SOP 面
+  planner_system/engineer_system/reviewer_system——sop_full/sop_no_qa/
+  sop_minimal 三图的模板引用）；reportkit 同机制（reader_system/
+  writer_system）。
+
+- 图源文件：manifest `graphs[].source` 定位串 ↔ `<包>/graphs/<名>@<版本>.afb`
+  落盘正本。sweng 四图（sop_full/sop_no_qa/sop_minimal/fix_swe_task）与
+  reportkit paper_report 均已在盘（G4 收尾批物化 selector 时代「声明无源」
+  的三份 SOP 图源；装载面仍只登记引用——registry.rs 首版语义不变）。
 
 首批声明 = golden 源 sample2 / sample3 / GPTSwarm 三稿 `uses.*` 引用闭包：
 `route.main@1`、`route.cheap@1`（根级）；`pkg.sweng.locate/view/edit`、

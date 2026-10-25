@@ -1,6 +1,5 @@
-== step8 neutrality 门开始 2026-10-25 11:44:29
-  [守卫] target 缓存含跨沙箱陈旧测试二进制（烙印路径≠/home/pan-ding/afb-neut-sbx）——cargo clean -p 两 crate 强制重编
-[PASS] Z0-pre 沙箱 /home/pan-ding/afb-neut-sbx（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，9.7M）；target=/home/pan-ding/afbuild-neutrality
+== step8 neutrality 门开始 2026-10-25 12:15:08
+[PASS] Z0-pre 沙箱 /home/pan-ding/afb-neut-sbx（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，9.8M）；target=/home/pan-ding/afbuild-neutrality
 -- 阶段1 对照臂（包原样）
   对照臂 af-dsl exit=0
   对照臂 af-compiler exit=0
@@ -20,7 +19,7 @@
 -- 阶段4 N2 扫描 + N3 登记闭集
 [PASS] S1 领域词扫描白名单外命中 = 0（命中 14 处）
 [PASS] R7 闭集守卫 OK：21 份 IR golden 与登记互为闭集
-词表 SHA-256：302e906e7a5825d7752130aa205b961aba6d2d79246be6ab931180d149cd6edd
+词表 SHA-256：70970efcceebee93e5757ef67c683895c3c3ec9725e710f5f5b5bbbdf831b72c
 [PASS] Z0 正仓 git status 前后零差（沙箱只读正仓）
 == step8 汇总：PASS=12 FAIL=0（判据 C1/I1/I2/I3/I4/P-A/P-B/P-C/S1/R7/Z0）
 == step8 neutrality 门全绿

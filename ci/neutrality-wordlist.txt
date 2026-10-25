@@ -21,21 +21,23 @@
 #   2. 一词一行登记：词 <TAB> 来源 <TAB> 处置 <TAB> 理由。
 #   3. 表冻结：本文件 SHA-256 随门日志落 ci/out/step8-neutrality.log，diff 即审计面。
 #
-# 【移交登记·裁决19】「G4 后词表再生成+重收敛」（G4 收官后执行，非本批范围）：
-#   reportkit 6 名已入册（pkg.report.web_search/web_fetch/pdf_extract/
-#   citation_unit/rubric_unit/mem.notes + manifest 图 pkg.reportkit.paper_report），
-#   机械源②再生成将新增候选段：report(kit)/paper/web_fetch/pdf_extract/
-#   doc_render/notes/render/citation_unit/rubric_unit——须按 §2.4 白名单流程
-#   重收敛（report 规范词不入表、render/notes 类通用词按剔除规则裁定）；
-#   同时补登 reflectkit（机械源②既有段，方案 §2.1 收敛正本未收录——历史收敛
-#   决策沿袭，随再收敛一并复核）。漏登记新包名=流程违约（方案 §4.3）。
+# 【移交执行·裁决19】「G4 后词表再生成+重收敛」已于 G4 收尾批（2026-10-25）
+#   执行：机械源②对 63 条终态注册面 + 全部 manifest 图名 + 两包 prompts/ 模板名
+#   再生成，新增黑名单 5 词（reportkit/reflectkit/paper/web_fetch/pdf，见段内
+#   逐词登记）；report 不入表（rule-1：BindReport 词边界安全，校验/绑定报告是
+#   核心机制词）；render/doc/notes/extract/fetch/web 及新模板名段
+#   planner/engineer/reviewer/reader/writer/system 全为通用英语词，按剔除规则
+#   不入表（sweng 新模板 planner_system/engineer_system/reviewer_system、
+#   reportkit 模板 reader_system/writer_system 均无专有段）。reflectkit 为
+#   机械源②既有段（pkg.reflexkit.*）历史收敛正本漏登，随本次再收敛补登。
+#   新增 5 词核心 src 实测 0 命中（grep -rniE 亲测），白名单零新增。
 #
 # 基线实测（2026-10-25 本 commit HEAD，ci/neutrality_scan.py）：
 #   核心 src（af-dsl+af-compiler，含 src/bin）全量命中 14 条，全部入白名单段——
 #   可执行标识符零领域词；code/repo/patch/diff/commit/rubric/citation/video/
 #   web_search 两包敏感词 0 命中。
 # =============================================================================
-# ==== 黑名单段（41 词：① 17 + ② 14 + ③④ 10；人工收敛正本） ====
+# ==== 黑名单段（46 词 = 原收敛正本 41 + G4 收尾批机械源②再生成新增 5；人工收敛正本） ====
 # 词	来源	处置	理由
 adas	①	黑名单	对齐稿域名（ADAS.yaml 分词）
 aflow	①	黑名单	对齐稿域名（AFlow.yaml）
@@ -68,6 +70,11 @@ searchkit	②	黑名单	包段（pkg.searchkit.*）
 hopqa	②	黑名单	专有名段（pkg.reactkit.hopqa_api 截段）
 swebench	②	黑名单	专有名段（pkg.sweagent.swebench_eval 截段）
 aci	②	黑名单	专有名段（pkg.sweagent.aci.*；ADR-006 裁决1 点名）
+reflectkit	②	黑名单	包段（pkg.reflexkit.*；机械源②既有段，历史收敛正本漏登，G4 收尾批补登）
+reportkit	②	黑名单	包段（pkg.reportkit.* / manifest 图 pkg.reportkit.paper_report；研究报告包）
+paper	②	黑名单	专有名段（pkg.reportkit.paper_report 图段；研究报告包域）
+web_fetch	②③④	黑名单	专有名段（pkg.report.web_fetch；ADR-006 web 检索域，同 web_search 先例）
+pdf	②	黑名单	专有名段（pkg.report.pdf_extract 截段；研究报告包域）
 git	③④	黑名单·homonym	ADR-006 软件工程包领域词；同形 .git VCS 目录名（见白名单 registry.rs:228）
 terminal	③④	黑名单·homonym	ADR-006「终端」领域词；同形 DSL 语法词 failures[].terminal（提案 B §1.2 policies 表）
 video	③④	黑名单	ADR-006 点名领域词（视频）
