@@ -1,0 +1,381 @@
+{
+  "v": 1,
+  "body": {
+    "plan_id": "plan.sweng_fix_swe@1.0+535e358b13cb",
+    "compiled_from": {
+      "dsl_digest": "535e358b13cbad592cb89799d0928ce4d8cfb239e20e6fc4d2a9e20d44bbbff3",
+      "compiler_version": "0.1.0",
+      "graph_version": "1.0",
+      "registry_digest": "d507bf61f6c34a0d90149ab4b99384b6db14bad1285d310e4ee23a4d8400456e"
+    },
+    "line": {
+      "line_id": null,
+      "line_version": null,
+      "domain_pack_digest": null
+    },
+    "order": {
+      "id": "",
+      "stable_id": "",
+      "run_id": "",
+      "state": "Created",
+      "graph_version": "1.0",
+      "line": null,
+      "budget_voucher": null,
+      "artifacts": [],
+      "sla": {
+        "deadline": null,
+        "priority": "Normal"
+      },
+      "supersedes": null,
+      "history": []
+    },
+    "graph": {
+      "graph_version": "1.0",
+      "name": "sweng_fix_swe",
+      "entry": "env_boot",
+      "nodes": [
+        {
+          "id": "env_boot",
+          "kind": "task",
+          "escape": {
+            "kind": "env_adapter",
+            "impl_ref": "executor:builtin/sweng.env_boot@af-execline",
+            "reason": "per-instance 容器装载与资源护栏/代理注入是运行时基础设施，静态拓扑无法穷举（承 SWE-agent.yaml:139-146 判例）",
+            "owner": "sweng-team",
+            "share_budget_pct": 6
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "evaluate",
+          "kind": "check",
+          "capability_refs": []
+        },
+        {
+          "id": "fix",
+          "kind": "task",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "env_boot",
+          "output": "env",
+          "to": "fix",
+          "input": "env",
+          "checkpoint": false
+        },
+        {
+          "from": "fix",
+          "output": "patch",
+          "to": "evaluate",
+          "input": "patch",
+          "checkpoint": true
+        }
+      ],
+      "subgraphs": {}
+    },
+    "interface": {
+      "input_type": "swe_task_input",
+      "output_type": "verdict",
+      "output_from": "evaluate",
+      "intent": "软件工程包 E2E：容器环境装载（L4 记账）→ 单 LLM 修复节点（bash 工具面，节点运行时环）→ swebench 官方判分（外部评估器；评估输入对修复节点不可读）"
+    },
+    "types": {
+      "env_handle": {
+        "properties": {
+          "container": {
+            "type": "string"
+          },
+          "repo_path": {
+            "type": "string"
+          },
+          "test_command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "container",
+          "repo_path",
+          "test_command"
+        ],
+        "type": "object"
+      },
+      "patch": {
+        "properties": {
+          "diff": {
+            "type": "string"
+          },
+          "files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "diff",
+          "files"
+        ],
+        "type": "object"
+      },
+      "swe_task_input": {
+        "properties": {
+          "image": {
+            "type": "string"
+          },
+          "instance_id": {
+            "type": "string"
+          },
+          "problem_statement": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo",
+          "instance_id",
+          "problem_statement"
+        ],
+        "type": "object"
+      },
+      "verdict": {
+        "properties": {
+          "f2p_passed": {
+            "type": "integer"
+          },
+          "f2p_total": {
+            "type": "integer"
+          },
+          "resolved": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "resolved",
+          "f2p_passed",
+          "f2p_total"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "eval_refs": {
+        "name": "eval_refs",
+        "kind": "collection",
+        "item": "patch",
+        "writer": "env_boot",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": true
+      }
+    },
+    "node_exec": [
+      {
+        "node_id": "env_boot",
+        "unit": null,
+        "components": {
+          "model_route": null,
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "env",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "evaluate",
+        "unit": {
+          "unit_id": "pkg.sweagent.swebench_eval",
+          "unit_version": "1"
+        },
+        "components": {
+          "model_route": null,
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "verdict",
+            "is_final": true,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "fix",
+        "unit": null,
+        "components": {
+          "model_route": "route.main@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [
+            {
+              "reference": "pkg.sweagent.env@1",
+              "effect_class": "external_once"
+            }
+          ],
+          "context_compaction": null
+        },
+        "budget": [
+          {
+            "id": "turn_cap",
+            "dimension": "turns",
+            "cap": 60
+          }
+        ],
+        "artifact_contract": [
+          {
+            "name": "patch",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      }
+    ],
+    "budget": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 100
+        },
+        {
+          "id": "turn_cap",
+          "dimension": "turns",
+          "scope": "node:fix",
+          "cap": 60
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "last_tool.first_line in ['TASK_COMPLETE']",
+            "roots": [
+              "last_tool"
+            ],
+            "digest": "750ae57223e297f23263356970f81d9a79ee08059b7c01e92debf212ce11678f"
+          },
+          "outcome": "completed"
+        },
+        {
+          "when": {
+            "source": "steps.tool_free >= 3",
+            "roots": [
+              "steps"
+            ],
+            "digest": "0820e99b1e8a42473f4de230852768ed6bc993953ad533420735c374d6b64afc"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "environment_failure",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "resources": {
+      "gates": [],
+      "limits": []
+    },
+    "observation": {
+      "span_tree": [
+        "invoke_workflow",
+        "invoke_agent",
+        "chat",
+        "execute_tool"
+      ],
+      "ctx_propagation": "env",
+      "otel": {
+        "enabled": false,
+        "endpoint": null,
+        "batch_size": 512
+      },
+      "events": {
+        "root_env": "AF_OBS_ROOT",
+        "line": "",
+        "index": true,
+        "manifest": true
+      },
+      "mes": {
+        "endpoint_ref": "env:MES_CH_URL",
+        "database": "af_mes",
+        "line_id": "",
+        "station_id": ""
+      }
+    },
+    "recovery": {
+      "node_retry": null,
+      "resume_source": [
+        "run_store",
+        "record_stream",
+        "mes_events"
+      ],
+      "safety_points": [],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "environment_failure",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {
+      "env_boot": {
+        "kind": "env_adapter",
+        "impl_ref": "executor:builtin/sweng.env_boot@af-execline",
+        "reason": "per-instance 容器装载与资源护栏/代理注入是运行时基础设施，静态拓扑无法穷举（承 SWE-agent.yaml:139-146 判例）",
+        "owner": "sweng-team",
+        "share_budget_pct": 6
+      }
+    }
+  }
+}
