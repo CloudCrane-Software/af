@@ -1,8 +1,8 @@
-step1  PASS  579ms  cargo fmt --check
-step2  PASS  294ms  cargo clippy + clippy_gate
-step3  PASS  9989ms  cargo test -j4 --workspace
-step4  PASS  36ms  cue recipe vet+export+断言
-step5  PASS  234ms  parse_scrub × 7 真实日志
-step6  PASS  70ms  cosign 断网 verify-blob
-step7  PASS  547ms  cargo deny --offline check
-step8  PASS  2882ms  neutrality 删包自洽+领域词扫描+golden 登记
+step1  PASS  624ms  cargo fmt --check
+step2  PASS  37334ms  cargo clippy + clippy_gate
+step3  PASS  143080ms  cargo test -j4 --workspace
+step4  PASS  61ms  cue recipe vet+export+断言
+step5  PASS  259ms  parse_scrub × 7 真实日志
+step6  PASS  148ms  cosign 断网 verify-blob
+step7  PASS  841ms  cargo deny --offline check
+step8  PASS  9725ms  neutrality 删包自洽+领域词扫描+golden 登记

@@ -45,6 +45,7 @@ pub mod profile;
 pub mod record;
 pub mod shadow;
 pub mod suite;
+pub mod tracetree;
 
 pub use agent::{
     bench_paper_order, AgentLaunch, AgentRunFailure, AgentRunOutcome, AgentRunner, BashFn,

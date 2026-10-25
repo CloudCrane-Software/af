@@ -33,6 +33,10 @@ af-workorder = { path = "../af-workorder" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = "=0.10.9"
+# G5 前置（tracetree）：只读打开订单 runs/ 的 harness.db 与 effects.db
+# （invoke_agent 终态 / execute_tool effect_intent 两个权威载体），
+# 只拼 SELECT，不写库——版本随 workspace 钉锁（rusqlite 0.32.1 bundled）。
+rusqlite = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]

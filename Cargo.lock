@@ -114,6 +114,7 @@ dependencies = [
  "af-meter",
  "af-stop",
  "af-workorder",
+ "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.10.9",
