@@ -367,6 +367,12 @@ warning[duplicate]: found 2 duplicate entries for crate 'digest'
           └── ed25519 v2.2.3
               └── ed25519-dalek v2.2.0 (*)
 
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/deny.toml:28:4
+   │
+28 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
 warning[duplicate]: found 3 duplicate entries for crate 'getrandom'
     ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/Cargo.lock:132:1
     │  
@@ -869,12 +875,6 @@ warning[duplicate]: found 2 duplicate entries for crate 'r-efi'
               ├── proptest v1.12.0 (*)
               └── rusty-fork v0.3.1
                   └── proptest v1.12.0 (*)
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/deny.toml:28:4
-   │
-28 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 3 duplicate entries for crate 'rand'
     ┌─ /home/pan-ding/workspace/af-wt-phase2-execline/Cargo.lock:240:1

@@ -210,7 +210,7 @@ impl ExecuteUnit for GraphExecuteUnit {
             )));
         }
         let order = linearize(plan)?;
-        let budget = PlanBudgets::of(plan);
+        let budget = PlanBudgets::of(plan)?;
 
         // ---- setup 相③：任务材料 + 容器（swev 环模式复用）----
         let task = GraphTask::parse(&input)?;
@@ -314,17 +314,18 @@ impl ExecuteUnit for GraphExecuteUnit {
                     plan.body.interface.output_from, final_port
                 ))
             })?;
-        if let Some(schema) = plan.body.types.get(&plan.body.interface.output_type) {
-            if let Err(detail) = validate_schema(&final_payload, schema) {
-                return Err(Self::envelope_err(format!(
-                    "终态工件 {}.{} 不符 {} schema：{}",
-                    plan.body.interface.output_from,
-                    final_port,
-                    plan.body.interface.output_type,
-                    detail
-                )));
-            }
-        }
+        // 终态工件 typed 正门（对抗面 2026-10-25）：output_type 经 [`check_typed`]
+        // ——与 emissions（上游面）/consumes（下游面）同一校验器（命名类型解析 +
+        // list<T> 拆包，sop_no_qa 的 `list<code_file>` 表达式形态同覆盖）。此前
+        // `types.get(output_type)` 缺席即**静默跳过**终态校验——ghost 类型/非对象
+        // schema/非字符串 type 段均可溜过（EX4006 点名收口）。
+        check_typed(
+            &plan.body.types,
+            &plan.body.interface.output_from,
+            &final_port,
+            &plan.body.interface.output_type,
+            &final_payload,
+        )?;
         // 判定语义：判定型终态（含 boolean pass 字段，如 qa_report）取其值；
         // 非判定型（如 patch）产出即合格——envelope 已过结构校验。
         let verdict = final_payload
@@ -397,12 +398,14 @@ impl GraphExecuteUnit {
                 .expect("装载期已保证基座档案可解析")
                 .key_cmd
         });
-        // 节点 turns 帽：声明值 > spec 缺省。
+        // 节点 turns 帽：声明值 > spec 缺省。u64→u32 **饱和**换算（对抗面
+        // 2026-10-25）：`as u32` 截断曾把 cap=2^32 静默折成 0 帽——帽越大约束
+        // 越紧的语义倒置；饱和语义 = 巨帽≈无帽（fail-open 方向不变）。
         let max_turns = node
             .budget
             .iter()
             .find(|b| b.dimension == BudgetDimension::Turns)
-            .map(|b| b.cap as u32)
+            .map(|b| u32::try_from(b.cap).unwrap_or(u32::MAX))
             .unwrap_or(self.spec.default_node_turns);
         // 节点工具面：uses.tools 逐件 builtin（声明 + 执行闭包同源）。
         // pkg.sweagent.env 的模型面名 = "bash"（T1 先例）——由下方 bash 专缝
@@ -816,8 +819,49 @@ impl GraphTask {
 // ============================================================
 
 /// 线性化：Kahn 拓扑序（就绪集 BTree 最小 id 先出——确定序）。v1 拒：
-/// loop/map 构造节点（登记后续）与环拓扑。
+/// loop/map 构造节点（登记后续）与环拓扑。形状前置守卫（对抗面
+/// 2026-10-25）：空图 / 入口节点悬空 / 悬边端点——先于 Kahn 判别（悬边
+/// 端点此前被「out.len() != ids.len()」误诊为环拓扑）。
 pub fn linearize(plan: &ExecutablePlan) -> Result<Vec<String>, ExeclineError> {
+    let ids: BTreeSet<&str> = plan
+        .body
+        .graph
+        .nodes
+        .iter()
+        .map(|n| n.id.as_str())
+        .collect();
+    if ids.is_empty() {
+        return Err(ExeclineError::GraphShapeUnsupported {
+            detail: "空图（graph.nodes 零节点）——无终态发射者，v1 拒驱动".into(),
+        });
+    }
+    if !ids.contains(plan.body.graph.entry.as_str()) {
+        return Err(ExeclineError::GraphShapeUnsupported {
+            detail: format!(
+                "入口节点 entry={} 不在节点集（悬空入口）",
+                plan.body.graph.entry
+            ),
+        });
+    }
+    for edge in &plan.body.graph.edges {
+        let edge_desc = format!(
+            "{}.{} -> {}.{}",
+            edge.from, edge.output, edge.to, edge.input
+        );
+        if !ids.contains(edge.from.as_str()) {
+            return Err(ExeclineError::GraphShapeUnsupported {
+                detail: format!(
+                    "边 {edge_desc} 的端点 from={} 不在节点集（悬边）",
+                    edge.from
+                ),
+            });
+        }
+        if !ids.contains(edge.to.as_str()) {
+            return Err(ExeclineError::GraphShapeUnsupported {
+                detail: format!("边 {edge_desc} 的端点 to={} 不在节点集（悬边）", edge.to),
+            });
+        }
+    }
     for node in &plan.body.graph.nodes {
         if node.loop_spec.is_some() || node.map_spec.is_some() {
             return Err(ExeclineError::GraphShapeUnsupported {
@@ -828,13 +872,6 @@ pub fn linearize(plan: &ExecutablePlan) -> Result<Vec<String>, ExeclineError> {
             });
         }
     }
-    let ids: BTreeSet<&str> = plan
-        .body
-        .graph
-        .nodes
-        .iter()
-        .map(|n| n.id.as_str())
-        .collect();
     let mut indegree: BTreeMap<&str, usize> = ids.iter().map(|id| (*id, 0)).collect();
     for edge in &plan.body.graph.edges {
         *indegree.entry(edge.to.as_str()).or_default() += 1;
@@ -879,21 +916,45 @@ struct PlanBudgets {
 }
 
 impl PlanBudgets {
-    fn of(plan: &ExecutablePlan) -> Self {
+    /// 提取 plan 级预算条目。**正典 id 门**（对抗面 2026-10-25）：plan 级
+    /// cents/tokens_total 条目的 id 必须是 `cost_cap`/`token_cap`——执行面
+    /// 只认这两个正典 id，改名条目此前被静默跳过（= 手改计划改名即**静默
+    /// 免帽**）；非正典 id fail-loud 拒收（EX4005），不静默降级为无预算。
+    fn of(plan: &ExecutablePlan) -> Result<Self, ExeclineError> {
         let mut b = Self::default();
         for entry in &plan.body.budget.budgets {
             if entry.scope != "plan" {
                 continue;
             }
             match entry.dimension {
-                BudgetDimension::Cents if entry.id == "cost_cap" => b.cost_cap = Some(entry.cap),
-                BudgetDimension::TokensTotal if entry.id == "token_cap" => {
-                    b.token_cap = Some(entry.cap)
+                BudgetDimension::Cents => {
+                    if entry.id != "cost_cap" {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "plan 级 cents 预算 id {} 非正典 cost_cap（执行面只认 \
+                                 cost_cap——改名即静默免帽，拒收）",
+                                entry.id
+                            ),
+                        });
+                    }
+                    b.cost_cap = Some(entry.cap);
+                }
+                BudgetDimension::TokensTotal => {
+                    if entry.id != "token_cap" {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "plan 级 tokens_total 预算 id {} 非正典 token_cap（执行面\
+                                 只认 token_cap——改名即静默免帽，拒收）",
+                                entry.id
+                            ),
+                        });
+                    }
+                    b.token_cap = Some(entry.cap);
                 }
                 _ => {}
             }
         }
-        b
+        Ok(b)
     }
 
     /// 熔断门：节点起动前对账（llm.cents 口径 1 模型调用 = 1¢）。B 席嫁接
@@ -1193,8 +1254,11 @@ fn collect_template_refs(plan_src: &str) -> Vec<String> {
 }
 
 /// quota_tokens 的粗字符帽（1 token ≈ 4 chars，v1 粗口径——精确分词器不在面）。
+/// **饱和乘**（对抗面 2026-10-25）：u64::MAX × 4 在 debug 构建溢出 panic——
+/// 合法大配额（quota_tokens 无上界约束）不得炸环；饱和后帽巨大 = 不截断，
+/// 语义与「配额大于全文」一致。
 fn quota_chars(quota_tokens: u64) -> usize {
-    (quota_tokens.max(1) as usize) * 4
+    quota_tokens.max(1).saturating_mul(4) as usize
 }
 
 fn truncate_chars(text: &str, cap: usize) -> String {
@@ -1412,8 +1476,17 @@ fn final_artifact_port(plan: &ExecutablePlan) -> Result<String, ExeclineError> {
 
 /// JSON Schema 子集校验（sop 图 types 词典实际用到的面：type/required/
 /// properties/items；不足即报——不静默放行未知关键字之外的形状）。
+/// 形状硬门（对抗面 2026-10-25）：schema 非对象（如串/数）此前被
+/// `Value::get` 全 None **静默当通过**——现 fail-loud 报错；`type` 段在场
+/// 但非字符串（如 `{"type":123}`）同理。
 fn validate_schema(value: &Value, schema: &Value) -> Result<(), String> {
-    if let Some(expected) = schema.get("type").and_then(Value::as_str) {
+    let Some(schema_obj) = schema.as_object() else {
+        return Err(format!("schema 不是对象：{schema}"));
+    };
+    if let Some(type_value) = schema_obj.get("type") {
+        let Some(expected) = type_value.as_str() else {
+            return Err(format!("schema type 段非字符串：{type_value}"));
+        };
         let ok = match (expected, value) {
             ("object", Value::Object(_)) => true,
             ("array", Value::Array(_)) => true,
@@ -1427,7 +1500,7 @@ fn validate_schema(value: &Value, schema: &Value) -> Result<(), String> {
             return Err(format!("type 应为 {expected}，实为 {value}"));
         }
     }
-    if let (Value::Object(map), Some(required)) = (value, schema.get("required")) {
+    if let (Value::Object(map), Some(required)) = (value, schema_obj.get("required")) {
         if let Some(required) = required.as_array() {
             for key in required {
                 if let Some(key) = key.as_str() {
@@ -1438,9 +1511,10 @@ fn validate_schema(value: &Value, schema: &Value) -> Result<(), String> {
             }
         }
     }
-    if let (Value::Object(map), Some(properties)) =
-        (value, schema.get("properties").and_then(Value::as_object))
-    {
+    if let (Value::Object(map), Some(properties)) = (
+        value,
+        schema_obj.get("properties").and_then(Value::as_object),
+    ) {
         for (key, sub) in properties {
             if let Some(item) = map.get(key) {
                 validate_schema(item, sub)?;
@@ -1448,7 +1522,7 @@ fn validate_schema(value: &Value, schema: &Value) -> Result<(), String> {
         }
     }
     if let (Value::Array(items), Some(item_schema)) =
-        (value, schema.get("items").filter(|s| s.is_object()))
+        (value, schema_obj.get("items").filter(|s| s.is_object()))
     {
         for item in items {
             validate_schema(item, item_schema)?;
@@ -1491,39 +1565,48 @@ impl SchemaValidator<'_> {
             errors.push(format!("{path}: schema 不是对象"));
             return;
         };
-        if let Some(ty) = obj.get("type").and_then(Value::as_str) {
-            if PRIMITIVES.contains(&ty) {
-                let ok = match ty {
-                    "object" => value.is_object(),
-                    "array" => value.is_array(),
-                    "string" => value.is_string(),
-                    "boolean" => value.is_boolean(),
-                    "integer" => value.is_i64() || value.is_u64(),
-                    _ => value.is_number(),
-                };
-                if !ok {
-                    errors.push(format!("{path}: 应为 {ty}，实为 {}", kind_of(value)));
+        // type 段硬门（对抗面 2026-10-25）：在场但非字符串（如 123）此前被
+        // and_then(as_str) 静默跳过——现报错（EX4006 面）。
+        match obj.get("type") {
+            None => {}
+            Some(Value::String(ty)) => {
+                if PRIMITIVES.contains(&ty.as_str()) {
+                    let ok = match ty.as_str() {
+                        "object" => value.is_object(),
+                        "array" => value.is_array(),
+                        "string" => value.is_string(),
+                        "boolean" => value.is_boolean(),
+                        "integer" => value.is_i64() || value.is_u64(),
+                        _ => value.is_number(),
+                    };
+                    if !ok {
+                        errors.push(format!("{path}: 应为 {ty}，实为 {}", kind_of(value)));
+                        return;
+                    }
+                } else if let Some(named) = self.types.get(ty.as_str()) {
+                    // 命名类型引用：对正本 schema 递归（引用 schema 自身无其他
+                    // 约束关键字时即纯转发；有则合并语义——type 段替换为正本，
+                    // 其余关键字覆写）。
+                    let merged = if obj.len() == 1 {
+                        named.clone()
+                    } else {
+                        let mut m = obj.clone();
+                        m.remove("type");
+                        let mut base = named.as_object().cloned().unwrap_or_default();
+                        for (k, v) in m {
+                            base.insert(k, v);
+                        }
+                        Value::Object(base)
+                    };
+                    self.walk(value, &merged, path, errors, depth + 1);
+                    return;
+                } else {
+                    errors.push(format!("{path}: 不支持的 schema type {ty}"));
                     return;
                 }
-            } else if let Some(named) = self.types.get(ty) {
-                // 命名类型引用：对正本 schema 递归（引用 schema 自身无其他
-                // 约束关键字时即纯转发；有则合并语义——type 段替换为正本，
-                // 其余关键字覆写）。
-                let merged = if obj.len() == 1 {
-                    named.clone()
-                } else {
-                    let mut m = obj.clone();
-                    m.remove("type");
-                    let mut base = named.as_object().cloned().unwrap_or_default();
-                    for (k, v) in m {
-                        base.insert(k, v);
-                    }
-                    Value::Object(base)
-                };
-                self.walk(value, &merged, path, errors, depth + 1);
-                return;
-            } else {
-                errors.push(format!("{path}: 不支持的 schema type {ty}"));
+            }
+            Some(other) => {
+                errors.push(format!("{path}: schema type 段非字符串：{other}"));
                 return;
             }
         }

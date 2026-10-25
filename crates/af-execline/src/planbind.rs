@@ -18,7 +18,7 @@
 //! `ExecutablePlan` decode + `ComponentRegistry::load`）；af-plan 独立建位
 //! （类型搬迁去重）仍列开放问题（软件工程包设计 §7-2）。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 use af_compiler::plan::{decode_plan, PLAN_VERSION};
@@ -100,6 +100,26 @@ pub fn bind(
     }
     // node_exec 与 graph.nodes 按 id 对齐：顶层节点全覆盖 + 反向归属
     // （node_exec 的点号路径须落在某顶层节点名下——体内节点带路径前缀）。
+    // 重影拒绝（对抗面 2026-10-25）：任一侧 id 重复 = 编排真相二义——
+    // 执行面 `find` 静默取首份投影，重复条目的契约差异被吞；先拒后对齐。
+    {
+        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        for n in &plan.body.graph.nodes {
+            if !seen.insert(n.id.as_str()) {
+                return Err(ExeclineError::PlanBindMismatch {
+                    detail: format!("graph.nodes 重复节点 id {}", n.id),
+                });
+            }
+        }
+        let mut seen: BTreeSet<&str> = BTreeSet::new();
+        for n in &plan.body.node_exec {
+            if !seen.insert(n.node_id.as_str()) {
+                return Err(ExeclineError::PlanBindMismatch {
+                    detail: format!("node_exec 重复投影 {}", n.node_id),
+                });
+            }
+        }
+    }
     let top_ids: Vec<&str> = plan
         .body
         .graph
