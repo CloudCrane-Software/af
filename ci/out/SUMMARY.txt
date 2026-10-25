@@ -1,9 +1,9 @@
-step1  PASS  647ms  cargo fmt --check
-step2  PASS  456ms  cargo clippy + clippy_gate
-step3  PASS  11118ms  cargo test -j4 --workspace
+step1  PASS  672ms  cargo fmt --check
+step2  PASS  474ms  cargo clippy + clippy_gate
+step3  PASS  10801ms  cargo test -j4 --workspace
 step4  PASS  33ms  cue recipe vet+export+断言
-step5  PASS  230ms  parse_scrub × 7 真实日志
-step6  PASS  66ms  cosign 断网 verify-blob
-step7  PASS  566ms  cargo deny --offline check
-step8  PASS  3099ms  neutrality 删包自洽+领域词扫描+golden 登记
-step9  ADVISORY-PASS  25435ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）
+step5  PASS  233ms  parse_scrub × 7 真实日志
+step6  PASS  59ms  cosign 断网 verify-blob
+step7  PASS  544ms  cargo deny --offline check
+step8  PASS  2967ms  neutrality 删包自洽+领域词扫描+golden 登记
+step9  ADVISORY-PASS  27999ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）
