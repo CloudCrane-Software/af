@@ -42,6 +42,12 @@ pub enum ErrorCode {
     /// 计划装订-模板漂移：文件 sha256 ≠ 清单登记值，或 template_ref 版本段
     /// ≠ 清单版本（同 E9004 的拒绝式纪律——不降级、不静默换模板）。
     TemplateDrift,
+    /// 计划装订-注册表 digest 不符（E9004 执行面消费——planbind 唯一正本，
+    /// 裁决9；文案首 token 带 E9004，点名计划携带/本地重算双 digest）。
+    PlanDigestMismatch,
+    /// 计划装订-一致性核对失败：信封版本/graph_version/line 绑定/node_exec
+    /// 与 graph.nodes 对齐（planbind 附带核对面，设计 §2.5）。
+    PlanBindMismatch,
 }
 
 impl ErrorCode {
@@ -62,6 +68,8 @@ impl ErrorCode {
             Self::TemplateRefInvalid => "EX4001",
             Self::TemplateUnregistered => "EX4002",
             Self::TemplateDrift => "EX4003",
+            Self::PlanDigestMismatch => "EX4004",
+            Self::PlanBindMismatch => "EX4005",
         }
     }
 
@@ -82,6 +90,8 @@ impl ErrorCode {
             Self::TemplateRefInvalid => "TEMPLATE_REF_INVALID",
             Self::TemplateUnregistered => "TEMPLATE_UNREGISTERED",
             Self::TemplateDrift => "TEMPLATE_DRIFT",
+            Self::PlanDigestMismatch => "PLAN_DIGEST_MISMATCH",
+            Self::PlanBindMismatch => "PLAN_BIND_MISMATCH",
         }
     }
 }
@@ -133,6 +143,11 @@ pub enum ExeclineError {
     TemplateUnregistered { reference: String, detail: String },
     #[error("EX4003: 计划装订-模板漂移（sha256/版本不符）: {reference}: {detail}")]
     TemplateDrift { reference: String, detail: String },
+    /// E9004→EX4004（裁决9 唯一正本；编译器/执行面共用语义码 E9004 首 token）。
+    #[error("E9004/EX4004: 计划装订-registry_digest 不符: 本地重算 {actual} ≠ 计划携带 expected {expected}（执行面拒启动——组件注册表与编译期漂移）")]
+    PlanDigestMismatch { expected: String, actual: String },
+    #[error("EX4005: 计划装订-一致性核对失败: {detail}")]
+    PlanBindMismatch { detail: String },
 }
 
 impl ExeclineError {
@@ -153,6 +168,8 @@ impl ExeclineError {
             Self::TemplateRefInvalid { .. } => ErrorCode::TemplateRefInvalid,
             Self::TemplateUnregistered { .. } => ErrorCode::TemplateUnregistered,
             Self::TemplateDrift { .. } => ErrorCode::TemplateDrift,
+            Self::PlanDigestMismatch { .. } => ErrorCode::PlanDigestMismatch,
+            Self::PlanBindMismatch { .. } => ErrorCode::PlanBindMismatch,
         }
     }
 }
@@ -192,6 +209,8 @@ mod tests {
         assert_eq!(ErrorCode::TemplateRefInvalid.as_str(), "EX4001");
         assert_eq!(ErrorCode::TemplateUnregistered.as_str(), "EX4002");
         assert_eq!(ErrorCode::TemplateDrift.as_str(), "EX4003");
+        assert_eq!(ErrorCode::PlanDigestMismatch.as_str(), "EX4004");
+        assert_eq!(ErrorCode::PlanBindMismatch.as_str(), "EX4005");
         assert_eq!(ErrorCode::TemplateDrift.name(), "TEMPLATE_DRIFT");
     }
 

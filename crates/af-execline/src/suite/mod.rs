@@ -9,6 +9,7 @@
 //! [`tb_unit`]（P5）。本包不碰引擎、容器、网络、模型
 //! （`resolve_key` 的 bash 子进程仅密钥解析器调用，测试用 printf 假命令，零真实凭证）。
 
+pub mod report_unit;
 pub mod swev;
 pub mod swev_unit;
 pub mod tb;

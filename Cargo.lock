@@ -106,7 +106,9 @@ dependencies = [
 name = "af-execline"
 version = "0.1.0"
 dependencies = [
+ "af-compiler",
  "af-credential",
+ "af-dsl",
  "af-harness",
  "af-mes",
  "af-meter",
