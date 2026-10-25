@@ -22,7 +22,7 @@
 use crate::bind::{bind, BindReport, BindViolation};
 use crate::ir::{
     BudgetDimension, BudgetEntry, EffectClass, EscapeSpec, FailureEntry, GraphTemplate,
-    InterfaceSpec, IrProgram, ProvenanceSpec, StopEntry, StoreSpec,
+    InterfaceSpec, IrProgram, ProvenanceSpec, SectionSpec, StopEntry, StoreSpec,
 };
 use crate::lower::lower;
 use serde::{Deserialize, Serialize};
@@ -151,6 +151,13 @@ pub struct PlanNodeExec {
     /// 判定单元绑定（`uses.unit` 解析产物）。
     pub unit: Option<UnitBinding>,
     pub components: PlanComponents,
+    /// context.sections 装配声明投影（IR `NodeExec.context` 原样——图执行器
+    /// 的节点提示词材料：`template_ref`/输入字段面/边端口面。v1.1 增补块：
+    /// 计划自含纪律（§7.2-1「单文件即编排真相」）的补齐——此前该面只在 IR，
+    /// 执行器无从取 template_ref。`#[serde(default)]` = 旧计划（无此键）
+    /// 仍可 decode，向后兼容；序列化恒在场（文档序 = 拼接序，确定性不变）。
+    #[serde(default)]
+    pub context: Vec<SectionSpec>,
     /// 该节点的预算（IR budgets 中 `scope == "node:<路径>"` 者，按 id 序）。
     pub budget: Vec<NodeBudget>,
     pub artifact_contract: Vec<PlanArtifact>,
@@ -394,6 +401,7 @@ pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePl
                     .collect(),
                 context_compaction: None,
             },
+            context: b.context.clone(),
             budget: body
                 .policies
                 .budgets
