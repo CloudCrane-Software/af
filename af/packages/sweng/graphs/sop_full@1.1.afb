@@ -1,7 +1,7 @@
 version: 1
 meta:
   name: sweng_sop_full
-  graph_version: "1.0"
+  graph_version: "1.1"
   entry: planner
   input: swe_task_input
   output: { ref: qa_report, from: tester }
@@ -115,7 +115,11 @@ edges:
 policies:
   budgets:
     - { id: cost_cap, dimension: cents, scope: plan, cap: 600 }
-    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 400000 }
+    # token_cap 1.0→1.1 校准（F-第四单续二批 2026-10-25）：F4C 实测主单 EX4007
+    # 熔断于累计 514,425 tok（planner 1,909 + coder 512,516@31/60 turns，
+    # tokens_total 含 cache_read，ledger seq6 逐位闭合）——400k 帽先于 turns 帽
+    # 压制真实编码负载。1,000,000 = planner+coder 实测 + reviewer 预估 + 余量。
+    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 1000000 }
     - { id: coder_turns, dimension: turns, scope: node:coder, cap: 60 }
     - { id: reviewer_turns, dimension: turns, scope: node:reviewer, cap: 12 }
   stop:

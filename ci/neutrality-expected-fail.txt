@@ -1,6 +1,6 @@
 # =============================================================================
 # N1 预期红名单（隔离臂=清空保留空目录 af/packages 后的预期失败集正本）
-# ——《G4-任务中立性机器检查方案.md》§1.3（21 项；2026-10-25 挂门批实测复核
+# ——《G4-任务中立性机器检查方案.md》§1.3（22 项；2026-10-25 挂门批实测复核
 #    19 项逐项精确相等——执行器合流批 +2：plan_node_exec_projects_context_sections
 #    随 A 席 merge 入线（repo_registry 装载面），plan_projects_emits_types_
 #    and_consumes_contracts 为 B 席嫁接投影例（sop_full@1.0.afb 正本 +
@@ -40,3 +40,4 @@ af-compiler::registry_decl_test::unversioned_referenced_names_declare_exactly_on
 af-compiler::registry_decl_test::class_mismatch_against_repo_registry_is_rejected
 af-compiler::plan_test::plan_node_exec_projects_context_sections
 af-compiler::plan_test::plan_projects_emits_types_and_consumes_contracts
+af-compiler::plan_test::sop_full_v1_1_token_cap_calibrated_to_f4c_measurement

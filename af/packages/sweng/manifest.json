@@ -3,8 +3,8 @@
   "graphs": [
     {
       "name": "sop_full",
-      "version": "1.0",
-      "source": "packages/sweng/graphs/sop_full@1.0.afb"
+      "version": "1.1",
+      "source": "packages/sweng/graphs/sop_full@1.1.afb"
     },
     {
       "name": "sop_no_qa",
