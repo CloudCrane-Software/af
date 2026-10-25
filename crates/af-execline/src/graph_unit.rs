@@ -1,6 +1,8 @@
 //! 图执行器 v1——可执行计划的节点级消费（F-第四单执行长缺口销项）。
 //!
-//! 一句话：planbind 三核对（EX4004 口径）通过后，把 `ExecutablePlan` 按
+//! 一句话：planbind 四核对（EX4004 口径；核对清单=信封 decode/E9004
+//! digest/一致性/模板装载，承 planbind.rs 模块头先例术语）通过后，把
+//! `ExecutablePlan` 按
 //! 拓扑序逐节点驱动到真实执行面——**v1 范围 = sop_full 线性链形态**（可
 //! 序贯拓扑序的 DAG；loop/map 构造节点与环拓扑 → EX4008 登记后续）。
 //!
@@ -158,7 +160,7 @@ impl ExecuteUnit for GraphExecuteUnit {
     }
 
     fn execute(&self, ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
-        // ---- setup 相①：任务包 + 计划装订三核对（planbind 唯一正本）----
+        // ---- setup 相①：任务包 + 计划装订四核对（planbind 唯一正本，先例术语）----
         let task_dir = ctx.data_root.join(ctx.task_id);
         let plan_src = std::fs::read_to_string(task_dir.join("plan.json")).map_err(|err| {
             self.fail(format!(

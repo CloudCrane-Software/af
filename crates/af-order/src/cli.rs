@@ -273,7 +273,7 @@ fn run_submit(
     // 预算硬顶由执行面注入（B①：--max-turns/--spend-cap-cents 覆写 fix2 缺省）。
     // 单元路由（裁决7：--unit swev|report|graph|stub；缺省=现行为）。报告臂装载期
     // 即过 planbind 三重门（指纹/模板/档案）+ 任务包材料核对（fail-loud）；
-    // 图臂 = 图执行器（planbind 三核对 + 拓扑序逐节点驱动）。
+    // 图臂 = 图执行器（planbind 四核对 + 拓扑序逐节点驱动）。
     let selected = resolve_unit(unit, exec)?;
     let report = match selected {
         SelectedUnit::Swev => {
@@ -298,7 +298,7 @@ fn run_submit(
             driver.drive(&unit)?
         }
         SelectedUnit::Graph => {
-            // 图执行器（F-第四单执行长缺口销项）：planbind 三核对 + 拓扑序逐
+            // 图执行器（F-第四单执行长缺口销项）：planbind 四核对 + 拓扑序逐
             // 节点驱动；计划从任务包约定路径 <data_root>/<task>/plan.json 读。
             let exec = exec.expect("resolve 已保证 Graph 携三件套");
             let unit_spec = graph_unit_for(exec)?;
