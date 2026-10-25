@@ -12,8 +12,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use af_execline::{
-    AttemptLayout, DriverConfig, EngineClient, HarnessRunner, MesChSink, MesChTarget,
-    MesFileWriter, OrderLifecycleDriver, SshBridge, StubExecuteUnit, SwevExecuteUnit, SystemClock,
+    draft_fn_real_ring, AttemptLayout, DriverConfig, EngineClient, HarnessRunner, IngestFetcher,
+    MesChSink, MesChTarget, MesFileWriter, OrderLifecycleDriver, SshBridge, StubExecuteUnit,
+    SwevExecuteUnit, SystemClock,
 };
 use af_workorder::{Priority, Sla, StableId};
 use serde_json::{json, Value};
@@ -283,10 +284,15 @@ fn run_submit(
         SelectedUnit::Report => {
             let exec = exec.expect("resolve 已保证 Report 携三件套");
             let unit_spec = report_unit_for(exec)?;
+            // F-第五单：真模型环接线（reader→writer 双节点 + cite_check 反馈环）；
+            // 摄取分派器按 source 形状选路（https/arXiv web 面、本地文本/PDF 面）。
+            let runner = HarnessRunner::new().map_err(|err| OrderError::State {
+                detail: format!("HarnessRunner 装载失败: {err}"),
+            })?;
             let unit = af_execline::ReportExecuteUnit::new(
-                unit_spec,
-                af_execline::suite::report_unit::draft_fn_unwired(),
-                Arc::new(af_execline::LocalFileFetcher),
+                unit_spec.clone(),
+                draft_fn_real_ring(Arc::new(runner), unit_spec),
+                Arc::new(IngestFetcher),
             )
             .map_err(OrderError::from)?;
             driver.drive(&unit)?

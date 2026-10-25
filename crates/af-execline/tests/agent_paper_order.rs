@@ -240,6 +240,7 @@ fn harness_runner_paper_order_passes_real_gateway_declare() {
         spend_cap_cents: 100,
         tool_spend_cents: 1,
         budget_ledger_cents: 100,
+        extra_tools: Vec::new(),
     };
     let runner = HarnessRunner::new().unwrap();
     let outcome = match runner.run(launch) {

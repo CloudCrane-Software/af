@@ -24,8 +24,8 @@ use af_execline::exec::{ExecContext, ExecuteUnit};
 use af_execline::planbind::{bind, BindExpectations};
 use af_execline::record::{ExecutionFacts, FileRecordSink};
 use af_execline::suite::report_unit::{
-    invoke_citation, invoke_rubric, DraftFn, DraftInput, LocalFileFetcher, ReportExecuteUnit,
-    ReportJudgeLocator, ReportUnitSpec, SourceFetcher,
+    invoke_citation, invoke_rubric, DraftFn, DraftInput, DraftOutput, LocalFileFetcher,
+    ReportExecuteUnit, ReportJudgeLocator, ReportUnitSpec, SourceFetcher,
 };
 use serde_json::{json, Value};
 
@@ -603,7 +603,7 @@ fn draft_fn_ok() -> DraftFn {
                 input.focus
             )
         };
-        Ok(json!({
+        Ok(DraftOutput::from_report_json(json!({
             "paper": { "url": "file:///tmp/paper.txt", "title": "Ledgered Agents", "sha256": sha },
             "sections": [
                 { "id": "summary", "title": "S", "body_md": body("账本协调。") },
@@ -618,7 +618,7 @@ fn draft_fn_ok() -> DraftFn {
                   "snapshot_sha256": sha, "snapshot_ref": snap_ref }
             ]
         })
-        .to_string())
+        .to_string()))
     })
 }
 
@@ -728,22 +728,24 @@ fn report_unit_tampered_draft_yields_false_verdict_not_null() {
             };
             let body_cited =
                 |t: &str| format!("{t} 论据见引用 [1]。占位补充文本若干以满足章节字数下限要求。");
-            Ok(json!({
-                "paper": { "url": "file:///tmp/paper.txt", "title": "T", "sha256": sha },
-                "sections": [
-                    { "id": "summary", "title": "S", "body_md": body("a") },
-                    { "id": "method", "title": "M", "body_md": body("b") },
-                    { "id": "findings", "title": "F", "body_md": body_cited("c") },
-                    { "id": "limitations", "title": "L", "body_md": body("d") },
-                    { "id": "implications", "title": "I", "body_md": body("e") }
-                ],
-                "citations": [
-                    { "n": 1, "url": "file:///tmp/paper.txt",
-                      "quote": "TOTALLY NOT IN THE SNAPSHOT TEXT AT ALL ANYWHERE",
-                      "snapshot_sha256": sha, "snapshot_ref": snap_ref }
-                ]
-            })
-            .to_string())
+            Ok(DraftOutput::from_report_json(
+                json!({
+                    "paper": { "url": "file:///tmp/paper.txt", "title": "T", "sha256": sha },
+                    "sections": [
+                        { "id": "summary", "title": "S", "body_md": body("a") },
+                        { "id": "method", "title": "M", "body_md": body("b") },
+                        { "id": "findings", "title": "F", "body_md": body_cited("c") },
+                        { "id": "limitations", "title": "L", "body_md": body("d") },
+                        { "id": "implications", "title": "I", "body_md": body("e") }
+                    ],
+                    "citations": [
+                        { "n": 1, "url": "file:///tmp/paper.txt",
+                          "quote": "TOTALLY NOT IN THE SNAPSHOT TEXT AT ALL ANYWHERE",
+                          "snapshot_sha256": sha, "snapshot_ref": snap_ref }
+                    ]
+                })
+                .to_string(),
+            ))
         })
     };
     let (base, task_dir, _, unit) = report_unit("bad", bad_draft);

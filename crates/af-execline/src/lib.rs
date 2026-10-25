@@ -49,7 +49,7 @@ pub mod tracetree;
 
 pub use agent::{
     bench_paper_order, AgentLaunch, AgentRunFailure, AgentRunOutcome, AgentRunner, BashFn,
-    HarnessRunner,
+    HarnessRunner, ToolBinding, ToolFn,
 };
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use driver::{AttemptLayout, DriveReport, DriverConfig, OrderLifecycleDriver};
@@ -66,8 +66,10 @@ pub use mes_ch::{
 pub use planbind::{bind as planbind_bind, BindExpectations, PlanBind};
 pub use record::{ExecutionFacts, FileRecordSink, PendingRecordSink, RecordSink, TbExecutionFacts};
 pub use suite::report_unit::{
-    invoke_citation, invoke_rubric, DraftFn, DraftInput, FetchedDoc, LocalFileFetcher,
-    ReportExecuteUnit, ReportJudgeLocator, ReportTask, ReportUnitSpec, SourceFetcher,
+    draft_fn_real_ring, html_to_text, invoke_citation, invoke_rubric, validate_envelope,
+    ArxivWebFetcher, DraftFn, DraftInput, DraftOutput, FetchedDoc, IngestFetcher, LocalFileFetcher,
+    PaperEnvelope, ReportExecuteUnit, ReportJudgeLocator, ReportTask, ReportUnitSpec, RingTypes,
+    SourceFetcher,
 };
 pub use suite::swev_unit::{SwevExecuteUnit, SwevUnitSpec};
 pub use suite::tb_unit::{TbExecuteUnit, TbUnitSpec};

@@ -194,6 +194,7 @@ impl ExecuteUnit for SwevExecuteUnit {
             spend_cap_cents: self.spec.spend_cap_cents,
             tool_spend_cents: self.spec.tool_spend_cents,
             budget_ledger_cents: self.spec.spend_cap_cents,
+            extra_tools: Vec::new(),
         };
         let mut http_retries: u64 = 0;
         let report = match self.runner.run(launch) {

@@ -1,4 +1,4 @@
 # reportkit prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
 # manifest_version: 1
-36956cf52ab00dd8e4fbee4febf3148314f67f5b9c902e5b7cc32cb859da7668  prompts/reader_system.md
-8640c04636fd9b86a6e3b0a8ae26bcedeef4cc6d2194d1d4b12265ce4d576229  prompts/writer_system.md
+4d05e9163a6f1c5e958ac6de44108b706d0ce0530988b9f0478cb79645da6ed6  prompts/reader_system.md
+bb1d07f64f3e347374f753be4e4644c1145085a0d725123e0b45f3a4a5f22477  prompts/writer_system.md
