@@ -427,8 +427,7 @@ fn comments_are_skipped_by_lex_scan() {
     }
     // 对照：除号不是注释起点；字符串字面量里的 // 不是注释。
     check("1 / 2 == 0", &e).unwrap_or_else(|err| panic!("除号不误伤：{err:?}"));
-    check("input.q == \"// has(\"", &e)
-        .unwrap_or_else(|err| panic!("字面量内 // 不误伤：{err:?}"));
+    check("input.q == \"// has(\"", &e).unwrap_or_else(|err| panic!("字面量内 // 不误伤：{err:?}"));
     err_of("input.q == \"// has(\" && has(input.q)", &e);
     // 对照：真宏调用仍拦（E1052）；块注释不在文法内（解析必拒 E1051，
     // 词法面不得跳过——跳过即给深括号绕过 E1054 前置闸开门）。

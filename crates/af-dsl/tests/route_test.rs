@@ -441,16 +441,12 @@ fn default_exit_with_exit_rules_joins_disjunction() {
         &targets(&["c"]),
     )
     .expect("合法 route 应归一化成功");
-    assert_eq!(
-        norm.exit_guard.as_deref(),
-        Some("(a) || !((a) || (b))")
-    );
+    assert_eq!(norm.exit_guard.as_deref(), Some("(a) || !((a) || (b))"));
 }
 
 #[test]
 fn default_exit_without_rules_is_true_guard() {
-    let norm = normalize(&route(&[], "exit"), &targets(&[]))
-        .expect("合法 route 应归一化成功");
+    let norm = normalize(&route(&[], "exit"), &targets(&[])).expect("合法 route 应归一化成功");
     assert!(norm.edges.is_empty());
     assert_eq!(norm.exit_guard.as_deref(), Some("true"));
 }

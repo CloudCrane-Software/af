@@ -482,9 +482,6 @@ fn builtin_passed_port_satisfies_output_ref() {
 fn dual_same_type_emit_ports_ambiguate_output() {
     // 同节点 emits 两个同类型端口（answer + shadow 同为 a）：output.ref 无法
     // 单义指认终态端口 → E2202（恰一端口类型匹配收紧；多匹配即歧义）。
-    let src = base().replace(
-        "emits: { answer: a }",
-        "emits: { answer: a, shadow: a }",
-    );
+    let src = base().replace("emits: { answer: a }", "emits: { answer: a, shadow: a }");
     assert_eq!(check(&src), ["E2202"]);
 }

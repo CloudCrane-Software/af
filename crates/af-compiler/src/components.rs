@@ -16,7 +16,10 @@
 //!   `name@version` 的分隔符纪律，同 manifest 规范）；tool 类必填
 //!   `effect_class`（ADR-010 effect_class 回填的唯一来源）；model_route 类
 //!   必填 `endpoint` 且过 af-harness 同款端点纪律（http(s) 前缀、无
-//!   userinfo、`key_ref` 引用名非明文、不以 `sk-` 开头）；非 tool 类不得带
+//!   userinfo、`key_ref` 引用名非明文、不以 `sk-` 开头、长度 <= 128——
+//!   与 af-harness `is_ref_name` 全条同界，长度上限由红队 W1-C29 补齐
+//!   （此前镜像漏该条，129+ 字符 key_ref 编译面过、harness 面拒，同声明
+//!   双面判定分歧）；非 tool 类不得带
 //!   `effect_class`、非 model_route 类不得带 `endpoint`（类别×字段正交）。
 //!
 //! `EndpointSpec` 为 af-harness `spec.rs:16-95` 的**字段级镜像**（协议/档位/
@@ -386,8 +389,15 @@ fn validate_endpoint(e: &EndpointSpec) -> Result<(), String> {
         return Err("model 不能为空或含空白".into());
     }
     let ok_char = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '.' | ':' | '-');
-    if e.key_ref.is_empty() || !e.key_ref.chars().all(ok_char) || e.key_ref.starts_with("sk-") {
-        return Err("key_ref 只存引用名（字母数字和 _.:-），不存明文密钥，也不以 sk- 开头".into());
+    if e.key_ref.is_empty()
+        || e.key_ref.len() > 128
+        || !e.key_ref.chars().all(ok_char)
+        || e.key_ref.starts_with("sk-")
+    {
+        return Err(
+            "key_ref 只存引用名（字母数字和 _.:-，长度 <= 128——与 af-harness is_ref_name 同界，红队 W1-C29 补齐长度上限），不存明文密钥，也不以 sk- 开头"
+                .into(),
+        );
     }
     Ok(())
 }

@@ -62,7 +62,10 @@ fn sample5_route_guards() {
     );
     let approve = &sg.nodes.iter().find(|n| n.id == "approve").unwrap();
     assert_cel(
-        approve.route_exit_guard.as_ref().expect("default:exit 守卫记在节点"),
+        approve
+            .route_exit_guard
+            .as_ref()
+            .expect("default:exit 守卫记在节点"),
         "!((resume.approved == false))",
         &["resume"],
     );
@@ -132,7 +135,9 @@ fn sample2_sample6_route_guards() {
     assert_cel(e.guard.as_ref().unwrap(), "(qa.passed == false)", &["qa"]);
     let qa = &sg2.nodes.iter().find(|n| n.id == "qa").unwrap();
     assert_cel(
-        qa.route_exit_guard.as_ref().expect("default:exit 守卫记在节点"),
+        qa.route_exit_guard
+            .as_ref()
+            .expect("default:exit 守卫记在节点"),
         "!((qa.passed == false))",
         &["qa"],
     );

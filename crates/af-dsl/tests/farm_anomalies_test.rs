@@ -292,7 +292,6 @@ fn documented_boundaries_stay_pass() {
     }
 }
 
-
 /// 红队 W1-C28 收紧钉：C_IV48（W 节点 fin/leak 双端口同型 T_out 且
 /// output.from=W）自恰一端口匹配收紧起为 E2202——终态工件不可单义识别
 ///（lower 面按类型相等逐端口推导 is_final，双匹配即双终态工件计划）。

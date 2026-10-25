@@ -222,8 +222,14 @@ fn sole_writer_mismatch_message_says_mismatch_not_multi() {
     let r = validate(&doc);
     assert_eq!(codes_of(&r), ["E2311"]);
     let msg = &r.violations[0].message;
-    assert!(msg.contains("写者与声明不符"), "文案应为「写者与声明不符」：{msg}");
-    assert!(!msg.contains("不唯一"), "单写者分支不得断言「不唯一」：{msg}");
+    assert!(
+        msg.contains("写者与声明不符"),
+        "文案应为「写者与声明不符」：{msg}"
+    );
+    assert!(
+        !msg.contains("不唯一"),
+        "单写者分支不得断言「不唯一」：{msg}"
+    );
 }
 
 #[test]
