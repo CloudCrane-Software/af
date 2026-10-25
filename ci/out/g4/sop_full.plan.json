@@ -1,11 +1,11 @@
 {
   "v": 1,
   "body": {
-    "plan_id": "plan.sweng_sop_full@1.0+7dd9c5aa253b",
+    "plan_id": "plan.sweng_sop_full@1.1+348a0142d883",
     "compiled_from": {
-      "dsl_digest": "7dd9c5aa253b9f9c702219132656fdf93ffd838c56fbcf4bd65b38db70c469d0",
+      "dsl_digest": "348a0142d88388617bfdd5f8c56e26d13edb0df7fafb34ae13bcdb180bdf5862",
       "compiler_version": "0.1.0",
-      "graph_version": "1.0",
+      "graph_version": "1.1",
       "registry_digest": "63c3478e9321e1c58318620a592e9953ef34cee3a5d19ea4c3300a722fafe15b"
     },
     "line": {
@@ -18,7 +18,7 @@
       "stable_id": "",
       "run_id": "",
       "state": "Created",
-      "graph_version": "1.0",
+      "graph_version": "1.1",
       "line": null,
       "budget_voucher": null,
       "artifacts": [],
@@ -30,7 +30,7 @@
       "history": []
     },
     "graph": {
-      "graph_version": "1.0",
+      "graph_version": "1.1",
       "name": "sweng_sop_full",
       "entry": "planner",
       "nodes": [
@@ -255,6 +255,27 @@
           ],
           "context_compaction": null
         },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.sweng.engineer_system@1"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 1000,
+            "fields": [
+              "problem_statement"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1800,
+            "port": "plan",
+            "policy": "project"
+          }
+        ],
         "budget": [
           {
             "id": "coder_turns",
@@ -262,10 +283,14 @@
             "cap": 60
           }
         ],
+        "consumes": {
+          "plan": "task_plan"
+        },
         "artifact_contract": [
           {
             "name": "files",
             "is_final": false,
+            "type": "list<code_file>",
             "qualified_by": null,
             "provenance": null
           }
@@ -282,11 +307,29 @@
           "tools": [],
           "context_compaction": null
         },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.sweng.planner_system@1"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 1500,
+            "fields": [
+              "repo",
+              "instance_id",
+              "problem_statement"
+            ],
+            "policy": "project"
+          }
+        ],
         "budget": [],
         "artifact_contract": [
           {
             "name": "plan",
             "is_final": false,
+            "type": "task_plan",
             "qualified_by": null,
             "provenance": null
           }
@@ -303,6 +346,25 @@
           "tools": [],
           "context_compaction": null
         },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.sweng.reviewer_system@1"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1200,
+            "port": "plan",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1800,
+            "port": "files",
+            "policy": "project"
+          }
+        ],
         "budget": [
           {
             "id": "reviewer_turns",
@@ -310,10 +372,15 @@
             "cap": 12
           }
         ],
+        "consumes": {
+          "files": "list<code_file>",
+          "plan": "task_plan"
+        },
         "artifact_contract": [
           {
             "name": "review",
             "is_final": false,
+            "type": "review_report",
             "qualified_by": null,
             "provenance": null
           }
@@ -333,11 +400,17 @@
           "tools": [],
           "context_compaction": null
         },
+        "context": [],
         "budget": [],
+        "consumes": {
+          "files": "list<code_file>",
+          "review": "review_report"
+        },
         "artifact_contract": [
           {
             "name": "report",
             "is_final": true,
+            "type": "qa_report",
             "qualified_by": null,
             "provenance": null
           }
@@ -369,7 +442,7 @@
           "id": "token_cap",
           "dimension": "tokens_total",
           "scope": "plan",
-          "cap": 400000
+          "cap": 1000000
         }
       ],
       "stop": [

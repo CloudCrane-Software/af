@@ -53,9 +53,9 @@ fn sop_full_src() -> String {
         repo_packages()
             .join("sweng")
             .join("graphs")
-            .join("sop_full@1.0.afb"),
+            .join("sop_full@1.1.afb"),
     )
-    .expect("sop_full@1.0.afb 仓库正本应在盘")
+    .expect("sop_full@1.1.afb 仓库正本应在盘")
 }
 
 fn compile_plan(graph_src: &str) -> String {

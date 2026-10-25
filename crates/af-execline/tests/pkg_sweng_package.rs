@@ -153,9 +153,14 @@ fn sop_graphs_materialized_with_resolvable_template_refs() {
     // 物化（manifest 声明 ⇔ graphs/ 源文件在盘），其 template_ref 全部可解析
     // ——与 fix_swe_task 同款装载期门预演（干跑编译面见 ci/out/g4/*.plan.json）。
     let graphs_dir = repo_packages_root().join("sweng").join("graphs");
-    for name in ["sop_full", "sop_no_qa", "sop_minimal"] {
-        let graph = std::fs::read_to_string(graphs_dir.join(format!("{name}@1.0.afb")))
-            .unwrap_or_else(|e| panic!("sop 图 {name}@1.0.afb 应已物化: {e}"));
+    // sop_full 预算校准批（2026-10-25）版本化 1.0→1.1；no_qa/minimal 仍 @1.0。
+    for (name, ver) in [
+        ("sop_full", "1.1"),
+        ("sop_no_qa", "1.0"),
+        ("sop_minimal", "1.0"),
+    ] {
+        let graph = std::fs::read_to_string(graphs_dir.join(format!("{name}@{ver}.afb")))
+            .unwrap_or_else(|e| panic!("sop 图 {name}@{ver}.afb 应已物化: {e}"));
         let refs: Vec<&str> = graph
             .lines()
             .filter_map(|l| {

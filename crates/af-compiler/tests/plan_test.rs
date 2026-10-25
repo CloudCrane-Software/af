@@ -391,7 +391,7 @@ fn plan_node_exec_projects_context_sections() {
 
 /// 图执行器 B 席嫁接（合流批）：emits 类型表达式投影 `artifact_contract[].type`
 /// 与入边消费契约投影 `node_exec[].consumes`（端口名 → 类型表达式串）。
-/// 载体 = 仓库正本 sop_full@1.0.afb（planner emits task_plan；coder emits
+/// 载体 = 仓库正本 sop_full@1.1.afb（planner emits task_plan；coder emits
 /// list&lt;code_file&gt;；coder·reviewer·tester 各带 consumes）。两者均
 /// serde(default) + skip_serializing_if——旧计划（无此键）仍可 decode，与
 /// context 投影同一向后兼容方针。
@@ -399,9 +399,9 @@ fn plan_node_exec_projects_context_sections() {
 fn plan_projects_emits_types_and_consumes_contracts() {
     let src = std::fs::read_to_string(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../af/packages/sweng/graphs/sop_full@1.0.afb"),
+            .join("../../af/packages/sweng/graphs/sop_full@1.1.afb"),
     )
-    .expect("sop_full@1.0.afb 仓库正本应在盘");
+    .expect("sop_full@1.1.afb 仓库正本应在盘");
     let doc = af_dsl::load_str(&src).expect("sop_full 应装载");
     assert!(af_dsl::validate(&doc).is_ok());
     let ir = lower(&doc).unwrap();
@@ -480,4 +480,96 @@ fn plan_projects_emits_types_and_consumes_contracts() {
         .iter()
         .flat_map(|n| n.artifact_contract.iter())
         .all(|a| a.r#type.is_none()));
+}
+
+/// 预算校准批（F-第四单续二，2026-10-25）：F4C 实测主单 EX4007 熔断于
+/// planner 1,909 + coder 512,516 = 514,425 tok（tokens_total 口径含
+/// cache_read；af-state ledger seq6 逐位闭合），31/60 turns 处 400k 帽先于
+/// turns 帽压制真实编码负载。裁决：sop_full 版本化 1.0→1.1，plan 级
+/// token_cap 400,000→1,000,000（planner+coder 实测 + reviewer 预估 +
+/// 余量）；cost_cap 600¢ 与 coder/reviewer turns 帽不动。
+#[test]
+fn sop_full_v1_1_token_cap_calibrated_to_f4c_measurement() {
+    let src = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../af/packages/sweng/graphs/sop_full@1.1.afb"),
+    )
+    .expect("sop_full@1.1.afb 仓库正本应在盘（预算校准批版本化 1.0→1.1）");
+    let doc = af_dsl::load_str(&src).expect("sop_full@1.1 应装载");
+    assert!(af_dsl::validate(&doc).is_ok(), "sop_full@1.1 应零违例");
+    let ir = lower(&doc).unwrap();
+    let report = bind(&ir, &repo_registry());
+    assert!(
+        report.is_ok(),
+        "sop_full@1.1 绑定应零违例: {:?}",
+        report.violations
+    );
+    let plan = generate_plan(&ir, &report).unwrap();
+
+    // 版本化面：plan_id 携带 @1.1（新 dsl_digest 随之）。
+    assert!(
+        plan.body.plan_id.starts_with("plan.sweng_sop_full@1.1+"),
+        "plan_id 应为 @1.1 版本化产物，got {}",
+        plan.body.plan_id
+    );
+
+    // 注册面：仓库正本声明 @1.1，@1.0 退场（旧引用清零的声明面证据）。
+    let reg = af_dsl::registry::Registry::load(repo_packages_root()).unwrap();
+    let declared = reg.declared_graphs();
+    assert!(
+        declared.contains(&"pkg.sweng.sop_full@1.1".to_string()),
+        "af/packages 应声明 pkg.sweng.sop_full@1.1"
+    );
+    assert!(
+        !declared.contains(&"pkg.sweng.sop_full@1.0".to_string()),
+        "pkg.sweng.sop_full@1.0 应已退场（版本化不留双版本）"
+    );
+
+    // 预算面（plan body 投影）：token_cap 校准 1,000,000（scope/dimension
+    // 口径不变）；其余三条逐项不动。
+    let entry = |id: &str| {
+        plan.body
+            .budget
+            .budgets
+            .iter()
+            .find(|b| b.id == id)
+            .unwrap_or_else(|| panic!("预算条目 {id} 应存在"))
+    };
+    let token = entry("token_cap");
+    assert_eq!(
+        (token.cap, token.scope.as_str(), token.dimension),
+        (
+            1_000_000,
+            "plan",
+            af_compiler::ir::BudgetDimension::TokensTotal
+        ),
+        "token_cap：F4C 实测 514,425 tok 熔断 → 1,000,000（planner 1,909 + coder \
+         512,516@31/60 turns + reviewer 预估 + 余量），口径仍 plan/tokens_total"
+    );
+    let cost = entry("cost_cap");
+    assert_eq!(
+        (cost.cap, cost.scope.as_str(), cost.dimension),
+        (600, "plan", af_compiler::ir::BudgetDimension::Cents),
+        "cost_cap 不动：F4C coder 实测 32¢，600¢ 帽余量充足"
+    );
+    let coder_turns = entry("coder_turns");
+    assert_eq!(
+        (
+            coder_turns.cap,
+            coder_turns.scope.as_str(),
+            coder_turns.dimension
+        ),
+        (60, "node:coder", af_compiler::ir::BudgetDimension::Turns),
+        "coder_turns 不动：F4C 实测 31/60 未触"
+    );
+    let reviewer_turns = entry("reviewer_turns");
+    assert_eq!(
+        (
+            reviewer_turns.cap,
+            reviewer_turns.scope.as_str(),
+            reviewer_turns.dimension
+        ),
+        (12, "node:reviewer", af_compiler::ir::BudgetDimension::Turns),
+        "reviewer_turns 不动"
+    );
 }

@@ -249,8 +249,8 @@ const DRAFT_REFS: &[&str] = &[
     "pkg.swarmkit.graph.plan_execute_review@2.1",
     "pkg.swarmkit.graph.fanout_vote@1.4",
     "pkg.swarmkit.graph.react_baseline@1.0",
-    // MetaGPT.yaml:23-25
-    "pkg.sweng.sop_full@1.0",
+    // MetaGPT.yaml:23-25（sop_full 预算校准批 2026-10-25 起 @1.1）
+    "pkg.sweng.sop_full@1.1",
     "pkg.sweng.sop_no_qa@1.0",
     "pkg.sweng.sop_minimal@1.0",
 ];

@@ -13,7 +13,7 @@
 //! - loop/map 节点与环拓扑 = EX4008（登记后续，v1 不驱动）。
 //!
 //! 注入手法与 p4/p5 同源：FakeRunner（零模型/零凭证）+ FakeBridge（零容器）；
-//! 计划经真编译器全链产出（load→validate→plan_json，sop_full@1.0.afb 仓库
+//! 计划经真编译器全链产出（load→validate→plan_json，sop_full@1.1.afb 仓库
 //! 正本），注册表/模板用仓库 af/packages 正本——digest/模板核对走真路径。
 
 use std::path::{Path, PathBuf};
@@ -45,9 +45,9 @@ fn sop_full_src() -> String {
         repo_packages()
             .join("sweng")
             .join("graphs")
-            .join("sop_full@1.0.afb"),
+            .join("sop_full@1.1.afb"),
     )
-    .expect("sop_full@1.0.afb 仓库正本应在盘")
+    .expect("sop_full@1.1.afb 仓库正本应在盘")
 }
 
 /// 真编译器全链产计划 JSON（load→validate→plan_json；pkg_reportkit 先例）。
@@ -430,7 +430,7 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     assert!(rows[0]["plan_id"]
         .as_str()
         .unwrap()
-        .starts_with("plan.sweng_sop_full@1.0+"));
+        .starts_with("plan.sweng_sop_full@1.1+"));
     assert_eq!(rows[0]["nodes"], json!(4));
 
     // 容器清理必达（RAII）：rm -f 恰两次（setup 前清残件 + 收尾）。
@@ -809,7 +809,7 @@ fn downstream_consumes_face_revalidates_incoming_edges() {
 fn plan_token_cap_fuses_before_downstream_nodes() {
     let root = temp_root("tokfuse");
     let src = sop_full_src().replace(
-        "{ id: token_cap, dimension: tokens_total, scope: plan, cap: 400000 }",
+        "{ id: token_cap, dimension: tokens_total, scope: plan, cap: 1000000 }",
         "{ id: token_cap, dimension: tokens_total, scope: plan, cap: 310 }",
     );
     assert!(src != sop_full_src(), "夹具改写应生效");
