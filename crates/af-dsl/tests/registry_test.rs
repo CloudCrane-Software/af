@@ -258,17 +258,23 @@ const DRAFT_REFS: &[&str] = &[
 /// G4 任务图白名单（裁决§二：14 图闭包测试扩展为「草稿引用 ∪ G4 任务图
 /// 白名单」常量形式——注册表卫生语义保留：清单仍不得夹带闭包外图，只是
 /// 闭包定义从「草稿引用」扩为「草稿引用 ∪ G4 落地任务图」）。Phase 1 =
-/// sweng fix_swe_task；Phase 2 reportkit paper_report 随其包落地同 commit
-/// 追加于此。
+/// sweng fix_swe_task；Phase 2（G4 终态）+ reportkit paper_report——两包
+/// 各随其落地同 commit 追加。
 const G4_TASK_GRAPH_WHITELIST: &[&str] = &[
-    // sweng/manifest.json:9（G4 软件工程包 E2E 图，设计 §4.2）
+    // sweng/manifest.json:6-9（G4 软件工程包 E2E 图，设计 §4.2）
     "pkg.sweng.fix_swe_task@1.0",
+    // reportkit/manifest.json:4（G4 研究报告包 E2E 图，设计附录 A）
+    "pkg.reportkit.paper_report@1.0",
 ];
 
 #[test]
 fn repo_packages_registry_covers_all_four_draft_refs() {
     let r = Registry::load(repo_packages()).expect("仓库正本 af/packages 应装载（4 示例包）");
-    assert_eq!(r.package_count(), 4, "adaskit/autogen/swarmkit/sweng");
+    assert_eq!(
+        r.package_count(),
+        5,
+        "adaskit/autogen/swarmkit/sweng/reportkit"
+    );
     for rf in DRAFT_REFS {
         assert!(
             r.declared_graphs().contains(*rf),

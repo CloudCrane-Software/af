@@ -1,0 +1,43 @@
+{
+  "components": [
+    {
+      "class": "tool",
+      "name": "pkg.report.web_search",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/reportkit@1.0.0/tools/web_search.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.report.web_fetch",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/reportkit@1.0.0/tools/web_fetch.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.report.pdf_extract",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "packages/reportkit@1.0.0/tools/pdf_extract.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.report.citation_unit",
+      "version": "1",
+      "impl_ref": "packages/reportkit@1.0.0/units/citation_unit.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.report.rubric_unit",
+      "version": "1",
+      "impl_ref": "packages/reportkit@1.0.0/units/rubric_unit.py"
+    },
+    {
+      "class": "memory",
+      "name": "pkg.report.mem.notes",
+      "version": "1",
+      "impl_ref": "packages/reportkit@1.0.0/memory/notes.py"
+    }
+  ]
+}

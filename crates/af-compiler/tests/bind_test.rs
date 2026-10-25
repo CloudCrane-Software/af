@@ -39,7 +39,11 @@ fn repo_registry() -> ComponentRegistry {
 #[test]
 fn repo_components_registry_loads_deterministically() {
     let reg = repo_registry();
-    assert_eq!(reg.component_count(), 57, "P2-L11 首批 7 + P2-L12 扩容 50");
+    assert_eq!(
+        reg.component_count(),
+        63,
+        "P2-L11 首批 7 + P2-L12 扩容 50 + G4 reportkit 6（57→63，裁决§二同 commit）"
+    );
 
     let again = repo_registry();
     assert_eq!(reg.digest(), again.digest(), "两次装载 digest 逐位一致");
@@ -64,14 +68,18 @@ fn repo_components_registry_loads_deterministically() {
 fn components_files_do_not_touch_graph_manifest_surface() {
     let graph_reg = af_dsl::registry::Registry::load(repo_packages_root())
         .expect("af-dsl 图清单装载不受 components.json 影响");
-    assert_eq!(graph_reg.package_count(), 4);
+    assert_eq!(
+        graph_reg.package_count(),
+        5,
+        "+reportkit（G4 终态，裁决§二）"
+    );
     // G4 裁决§二：14 草稿闭包 ∪ G4 任务图白名单（Phase 1 +sweng
-    // fix_swe_task；白名单常量正本在 af-dsl registry_test——计数同步与
-    // 包落地同 commit）。
+    // fix_swe_task、Phase 2 +reportkit paper_report；白名单常量正本在
+    // af-dsl registry_test——计数同步与包落地同 commit）。
     assert_eq!(
         graph_reg.declared_graphs().len(),
-        15,
-        "14 草稿闭包 + sweng fix_swe_task"
+        16,
+        "14 草稿闭包 + sweng fix_swe_task + reportkit paper_report"
     );
 }
 
