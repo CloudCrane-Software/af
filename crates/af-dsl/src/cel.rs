@@ -93,6 +93,68 @@ fn run_captured<R>(f: impl FnOnce() -> R) -> Result<R, ()> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|_| ())
 }
 
+/// 受控大栈线程执行（红队 W3-C16）：antlr4rust 递归下降的栈帧随构建档
+/// 差一个数量级——release 下 8MB 主栈括号深 1000 优雅 PASS，debug 下
+/// （cargo build/test 默认档，生产 CLI 即此档）深约 100 起即栈溢出
+/// SIGABRT（rc=134），而农田语料 C_CE28/29 要求深 500/1000 PASS、原测试
+/// 靠 256MB 大栈线程达成、生产主线程无保护。解析改在固定大栈工作线程
+/// 上跑：阈值语义（>1000 拒）与「本机 8MB 主栈优雅过」标定自此不再
+/// 依赖构建档与调用方栈大小（worker 栈与主栈解耦）。线程构建失败
+/// （极少见）回退主线程执行——行为不劣于修复前。
+// 256MB = 农田语料深 500/1000 两样本在原测试大栈线程（farm_anomalies_test
+// run_on_big_stack）实测通过的同一量级；debug 构建 antlr4rust 帧约 80KB/层
+// （8MB 主栈深约 100 崩的实测折算），深 1000 需 ~80MB，留 3 倍余量。线程栈
+// 为虚拟内存预留（非实提交），不构成实存压力。
+const CEL_WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
+
+/// 在受控大栈工作线程上执行判定主体（W3-C16）。`CelEnv` 克隆进线程、结果
+/// 只有 `CelCheck`/`CelError`（均 Send）回传——`Program` 含 `Rc` 不可跨线程，
+/// 故 compile→提取→求值全链条在线程内完成。线程构建/join 失败（极少见）
+/// 回退主线程执行——行为不劣于修复前。
+fn check_on_big_stack(source: &str, scan: &LexScan, env: &CelEnv) -> Result<CelCheck, CelError> {
+    let source_owned = source.to_owned();
+    let scan_owned = LexScan {
+        max_depth: scan.max_depth,
+        has_macro: scan.has_macro,
+    };
+    let env_owned = env.clone();
+    let cell = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let cell2 = cell.clone();
+    let builder = std::thread::Builder::new()
+        .name("af-dsl-cel-parse".into())
+        .stack_size(CEL_WORKER_STACK_BYTES);
+    let spawned = builder.spawn(move || {
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            check_inner(&source_owned, &scan_owned, &env_owned)
+        }));
+        *cell2.lock().unwrap_or_else(|e| e.into_inner()) = Some(out);
+    });
+    match spawned {
+        Ok(handle) => {
+            if handle.join().is_err() {
+                return Err(CelError {
+                    code: ErrorCode::CelParse,
+                    detail: format!(
+                        "解析失败：大栈工作线程异常退出（{source:?}）——fail-loud，不在 \
+                         调用方栈上重试（debug 主栈深约 100 即 SIGABRT，红队 W3-C16）"
+                    ),
+                });
+            }
+            match cell.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                Some(Ok(result)) => result,
+                _ => Err(CelError {
+                    code: ErrorCode::CelParse,
+                    detail: format!(
+                        "解析失败：cel-parser 内部 panic（尾部运算符/空输入触发 antlr4rust \
+                         错误恢复 panic，已兜底归一）：{source:?}"
+                    ),
+                }),
+            }
+        }
+        Err(_) => check_inner(source, scan, env),
+    }
+}
+
 /// 前置闸阈值（农田实测标定，ANOMALIES.md A-2：本机 8MB 主栈括号深 1000
 /// 优雅 PASS、深 2000 起 SIGABRT；对齐稿 15 + 样例 6 的最长 CEL 表达式
 /// 155 字节）：深度上限取实测过界 1000（>1000 拒），长度上限 64 KiB
@@ -237,7 +299,8 @@ fn limit_violation(source: &str, scan: &LexScan) -> Option<String> {
 /// 含 has() 宏词法补位）→ 根（E2203）→ 布尔（E1053），首个违例即返
 /// （§1.4 草图同款单错出口）。通过 → [`CelCheck`]。
 pub fn check(source: &str, env: &CelEnv) -> Result<CelCheck, CelError> {
-    // ⓪ 前置闸：深/长表达式不进 antlr4rust 递归下降（SIGABRT 面）。
+    // ⓪ 前置闸：深/长表达式不进 antlr4rust 递归下降（SIGABRT 面）。闸判定
+    //    本身 O(n) 无递归，留在调用方栈。
     let scan = lex_scan(source);
     if let Some(detail) = limit_violation(source, &scan) {
         return Err(CelError {
@@ -245,6 +308,17 @@ pub fn check(source: &str, env: &CelEnv) -> Result<CelCheck, CelError> {
             detail,
         });
     }
+    // ①-④ 判定主体：红队 W3-C16——antlr4rust 递归下降（parse 与 execute 两面）
+    //    改在 256MB 受控大栈工作线程上跑。debug 构建（cargo build/test 默认档，
+    //    生产 CLI 即此档）8MB 主栈括号深约 100 起即栈溢出 SIGABRT（rc=134，
+    //    实测复现），而农田语料 C_CE28/29 要求深 500/1000 PASS、原测试靠
+    //    256MB 大栈线程达成、生产主线程无保护；大栈线程使「>1000 拒」阈值
+    //    与「本机 8MB 主栈优雅过」标定不再依赖构建档与调用方栈大小。
+    check_on_big_stack(source, &scan, env)
+}
+
+/// 判定主体（①解析 → ②算子 → ③根 → ④布尔）；在大栈线程或回退路径上执行。
+fn check_inner(source: &str, scan: &LexScan, env: &CelEnv) -> Result<CelCheck, CelError> {
     // ① 解析：Err → 编译错误；panic → antlr4rust 错误恢复路径，兜底归一。
     let program = match run_captured(|| Program::compile(source)) {
         Ok(Ok(p)) => p,

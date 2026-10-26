@@ -101,7 +101,8 @@ sweng	白名单	crates/af-compiler/src/components.rs:62	1	组件名·挂载机�
 langgraph	白名单	crates/af-compiler/src/ir.rs:121	1	出处注记	checkpoint 语义出处（提案 B 互译表引注）	2026-10-25
 langgraph	白名单	crates/af-compiler/src/ir.rs:151	1	出处注记	interrupt(response_schema) 对应物语义出处	2026-10-25
 terminal	白名单	crates/af-compiler/src/ir.rs:578	1	规范词	failures[].terminal 终态义投影字段	2026-10-25
-terminal	白名单	crates/af-compiler/src/lower.rs:541	2	规范词	lowering 投影行 terminal: f.terminal 行内 2 处（字段名+访问表达式）	2026-10-25
+terminal	白名单	crates/af-compiler/src/lower.rs:587	2	规范词	lowering 投影行 terminal: f.terminal 行内 2 处（字段名+访问表达式；红队 W3-C20 norm_type_expr 增行使行号 541→587 漂移修正）	2026-10-26
 voyager	白名单	crates/af-compiler/src/ir.rs:23	1	图名示例·机制注释	sample6 子图路径示例 voyager_curriculum/explore/acquire（构造体路径键机制；红队 W1-C60 ASCII 词边界后可见，原 \b 口径对 CJK 邻接失明）	2026-10-26
 debate	白名单	crates/af-compiler/src/ir.rs:58	1	图名示例·机制注释	体内节点全局唯一连接键示例 rounds.debate_map（提案 B 路径键机制示例；红队 W1-C60 补见）	2026-10-26
 debate	白名单	crates/af-dsl/src/validate/mod.rs:30	1	图名示例·机制注释	点号路径示例 "rounds.debate_map.debater"（NodeRef.path 机制示例；红队 W1-C60 补见）	2026-10-26
+debate	白名单	crates/af-compiler/src/lower.rs:79	1	图名示例·机制注释	golden Multi-Agent-Debate 内联原始型 sentinel 实证携带者（W3-C20 注释引用 golden 语料名，与 ir.rs:58/validate/mod.rs:30 同类）	2026-10-26

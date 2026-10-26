@@ -76,6 +76,9 @@ pub struct ValidateOptions {
 pub fn validate_with(doc: &Document, opts: &ValidateOptions) -> Report {
     let mut report = Report::default();
     report.violations.extend(crate::shape::check_vocab(doc));
+    report
+        .violations
+        .extend(crate::shape::check_schema_shape(doc));
     let index = Index::build(doc, &mut report);
     refs::check(doc, &index, &mut report);
     loop_guard::check(&index, &mut report);

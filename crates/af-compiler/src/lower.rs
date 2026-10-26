@@ -69,13 +69,30 @@ impl fmt::Display for LowerError {
 impl std::error::Error for LowerError {}
 
 /// `Document` → `IrProgram`（纯函数）。
+/// 类型表达式规范串（红队 W3-C20）：内联原始型规范化为**原始名**
+/// （string/integer/number/boolean），而非 `PortType::display()` 的
+/// `"{type:string}"` sentinel——后者不在计划类型表达式文法
+/// （name | list<> | envelope<> | signal）内、plan.types 无此基名：
+/// 执行面 check_typed 对有人边载荷的该端口硬拒「基名不在 plan.types」、
+/// materialize_schema 静默返 None（端口零形状信息）。规范化后内联型经
+/// `inline_prims` 并入 plan.types（独立原始型条目 `{type: <prim>}`），
+/// 边核对面/物化面/执行面同可解析（golden Multi-Agent-Debate 的
+/// `consumes.item="{type:string}"` 即该 sentinel 的实证携带者）。
+fn norm_type_expr(t: &m::PortType) -> String {
+    match t {
+        m::PortType::Named(r) => r.display(),
+        m::PortType::Inline(p) => p.r#type.display().to_string(),
+    }
+}
+
 pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
     let mut lw = Lowering {
         doc,
+        inline_prims: BTreeSet::new(),
         graph_name: doc.meta.name.clone(),
         graph_version: doc.meta.graph_version.clone(),
         output_from: doc.meta.output.from.clone(),
-        output_type: doc.meta.output.r#ref.display(),
+        output_type: norm_type_expr(&doc.meta.output.r#ref),
         subgraphs: BTreeMap::new(),
         node_exec: BTreeMap::new(),
         escapes: BTreeMap::new(),
@@ -92,17 +109,28 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
         },
         interface: InterfaceSpec {
             input_type: doc.meta.input.clone(),
-            output_type: doc.meta.output.r#ref.display(),
+            output_type: norm_type_expr(&doc.meta.output.r#ref),
             output_from: doc.meta.output.from.clone(),
             intent: doc.meta.intent.clone(),
         },
         // 类型词典（重复名 = stage 1 E2003 面，last-wins 机械收集）；
         // schema 为透传 Value，经 canonical_value 规范键序（见 ir.rs 契约护栏）
-        types: doc
-            .types
-            .iter()
-            .map(|t| (t.name.clone(), canonical_value(&t.schema)))
-            .collect(),
+        // 类型词典 = 声明 types + 内联原始型条目（红队 W3-C20：规范串
+        // string/integer/... 的执行面解析位——声明面无同名时补
+        // `{type: <prim>}`；声明面已有同名（极少见）时声明优先，不覆写）。
+        types: {
+            let mut types: BTreeMap<String, serde_json::Value> = doc
+                .types
+                .iter()
+                .map(|t| (t.name.clone(), canonical_value(&t.schema)))
+                .collect();
+            for prim in &lw.inline_prims {
+                types
+                    .entry(prim.clone())
+                    .or_insert_with(|| serde_json::json!({ "type": prim }));
+            }
+            types
+        },
         stores: doc
             .stores
             .iter()
@@ -137,6 +165,9 @@ struct Lowering<'a> {
     node_exec: BTreeMap<String, NodeExec>,
     /// L4 逃逸记账（键 = 点号路径）。
     escapes: BTreeMap<String, EscapeSpec>,
+    /// 内联原始型名收集（红队 W3-C20：emits/consumes/interface 引用到的
+    /// 原始型并入 plan.types，使规范串在执行面可解析）。
+    inline_prims: BTreeSet<String>,
 }
 
 impl<'a> Lowering<'a> {
@@ -178,8 +209,8 @@ impl<'a> Lowering<'a> {
             } else {
                 format!("{parent}.{}", n.id)
             };
-            self.node_exec
-                .insert(path.clone(), self.node_exec(n, &path)?);
+            let node_projection = self.node_exec(n, &path)?;
+            self.node_exec.insert(path.clone(), node_projection);
 
             let loop_spec = match &n.loop_spec {
                 Some(lp) => Some(self.loop_spec(lp, &path)?),
@@ -250,7 +281,7 @@ impl<'a> Lowering<'a> {
     }
 
     /// 节点执行投影（uses/consumes/emits/context/ops/assert/reads/writes）。
-    fn node_exec(&self, n: &m::NodeDecl, path: &str) -> Result<NodeExec, LowerError> {
+    fn node_exec(&mut self, n: &m::NodeDecl, path: &str) -> Result<NodeExec, LowerError> {
         let mut components = Components {
             model: None,
             tools: BTreeMap::new(),
@@ -288,7 +319,13 @@ impl<'a> Lowering<'a> {
                 em.iter()
                     .map(|(port, spec)| {
                         let (ty, fb) = match spec {
-                            m::EmitSpec::Type(t) => (Some(t.display()), None),
+                            m::EmitSpec::Type(t) => {
+                                let norm = norm_type_expr(t);
+                                if let m::PortType::Inline(p) = t {
+                                    self.inline_prims.insert(p.r#type.display().to_string());
+                                }
+                                (Some(norm), None)
+                            }
                             m::EmitSpec::FromBody { from_body } => (None, Some(from_body.clone())),
                         };
                         // 终态判定（红队 W2-C26 收紧）：显式类型端口按
@@ -328,7 +365,16 @@ impl<'a> Lowering<'a> {
             consumes: n
                 .consumes
                 .as_ref()
-                .map(|c| c.iter().map(|(k, v)| (k.clone(), v.display())).collect())
+                .map(|c| {
+                    c.iter()
+                        .map(|(k, v)| {
+                            if let m::PortType::Inline(p) = v {
+                                self.inline_prims.insert(p.r#type.display().to_string());
+                            }
+                            (k.clone(), norm_type_expr(v))
+                        })
+                        .collect()
+                })
                 .unwrap_or_default(),
             artifacts,
             context: n

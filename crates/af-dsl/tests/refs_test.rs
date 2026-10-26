@@ -446,16 +446,41 @@ fn store_retention_unbounded_is_e2208() {
 // ---------- 红队修复批（W1）：E2202 判定面与内建端口表同源 ----------
 
 #[test]
-fn builtin_done_port_satisfies_output_ref() {
-    // meta.output.from = loop 构造节点（无 emits）、ref = signal：内建
-    // done:signal 端口在 E2202 判定面应被承认（与 port_exists/emit_type
-    // 同一口径——此前边核对面存在、output 判定面「不存在」，合法文档假拒）。
-    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: signal, from: l1 }\n";
+fn builtin_only_terminal_is_rejected_e2202() {
+    // 红队 W3-C19（原 W1-C22 两例翻转）：无 emits 的构造/判定节点不得作
+    // meta.output.from——内建端口（loop/map done、check/gate passed）服务边
+    // 模型，但 lower 的 artifact_contract 仅由 n.emits 构造，计划面无其投影
+    // 位；W1-C22 放行后形成「af-dsl 过、编译 exit 0、执行面
+    // final_artifact_port 找不到 is_final 工件」的修复面新缺口。现 emits 缺席
+    // 即 E2202（闭环：编译产物不存在不可执行的终态计划）。
+    let meta_done = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: signal, from: l1 }\n";
     let src = build(
-        meta,
+        meta_done,
         DEF_TYPES,
         "",
         "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), ["E2202"]);
+
+    let meta_passed = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: { type: boolean }, from: c1 }\n";
+    let src = build(
+        meta_passed,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), ["E2202"]);
+
+    // 对照：自带 emits 的 gate 节点作终态仍合法（sop_full tester 同款形态）。
+    let src = build(
+        meta_passed,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n    emits: { passed: { type: boolean } }\n",
         "",
         DEF_POLICIES,
     );
@@ -463,16 +488,16 @@ fn builtin_done_port_satisfies_output_ref() {
 }
 
 #[test]
-fn builtin_passed_port_satisfies_output_ref() {
-    // meta.output.from = gate 节点（无 emits）、ref 内联 boolean：内建
-    // passed:boolean 端口同理应被承认。
-    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: { type: boolean }, from: c1 }\n";
+fn builtin_done_port_still_feeds_edges() {
+    // 边模型不变：loop 的 done:signal 仍可合法接边（内建端口服务边核对面，
+    // W1-C22 该半不受终态收紧影响）。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\n";
     let src = build(
         meta,
         DEF_TYPES,
         "",
-        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n",
-        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n  - id: n2\n    kind: transform\n    ops: [ { op: project, port: p, into: q } ]\n",
+        "  - { from: l1, output: done, to: n2, input: done }\n",
         DEF_POLICIES,
     );
     assert_eq!(check(&src), Vec::<&str>::new());

@@ -107,8 +107,7 @@ $FARM detail ~/.cache/afv1-farm/anomalies/<样本>.yaml # 逐条违例/panic 文
   经端口转发两跳即漏。
 - `C_CX20` PASS — 同名入边端口被两条边共用时，单段引用即满足 E2304「恰一」
   （`inv1.rs:53-63` in_ports 先集合去重再计数）。
-- `B10_type_schema_str.yaml` PASS — `types[].schema: "x"`（标量）被接受：
-  schema 是 `serde_json::Value`，无 object 形状强制（`model.rs:71-74` 注记与实现不符）。
+- `B10_type_schema_str.yaml` **拒收（红队 W3-C18 勘误，原 PASS）** — `types[].schema: "x"`（标量）由 `shape::check_schema_shape` 拒收（E1003）：model.rs:71-74 自述 schema 为「内联 JSON Schema 对象（唯一 schema 家）」，原实现裸 `Value` 零校验与该自述矛盾，且 cel.rs synth_from_schema 对非 object schema 退化为 Null 绑定、求值错误不判 ⇒ CEL 布尔判定静默无证据。形状门现要求：对象 + type ∈ 原始六型 + properties/items 递归同规则。本样本由「文档化边界（注记与实现不符）」翻转为拒收例，钉子自 documented_boundaries_stay_pass 迁移至 parse_test::non_object_schema_is_e1003。
 - `B50_retention_zero.yaml` PASS — `retention.max_items: 0` 记「有界」
   （`refs.rs:157` 只查 is_none；Some(0) 值域空洞）。
 - `C_CE02/C_CE03` PASS — list/map 字面量过算子白名单（`cel.rs:24-27` 未覆盖的字面量构造）。

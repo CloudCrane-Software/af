@@ -99,6 +99,28 @@ fn check_meta(doc: &Document, ix: &Index<'_>, report: &mut Report) {
             }
         }
     }
+    // 终态发射者必须自带 emits 声明（红队 W3-C19）：内建端口（loop/map
+    // done、check/gate passed）只服务**边**的端口模型（port_exists/emit_type
+    // 同源），不构成终态工件——lower 的 artifact_contract 仅由 n.emits 构造
+    // （内建端口无投影位），执行面 final_artifact_port 找不到 is_final 工件
+    // 即 EnvelopeMismatch。W1-C22 曾放行「无 emits + 内建端口满足 ref」的
+    // 终态，形成「编译 exit 0、计划不可执行」的修复面新缺口（闭环探针：
+    // loop 节点作 output.from 主线 E2202 拒、修复面编译过但 artifact_contract
+    // 空）。现闭合：emits 缺席即拒，内建端口不得冒充终态工件来源。
+    if from.node.emits.is_none() && !builtin_ports(from).is_empty() {
+        report.push(
+            ErrorCode::OutputNotEmitted,
+            "root",
+            format!(
+                "meta.output.from {:?} 无 emits 声明（仅内建端口 {:?}）——内建端口服务边模型、\
+                 不构成终态工件（计划面 artifact_contract 无其投影位、执行器不产该载荷）；\
+                 终态发射者必须自带 emits（红队 W3-C19）",
+                from.path,
+                builtin_ports(from)
+            ),
+        );
+        return;
+    }
     for port in builtin_ports(from) {
         if let Some(t) = ix.emit_type(from, port, TYPE_DEPTH) {
             // 端口名去重（红队 W2-C23）：emits 显式声明的内建端口名

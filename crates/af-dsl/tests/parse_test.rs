@@ -22,6 +22,12 @@ fn shape_codes(src: &str) -> Vec<&'static str> {
     }
 }
 
+/// 语义层（validate）违例码集——形状门 E1003 经 validate 一次收齐面断言。
+fn codes(src: &str) -> Vec<&'static str> {
+    let doc: Document = load_str(src).unwrap_or_else(|e| panic!("解析失败：{e}"));
+    af_dsl::validate(&doc).codes()
+}
+
 // ---------- golden 样例：解析通过 ----------
 
 const SAMPLE_NAMES: [(&str, &str); 6] = [
@@ -403,4 +409,70 @@ fn unknown_retention_policy_is_e1004() {
         "stores:\n  - { name: s, type: kv, writer: n1, lifecycle: run, retention: { policy: fifo } }\n",
     );
     assert_eq!(shape_codes(&src), ["E1004"]);
+}
+
+// ---------- 红队 W3-C17：负值入无符号字段归 E2002 值域（非 E1004 枚举） ----------
+
+#[test]
+fn negative_into_unsigned_is_e2002_not_e1004() {
+    // serde 对无符号域报 `invalid value: integer -1, expected u32`——类型家族
+    // 对、值越界，属 E2002 值域（error.rs:62-63）；原映射把它与 unknown
+    // variant 一并塞 E1004「枚举值非法」，误导排障方向。
+    let cases = [
+        // loop max_iterations:-1（expected u32）
+        (
+            "  - id: n1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: -1\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: a }",
+            "",
+        ),
+        // store retention.max_items:-1（expected usize）
+        (
+            "  - id: n1\n    kind: task\n    emits: { answer: a }",
+            "stores:\n  - { name: s, type: kv, writer: n1, lifecycle: run, retention: { max_items: -1 } }\n",
+        ),
+        // context quota_tokens:-5（expected u64）
+        (
+            "  - id: n1\n    kind: task\n    context:\n      sections:\n        - { from: root, template_ref: pkg.x.t@1, quota_tokens: -5 }\n    emits: { answer: a }",
+            "",
+        ),
+    ];
+    for (nodes, stores) in cases {
+        assert_eq!(shape_codes(&doc(nodes, stores)), ["E2002"]);
+    }
+    // 对照组：枚举未知值仍归 E1004（词表域不受本次二分影响）。
+    let src = doc(
+        "  - id: n1\n    kind: task\n    emits: { answer: a }",
+        "stores:\n  - { name: s, type: queue, writer: n1, lifecycle: run, retention: { max_items: 8 } }\n",
+    );
+    assert_eq!(shape_codes(&src), ["E1004"]);
+}
+
+// ---------- 红队 W3-C18：types[].schema 形状强制（E1003） ----------
+
+#[test]
+fn non_object_schema_is_e1003() {
+    // model.rs 自述 schema 为「内联 JSON Schema 对象」，实现原为裸 Value 零
+    // 校验——标量/数组/布尔/null 形状零违例过审，CEL 合成绑定退化为 Null、
+    // 求值错误不判 ⇒ 布尔判定静默无证据。现形状层 fail-loud（E1003）。
+    let bad_schemas = [
+        ("字符串标量", "x"),
+        ("数字", "42"),
+        ("数组", "[1, 2]"),
+        ("布尔", "true"),
+        ("null", "null"),
+        ("空对象（无 type）", "{}"),
+        ("type 非六型", "{ type: blob }"),
+        (
+            "properties 子节点无 type",
+            "{ type: object, properties: { r: {} } }",
+        ),
+    ];
+    for (label, schema) in bad_schemas {
+        let src = format!(
+            "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: {{ ref: a, from: n1 }}\ntypes:\n  - {{ name: in_t, schema: {{ type: object, required: [q], properties: {{ q: {{ type: string }} }} }} }}\n  - {{ name: a, schema: {schema} }}\nnodes:\n  - id: n1\n    kind: task\n    uses: {{ model: route.main@1 }}\n    emits: {{ answer: a }}\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n"
+        );
+        assert_eq!(codes(&src), ["E1003"], "{label} 应被形状门拒（E1003）");
+    }
+    // 正例：六型与嵌套 properties/items 合法（含内联原始型与 list items）。
+    let ok = "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\ntypes:\n  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }\n  - { name: a, schema: { type: object, required: [items], properties: { items: { type: array, items: { type: integer } }, flag: { type: boolean } } } }\nnodes:\n  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n";
+    assert_eq!(codes(ok), Vec::<&str>::new(), "合法 schema 形状零违例");
 }

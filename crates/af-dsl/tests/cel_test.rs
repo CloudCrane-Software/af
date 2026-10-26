@@ -459,3 +459,25 @@ fn has_macro_across_line_comment_is_still_rejected() {
     check("true // has(input.q)", &e)
         .unwrap_or_else(|err| panic!("注释文本内 has( 不误伤（W1-C23 口径不回退）：{err:?}"));
 }
+
+#[test]
+fn deep_expression_parses_on_default_stack_thread() {
+    // 红队 W3-C16：默认（小）栈线程上深 1000 表达式必须被解析/拒绝，而非
+    // 栈溢出 SIGABRT——修复前 antlr4rust 递归下降跑在调用方栈上，debug 构建
+    // 8MB 主栈深约 100 起崩（农田 C_CE29 深 1000 PASS 样本原依赖 256MB 大栈
+    // 测试线程达成，生产 CLI 主线程无保护）。解析已改 64MB 大栈工作线程，
+    // 本测试刻意不包大栈：深度 ≤1000 合法过、>1000 走 E1054 前置拒。
+    let e = env(&[("input", vmap(&[("q", vstr("x"))]))]);
+    // 深 1000（恰阈值内）：((((…1…)))) 语义 = 1，非布尔→E1053（不是崩溃）。
+    let deep_ok = format!("{}1{}", "(".repeat(1000), ")".repeat(1000));
+    let err = err_of(&deep_ok, &e);
+    assert_ne!(
+        err.code.code(),
+        "E1051",
+        "深 1000 不应解析失败（栈溢出会体现为 panic/abort）：{err:?}"
+    );
+    // 深 1200（阈值外）：前置闸 E1054。
+    let deep_over = format!("{}1{}", "(".repeat(1200), ")".repeat(1200));
+    let err = err_of(&deep_over, &e);
+    assert_eq!(err.code.code(), "E1054", "深 1200 应被前置闸拒：{err:?}");
+}

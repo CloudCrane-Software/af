@@ -2,6 +2,11 @@
 //! 双构造此前不被任何判定拒绝，且 emit_type 对其 emits.from_body 的类型
 //! 推导自相矛盾（解析域取 loop 体、类型域因 map 在场一律包 list<>）。
 //! 收紧为 E2209（fail-closed：组合非法，二构造必须分节点）。
+//!
+//! 红队 W3-C19 迁移：终态发射者必须自带 emits（内建端口不构成终态工件）——
+//! 两条样本的 n1 原为「无 emits + output.from=n1」形态，现补
+//! `emits: { done: signal }`（inv4_test loader 同款形态：显式声明内建 done
+//! 端口为终态发射）。判据本体（E2209 / 零违例）不变。
 
 use af_dsl::{load_str, validate, Document};
 
@@ -25,6 +30,7 @@ nodes:
   - id: n1
     kind: task
     uses: { model: route.main@1 }
+    emits: { done: signal }
     loop:
       body:
         nodes:
@@ -62,6 +68,7 @@ nodes:
   - id: n1
     kind: task
     uses: { model: route.main@1 }
+    emits: { done: signal }
     loop:
       body:
         nodes:

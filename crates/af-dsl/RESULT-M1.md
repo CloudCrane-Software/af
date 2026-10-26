@@ -71,7 +71,8 @@ policies：`BudgetDecl{id,dimension:8 值,scope,cap}` · `StopDecl{when,outcome:
 | E1001 | unknown_field | serde `unknown field`（全文 deny_unknown_fields） | 形状 |
 | E1002 | missing_field | serde `missing field`（含 route.default、escape 记账四字段、body.nodes） | 形状 |
 | E1003 | type_mismatch | serde `invalid type`/untagged 失配/类型表达式语法错/端口内联对象 schema/嵌套泛型 | 形状 |
-| E1004 | invalid_enum_value | serde `unknown variant`（store 型/lifecycle/安全点三值/escape 7 类/预算维度/stop 终态/失败类/retention policy）+ 手写词表（ops 8 算子、section 5 来源） | 形状 |
+| E1004 | invalid_enum_value | serde `unknown variant`（store 型/lifecycle/安全点三值/escape 7 类/预算维度/stop 终态/失败类/retention policy）+ 枚举形 `invalid value`（如 string 值不在词表）+ 手写词表（ops 8 算子、section 5 来源） | 形状 |
+| E2002 | value_out_of_range | serde `invalid value: integer <n>, expected <数值域>`——负数/越界入无符号或正数字段（max_iterations/quota_tokens/cap/max_items/share_budget_pct/backoff_ms/max_fanout 等）；红队 W3-C17 勘误：原与 unknown variant 一并归 E1004，负数入无符号被误报「枚举值非法」，按 serde 实际语义二分后归值域（fix2 起实装） | 形状 |
 | E2001 | dangling_reference | meta.entry/output.from/边端点/writer 路径/writes/reads/carried.store | 语义 |
 | E2003 | duplicate_id | 同作用域节点 id/类型名/store 名（首个声明者胜） | 语义 |
 | E2104 | map_over_not_list | over 解析到非 list（端口类型或 schema 字段 type≠array 且可判定） | 语义 |

@@ -266,7 +266,9 @@ policies: {}
 #[test]
 fn documented_boundaries_stay_pass() {
     for name in [
-        "B10_type_schema_str.yaml",
+        // B10_type_schema_str.yaml 自红队 W3-C18 起移出 PASS 钉：schema 标量
+        // 形状由 shape::check_schema_shape 拒收（E1003）——原「文档化边界」
+        // 与 model.rs 自述矛盾，勘误后翻转为拒收例（见 schema_shape_test）。
         "B23_ops_param_unclosed.yaml",
         "B50_retention_zero.yaml",
         "B69_zero_writer.yaml",
