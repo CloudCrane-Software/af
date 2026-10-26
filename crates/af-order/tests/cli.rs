@@ -597,3 +597,43 @@ fn submit_rejects_duplicate_flags_as_usage_errors() {
         "拒绝不得留下订单目录（state B）"
     );
 }
+
+// ---------- 红队修复批（W3）：W3-C-26 ----------
+
+/// W3-C-26：`voucher.json` 损坏 = OR2003（凭证面），不是 OR2005（状态/账本面）。
+/// RESULT.md 曾把该情形误写为 OR2005——实证：load_record 的读回/解析失败映射
+/// `OrderError::Voucher`（voucher.rs），error.rs 格式化为 OR2003；OR2005 只属于
+/// state::load_ledger 的账本路径。本例锁死码位，防止文书与代码再漂移。
+#[test]
+fn corrupted_voucher_reports_or2003_not_or2005() {
+    let state = scratch("w3c26");
+    let spec = write_spec(&state, "order.json", &spec_text("wo-cli-w3c26", 9));
+    let first = submit(&spec, &state);
+    expect_ok(&first);
+
+    // 篡改盘上凭证为非法 JSON 后重放 submit。
+    let voucher_path = order_dir(&state, "wo-cli-w3c26").join("voucher.json");
+    fs::write(&voucher_path, "{ broken json").expect("篡改 voucher.json");
+
+    let second = submit(&spec, &state);
+    assert!(
+        !second.status.success(),
+        "凭证损坏必须拒绝，不得静默重建：{}",
+        String::from_utf8_lossy(&second.stdout)
+    );
+    let err_text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&second.stderr),
+        String::from_utf8_lossy(&second.stdout)
+    );
+    assert!(err_text.contains("OR2003"), "稳定码 OR2003：{err_text}");
+    assert!(err_text.contains("凭证损坏"), "点名凭证损坏：{err_text}");
+    assert!(
+        err_text.contains("voucher.json"),
+        "点名损坏文件路径：{err_text}"
+    );
+    assert!(
+        !err_text.contains("OR2005"),
+        "凭证损坏不得误报 OR2005（那是账本面码位）：{err_text}"
+    );
+}
