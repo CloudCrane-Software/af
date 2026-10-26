@@ -1195,9 +1195,15 @@ impl PlanBudgets {
     }
 
     /// 单节点 launch 硬顶：plan cost_cap 在场时收敛到剩余额度。
+    ///
+    /// 红队 W2-C-28：u64 帽**饱和**换算——先 `as i64` 曾把 ≥2^63 的帽回绕成
+    /// 负数、再被 `.max(1)` 压成 1¢，「巨帽≈无帽」倒置为「巨帽=1¢ 立即
+    /// EX4007」。现剩余额度全程 u64 域计算（禁止先 `as i64`），装不下 i64
+    /// 即饱和到 i64::MAX——与同函数族 turns 帽
+    /// （`u32::try_from(b.cap).unwrap_or(u32::MAX)`）同款饱和语义：巨帽≈无帽。
     fn node_spend_cap(&self, default_cap: i64, cents_used: u64) -> i64 {
         match self.cost_cap {
-            Some(cap) => (cap as i64 - cents_used as i64).max(1),
+            Some(cap) => i64::try_from(cap.saturating_sub(cents_used)).unwrap_or(i64::MAX),
             None => default_cap,
         }
     }
@@ -2529,5 +2535,54 @@ mod tests {
             cut.chars().count(),
             10 + 1 + "\n…[truncated at 10 chars]".chars().count() - 1
         );
+    }
+
+    /// 红队 W2-C-28——cost 帽 u64→i64 **饱和**换算：先 `as i64` 曾把 ≥2^63 的
+    /// u64 帽回绕成负数、再被 `.max(1)` 压成 1¢——「巨帽≈无帽」倒置为
+    /// 「巨帽=1¢ 立即 EX4007」，与同文件 turns 帽饱和换算
+    /// （`u32::try_from(b.cap).unwrap_or(u32::MAX)`）同类未修。饱和语义 =
+    /// 巨帽≈无帽（剩余额度按 u64 算、装不下 i64 即饱和到 i64::MAX）。
+    #[test]
+    fn node_spend_cap_saturates_giant_u64_caps_instead_of_wrapping_to_one_cent() {
+        let budget = |cost_cap: Option<u64>| PlanBudgets {
+            cost_cap,
+            token_cap: None,
+        };
+        // 巨帽两档（裁判实测复现值）：2^63 恰是 as i64 回绕边界、u64::MAX 全帽。
+        for cap in [u64::MAX, 1u64 << 63] {
+            let got = budget(Some(cap)).node_spend_cap(300, 0);
+            assert_eq!(
+                got, i64::MAX,
+                "cost_cap={cap} 巨帽不得回绕成 1¢ 立即熔断（饱和≈无帽）"
+            );
+            // 有消耗时仍饱和：u64::MAX − 42 仍装不下 i64（2^63 − 42 可精确
+            // 表达，归入下方精确档）。
+            if cap == u64::MAX {
+                assert_eq!(
+                    budget(Some(cap)).node_spend_cap(300, 42),
+                    i64::MAX,
+                    "cost_cap={cap} 减 42¢ 后仍巨帽"
+                );
+            }
+        }
+        // 2^63 − 42 恰装得下 i64：精确剩余、不饱和不回绕。
+        assert_eq!(
+            budget(Some(1u64 << 63)).node_spend_cap(300, 42),
+            ((1u64 << 63) - 42) as i64
+        );
+        // 常规帽不漂移：剩余额度精确收敛。
+        assert_eq!(budget(Some(600)).node_spend_cap(300, 0), 600);
+        assert_eq!(budget(Some(3)).node_spend_cap(300, 1), 2);
+        // 边界内巨帽：i64::MAX 本身可精确表达（不饱和也正确）。
+        assert_eq!(
+            budget(Some(i64::MAX as u64)).node_spend_cap(300, 7),
+            i64::MAX - 7
+        );
+        // 耗尽/超耗：诚实给 0（生产面 gate() 先 EX4007 拦住，纯函数面不撒谎
+        // 也不 .max(1) 造假帽——fail-closed 方向）。
+        assert_eq!(budget(Some(600)).node_spend_cap(300, 600), 0);
+        assert_eq!(budget(Some(600)).node_spend_cap(300, 700), 0);
+        // plan 未声明 cost_cap：spec 缺省帽原样。
+        assert_eq!(budget(None).node_spend_cap(300, 42), 300);
     }
 }

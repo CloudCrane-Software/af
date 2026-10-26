@@ -40,6 +40,13 @@ pub struct VoucherRecord {
     /// 换 line 重放被静默吞掉；旧行无此键 = None，不核对（历史盘兼容）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub line_id: Option<String>,
+    /// 产线版本（红队 W2-C-35：LineBinding 两字段同属身份面——spec 面
+    /// check_line 两键都强制非空，凭证面却只钉 line_id，重放时只换
+    /// line_version 即静默放行（bind_line 幂等跳过、订单绑定保持首驱版本、
+    /// 零诊断）。与 line_id 同纪律 fail-loud；旧行无此键 = None，不核对
+    /// （历史盘兼容）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_version: Option<String>,
     /// 任务包计划面 sha256（红队 W2-C55：graph/report 两臂全部预算帽
     /// （cost_cap/token_cap/节点 turns）都写在 plan.json 里，而 C-59 的
     /// digest 钉死只覆盖 task.json——提交后换一份同 graph_version、同
@@ -101,6 +108,20 @@ pub fn issue_or_load(
                 });
             }
         }
+        // 红队 W2-C-35：line_version 与 line_id 同属 LineBinding 身份面（spec
+        // check_line 两键都强制非空）——只钉 line_id 时换版本重放被静默放行
+        // （bind_line 幂等跳过、订单绑定保持首驱版本、零诊断），同性质 fail-loud。
+        if let Some(recorded_version) = &record.line_version {
+            if recorded_version != &spec.line.line_version {
+                return Err(OrderError::Voucher {
+                    detail: format!(
+                        "已有凭证与本单不符: 盘上 line_version={}，本次 line_version={}（产线版本不可经重放偷改——\
+                         LineBinding 两字段同属身份面，红队 W2-C-35）",
+                        recorded_version, spec.line.line_version
+                    ),
+                });
+            }
+        }
         // 红队 W2-C55：plan 摘要身份面核对——盘上有摘要而本次不符 = 换计划
         // 重放（放宽预算的标准手法），与换预算/换线同性质 fail-loud。
         if let (Some(recorded), Some(current)) = (&record.plan_sha256, plan_sha256) {
@@ -139,6 +160,7 @@ pub fn issue_or_load(
         stable_id: stable_id.as_str().to_string(),
         amount: spec.budget,
         line_id: Some(spec.line.line_id.clone()),
+        line_version: Some(spec.line.line_version.clone()),
         plan_sha256: plan_sha256.map(str::to_string),
         note: spec.note.clone(),
         payload,
