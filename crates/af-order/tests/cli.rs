@@ -559,3 +559,41 @@ fn show_rejects_path_unsafe_order_ids() {
     let text = String::from_utf8_lossy(&ok.stderr);
     assert!(text.contains("OR2004"), "安全 id 走订单不存在：{text}");
 }
+
+/// 红队 W2-C36：重复旗标必须在参数解析期 OR1001 拒绝（退出码 2、stderr
+/// 点名重复旗标），不得再静默取首个值——此前 `--state A --state B` exit 0
+/// 且账本落 A、B 无声丢弃（--state 决定账本落点，静默选错目录尤其危险）。
+#[test]
+fn submit_rejects_duplicate_flags_as_usage_errors() {
+    let state_a = scratch("dup-a");
+    let state_b = scratch("dup-b");
+    let spec = write_spec(&state_a, "dup.json", &spec_text("dup-flag-it", 1));
+    let out = run(&[
+        "submit",
+        "--spec",
+        spec.to_str().unwrap(),
+        "--state",
+        state_a.to_str().unwrap(),
+        "--state",
+        state_b.to_str().unwrap(),
+        "--workspace",
+        workspace_root().to_str().unwrap(),
+    ]);
+    assert!(!out.status.success(), "重复 --state 应被拒");
+    assert_eq!(out.status.code(), Some(2), "用法错误退出码 2");
+    let text = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        text.contains("OR1001") && text.contains("--state"),
+        "应 OR1001 点名重复旗标 --state：{text}"
+    );
+    // 拒绝发生在参数解析期（凭证签发/目录创建之前）：两侧状态目录都不得
+    // 留下订单目录。
+    assert!(
+        !order_dir(&state_a, "dup-flag-it").exists(),
+        "拒绝不得留下订单目录（state A）"
+    );
+    assert!(
+        !order_dir(&state_b, "dup-flag-it").exists(),
+        "拒绝不得留下订单目录（state B）"
+    );
+}
