@@ -28,8 +28,14 @@ theorems-v1 定稿 **57 条**（A16 + B23 + C9 + D9）。逐条对照四流载�
   27-goto 分配全枚举 Kani harness 3 verified——theorems-v1.md:366 工具栏
   登记「已机器穷尽 E2102/E2103 计数语义 + E2101 抑制规则；残余 = 镜像↔实现
   对账单测」，与 B-14/B-15 的残余状态同构，红队 W2-C43 勘误补入）。
-- **部分证据/不可立**：C-05（部分证据，§二）；A-08/A-10②/A-16 运行时半边
-  （theorems-v1 自认 v0 不可立）。
+- **部分证据/不可立**：C-05（部分证据，§二）；**A-16 运行时半边**（57 条中
+  唯一「运行时半边 v0 不可立」——theorems-v1.md:216：评估 ground truth 对候选
+  不可读的拦截层为执行面读权限白名单占位，落地后方可 Kani 建 harness）。
+  **A-08/A-10② 不属不可立**（红队 W2-C-39 勘误——原误列）：A-08 档位=静态可
+  证明+可全判位（theorems-v1.md:147；Kani镜像员-INV组/RUNLOG.md:60-61
+  a08_soundness/a08_completeness 双 harness SUCCESS）；A-10② 档位=引理可全判
+  （Rocq 抽象模型）+「按 writer 路由」前提在执行面 TCB 显式假设
+  （theorems-v1.md:165；RUNLOG.md:65 a10_no_conflict_lemma SUCCESS）。
 - **受阻归因如实登记**：C-06/C-08/C-09（kani-compiler ICE / CBMC 病态面，
   对应表 §三）。
 - **有 Rocq 陈述、无内核裁决**：B-20（T10 Admitted）。
