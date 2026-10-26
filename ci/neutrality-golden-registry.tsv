@@ -11,8 +11,23 @@
 #   15 份快照已重跑更新并逐位一致性登记（RESULT-G4-reportkit.md；本表登记新值）。
 # G4 收尾批再核（2026-10-25，RESULT-G4-收尾.md）：sop_full/sop_no_qa/sop_minimal
 #   三图物化（图源+模板，不触 components.json）后 registry_digest 逐位不变
-#   （63c3478e…复测）；15 份快照以本树 registry 重跑 cmp 15/15 逐字节全等
-#   （plan_id 逐字一致），本表登记值维持现状。
+#   （63c3478e…复测）。
+# 红队 W3-C-21 勘误+重生成（2026-10-27）：上两处「逐位一致/逐字节全等」判据
+#   对投影落地后的编译器**不可复现**——15 份快照（mtime 2026-10-25 10:44:50）
+#   生成于投影落地（d34633b context、05546bc consumes+artifact_contract.type）
+#   之前，是「旧计划体 + 手改 digest 行（W2-C-07）」混合体：亲算 context
+#   0/247、consumes 0/247、artifact_contract.type 0/269 全缺席。已用本树
+#   af-compiler-plan（--registry af/packages，testdata/src 15 稿同语料）全量
+#   重生成：context 247/247 在场、consumes 203 节点非空（空者省略=无入边，
+#   plan.rs skip_serializing_if）、artifact_contract.type 240/269（Option None
+#   省略）；registry_digest 15/15 仍 63c3478e…（63 条代际不变，上述 PLAN 行
+#   登记值维持现状）；dsl_digest/plan_id 10 份随 IR 演进换代——5 份
+#   route_exit_guard 增全否守卫面（23d9d7a default:exit 入 exit_guard）、
+#   4 份 types 增 signal 使用面内建条目（e4d67aa W2-C-27；MetaGPT 两者兼具）、
+#   Multi-Agent-Debate 增 types.string 内建原始型条目（cfcaaab W3-C20
+#   inline_prims）——旧 d5f3bd3a/c09249e8 等值仅存
+#   2026-10-27 前历史证据，属旧代际。双跑 cmp 15/15 逐字节一致；现行验收
+#   判据=「以本树 af-compiler 重产 cmp 15/15 逐字节全等」（重生成本身亲验）。
 # =============================================================================
 crates/af-compiler/testdata/golden/sample1.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363（g3_golden_corpus_byte_exact）
 crates/af-compiler/testdata/golden/sample2.ir.json	IR	中立	裸链	绿	golden_test.rs:267,363
