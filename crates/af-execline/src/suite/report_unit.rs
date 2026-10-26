@@ -65,7 +65,10 @@ impl ReportJudgeLocator {
             citation_sha256: "0c34b5956bf4a09aef24368f5f4ab6cf7a1cd97132ce8643c909dacbeb9905dc"
                 .into(),
             rubric_script: pkg_root.join("units/rubric_unit.py"),
-            rubric_sha256: "af63af2c0d16ff890d081938a77853d6e817f3e0a7b765fc4e5096a3e16d3654"
+            // 红队 W2-C50：锚随加载侧自证更新——rubric_unit.py 增 render 模块
+            // 加载面校验（__file__ 须为源 .py 且 __cached__ 路径不得在盘），
+            // 影子字节码即使骗过 import 也会在产出判据前 exit 3 fail-loud。
+            rubric_sha256: "2e8ca98f092f808e23549085163004557cec4523ff4749ae248472c8b3a2c27f"
                 .into(),
             render_script: pkg_root.join("tools/render.py"),
             render_sha256: "255f68f7795706637749a9559fbb85444afcd92687b2398012dd94b077b4db76"
