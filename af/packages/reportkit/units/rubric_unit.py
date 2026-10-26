@@ -18,6 +18,13 @@ import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "tools"))
+# 红队 W3-C-06：禁写字节码须先于 import render——判分子进程虽由外层统一
+# 以 -B + PYTHONDONTWRITEBYTECODE=1 派生，但人工复算/基准树重放常裸跑本
+# 脚本（无 -B），裸跑的 `import render` 会把 tools/__pycache__/render.*.pyc
+# 落盘（2026-10-27 06:17 主线再生件成因），随即触发在场性门 EX3002 把整树
+# report 臂判死。本标志使裸跑同样零字节码落盘（-B 的进程内等价物，只影响
+# 本进程后续 import，不改解释器全局），防再生自此为不变量而非一次性动作。
+sys.dont_write_bytecode = True
 import render  # noqa: E402  同包渲染器（R5 与单元产 md 同构的唯一正本）
 
 # 红队 W2-C50：加载侧自证——校验**实际执行**的 render 模块本体，而非仅源文件。

@@ -912,3 +912,47 @@ fn judge_fingerprint_gate_rejects_planted_pyc_shadow() {
     );
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn rubric_unit_bare_run_without_b_writes_no_bytecode() {
+    // 红队 W3-C-06（勘误后补防再生）：判分子进程虽由 report_unit.rs 统一以
+    // -B + PYTHONDONTWRITEBYTECODE=1 派生（禁写），但人工复算/F5c 基准树
+    // 重放常**裸跑** `python3 rubric_unit.py`（无 -B）——其 `import render`
+    // 会把 tools/__pycache__/render.*.pyc 落盘（2026-10-27 06:17 主线再生件
+    // 成因），随后触发在场性门把整树 report 臂判死（EX3002），且实测「已清」
+    // 不是不变量（10 份同名 pyc 散在 af 各工作树）。修复=rubric_unit.py 在
+    // import render 前置 sys.dont_write_bytecode：裸跑也不落任何字节码、
+    // 加载面自证照常、rc=0。本测试用临时副本裸跑（不污染在仓脚本），
+    // env_remove 防 CI 环境已带禁写变量而使断言空转。
+    let prod = ReportJudgeLocator::production();
+    let dir = kit_dir("bare-run-no-bytecode");
+    let units = dir.join("units");
+    let tools = dir.join("tools");
+    std::fs::create_dir_all(&units).unwrap();
+    std::fs::create_dir_all(&tools).unwrap();
+    std::fs::copy(&prod.rubric_script, units.join("rubric_unit.py")).unwrap();
+    std::fs::copy(&prod.render_script, tools.join("render.py")).unwrap();
+    let sha = paper_sha();
+    let task = task_json(1, 40, &sha);
+    let report = valid_report(&dir, &sha);
+    std::fs::write(dir.join("task.json"), task.to_string()).unwrap();
+    std::fs::write(dir.join("report.json"), report.to_string()).unwrap();
+    std::fs::write(dir.join("report.md"), render_md(&dir)).unwrap();
+    let out = std::process::Command::new(&prod.python)
+        .arg(units.join("rubric_unit.py"))
+        .arg(dir.join("task.json"))
+        .arg(dir.join("report.json"))
+        .env_remove("PYTHONDONTWRITEBYTECODE")
+        .output()
+        .expect("裸跑判分子进程应可拉起");
+    assert!(
+        out.status.success(),
+        "裸跑（无 -B、无禁写环境）应 rc=0 且加载面自证过：{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !tools.join("__pycache__").exists(),
+        "裸跑不得在 tools/ 落任何字节码（防再生须成不变量，非一次性动作）"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
