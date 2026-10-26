@@ -14,6 +14,8 @@
 
 **17/17 harness 内核 VERIFIED-SUCCESSFUL（Kani 0.68.0 / CBMC 6.11.0 终跑单次全绿），覆盖 11 条陈述**（C-01/C-02/C-03/C-07 + B-01/B-03/B-04/B-06 + B-09/B-11/B-13）；**3 条标记已完成**（B-14/B-15/C-04——FV-0.1 route::normalize 三性质 12 verified/0 errors，按指令不重证）；**C-05 部分证据**（镜像签名纯度+源码锚，全程序性质不可单 harness 全判——陈述工具注记原文即「混合证据形态」）；**C-06/C-08/C-09 受阻归因**（工具不可达/病态面，与 theorems-v1 审计修订注记一致）。
 
+> **全库覆盖率（红队 W1-C42 补登，2026-10-26；W2-C42/C43 机算勘误后 2026-10-27 回填；计数经下方 §三.6 `coverage-check` 块机算）**：theorems-v1 共 **57 条义务**（A16/B23/C9/D9，`grep -c '^## [A-D]-'` 机算），四流合计 **40 条有内核裁决载体**（Kani INV 32 harness→A 全 16；本表 Kani 17 harness→11 条；FV-0.1→B-14/B-15/C-04；状态机组 Verus 29 verified→D 全 9；**B-16→FV-0.2 `mirror_normalize_all_gotos_exhaustive` 27-goto 分配全枚举 Kani harness 3 verified**，FV0-工具链PoC-20261024.md:79-80 + theorems-v1.md:362-368 工具栏在案——原口径误列无载体，红队 W2-C43 勘误补入；**证据工件 `proofs/kani/`（含 kani-run.log 3 verified）已于 2026-10-27 红队 W2-C-37 入仓，在仓可复核**）= **40/57（70.2%）**；其余 17 条按「部分证据（C-05）/仅陈述（B-20，Rocq T10 Admitted）/受阻（C-06/08/09）/无载体（12 条，B-12 有覆盖注记仍计无载体）」如实分类，**不以覆盖率数字冒充全量已证**——分类与清单见 §三.6。
+
 ## 一、内核裁决汇总（实跑输出，摘自 logs/kani-suite-final.log）
 
 命令：`bash /dev/shm/wave1/run-suite.sh /dev/shm/wave1/suite-final.log`
@@ -67,13 +69,22 @@
 3. **C-09（拒绝式信封/unknown_kinds）**：envelope.rs:14 入参 serde_yaml::Value，FV-0 实测 >4 分钟不收敛（阻断二）；未做。
 4. **C-05**：部分证据（见 §二），未列全 verified——如实。
 5. **Verus 路线（陈述对 B-01/B-04/B-06/C-02/C-03 的首选工具）**：安装未成。40+1 次代理下载全败（curl exit 35，SSL wrong version number；FV-0 §2.3 预记的「SSL 窗口性失败」本批次全程未开窗）。`verus-prepared/b_loop_guard_e2002_e2004.rs` 为已写未跑的 Verus 镜像草稿（B-01/B-04/B-06 编译+运行侧，含无界不变式形态），**未获任何内核裁决**，不计入 verified。本轮内核证据全部为 Kani 有界域穷尽（域声明见 lib.rs 头注），无界归纳版留给 Verus 窗口开启后的后续批次——分层如实。
-6. **在义务清单、本组无证明载体**（红队 W1-C42 勘误——原措辞「不在义务清单」与
-   实况相反）：B-02/B-05/B-07/B-08/B-10/B-12/B-16..B-23 均为 theorems-v1 §B 组
-   正式条目；本组（构造语义组）载体域不含它们——B-12 的聚合完整面已由 B-09
-   发射总数=n + B-13 双射前提覆盖注记；B-20 仅有 Rocq 陈述（T10 Admitted，
-   无内核裁决）；其余移交 Kani 执行面切片 / Rocq 陈述库 / Verus 后续批次 /
-   TCB 义务（载体清单与 57 条分母覆盖率见 `proofs/README-形式验证.md` §一
-   之下的覆盖率披露，红队 W1-C42 补）。
+6. **B 组未证条目（红队 W1-C42 勘误 2026-10-26——原写「不在义务清单」系错误措辞：B-02/B-05/B-07/B-08/B-10/B-12/B-16..B-23 共 14 条全部是 theorems-v1 §B 组正式义务（`grep -c '^## B-'` = 23），应为「**在义务清单、本批无证明载体**」**）：B-12 的聚合完整面已由 B-09 发射总数=n + B-13 双射前提覆盖注记；B-20 已有 Rocq T10_envelope血缘包装.v 陈述（Admitted，「只译不证」，非证明）；其余 12 条（B-02/B-05/B-07/B-08/B-10/B-12/B-17/B-18/B-19/B-21/B-22/B-23）四流均无证明载体——**B-16 已于 2026-10-27 红队 W2-C42/C43 机算勘误中移入有载体**（FV-0.2 27-goto 分配全枚举 Kani harness 3 verified，证据链接见 §〇；B-12 的覆盖注记不构成内核裁决，仍计无载体）。全库 57 条义务的覆盖率与分类如下（清单由脚本对 theorems-v1 条目头机算闭合校验：40+17=57——有载体 40（含 B-16）+部分 1+仅陈述 1+受阻 3+无载体 12、类间无交、并集=全集；2026-10-27 复算通过）：
+
+```coverage-check
+分母: theorems-v1.md ^## 条目头 = 57 (A16/B23/C9/D9)
+covered-kani-inv: A-01..A-16
+covered-kani-17: B-01 B-03 B-04 B-06 B-09 B-11 B-13 C-01 C-02 C-03 C-07
+covered-fv01: B-14 B-15 C-04
+covered-verus-d: D-01..D-09
+covered-fv02-goto-enum: B-16
+partial: C-05
+statement-admitted: B-20
+blocked: C-06 C-08 C-09
+no-carrier: B-02 B-05 B-07 B-08 B-10 B-12 B-17 B-18 B-19 B-21 B-22 B-23
+```
+
+（复算命令：`grep -c '^## A-'|^## B-'|^## C-'|^## D-' theorems-v1.md` 得 16/23/9/9；四流内核裁决源 = Kani镜像员-INV组/RUNLOG.md:27「32 successfully verified harnesses」、本表 §一「pass=17 fail=0」、FV0-工具链PoC-20261024.md §1.2（FV-0.1 12 verified）、状态机组-Verus/RUN-SUMMARY.md §1「29 verified, 0 errors」。）
 
 ## 四、镜像↔实现对账（诚实边界）
 
