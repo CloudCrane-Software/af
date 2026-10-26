@@ -2422,3 +2422,116 @@ fn swebench_eval_with_judge_passes_gate_into_verify_chain() {
         bridge.calls()
     );
 }
+
+// ============================================================
+// ⑫ 红队 W2-C34：失败路径落 legacy 失败行——失败单与「从未开跑」可区分
+// ============================================================
+
+/// 读回输出目录的 legacy 轨（results.jsonl）行集。
+fn read_legacy_rows(out: &Path) -> Vec<Value> {
+    let text = std::fs::read_to_string(out.join("results.jsonl")).unwrap_or_default();
+    text.lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("results.jsonl 行应为合法 JSON"))
+        .collect()
+}
+
+/// EX3001（check 节点 swebench_eval 拒载——驱动相失败）→ run_failed 行：
+/// suite=graph、error_code=EX3001、verdict(reward)=null、run_dir 在场；
+/// v1 轨零失败投影（RESULT-P4 §4）。此前失败路径双轨零行，失败单与
+/// 「从未开跑」不可区分。
+#[test]
+fn unit_failure_emits_run_failed_row_ex3001() {
+    let root = temp_root("w2c34-ex3001");
+    let graph_src = sweeval_graph_src();
+    let data_root = task_package(&root, &compile_plan(&graph_src));
+    let scripted = |node: &str| -> Option<String> {
+        match node {
+            "actor" => Some(
+                json!({"action": {"thought": "t", "command": "c", "submit": false}}).to_string(),
+            ),
+            _ => None,
+        }
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("拒载应失败");
+    assert_eq!(err.code(), ErrorCode::UnitFailed, "{err}");
+
+    let rows = read_legacy_rows(&out);
+    assert_eq!(rows.len(), 1, "失败路径恰落一行 legacy 失败行");
+    assert_eq!(rows[0]["status"], "run_failed");
+    assert_eq!(rows[0]["suite"], "graph");
+    assert_eq!(rows[0]["error_code"], "EX3001");
+    assert_eq!(rows[0]["task_id"], TASK);
+    assert!(rows[0]["reward"].is_null(), "失败行 verdict=null");
+    assert!(
+        rows[0]["run_dir"].as_str().is_some(),
+        "run_failed 行记实际目录: {}",
+        rows[0]
+    );
+    // v1 轨无失败投影（文件在（sink 双开）但零行）。
+    let v1 = std::fs::read_to_string(out.join("records.jsonl")).unwrap_or_default();
+    assert!(v1.trim().is_empty(), "失败行不落 v1 轨: {v1}");
+}
+
+/// EX4006（envelope 违例——驱动相，stage.commit 拒收上游产物）→ run_failed 行。
+#[test]
+fn unit_failure_emits_run_failed_row_ex4006() {
+    let root = temp_root("w2c34-ex4006");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let scripted = |node: &str| -> Option<String> {
+        match node {
+            "planner" => sop_full_payloads("planner"),
+            "coder" => sop_full_payloads("coder"),
+            "reviewer" => Some(json!({"verdict": "looks fine"}).to_string()),
+            _ => None,
+        }
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("envelope 违例应拒");
+    assert_eq!(err.code(), ErrorCode::EnvelopeMismatch, "{err}");
+
+    let rows = read_legacy_rows(&out);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["status"], "run_failed");
+    assert_eq!(rows[0]["error_code"], "EX4006");
+    assert!(rows[0]["reward"].is_null());
+}
+
+/// EX4008（loop 节点——linearize 在 setup 相拒绝）→ setup_failed 行：
+/// run_dir=null（执行未启动、run 目录未建——D-20 字段齐备含 null）。
+#[test]
+fn unit_failure_emits_setup_failed_row_ex4008() {
+    let root = temp_root("w2c34-ex4008");
+    let plan_src = compile_plan(&sop_full_src());
+    let mut looped: Value = serde_json::from_str(&plan_src).unwrap();
+    looped["body"]["graph"]["nodes"][0]["loop_spec"] = json!({
+        "body": "sweng_sop_full/coder",
+        "max_iterations": 2,
+        "carried": [],
+        "safety_points": []
+    });
+    let data_root = task_package(&root, &serde_json::to_string(&looped).unwrap());
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("loop 节点应拒");
+    assert_eq!(err.code(), ErrorCode::GraphShapeUnsupported, "{err}");
+    assert_eq!(runner.launches().len(), 0, "setup 相拒绝零节点驱动");
+    assert!(bridge.calls().is_empty(), "setup 相拒绝零容器调用");
+
+    let rows = read_legacy_rows(&out);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["status"], "setup_failed");
+    assert_eq!(rows[0]["error_code"], "EX4008");
+    assert!(rows[0]["reward"].is_null());
+    assert!(
+        rows[0]["run_dir"].is_null(),
+        "setup_failed 行 run 目录未建 → null: {}",
+        rows[0]
+    );
+}
