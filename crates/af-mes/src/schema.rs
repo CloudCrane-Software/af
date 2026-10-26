@@ -57,6 +57,11 @@ ORDER BY (line_id, hour)
 ";
 
 /// 从 `mes_event` 的插入块按产线、小时聚合。视图读的是插入块，不是 `SELECT FINAL`。
+/// 红队 W1-C64：`stub:` 前缀 = 冒烟档判别量（af-order 门面在凭证/订单绑定/MES
+/// 三面写入同值），产线聚合在聚合前显式排除——冒烟产量不计入 mes_line_hour
+/// （ADR-011 裁决 7）；原始事件仍在 mes_event 全量可查。注意：本 DDL 约束
+/// 新建部署的视图；已按旧 DDL 建成的存量 `mes_line_hour` 行不被本改动改写
+/// （存量清洗属运维面，须按删除纪律另行裁决）。
 pub const DDL_MES_LINE_HOUR_MV: &str = "\
 CREATE MATERIALIZED VIEW IF NOT EXISTS mes_line_hour_mv
 TO mes_line_hour
@@ -67,6 +72,7 @@ SELECT
     count() AS event_count,
     sum(quantity) AS quantity_sum
 FROM mes_event
+WHERE line_id NOT LIKE 'stub:%'
 GROUP BY line_id, hour
 ";
 
@@ -100,6 +106,23 @@ mod tests {
             SCHEMA_STATEMENTS,
             &[DDL_MES_EVENT, DDL_MES_LINE_HOUR, DDL_MES_LINE_HOUR_MV]
         );
+    }
+
+    /// 红队 W1-C64：产线聚合面显式排除冒烟档——stub 冒烟单的 MES line_id 带
+    /// `stub:` 前缀（af-order 门面三面同值），物化视图聚合必须按前缀排除
+    /// （ADR-011 裁决 7「产线聚合口径按前缀排除」的落地面），冒烟产量不得
+    /// 计入 mes_line_hour。原始事件仍在 mes_event 全量可查（审计面不动）。
+    #[test]
+    fn materialized_view_excludes_stub_smoke_lines_from_production_aggregation() {
+        let folded = DDL_MES_LINE_HOUR_MV.to_ascii_lowercase();
+        assert!(
+            folded.contains("where line_id not like 'stub:%'"),
+            "mes_line_hour_mv 必须显式排除 stub: 冒烟线：{DDL_MES_LINE_HOUR_MV}"
+        );
+        // 排除发生在聚合之前（WHERE 在 FROM 之后、GROUP BY 之前）。
+        let where_pos = folded.find("where line_id not like 'stub:%'").unwrap();
+        let group_pos = folded.find("group by line_id, hour").unwrap();
+        assert!(where_pos < group_pos, "排除必须先于聚合");
     }
 
     #[test]

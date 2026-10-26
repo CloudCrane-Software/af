@@ -55,7 +55,9 @@ W1-C14 的遗留表总数 3,043,489→3,042,489 手工加总勘误与决策定�
    record.v1 契约化（C-36，evidence.run_dir 同步闭合 trace L1→L2）；边级重影
    与路径安全核（C-37/C-38）；判据面 digest 钉死 + tests_collected=0 不当成功
    （C-59）；渲染器入双指纹门（C-61）；MES 同 event_id 异 line 拒并（C-63）；
-   stub 冒烟档 MES line_id 加 `stub:` 前缀（C-64，产线聚合口径按前缀排除）；
+   stub 冒烟档 MES line_id 加 `stub:` 前缀（C-64，产线聚合口径按前缀排除；
+   复核批补落地：`mes_line_hour_mv` DDL 增 `WHERE line_id NOT LIKE 'stub:%'`，
+   聚合前显式排除冒烟线，判据门测试化见 C-59② verdict_from_judge_row）；
    凭证面 line 身份钉死（C-41）。
 8. **CI 面修复**（详 commit 71b7cef）：step9 9b 解析 Complete 汇总行并断言
    harness 计数恰 32/0 failures（证明集删减此前零防护，W1-C44）；中立性门

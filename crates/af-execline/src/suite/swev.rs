@@ -212,6 +212,10 @@ pub fn capture_diff(
 /// （← af-bench swev.rs:145-258 原样搬入：`tb_ssh()` 换 `bridge.run()`、judge
 /// 直造 Command 换 [`crate::judge::invoke`]（argv 契约收敛点，路径来自
 /// locator）；新增指纹门前置（方案 §3.2-2，偏差登记 RESULT-P3.md §3-1）。）
+/// eval 超时秒数（fix2 对齐，审计 D9/§6.A.8：官方 run_evaluation --timeout 默认）。
+/// verify 执行臂与判分注记（[`verdict_from_judge_row`]）共用同一常量。
+const EVAL_TIMEOUT_SEC: u32 = 1800;
+
 pub fn verify(
     bridge: &dyn HostBridge,
     judge: &JudgeLocator,
@@ -246,7 +250,6 @@ pub fn verify(
     // `2>&1` 已合并进日志，桥接层再并入会把 ssh 噪声写进判分日志）。语句与
     // af-bench swev.rs:166-186 逐字对照，仅局部变量 `bridge` 更名
     // `bridge_script` 避开本函数新增的 bridge 参数；登记 RESULT-P3.md §3-2。）
-    const EVAL_TIMEOUT_SEC: u32 = 1800;
     let run_cmd = format!("docker exec -i {} bash -s 2>&1", env.container);
     let log_path = work_dir.join("eval.log");
     let bridge_script = format!("timeout {EVAL_TIMEOUT_SEC} {run_cmd}");
@@ -296,41 +299,13 @@ pub fn verify(
             let text = String::from_utf8_lossy(&output.stdout);
             match serde_json::from_str::<serde_json::Value>(text.trim()) {
                 Ok(row) => {
-                    let mut resolved = row.get("resolved").and_then(serde_json::Value::as_bool);
-                    // 红队 W1-C59②：零测试判据 fail-loud——tests_collected=0
-                    // 表示判分器没从日志收集到任何测试（含任务包判据被清空
-                    // 的形态：swebench 对空清单 f2p=p2p=1 → RESOLVED_FULL，
-                    // 不改任何冻结指纹即可让冻结判分链对零测试任务包返回
-                    // resolved=true）；judge 明写 0 而消费侧不核 = 可作弊面。
-                    let zero_tests = row
-                        .get("tests_collected")
-                        .and_then(serde_json::Value::as_u64)
-                        .is_some_and(|n| n == 0);
-                    if zero_tests {
-                        resolved = resolved.filter(|r| !r);
-                    }
-                    // D-20 项 3 消费端：judge JSON 带 log_parsed 时在 note 前缀如实透传
-                    // （截断日志的判 false 与"真失败"不再同貌）。
-                    let parsed_note = match row.get("log_parsed") {
-                        Some(serde_json::Value::Bool(false)) => "[log_parsed=false] ".to_string(),
-                        _ => String::new(),
-                    };
-                    let zero_note = if zero_tests {
-                        "[tests_collected=0 判据面可疑，不当成功] ".to_string()
-                    } else {
-                        String::new()
-                    };
-                    let timeout_note = if eval_timed_out {
-                        format!("eval 超时击杀（已落标记 {EVAL_TIMEOUT_SEC}s）；")
-                    } else {
-                        String::new()
-                    };
+                    // 红队 W1-C59②：判据门收口到纯函数（tests_collected=0 不得
+                    // 作为成功——含任务包判据被清空形态；口径与注记拼接序由
+                    // verdict_tests 钉死）。
+                    let (resolved, notes) = verdict_from_judge_row(&row, eval_timed_out);
                     (
                         resolved,
-                        format!(
-                            "{timeout_note}{parsed_note}{zero_note}judge: {}",
-                            text.trim()
-                        ),
+                        format!("{notes}judge: {}", text.trim()),
                         eval_sha256,
                     )
                 }
@@ -368,4 +343,123 @@ pub(crate) fn sha256_hex(path: &Path) -> Option<String> {
     let data = std::fs::read(path).ok()?;
     let digest = Sha256::digest(&data);
     Some(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+/// judge stdout 行 → 订单 verdict 口径与注记前缀（红队 W1-C59②收口）。
+///
+/// tests_collected=0 = 判分器没从日志收集到任何测试（含任务包判据被清空
+/// 的形态：swebench 对空清单 f2p=p2p=1 → RESOLVED_FULL，不改任何冻结指纹
+/// 即可让冻结判分链对零测试任务包返回 resolved=true）；judge 明写 0 而消费
+/// 侧不核 = 可作弊面。故：
+/// - `tests_collected == 0` 时 `resolved=true` 一律降级 `None`（不当成功，
+///   合格终态工件出不去、close 门不放行）；`resolved=false` 保持失败不翻案；
+/// - 缺 `tests_collected` 字段按不适用处理（字段在常行由指纹门钉死的判分
+///   脚本保证，老形态行不误伤）。
+///
+/// 注记拼接序（与 verify 原臂逐字一致）：超时 → log_parsed → 零测试；
+/// 调用方在其后拼 `judge: {stdout}`。D-20 项 3：judge JSON 带 log_parsed=false
+/// 时在注记如实透传（截断日志的判 false 与"真失败"不再同貌）。
+fn verdict_from_judge_row(row: &serde_json::Value, eval_timed_out: bool) -> (Option<bool>, String) {
+    let mut resolved = row.get("resolved").and_then(serde_json::Value::as_bool);
+    let zero_tests = row
+        .get("tests_collected")
+        .and_then(serde_json::Value::as_u64)
+        .is_some_and(|n| n == 0);
+    if zero_tests {
+        resolved = resolved.filter(|r| !r);
+    }
+    let parsed_note = match row.get("log_parsed") {
+        Some(serde_json::Value::Bool(false)) => "[log_parsed=false] ".to_string(),
+        _ => String::new(),
+    };
+    let zero_note = if zero_tests {
+        "[tests_collected=0 判据面可疑，不当成功] ".to_string()
+    } else {
+        String::new()
+    };
+    let timeout_note = if eval_timed_out {
+        format!("eval 超时击杀（已落标记 {EVAL_TIMEOUT_SEC}s）；")
+    } else {
+        String::new()
+    };
+    (resolved, format!("{timeout_note}{parsed_note}{zero_note}"))
+}
+
+#[cfg(test)]
+mod verdict_tests {
+    use super::*;
+
+    /// W1-C59②判据门测试基座：构造 judge stdout 行（冻结判分链的真实出参形，
+    /// 键集与 tools/swev-judge.py 输出一致）。
+    fn judge_row(
+        resolved: serde_json::Value,
+        tests_collected: serde_json::Value,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "resolved": resolved,
+            "log_parsed": true,
+            "f2p_success": 1,
+            "p2p_success": 1,
+            "tests_collected": tests_collected,
+            "swebench_version": "4.1.0"
+        })
+    }
+
+    /// 红队 W1-C59②主例：任务包判据被清空的形态（swebench 对空清单
+    /// f2p=p2p=1 → RESOLVED_FULL）下判分链返回 resolved=true——消费侧必须
+    /// 降级为 None（不当成功）并留可疑注记，零测试不得作为合格终态过 close 门。
+    #[test]
+    fn zero_tests_downgrades_resolved_true_to_not_success() {
+        let (verdict, note) = verdict_from_judge_row(
+            &judge_row(serde_json::json!(true), serde_json::json!(0)),
+            false,
+        );
+        assert_eq!(verdict, None, "tests_collected=0 时 resolved=true 不得放行");
+        assert!(note.contains("tests_collected=0"), "{note}");
+        assert!(note.contains("不当成功"), "{note}");
+    }
+
+    /// 零测试 + resolved=false：失败保持失败（门只降级成功，不翻案失败）。
+    #[test]
+    fn zero_tests_keeps_resolved_false_as_failure() {
+        let (verdict, note) = verdict_from_judge_row(
+            &judge_row(serde_json::json!(false), serde_json::json!(0)),
+            false,
+        );
+        assert_eq!(verdict, Some(false));
+        assert!(note.contains("tests_collected=0"), "{note}");
+    }
+
+    /// 正常行：resolved 原样通过，无可疑注记（门不误伤真实判据面）。
+    #[test]
+    fn normal_row_passes_resolved_through_without_suspicion_note() {
+        let (verdict, note) = verdict_from_judge_row(
+            &judge_row(serde_json::json!(true), serde_json::json!(7)),
+            false,
+        );
+        assert_eq!(verdict, Some(true));
+        assert!(!note.contains("可疑"), "{note}");
+    }
+
+    /// 缺 tests_collected 字段：不触发零测试门（字段在常行由指纹门钉死的
+    /// 判分脚本保证；缺字段按不适用处理，不改 resolved 口径）。
+    #[test]
+    fn missing_tests_collected_field_does_not_trigger_gate() {
+        let row = serde_json::json!({ "resolved": true });
+        let (verdict, note) = verdict_from_judge_row(&row, false);
+        assert_eq!(verdict, Some(true));
+        assert!(!note.contains("可疑"), "{note}");
+    }
+
+    /// 注记拼接序与 verify 原臂一致：超时 → log_parsed → 零测试。
+    #[test]
+    fn timeout_and_log_parsed_notes_are_preserved_in_order() {
+        let mut row = judge_row(serde_json::json!(true), serde_json::json!(3));
+        row["log_parsed"] = serde_json::json!(false);
+        let (verdict, note) = verdict_from_judge_row(&row, true);
+        assert_eq!(verdict, Some(true));
+        assert!(note.starts_with("eval 超时击杀"), "{note}");
+        assert!(note.contains("[log_parsed=false] "), "{note}");
+        assert!(!note.contains("不当成功"), "{note}");
+    }
 }
