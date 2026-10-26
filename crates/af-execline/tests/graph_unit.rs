@@ -1931,30 +1931,42 @@ fn unsupported_budget_dimension_scope_combos_rejected() {
 }
 
 /// C-37：同一 (to, input) 端口被多条边命中 = 编排真相二义——入边装配取
-/// 后边、提示词装配取前边，载荷静默分叉；装订器先拒。
+/// 后边、提示词装配取前边，载荷静默分叉；装订器先拒。**顺序对抗**：重影边
+/// 排在原边之后（后边胜面）与之前（前边胜面）都必须拒——拒绝与边序无关，
+/// 不给任何一序留「恰好装配到真边」的侥幸面。
 #[test]
 fn duplicate_to_input_edges_rejected_at_bind() {
-    let root = temp_root("w1-c37");
-    let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
-    let edges = plan["body"]["graph"]["edges"].as_array().unwrap().clone();
-    let first = edges
-        .iter()
-        .find(|e| e["to"] == json!("coder"))
-        .expect("coder 入边在案")
-        .clone();
-    plan["body"]["graph"]["edges"]
-        .as_array_mut()
-        .unwrap()
-        .push(json!({
+    for (tag, dup_first) in [("dup-after", false), ("dup-before", true)] {
+        let root = temp_root(&format!("w1-c37-{tag}"));
+        let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+        let edges = plan["body"]["graph"]["edges"].as_array().unwrap().clone();
+        let first = edges
+            .iter()
+            .find(|e| e["to"] == json!("coder"))
+            .expect("coder 入边在案")
+            .clone();
+        // 重影边来自不同上游（reviewer.review ≠ 原边载荷）——不同载荷 + 两种
+        // 边序都只是排列差异，装订器一律先拒。
+        let dup = json!({
             "from": "reviewer", "output": "review",
             "to": first["to"], "input": first["input"], "checkpoint": false
-        }));
-    let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
-    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
-    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
-    let err = drive(&unit, &data_root, &attempt, &out).expect_err("重复 (to,input) 边应拒装订");
-    assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{err}");
-    assert!(err.to_string().contains("边级重影"), "{err}");
+        });
+        {
+            let arr = plan["body"]["graph"]["edges"].as_array_mut().unwrap();
+            if dup_first {
+                arr.insert(0, dup);
+            } else {
+                arr.push(dup);
+            }
+        }
+        let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+        let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+        let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+        let err = drive(&unit, &data_root, &attempt, &out)
+            .expect_err(&format!("{tag}: 重复 (to,input) 边应拒装订"));
+        assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{tag}: {err}");
+        assert!(err.to_string().contains("边级重影"), "{tag}: {err}");
+    }
 }
 
 /// C-38：节点 id / 工件端口名过路径安全核——含分隔符或纯点号段即拒
