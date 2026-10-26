@@ -145,8 +145,9 @@ pub fn parse_args(args: &[String]) -> Result<Command, OrderError> {
 /// `--flag value` 拆分结果：flag（全名含 `--` → 值）有序表 + 位置参数。
 type SplitFlags<'a> = (Vec<(&'a str, String)>, Vec<&'a str>);
 
-/// 把 `--flag value` 拆进 flags、其余归位置参数。未知 flag / 缺值 = 用法错误。
-/// flag 键存全名（含 `--`），与 `require_flag` / `flag_value` 的查询名一致。
+/// 把 `--flag value` 拆进 flags、其余归位置参数。未知 flag / 缺值 / 同名
+/// 旗标重复 = 用法错误。flag 键存全名（含 `--`），与 `require_flag` /
+/// `flag_value` 的查询名一致。
 fn split_flags<'a>(args: &'a [String], allowed: &[&str]) -> Result<SplitFlags<'a>, OrderError> {
     let mut flags = Vec::new();
     let mut positional = Vec::new();
@@ -174,9 +175,29 @@ fn split_flags<'a>(args: &'a [String], allowed: &[&str]) -> Result<SplitFlags<'a
             index += 1;
         }
     }
+    // 红队 W2-C36：同名旗标重复出现此前被静默取首个（flag_value 的 find），
+    // 后续值无声丢弃——--state 这类决定账本落点的旗标静默取错目录尤其危险。
+    // 重复 = OR1001 fail-loud，一次点名全部重复旗标。
+    let mut duplicated: Vec<&str> = Vec::new();
+    for (key, _) in &flags {
+        let count = flags.iter().filter(|(other, _)| *other == *key).count();
+        if count > 1 && !duplicated.contains(key) {
+            duplicated.push(key);
+        }
+    }
+    if !duplicated.is_empty() {
+        duplicated.sort_unstable();
+        return Err(OrderError::Usage {
+            detail: format!(
+                "参数重复出现: {}（同名旗标只允许一次；重复值此前会被静默丢弃）",
+                duplicated.join(" ")
+            ),
+        });
+    }
     Ok((flags, positional))
 }
 
+/// 取旗标值（split_flags 已保证同名旗标不重复，find 即唯一值）。
 fn flag_value<'a>(flags: &'a [(&'a str, String)], name: &str) -> Option<&'a str> {
     flags
         .iter()
@@ -638,6 +659,92 @@ mod tests {
             assert!(matches!(err, OrderError::Usage { .. }), "{err}");
             assert_eq!(err.exit_code(), 2, "{err}");
         }
+    }
+
+    /// W2-C36：同名旗标重复出现 = OR1001 用法错误并点名重复旗标。此前
+    /// flag_value 以 find 取首个匹配，重复旗标的后续值被无声丢弃——--state
+    /// 这类决定账本落点的旗标静默取错目录尤其危险，必须 fail-loud。
+    #[test]
+    fn duplicate_flags_are_rejected_as_usage_errors() {
+        let args = |parts: &[&str]| -> Vec<String> {
+            parts.iter().map(|part| (*part).to_string()).collect()
+        };
+        let expect_usage = |parts: &[&str], needles: &[&str]| {
+            let err = parse_args(&args(parts)).unwrap_err();
+            assert!(
+                matches!(err, OrderError::Usage { .. }),
+                "{parts:?} 应为用法错误: {err}"
+            );
+            assert_eq!(err.exit_code(), 2, "{parts:?} 用法错误退出码 2: {err}");
+            let text = err.to_string();
+            assert!(text.starts_with("OR1001:"), "{parts:?} 应报 OR1001: {text}");
+            for needle in needles {
+                assert!(
+                    text.contains(needle),
+                    "{parts:?} 应点名重复旗标 {needle}: {text}"
+                );
+            }
+        };
+
+        // --state 重复（决定账本落点，此前静默取首个目录）
+        expect_usage(
+            &[
+                "submit", "--spec", "o.json", "--state", "/a", "--state", "/b",
+            ],
+            &["--state"],
+        );
+        // 执行面旗标重复（此前同样静默取首个）
+        expect_usage(
+            &[
+                "submit",
+                "--spec",
+                "o.json",
+                "--state",
+                "s",
+                "--task",
+                "t1",
+                "--task",
+                "t2",
+                "--profile",
+                "p",
+                "--data-root",
+                "d",
+            ],
+            &["--task"],
+        );
+        expect_usage(
+            &[
+                "submit",
+                "--spec",
+                "o.json",
+                "--state",
+                "s",
+                "--task",
+                "t",
+                "--profile",
+                "p",
+                "--data-root",
+                "d",
+                "--max-turns",
+                "5",
+                "--max-turns",
+                "6",
+            ],
+            &["--max-turns"],
+        );
+        // 多个旗标各自重复：一次点名全部
+        expect_usage(
+            &[
+                "submit", "--spec", "a.json", "--spec", "b.json", "--state", "s", "--state", "t",
+            ],
+            &["--spec", "--state"],
+        );
+        // list / show 子命令同门
+        expect_usage(&["list", "--state", "a", "--state", "b"], &["--state"]);
+        expect_usage(
+            &["show", "wo-1", "--state", "a", "--state", "b"],
+            &["--state"],
+        );
     }
 }
 
