@@ -1,9 +1,9 @@
-step1  PASS  1025ms  cargo fmt --check + K5 判分链路径 lint
-step2  PASS  784ms  cargo clippy + clippy_gate
-step3  PASS  35450ms  cargo test -j4 --workspace
-step4  PASS  85ms  cue recipe vet+export+断言
-step5  PASS  347ms  parse_scrub × 7 真实日志
-step6  PASS  193ms  cosign 断网 verify-blob
-step7  PASS  937ms  cargo deny --offline check
-step8  FAIL  9331ms  neutrality 删包自洽+领域词扫描+golden 登记  (exit=1, 日志: ci/out/step8.log)
-step9  ADVISORY-PASS  51036ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）
+step1  PASS  953ms  cargo fmt --check + K5 判分链路径 lint
+step2  PASS  765ms  cargo clippy + clippy_gate
+step3  PASS  35098ms  cargo test -j4 --workspace
+step4  PASS  53ms  cue recipe vet+export+断言
+step5  PASS  395ms  parse_scrub × 7 真实日志
+step6  PASS  215ms  cosign 断网 verify-blob
+step7  PASS  943ms  cargo deny --offline check
+step8  PASS  5126ms  neutrality 删包自洽+领域词扫描+golden 登记
+step9  ADVISORY-PASS  50495ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）
