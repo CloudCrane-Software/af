@@ -340,8 +340,17 @@ impl<'a> Lowering<'a> {
                         let is_final = path == self.output_from
                             && match (&ty, &fb) {
                                 (Some(t), _) => t == &self.output_type,
-                                (None, Some(_)) => af_dsl::derived_emit_type(self.doc, path, port)
-                                    .is_some_and(|derived| derived.display() == self.output_type),
+                                (None, Some(_)) => {
+                                    // 红队 W2-C-26：推导类型经 norm_type_expr
+                                    // 规范化后再比——`display()` 对内联原始型
+                                    // 返回哨兵串 "{type:string}"，与 output_type
+                                    // 的裸名规范形永不等，af-dsl E2202 认可的
+                                    // 内联 ref 终态发射者被错误剥夺 is_final
+                                    // （全计划零终态工件 → 执行面必拒）。
+                                    af_dsl::derived_emit_type(self.doc, path, port).is_some_and(
+                                        |derived| norm_type_expr(&derived) == self.output_type,
+                                    )
+                                }
                                 (None, None) => false,
                             };
                         (

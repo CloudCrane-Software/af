@@ -632,3 +632,78 @@ policies:
         "from_body 推导类型 other_t ≠ out_t，不得置终态（W2-C26：误标即选错工件）"
     );
 }
+
+#[test]
+fn inline_primitive_output_ref_from_body_is_final_matches_normalized() {
+    // 红队 W2-C-26：内联原始型（{type: string} 等）作 meta.output.ref 时，
+    // from_body 终态端口的 is_final 恒为 false——(None, Some(_)) 分支用
+    // `derived.display()`（内联原始型返回哨兵串 "{type:string}"）与
+    // `self.output_type`（已经 norm_type_expr 规范为裸名 "string"）比较，
+    // 两形永不等；af-dsl E2202 认可的合法终态发射者在 lowering 被剥夺
+    // is_final ⇒ 全计划零终态工件 ⇒ 执行面 final_artifact_port 必拒
+    // （graph_unit「终态发射者 build 无 is_final 工件端口」）。修复 =
+    // 比较前经同一 norm_type_expr 规范化（内联原始型与命名型同一裸名口径）。
+    let src = r#"version: 1
+meta:
+  name: t_inline_final
+  graph_version: "1.0"
+  entry: collector
+  input: in_t
+  output: { ref: { type: string }, from: collector }
+types:
+  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }
+  - { name: other_t, schema: { type: object, required: [num], properties: { num: { type: integer } } } }
+nodes:
+  - id: collector
+    kind: task
+    loop:
+      body:
+        nodes:
+          - { id: worker, kind: task, uses: { model: route.main@1 }, emits: { good: { type: string }, bad: other_t } }
+          - { id: g, kind: gate, assert: "true" }
+        edges: []
+      max_iterations: 2
+      safety_points: [ { node: g, kind: gate } ]
+    emits:
+      final: { from_body: worker.good }
+      extra: { from_body: worker.bad }
+edges: []
+policies:
+  budgets: []
+  stop: []
+  failures: []
+"#;
+    let doc = af_dsl::load_str(src).expect("探针文档应装载");
+    let report = af_dsl::validate(&doc);
+    assert!(
+        report.is_ok(),
+        "af-dsl E2202 应认可内联原始型终态发射者：{report}"
+    );
+    let ir = lower(&doc).expect("lowering 应成功");
+    assert_eq!(
+        ir.body.interface.output_type, "string",
+        "output_type 应已规范为裸名"
+    );
+    let node = ir.body.node_exec.get("collector").expect("投影应在场");
+    let final_port = node.artifacts.get("final").expect("final 端口应在场");
+    let extra_port = node.artifacts.get("extra").expect("extra 端口应在场");
+    assert!(
+        final_port.is_final,
+        "from_body 推导内联 string 经规范化 = output_type，应承终态位（W2-C-26）"
+    );
+    assert!(
+        !extra_port.is_final,
+        "from_body 推导 other_t ≠ string，不得置终态"
+    );
+    let final_count: usize = ir
+        .body
+        .node_exec
+        .values()
+        .flat_map(|n| n.artifacts.values())
+        .filter(|a| a.is_final)
+        .count();
+    assert_eq!(
+        final_count, 1,
+        "全计划应恰一 is_final 工件（执行面 final_artifact_port 门槛）"
+    );
+}
