@@ -1,11 +1,14 @@
 # =============================================================================
 # N1 预期红名单（隔离臂=清空保留空目录 af/packages 后的预期失败集正本）
-# ——《G4-任务中立性机器检查方案.md》§1.3（22 项；2026-10-25 挂门批实测复核
-#    19 项逐项精确相等——执行器合流批 +2：plan_node_exec_projects_context_sections
-#    随 A 席 merge 入线（repo_registry 装载面），plan_projects_emits_types_
-#    and_consumes_contracts 为 B 席嫁接投影例（sop_full@1.0.afb 正本 +
-#    repo_registry 双依赖面）——两例均以 af/packages 为对象，隔离臂失败恰是
-#    fail-closed 证据；理由登记见 RESULT-执行器合流-20261025.md §2/§3）
+# ——《G4-任务中立性机器检查方案.md》§1.3（22 项；演进 19→21→22：2026-10-25
+#   挂门批实测复核 19 项逐项精确相等；执行器合流批 +2：
+#   plan_node_exec_projects_context_sections 随 A 席 merge 入线（repo_registry
+#   装载面）、plan_projects_emits_types_and_consumes_contracts 为 B 席嫁接投影例
+#   （sop_full@1.0.afb 正本 + repo_registry 双依赖面）——两例均以 af/packages 为
+#   对象，隔离臂失败恰是 fail-closed 证据（理由登记见 RESULT-执行器合流-20261025.md
+#   §2/§3）；预算校准批 +1：sop_full_v1_1_token_cap_calibrated_to_f4c_measurement
+#   （81ac6e6，装置读包图文件）。红队 W2-C-53 勘误 2026-10-27：头注此前只记 +2
+#   未记 +1，本行补全；同轮 G4 方案 §1.3 表体补录 3 行、gate 脚本注释 19→22）
 #
 # 格式：<crate>::<测试文件名>::<测试名>（一行一条，# 开头为注释）
 # 语义：这些测试以 af/packages 挂载机制为对象——隔离臂下它们失败恰是

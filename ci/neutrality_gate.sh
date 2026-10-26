@@ -5,7 +5,7 @@
 #
 # 判据（§1.4；任一 FAIL → exit 1 = 门红，对应 run.sh OVERALL=1）：
 #   C1  对照臂（包原样）cargo test -p af-dsl -p af-compiler exit=0
-#   I1  隔离臂失败集 ⊆ ci/neutrality-expected-fail.txt（19 项）
+#   I1  隔离臂失败集 ⊆ ci/neutrality-expected-fail.txt（22 项，红队 W2-C-53 勘误：原注 19）
 #   I2  名单 ⊆ 隔离臂失败集（缺项 = fail-open，最严重）
 #   I3  I1∧I2（集合精确相等；R3 漂移）
 #   I4  g3_golden_corpus_byte_exact（17 语料，含 sample1-6）在隔离臂通过
