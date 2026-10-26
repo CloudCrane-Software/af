@@ -172,8 +172,8 @@ fn port_base_name(expr: &str) -> &str {
 /// 使用面内建类型条目补登记（红队 W2-C-27）：`signal` 是语言内建控制类型
 /// （`m::TypeExpr::Signal`；af-dsl refs 对其 type_resolves 恒真——声明面
 /// 无条目也合法可用），而执行面 check_typed（graph_unit）按基名查
-/// plan.types：MetaGPT/SWE-agent 等六份合法 DSL 语料产出 signal 型端口/
-/// 终态，进图即 EX4006「基名 signal 不在 plan.types」——计划自含（单文件
+/// plan.types：多份合法 DSL 语料（golden 语料面）产出 signal 型端口/
+/// 终态，进图即 EX4006「基名 signal 不在 plan.types」——计划自包含（单文件
 /// 即编排真相）对该类型面不成立。与内联原始型（W3-C20）同法收口：扫描
 /// interface 输入/终态 + 全节点 consumes/emits 的类型表达式，使用面出现
 /// signal 基名而声明面无同名条目时补 `{}`（空 JSON Schema = 无形状约束
