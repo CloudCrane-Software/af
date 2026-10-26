@@ -116,6 +116,7 @@ fn fake_judge(tag: &str, json_line: &str) -> JudgeLocator {
         python,
         script,
         script_sha256,
+        import_chain: Vec::new(),
     }
 }
 

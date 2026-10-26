@@ -2680,6 +2680,7 @@ fn swebench_eval_with_judge_passes_gate_into_verify_chain() {
         python: fake_script.clone(),
         script: fake_script.clone(),
         script_sha256: af_execline::file_sha256_hex(&fake_script).expect("假判分脚本应可读"),
+        import_chain: Vec::new(),
     });
     let unit =
         GraphExecuteUnit::new(spec, bridge.clone(), runner.clone()).expect("图单元装载应通过");
