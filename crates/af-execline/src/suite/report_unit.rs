@@ -78,8 +78,13 @@ impl ReportJudgeLocator {
         }
     }
 
-    /// 双指纹门（装载期 + verify 入口，双重防线）：任一脚本 sha256 ≠ 声明锚
-    /// 即 EX3002 拒跑——不降级、不跳判、不静默换脚本（裁决6 判据 9 的牙齿）。
+    /// 判分指纹门（装载期 + verify 入口，双重防线），两部分同以 EX3002 拒跑：
+    /// ①三指纹锚——citation/rubric/render 任一脚本 sha256 ≠ 声明锚（W1-C61
+    /// 把渲染器纳入第三锚）；②字节码在场性——判分目录出现 __pycache__/*.pyc
+    /// （W2-C52，见下）。不降级、不跳判、不静默换脚本（裁决6 判据 9 的牙齿）。
+    /// 适用分支：本门随本树（红队修复线）生效；主线 @438fa6d 的本文件只有
+    /// citation/rubric 双指纹、无 render 锚、无在场性扫描——修复树报出的
+    /// EX3002 不得归因于旧主线（W3-C-06 勘误）。
     pub fn check_fingerprints(&self) -> Result<(), ExeclineError> {
         for (script, anchor) in [
             (&self.citation_script, &self.citation_sha256),
