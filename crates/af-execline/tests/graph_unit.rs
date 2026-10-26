@@ -1091,6 +1091,140 @@ policies:
     assert_eq!(output.verdict, Some(true));
 }
 
+/// 红队 W2-C29：aci_schema 载荷必须按 consumes 契约取 agent_action 端口，
+/// 禁 `inputs.values().next()`——inputs 是 BTreeMap，values().next()=端口名
+/// 字典序最小者。本图给 verifier 两条入边：agent_action 端口声明在前、
+/// 字典序在后（target > probe），诱饵工件恰含 thought/command/submit 三字段
+/// （结构上过得了 aci_schema 校验）——旧码会把结构校验跑在字典序最小的诱饵
+/// 上并输出其 submit，真 action 漏校。
+#[test]
+fn aci_schema_picks_contract_port_not_lexicographic_first() {
+    let graph_src = r#"
+version: 1
+meta:
+  name: sweng_aci_port_contract
+  graph_version: "1.0"
+  entry: actor
+  input: swe_task_input
+  output: { ref: schema_verdict, from: verifier }
+  intent: "W2-C29：aci_schema 多入边按 consumes 契约取 agent_action，不取字典序首"
+
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: agent_action
+    schema:
+      type: object
+      required: [thought, command, submit]
+      properties:
+        thought: { type: string }
+        command: { type: string }
+        submit: { type: boolean }
+  - name: decoy_payload
+    schema:
+      type: object
+      required: [thought, command, submit]
+      properties:
+        thought: { type: string }
+        command: { type: string }
+        submit: { type: boolean }
+  - name: schema_verdict
+    schema:
+      type: object
+      required: [error, submit]
+      properties:
+        error: { type: string }
+        submit: { type: boolean }
+
+nodes:
+  - id: actor
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { target: agent_action }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 400 }
+
+  - id: observer
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { probe: decoy_payload }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 400 }
+
+  - id: verifier
+    kind: check
+    uses: { unit: pkg.sweagent.aci_schema@1 }
+    consumes: { target: agent_action, probe: decoy_payload }
+    emits: { verdict: schema_verdict }
+
+edges:
+  - { from: actor, output: target, to: verifier, input: target }
+  - { from: observer, output: probe, to: verifier, input: probe }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 100 }
+  stop:
+    - { when: "last_tool.first_line in ['TASK_COMPLETE']", outcome: completed }
+    - { when: "steps.tool_free >= 3", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed
+"#;
+    let root = temp_root("aci_port_contract");
+    let data_root = task_package(&root, &compile_plan(graph_src));
+    let scripted = |node: &str| -> Option<String> {
+        let text = match node {
+            // 真 action（submit=true）：合同端口 target 的载荷。
+            "actor" => json!({"target": {
+                "thought": "run the tests", "command": "python -m pytest -q", "submit": true
+            }}),
+            // 诱饵（submit=false，thought 打标）：恰含三字段、结构过得 aci_schema。
+            "observer" => json!({"probe": {
+                "thought": "DECOY not an action", "command": "echo decoy", "submit": false
+            }}),
+            _ => return None,
+        };
+        Some(text.to_string())
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ = _bridge;
+
+    let _ = drive(&unit, &data_root, &attempt, &out).expect("双入边 aci_schema 链应走通");
+
+    let verdict: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("verifier.verdict.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        verdict["payload"]["error"],
+        json!(""),
+        "真 agent_action 过结构校验"
+    );
+    assert_eq!(
+        verdict["payload"]["submit"],
+        json!(true),
+        "aci_schema 必须校验 consumes 契约声明的 agent_action 端口（target），\
+         不是字典序最小的诱饵端口（probe——旧 values().next() 会输出其 submit=false）"
+    );
+}
+
 /// swebench_eval 分派面 fail-loud：spec.judge 未配置（None）时拒载点名
 /// 「判分锚」——不静默跳判（B 席嫁接口径）。
 #[test]

@@ -856,9 +856,35 @@ impl GraphExecuteUnit {
                 None,
             ),
             "pkg.sweagent.aci_schema" => {
-                let Some(action) = inputs.values().next() else {
+                // 红队 W2-C29：载荷按 consumes 契约取 agent_action 端口，禁
+                // values().next()——inputs 是 BTreeMap，values().next()=端口
+                // 名字典序最小者，多入边时结构校验会跑在任意工件上（诱饵恰含
+                // thought/command/submit 即静默放行未校验的真 action，或令真
+                // action 漏校）。合同面=consumes 中类型恰为 agent_action 的
+                // 恰一端口：按声明精确取；声明缺失/重复/端口无载荷一律
+                // fail-loud，不猜。
+                let mut declared = node
+                    .consumes
+                    .iter()
+                    .filter(|(_, ty)| ty.as_str() == "agent_action")
+                    .map(|(port, _)| port);
+                let port = match (declared.next(), declared.next()) {
+                    (Some(port), None) => port.clone(),
+                    _ => {
+                        return Err(self.fail(format!(
+                            "节点 {} aci_schema 需要 consumes 恰一声明一个 \
+                             agent_action 类型入边端口（合同面；声明 {} 个）",
+                            node.node_id,
+                            node.consumes
+                                .iter()
+                                .filter(|(_, ty)| ty.as_str() == "agent_action")
+                                .count()
+                        )));
+                    }
+                };
+                let Some(action) = inputs.get(&port) else {
                     return Err(self.fail(format!(
-                        "节点 {} aci_schema 需要入边工件（agent_action）",
+                        "节点 {} aci_schema 需要入边工件（agent_action 端口 {port}）",
                         node.node_id
                     )));
                 };
