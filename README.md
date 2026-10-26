@@ -27,7 +27,7 @@ git**）的版本与获取方式见 `BOOTSTRAP.md`。
 | `crates/af-dsl` | AFB 前端：信封 + 七段解析 + 静态校验（L0 不变量/CEL 保守子集/route 归一化/topology_selector）+ 包图清单装载 `registry`。语法定版见 `crates/af-dsl/SYNTAX.md` |
 | `crates/af-compiler` | 四阶段编译管线：校验→IR→组件绑定→计划生成（`af-compiler-plan` / `af-compiler-snapshot` CLI；golden 21 份逐字节回归）。ADR-002 规划的 `af-plan` 折入本 crate（`ExecutablePlan`），独立建位仍列开放问题 |
 | `crates/af-execline` | 统一执行面：swev（af-bench 迁移）/ graph（图执行器，节点级驱动 planner→coder→reviewer→tester）/ report（报告环 reader→writer）三单元 + planbind 装订 + `af-trace-tree-verify`（订单 trace 四层语义树核对，支持 swev 扁平与 report 环两种 runs 布局） |
-| `crates/af-order` | 下单门面 CLI：`submit --unit swev\|graph\|report` 单一入口，直驱 af-engine 9-op 生命周期 + MES 记账 |
+| `crates/af-order` | 下单门面 CLI：`submit --unit swev\|report\|graph\|stub` 单一入口（缺省 Auto：执行三件套在→Swev，缺→Stub 冒烟档；红队 W2-C50 勘误：原枚举漏 stub 与 Auto 缺省档，与 ADR-011 裁决2 及 exec.rs UnitChoice 实况对齐），直驱 af-engine 9-op 生命周期 + MES 记账 |
 | `crates/af-engine` | 订单持久化与驱动（ledger 9-op + MES 四类跃迁 + voucher），既有底座资产 |
 
 其余 17 个 crate 为第一/二阶段底座件（credential/graph/workorder/effect-gateway/
@@ -81,7 +81,7 @@ af/
 ├── crates/               # 22 个内核件（上表五件为第二阶段主线）
 ├── af/packages/          # 组件与包图登记处（两真包 + 声明集）
 ├── ci/                   # 九门+advisory 验收管道（run.sh；产物 ci/out/）
-├── docs/adr/             # ADR-001..010 裁决集 + VERSIONS.md 版本表
+├── docs/adr/             # ADR-001..011 裁决集（011=红队修复批 W1；红队 W2-C49 勘误：原 010 未随 ADR-011 同步）+ VERSIONS.md 版本表
 ├── poc/                  # 第一阶段 15 项 PoC（各带 RESULT.md / VERIFY*.md）
 ├── proofs/               # FV-1 第一波形式验证工件（Kani/Verus/Rocq）
 ├── fuzz/ redteam/        # fuzz target 与红队复验资产

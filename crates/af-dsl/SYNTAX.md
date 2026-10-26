@@ -43,11 +43,28 @@
    在档新增：E1008 `dotted_node_id`（点号=构造体路径分隔符，id 段禁用）、
    E1054 `cel_limit_exceeded`（深>1000 或长>64KiB 前置拒）——均在 error.rs
    文档注记登记依据，正本回填随规范 v0.2 议程。
+   红队修复批新增/收紧（红队 W2-C47 补登记；裁决依据 ADR-011 裁决 6 与
+   W2 批 commit ff68d80/fa0ec74，正本回填随规范 v0.2 议程）：
+   · **E2209 `construct_conflict`**：同节点 loop+map 双构造并存 fail-closed
+     拒绝（解析域取 loop 体/类型域包 list<> 自相矛盾）。
+   · **E2202 恰一端口匹配**：meta.output.from 的同型匹配端口须恰一（同型
+     双端口=终态工件不可单义识别）；判定面 = emits ∪ 内建端口（loop/map
+     done:signal、check/gate passed:boolean）且按端口名去重（显式同名声明
+     不重复计数）。
+   · **CEL 注释语义**：词法扫描与 cel-parser 同口径跳过 `//` 行注释；`has`
+     宏确认状态跨越注释存活（注释不得隔断宏调用绕闸）；块注释文法不收，
+     跳过即给深括号绕 E1054 开门，仍拒。
+   · **route default:exit**：default 分支的 ¬(when 析取) 守卫并入 exit_guard
+     联合（非 loop 文档不再静默丢失默认分支守卫，「分支 guard 析取永真」
+     性质恢复）。
+   · **E2311 文案分叉**：多写者称「写者不唯一」；唯一实际写者≠声明称
+     「写者与声明不符」（此前混用「不唯一」，误导排障方向）。
 2. **golden 21 契约**：`crates/af-compiler/testdata/golden/` 21 份 IR 快照
    逐字节回归 + 篡改检测——语法/编译器任何改动零漂移的机器闸（C10：语法
    演进必须 ADR + 全量 golden）。
 3. **语义钉死契约**：`crates/af-dsl/testdata/farm-anomalies/` 39 份对抗
-   农田样本 + `tests/farm_anomalies_test.rs` 13 个表驱动测试（39/39）——
+   农田样本 + `tests/farm_anomalies_test.rs` 14 个表驱动测试（39/39；红队
+   W2-C51 勘误：原 13 未随 W1-C28 新增 iv48 同型双端口用例同步）——
    含预算 scope 穿体语义（C_AL09，FALSE-POSITIVE-SEMANTIC：合法穿体必过 +
    悬空路径照报 E2207 反例）与文档化边界 14 份 PASS 钉。
 4. **组件声明契约**：`uses.*` 引用串 ↔ `af/packages/**/components.json`

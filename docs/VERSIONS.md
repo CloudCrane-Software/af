@@ -34,7 +34,7 @@ af-sandbox/af-station/af-stop/af-trace/af-workorder）均为 0.1.0，语义结�
 | golden 语料 | 21 份 IR 快照（逐字节+篡改检测回归） | `crates/af-compiler/testdata/golden/` |
 | 对齐语料 | 15/15 走通 L1-L4 全链（G3 矩阵 v2，2026-10-24） | `计划/研究组/G3-全链闸门-L1L4-v2-20261024.md`；快照正本 `计划/研究组/对齐计划快照/` |
 | 逃逸舱记账 | 97 条 / 15 稿（稿均 6.47，七类 kind） | golden `body.escapes` 与 plan 快照 `escapes` 交叉同值 |
-| 对抗农田钉死 | 39 份样本 13 测试（39/39） | `crates/af-dsl/testdata/farm-anomalies/` + `tests/farm_anomalies_test.rs` |
+| 对抗农田钉死 | 39 份样本 14 测试（39/39；红队 W2-C51 勘误：原 13 未随 W1-C28 新增用例同步） | `crates/af-dsl/testdata/farm-anomalies/` + `tests/farm_anomalies_test.rs` |
 
 ## 三、包与组件（af/packages/）
 
