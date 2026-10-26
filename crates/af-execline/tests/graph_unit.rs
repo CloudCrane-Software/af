@@ -2173,6 +2173,48 @@ fn terminal_verdict_reads_declared_resolved_field_not_pass_default() {
 }
 
 #[test]
+fn image_missing_error_attributes_executor_setup_not_schema_gate() {
+    // 红队 W1-C39 归属钉：schema 门与解析门各归其位——input schema 不要求
+    // image（in_t required=[q]，validate_schema 放行），执行器容器 setup 仍
+    // 硬性必填。缺 image 的拒绝必须如实归属执行器自加要求（「执行器容器
+    // setup 硬性必填」「非 swe_task_input schema 必填项」），不得再说成
+    // schema 面要求（W1-C39 前的旧文案「（swe_task_input 面）」）；解析门
+    // 前零 launch、零容器调用。
+    let root = temp_root("w1-c39");
+    let src = single_node_graph_src("  budgets: []\n  stop: []\n  failures: []\n");
+    let data_root = probe_task_package(&root, &compile_plan(&src));
+    // 抹去 image：schema 门照放行，解析门按容器 setup 要求拒。
+    let task_path = data_root.join(TASK).join("task.json");
+    let mut task: Value =
+        serde_json::from_str(&std::fs::read_to_string(&task_path).unwrap()).unwrap();
+    task.as_object_mut().unwrap().remove("image");
+    std::fs::write(&task_path, task.to_string()).unwrap();
+
+    let runner = Arc::new(GraphFakeRunner::new(payload_resolved_true));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let err = drive(&unit, &data_root, &attempt, &out)
+        .expect_err("schema 门放行的缺 image 输入应由解析门如实拒收");
+    assert_eq!(err.code(), ErrorCode::UnitFailed, "{err}");
+    assert!(err.to_string().starts_with("EX3001:"), "{err}");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("执行器容器 setup 硬性必填"),
+        "归属须为执行器容器 setup：{msg}"
+    );
+    assert!(
+        msg.contains("非 swe_task_input schema 必填项"),
+        "须声明 schema 非穷尽边界（image 非 schema 必填项）：{msg}"
+    );
+    assert!(
+        !msg.contains("（swe_task_input 面）"),
+        "不得把缺 image 归为 schema 面要求（W1-C39 前的旧文案）：{msg}"
+    );
+    assert!(runner.launches().is_empty(), "解析门前零模型 launch");
+    assert!(bridge.calls().is_empty(), "解析门前零容器调用");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
 fn terminal_token_overshoot_circuit_breaks_before_completion() {
     // 红队 W2-C31：双相熔断第二相——终态节点跑完后对账，超 tokens_total 帽
     // 不得完工（此前只在起动前 gate，终态超帽照常 check_typed/判定/落行）。
