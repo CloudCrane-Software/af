@@ -1391,6 +1391,11 @@ impl ReportUnitSpec {
     }
 }
 
+/// 失败行分类相（红队 W2-C34）：setup = 供给面（任务包/计划装订），
+/// run = ingest 相起（摄取/起草/判分）。
+const SETUP_PHASE: &str = "setup";
+const RUN_PHASE: &str = "run";
+
 // ============================================================
 // 执行单元
 // ============================================================
@@ -1449,7 +1454,30 @@ impl ExecuteUnit for ReportExecuteUnit {
     }
 
     fn execute(&self, ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
+        // 红队 W2-C34：失败行由单元落（RESULT-P4 §5）——report 此前只在成功
+        // 尾部双轨落行，任何失败路径提前 return、record_sink 零调用，失败单
+        // 在结果轨与「从未开跑」不可区分（盘上实证：F5-report results/records
+        // 双 0 字节）。wrapper：setup 相失败落 setup_failed、ingest 相起失败落
+        // run_failed（legacy 轨，失败行无 v1 投影），行附真实错误类别与
+        // verdict=null；原错误类别原样上抛不翻案。
+        let phase = std::cell::Cell::new(SETUP_PHASE);
         let started = std::time::Instant::now();
+        match self.drive_all(ctx, &phase, started) {
+            Ok(output) => Ok(output),
+            Err(err) => Err(self.emit_failure_row(ctx, err, phase.get())),
+        }
+    }
+
+
+}
+
+impl ReportExecuteUnit {
+    fn drive_all(
+        &self,
+        ctx: &ExecContext<'_>,
+        phase: &std::cell::Cell<&'static str>,
+        started: std::time::Instant,
+    ) -> Result<ExecOutput, ExeclineError> {
         // ---- setup 相：任务包装载 + 计划装订三核对（planbind 唯一正本）----
         let task_dir = ctx.data_root.join(ctx.task_id);
         let task_json = task_dir.join("task.json");
@@ -1493,6 +1521,8 @@ impl ExecuteUnit for ReportExecuteUnit {
             .unwrap_or(3) as usize;
 
         // ---- ingest 相：工具副作用落快照（谁写=fetcher、写哪=sources/）----
+        // 红队 W2-C34：此后失败归 run_failed（供给面已就位，run 目录随建）。
+        phase.set(RUN_PHASE);
         let attempt_dir = ctx.attempt_dir;
         std::fs::create_dir_all(attempt_dir)
             .map_err(|err| self.fail(format!("建 run 目录失败: {err}")))?;
@@ -1664,5 +1694,42 @@ impl ExecuteUnit for ReportExecuteUnit {
             record: Some(v1_row),
             evidence,
         })
+    }
+    /// 失败行落盘（legacy 轨）：sink 失败并案进文案转 EX3001（与
+    /// `record::fail_with_legacy_row` 同口径——不静默丢行）；sink 正常则原
+    /// 错误原样返回。
+    fn emit_failure_row(
+        &self,
+        ctx: &ExecContext<'_>,
+        err: ExeclineError,
+        phase: &str,
+    ) -> ExeclineError {
+        let note = format!("[{code}] {err}", code = err.code().as_str());
+        let row = if phase == RUN_PHASE {
+            crate::record::unit_run_failed_row(
+                "report",
+                ctx.task_id,
+                &self.spec.profile,
+                ctx.trial,
+                err.code().as_str(),
+                ctx.attempt_dir,
+                &note,
+            )
+        } else {
+            crate::record::unit_setup_failed_row(
+                "report",
+                ctx.task_id,
+                &self.spec.profile,
+                ctx.trial,
+                err.code().as_str(),
+                &note,
+            )
+        };
+        match ctx.record_sink.append_legacy(&row.to_string()) {
+            Ok(()) => err,
+            Err(sink_err) => ExeclineError::UnitFailed {
+                detail: format!("{err}；且失败行落盘失败: {sink_err}"),
+            },
+        }
     }
 }

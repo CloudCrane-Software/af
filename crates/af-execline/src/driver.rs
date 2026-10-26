@@ -730,6 +730,13 @@ impl OrderLifecycleDriver {
     /// 进去的文件，sync 也救不回）。按 event_id 对账正本，缺则按**该 op
     /// 首次成功记录的序号**补发（重放期间 replay_skip 行会推高账本 seq，
     /// 不得用当前 seq 重构 id），幂等。
+    ///
+    /// 红队 W2-C11：对账按逻辑键（stable_id + kind + seq）兼容两种落盘
+    /// 形态——W2-C53 引入 instance 判别量前的存量正本 event_id 是三段式
+    /// `{stable_id}:{kind}:{seq}`，只按新四段式精确串匹配认不出旧 id，
+    /// 重放任一修复前订单会对同单四跃迁各再补一条新 id，本地正本翻倍且
+    /// 被 sync 当差量再送 CH（MergeTree 无去重）。新格式在场**或**旧三段
+    /// 式在场，均视为已发。
     fn emit_mes_if_missing(&mut self, kind: &str, quantity: u64) -> Result<(), ExeclineError> {
         let Some(seq) = self
             .ledger
@@ -743,7 +750,8 @@ impl OrderLifecycleDriver {
         };
         let stable_id = self.order.stable_id().as_str().to_string();
         let event_id = format!("{stable_id}:{kind}:{seq}:{}", self.instance);
-        if self.mes.has_event(&event_id)? {
+        let legacy_event_id = format!("{stable_id}:{kind}:{seq}");
+        if self.mes.has_event(&event_id)? || self.mes.has_event(&legacy_event_id)? {
             return Ok(());
         }
         self.emit_mes_seq(kind, quantity, seq)

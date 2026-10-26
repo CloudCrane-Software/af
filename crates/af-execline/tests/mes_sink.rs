@@ -639,6 +639,125 @@ fn replay_backfills_mes_event_lost_by_first_write_failure() {
     assert_eq!(ids.len(), 4, "补发不产生重复 event_id");
 }
 
+// ---------- 红队 W2-C11：存量三段式 event_id 的重放不翻倍 ----------
+
+/// W2-C53 修复前落盘形态 sink：event_id 去 instance 尾段，复刻存量订单
+/// 正本的三段式 `{stable_id}:{kind}:{seq}` id（修复面前 15 个订单目录
+/// mes-events.jsonl 的真实形态）。
+struct LegacyIdSink {
+    inner: MesFileWriter,
+}
+
+impl MesSink for LegacyIdSink {
+    fn append(&mut self, event: &MesEvent) -> Result<(), ExeclineError> {
+        let (legacy_id, tail) = event.event_id.rsplit_once(':').ok_or_else(|| {
+            ExeclineError::MesCh {
+                detail: format!("W2-C11 用例：event_id 无尾段可剥: {}", event.event_id),
+            }
+        })?;
+        assert_eq!(tail.len(), 16, "四段式 instance 判别量应为 16 hex");
+        let legacy = MesEvent::new(
+            event.work_order_id.clone(),
+            event.occurred_at,
+            legacy_id,
+            event.line_id.clone(),
+            event.station_id.clone(),
+            event.kind.clone(),
+            event.quantity,
+        );
+        self.inner.append(&legacy)
+    }
+    fn sync(&mut self) -> Result<MesSyncReport, ExeclineError> {
+        Ok(MesSyncReport::file_stub())
+    }
+    fn path(&self) -> &Path {
+        self.inner.path()
+    }
+}
+
+/// C-11：用修复面二进制重放任一 W2-C53 修复前建立的订单（正本 event_id
+/// 为三段式、无 instance 尾段），emit_mes_if_missing 的精确串对账认不出
+/// 旧 id——同单四跃迁各再补一条新四段式 id，本地正本 4→8 行且被当差量
+/// 送进 CH（MergeTree 无去重），MES 记账静默翻倍。修复后：对账按逻辑键
+/// （stable_id+kind+seq）兼容三段式/四段式两种落盘形态，重放零补发，
+/// 本地与 CH 均不翻倍。
+#[test]
+fn replay_of_legacy_three_segment_event_ids_neither_doubles_local_nor_ch() {
+    let mock = MockClickHouse::start();
+    let dir = Scratch(scratch("w2-c11"));
+    let order_id = "wo-mes-w2c11";
+
+    // 一驱：W2-C53 修复前形态 sink——正本落三段式 id（存量订单形态）。
+    {
+        let sink = LegacyIdSink {
+            inner: MesFileWriter::new(dir.0.join("mes-events.jsonl")),
+        };
+        let mut driver = OrderLifecycleDriver::open_with_sink(
+            driver_config(order_id, dir.0.clone()),
+            engine_client(),
+            Box::new(FixedClock::new(1_767_225_600_000)),
+            Box::new(sink),
+        )
+        .unwrap();
+        driver
+            .drive(&StubExecuteUnit::qualified_final(format!("fa-{order_id}")))
+            .expect("一驱应走通");
+    }
+    let legacy_events = MesFileWriter::load(&dir.0.join("mes-events.jsonl")).unwrap();
+    assert_eq!(legacy_events.len(), 4, "一驱四类跃迁入正本");
+    assert!(
+        legacy_events
+            .iter()
+            .all(|e| e.event_id.matches(':').count() == 2),
+        "正本 event_id 应全为三段式（无 instance 尾段）: {:?}",
+        legacy_events.iter().map(|e| &e.event_id).collect::<Vec<_>>()
+    );
+
+    // CH 预置同 4 行（存量对账依据），SELECT 回放作读侧对账输入。
+    let mut raw_all = Vec::new();
+    for row in &legacy_events {
+        raw_all.extend(seed_ch_row(&mock, &dir.0, row));
+    }
+    mock.enqueue_query_body(raw_all);
+
+    // 二驱（重放）：修复面代码 + CH sink——不得补发、不得翻倍。
+    let sink2 = MesChSink::open(&MesChTarget::Url(mock.url().to_string()), &dir.0).unwrap();
+    let mut driver2 = OrderLifecycleDriver::open_with_sink(
+        driver_config(order_id, dir.0.clone()),
+        engine_client(),
+        Box::new(FixedClock::new(1_767_225_600_000)),
+        Box::new(sink2),
+    )
+    .unwrap();
+    let report2 = driver2
+        .drive(&StubExecuteUnit::qualified_final(format!("fa-{order_id}")))
+        .expect("二驱（重放）应走通");
+    assert!(report2.replayed, "同单二驱为重放");
+    assert_eq!(
+        report2.mes_sync.shipped, 0,
+        "重放不得把旧单事件当差量再送 CH"
+    );
+    assert_eq!(report2.mes_sync.already_in_ch, 4, "读侧对账认全部旧行");
+
+    // 本地正本不翻倍：仍恰 4 行、仍全为三段式。
+    let after = MesFileWriter::load(&dir.0.join("mes-events.jsonl")).unwrap();
+    assert_eq!(after.len(), 4, "重放不得向正本再落 4 条新格式事件");
+    assert!(
+        after
+            .iter()
+            .all(|e| e.event_id.matches(':').count() == 2),
+        "正本 id 形态不得被重放改写"
+    );
+    // CH 终态：恰 4 行（只有预置插入），零双写。
+    let accepted: usize = mock
+        .inserts()
+        .iter()
+        .filter(|captured| captured.accepted)
+        .map(|captured| captured.rows.len())
+        .sum();
+    assert_eq!(accepted, 4, "CH 终态恰 4 行，零双写");
+}
+
 /// 红队 W1-C63：同 event_id 异 line_id = 身份面冲突——event_id 无 line
 /// 判别量（stable_id+kind+seq），同 order_id 跨线/跨根的两单事件逐字节同
 /// id；此前差量按 event_id 去重会互相吞账（正本 4 条、CH 永少一笔且无

@@ -388,6 +388,8 @@ fn run_submit(
             "task": e.task,
             "profile": e.profile,
             "host": e.host,
+            // 红队 W2-C33：如实回显声明面——null = 用户未给旗标（各单元
+            // 自载缺省生效），不把 CLI 缺省值冒充用户预算。
             "max_turns": e.max_turns,
             "spend_cap_cents": e.spend_cap_cents,
         })),
@@ -705,8 +707,8 @@ mod w1_tests {
             task: task.to_string(),
             host: "local".into(),
             profile: "glm-cp".into(),
-            max_turns: 60,
-            spend_cap_cents: 300,
+            max_turns: Some(60),
+            spend_cap_cents: Some(300),
         };
         let swev = pin_task_digest(&SelectedUnit::Swev, Some(&exec("task-x")));
         assert_eq!(
@@ -745,8 +747,8 @@ mod w1_tests {
             task: "task-y".into(),
             host: "local".into(),
             profile: "glm-cp".into(),
-            max_turns: 60,
-            spend_cap_cents: 300,
+            max_turns: Some(60),
+            spend_cap_cents: Some(300),
         };
         assert_eq!(
             read_plan_graph_version(&SelectedUnit::Graph, Some(&exec)),
