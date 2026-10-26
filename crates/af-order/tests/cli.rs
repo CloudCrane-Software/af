@@ -497,6 +497,46 @@ fn same_order_id_across_state_roots_gets_distinct_event_ids() {
 }
 
 #[test]
+fn resubmit_with_different_line_version_is_rejected() {
+    // 红队 W2-C-35：W1-C41 的凭证 line 重放核对只钉 line_id 不钉 line_version
+    // ——LineBinding 两字段同属身份面（spec check_line 两键都强制非空），
+    // 重放时 bind_line 幂等跳过、订单保持首驱 line_version，本次只换
+    // line_version 的声明被静默吞掉且零诊断。与换 line_id 同性质 fail-loud
+    // （OR2003 点名 line_version）。旧行无此键不核对（历史盘兼容面不动）。
+    let state = scratch("w2c35");
+    let spec = write_spec(&state, "order.json", &spec_text("wo-cli-w2c35", 7));
+    expect_ok(&submit(&spec, &state));
+
+    // 同 order_id、同 line_id、只换 line_version：凭证面两键同纪律 → OR2003。
+    let swapped = write_spec(
+        &state,
+        "order2.json",
+        r#"{"order_id":"wo-cli-w2c35","line":{"line_id":"line-poc","line_version":"lv-2"},"budget":7}"#,
+    );
+    let second = submit(&swapped, &state);
+    assert!(
+        !second.status.success(),
+        "只换 line_version 的重放应拒绝：{}",
+        String::from_utf8_lossy(&second.stdout)
+    );
+    let err_text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&second.stderr),
+        String::from_utf8_lossy(&second.stdout)
+    );
+    assert!(err_text.contains("OR2003"), "稳定码 OR2003：{err_text}");
+    assert!(err_text.contains("line_version"), "点名字段：{err_text}");
+
+    // 订单绑定保持首驱版本不被漂移（账面 line_version 仍 lv-1）。
+    let voucher: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(order_dir(&state, "wo-cli-w2c35").join("voucher.json"))
+            .expect("凭证可读"),
+    )
+    .expect("凭证是 JSON");
+    assert_eq!(voucher["line_version"], "lv-1", "凭证钉首驱 line_version");
+}
+
+#[test]
 fn show_rejects_path_unsafe_order_ids() {
     // 红队 W2-C39：show 的位置参数与 submit 共用 order_id 路径安全门——绝对
     // 路径（Path::join 替换 state 根）、`..` 穿越、分隔符在此拒尽，不得读出
