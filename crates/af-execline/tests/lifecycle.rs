@@ -533,3 +533,86 @@ fn driver_open_rejects_ledger_of_another_order() {
     .unwrap_err();
     assert_eq!(err.code().as_str(), "EX2002", "异单账本不得冒充");
 }
+
+// ---------- 红队 W2-C-30：line 三面身份归订单快照 ----------
+
+#[test]
+fn replay_with_line_conflicting_with_order_binding_is_rejected() {
+    // 此前 ExecContext/MES 事件取 CLI 旗标 cfg.line 而 graph_version 取订单
+    // 快照（同一 ctx 两源不对称）；bind_line 幂等跳过 → 换 --line 重放时
+    // MES 事件与 v1 行印新线、账本订单绑旧线，不一致静默入账（trace 工具
+    // 只核 work_order_id 不核 line）。现 CLI/spec 与订单快照不可变绑定不符
+    // = EX2002 先拒绝重放。
+    let (mut driver, out) = open_driver("wo-c30", "c30");
+    driver.drive(&stub_unit("wo-c30")).expect("首驱走通");
+    drop(driver);
+
+    // ① 换 line_id 重放：拒绝。
+    let mut cfg = config("wo-c30", out.clone());
+    cfg.line = LineBinding {
+        line_id: "line-other".into(),
+        line_version: "lv-1".into(),
+    };
+    let err = OrderLifecycleDriver::open(
+        cfg,
+        engine_client(),
+        Box::new(FixedClock::new(FIXED_MS)),
+    )
+    .unwrap_err();
+    assert_eq!(err.code().as_str(), "EX2002", "换线重放 = 账本身份不符：{err}");
+    let text = err.to_string();
+    assert!(
+        text.contains("line-poc") && text.contains("line-other"),
+        "诊断须点名账本绑定线与本次声明线两值：{text}"
+    );
+
+    // ② 只换 line_version 重放：LineBinding 两字段同属身份面，同拒。
+    let mut cfg = config("wo-c30", out.clone());
+    cfg.line = LineBinding {
+        line_id: "line-poc".into(),
+        line_version: "lv-9".into(),
+    };
+    let err = OrderLifecycleDriver::open(
+        cfg,
+        engine_client(),
+        Box::new(FixedClock::new(FIXED_MS)),
+    )
+    .unwrap_err();
+    assert_eq!(
+        err.code().as_str(),
+        "EX2002",
+        "换 line_version 重放同样拒绝：{err}"
+    );
+    assert!(
+        err.to_string().contains("lv-1") && err.to_string().contains("lv-9"),
+        "诊断点名两版本：{err}"
+    );
+
+    // ③ 同线重放不误伤：幂等放行照旧（与 second_drive_* 互证）。
+    let mut driver2 = OrderLifecycleDriver::open(
+        config("wo-c30", out.clone()),
+        engine_client(),
+        Box::new(FixedClock::new(FIXED_MS)),
+    )
+    .expect("同线重放应照常打开");
+    let second = driver2.drive(&stub_unit("wo-c30")).expect("同线重放幂等");
+    assert!(second.replayed);
+}
+
+#[test]
+fn mes_events_and_exec_context_carry_order_bound_line() {
+    // 结构钉：MES 事件 line_id 与 ExecContext.line_id 取订单快照不可变绑定
+    // （cfg 仅为未绑新单的回落）——MES 不得以 cfg 线冒充订单实际绑定线
+    // （fixHint「禁止MES以cfg线冒充」）。
+    let (mut driver, out) = open_driver("wo-c30-mes", "c30-mes");
+    driver.drive(&stub_unit("wo-c30-mes")).expect("首驱走通");
+    assert_eq!(driver.order().line().as_ref().unwrap().line_id, "line-poc");
+    drop(driver);
+    let events = mes_events(&out);
+    assert_eq!(events.len(), 4);
+    assert!(
+        events.iter().all(|e| e.line_id == "line-poc"),
+        "MES 事件线 = 订单绑定线：{:?}",
+        events.iter().map(|e| e.line_id.clone()).collect::<Vec<_>>()
+    );
+}

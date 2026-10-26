@@ -230,6 +230,24 @@ impl OrderLifecycleDriver {
                 cfg.sla.clone(),
             )
         });
+        // 红队 W2-C-30：CLI/spec 声明的 line 与订单快照的**不可变绑定**不符
+        // = 先拒绝打开（EX2002 账本身份不符族）——此前 bind_line 幂等跳过、
+        // 订单保持首绑旧线，而 ExecContext/MES 事件取 cfg 新线，不一致静默
+        // 入账（trace 工具只核 work_order_id 不核 line）。LineBinding 两字段
+        // （line_id/line_version）整绑同比对；未绑新单（line=None）不核，
+        // 由 bind_line 落 cfg 声明。
+        if let Some(bound) = order.line() {
+            if bound != &cfg.line {
+                return Err(ExeclineError::LedgerCorrupt {
+                    detail: format!(
+                        "产线绑定不符: 订单账本绑定 line_id={} line_version={}，本次 CLI/spec 声明 \
+                         line_id={} line_version={}（产线绑定随订单一次性入账、不可经重放换线——\
+                         红队 W2-C-30）",
+                        bound.line_id, bound.line_version, cfg.line.line_id, cfg.line.line_version
+                    ),
+                });
+            }
+        }
         let done = ledger
             .done_idem_keys()
             .into_iter()
@@ -257,6 +275,18 @@ impl OrderLifecycleDriver {
     /// 当前状态。
     pub fn state(&self) -> OrderState {
         self.order.state()
+    }
+
+    /// 订单快照绑定的产线 id（红队 W2-C-30）：ExecContext 与 MES 事件一律取
+    /// **订单快照的不可变绑定**（与 graph_version 取 self.order 同源对称，
+    /// cfg 由门面每次 submit 重读、重放期可能与首绑漂移）；未绑新单
+    /// （bind_line 未落账）回落 cfg 声明。禁止 MES/记录行以 cfg 线冒充订单
+    /// 实际绑定线。
+    fn bound_line_id(&self) -> &str {
+        self.order
+            .line()
+            .map(|binding| binding.line_id.as_str())
+            .unwrap_or(&self.cfg.line.line_id)
     }
 
     /// 真引擎二进制路径（证明判定走子进程，不打桩）。
@@ -373,7 +403,9 @@ impl OrderLifecycleDriver {
         let ctx = ExecContext {
             order_id: &self.cfg.order_id,
             stable_id: self.order.stable_id().as_str(),
-            line_id: &self.cfg.line.line_id,
+            // 红队 W2-C-30：line_id 与下方 graph_version 同源——订单快照的
+            // 不可变绑定（此前取 cfg 旗标，重放换 --line 时与本单账面漂移）。
+            line_id: self.bound_line_id(),
             out_dir: &artifacts_dir,
             task_id: &self.cfg.task_id,
             host_alias: &self.cfg.host_alias,
@@ -623,7 +655,9 @@ impl OrderLifecycleDriver {
             // 产线复用不再产生逐字节相同的 event_id（CH 差量按 id 去重，相撞
             // 即互吞记账事件且无告警）。
             format!("{stable_id}:{kind}:{seq}:{}", self.instance),
-            self.cfg.line.line_id.clone(),
+            // 红队 W2-C-30：事件线 = 订单快照不可变绑定（此前取 cfg 旗标，
+            // 换线重放时 MES 印新线而账本订单绑旧线、静默入账）。
+            self.bound_line_id().to_string(),
             self.cfg.station_id.clone(),
             kind,
             quantity,
