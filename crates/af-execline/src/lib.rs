@@ -56,7 +56,7 @@ pub use clock::{Clock, FixedClock, SystemClock};
 pub use driver::{AttemptLayout, DriveReport, DriverConfig, OrderLifecycleDriver};
 pub use engine::{EngineAccept, EngineClient, EngineOutcome, EngineRejection};
 pub use error::ExeclineError;
-pub use exec::{ExecContext, ExecOutput, ExecuteUnit, StubExecuteUnit};
+pub use exec::{file_sha256_hex, ExecContext, ExecOutput, ExecuteUnit, StubExecuteUnit};
 pub use graph_unit::{linearize, GraphExecuteUnit, GraphUnitSpec};
 pub use hostbridge::{HostBridge, SshBridge};
 pub use judge::{invoke as judge_invoke, JudgeLocator};

@@ -30,6 +30,15 @@ pub trait MesSink {
     fn sync(&mut self) -> Result<MesSyncReport, ExeclineError>;
     /// 正本文件路径。
     fn path(&self) -> &Path;
+    /// 正本里是否已有该 event_id（红队 W1-C35：重放路径的 MES 补发对账
+    /// ——正本文件缺席 = 未发；文件/CH 两实现正本同文件，默认实现通用）。
+    fn has_event(&self, event_id: &str) -> Result<bool, ExeclineError> {
+        if !self.path().is_file() {
+            return Ok(false);
+        }
+        let events = MesFileWriter::load(self.path())?;
+        Ok(events.iter().any(|e| e.event_id == event_id))
+    }
 }
 
 /// 缝实现类别（回执自描述）。

@@ -702,7 +702,16 @@ fn corpus() -> Vec<Case> {
         }));
             None
         }),
-        Expect::ExAny(&[ErrorCode::GraphShapeUnsupported], "环"),
+        // 红队 W1-C37 后装订器先拒：新边与 planner→coder 边命中同一
+        // (to=coder, input=plan) 端口 = 边级重影（EX4005），先于 linearize
+        // 的环拒绝——两面都是正规拒绝，语料期望同步放宽。
+        Expect::ExAny(
+            &[
+                ErrorCode::GraphShapeUnsupported,
+                ErrorCode::PlanBindMismatch,
+            ],
+            "边级重影",
+        ),
     );
     c(
         "cycle",
@@ -1280,6 +1289,8 @@ fn run_case(base_plan: &Value, base_task: &Value, case: &Case) -> (Verdict, Vec<
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
         trial: false,
     };
 

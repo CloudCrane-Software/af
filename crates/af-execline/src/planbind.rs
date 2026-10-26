@@ -150,6 +150,68 @@ pub fn bind(
             });
         }
     }
+    // 红队 W1-C37：边级重影拒绝——同一 (to, input) 端口被多条边命中 = 编排
+    // 真相二义（与节点 id 重影同类）：入边装配 inputs.insert 后边胜、提示词
+    // 装配 .find 前边胜，「模型看到的」与「consumes 校验的」载荷静默分叉。
+    {
+        let mut seen: BTreeSet<(String, String)> = BTreeSet::new();
+        for e in &plan.body.graph.edges {
+            if !seen.insert((e.to.clone(), e.input.clone())) {
+                return Err(ExeclineError::PlanBindMismatch {
+                    detail: format!(
+                        "边级重影：{}.{:?} ← 多条边命中同一 (to, input) 端口（载荷二义，先拒）",
+                        e.to, e.input
+                    ),
+                });
+            }
+        }
+    }
+    // 红队 W1-C38：节点 id / 端口名路径安全——手写 plan.json（任务包面）不经
+    // af-dsl 词法集，id 含 '/'、'\' 或纯点号段（".."）即把节点目录与 envelope
+    // 工件名（{node_id}.{port}.json）写出 attempt_dir 之外（同类计划内容面
+    // 的敌意输入硬化）。
+    {
+        let bad_seg = |seg: &str| seg.is_empty() || seg == "." || seg == "..";
+        for id in exec_ids.iter().chain(top_ids.iter()) {
+            if id.contains('/') || id.contains('\\') || id.split('.').any(bad_seg) {
+                return Err(ExeclineError::PlanBindMismatch {
+                    detail: format!(
+                        "节点 id {id:?} 含路径分隔符或纯点号段（节点目录/工件名拼接面，拒绝）"
+                    ),
+                });
+            }
+        }
+        for n in &plan.body.node_exec {
+            for port in n.artifact_contract.iter().map(|a| a.name.as_str()) {
+                if port.contains('/')
+                    || port.contains('\\')
+                    || bad_seg(port)
+                    || port.starts_with('.')
+                {
+                    return Err(ExeclineError::PlanBindMismatch {
+                        detail: format!(
+                            "节点 {} 工件端口名 {port:?} 含路径分隔符或纯点号段（工件文件名拼接面，拒绝）",
+                            n.node_id
+                        ),
+                    });
+                }
+            }
+            for port in n.consumes.keys() {
+                if port.contains('/')
+                    || port.contains('\\')
+                    || bad_seg(port)
+                    || port.starts_with('.')
+                {
+                    return Err(ExeclineError::PlanBindMismatch {
+                        detail: format!(
+                            "节点 {} consumes 端口名 {port:?} 含路径分隔符或纯点号段，拒绝",
+                            n.node_id
+                        ),
+                    });
+                }
+            }
+        }
+    }
     // ④ 模板装载（裁决10 唯一机制，解析器一套）。
     let mut templates = BTreeMap::new();
     for r in template_refs {

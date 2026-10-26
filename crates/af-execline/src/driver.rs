@@ -57,6 +57,11 @@ pub struct DriverConfig {
     pub data_root: PathBuf,
     /// 目标题（swe-v = instance_id；换题=换 ctx）。
     pub task_id: String,
+    /// 任务包判据面摘要钉死（红队 W1-C59①：判分真值源 fail_to_pass/
+    /// pass_to_pass 全部来自任务包 JSON，此前无 digest 钉死——清空判据
+    /// 即可让冻结判分链对零测试任务包返回 resolved=true）。门面 submit 时
+    /// 计算，执行单元消费前核对，漂移即拒。None = 无期待（缺省，直调缝）。
+    pub task_sha256: Option<String>,
     /// 试验标记（--trial 行口径，不进决策）。
     pub trial: bool,
     /// ---- P5（方案 §5-P5：attempt 目录由驱动层分配）----
@@ -276,6 +281,8 @@ impl OrderLifecycleDriver {
     pub fn release(&mut self) -> Result<(), ExeclineError> {
         if self.engine_step("release", json!({}))? {
             self.emit_mes("release", 1)?;
+        } else {
+            self.emit_mes_if_missing("release", 1)?;
         }
         Ok(())
     }
@@ -284,6 +291,8 @@ impl OrderLifecycleDriver {
     pub fn start(&mut self) -> Result<(), ExeclineError> {
         if self.engine_step("start", json!({}))? {
             self.emit_mes("start", 1)?;
+        } else {
+            self.emit_mes_if_missing("start", 1)?;
         }
         Ok(())
     }
@@ -342,6 +351,11 @@ impl OrderLifecycleDriver {
             attempt_dir: &attempt_dir,
             record_sink: &sink,
             trial: self.cfg.trial,
+            // 红队 W1-C32：WorkOrder 一次性绑定的 graph_version 进执行上下文
+            // ——graph/report 单元装订时与 plan.compiled_from.graph_version
+            // 核对（此前期待分支是死代码，「一次性绑定」有账无核）。
+            graph_version: Some(self.cfg.graph_version.as_str()),
+            task_sha256: self.cfg.task_sha256.as_deref(),
         };
         let output = match unit.execute(&ctx) {
             Ok(output) => output,
@@ -374,6 +388,8 @@ impl OrderLifecycleDriver {
     pub fn complete(&mut self) -> Result<(), ExeclineError> {
         if self.engine_step("complete", json!({}))? {
             self.emit_mes("complete", 1)?;
+        } else {
+            self.emit_mes_if_missing("complete", 1)?;
         }
         Ok(())
     }
@@ -382,6 +398,8 @@ impl OrderLifecycleDriver {
     pub fn close(&mut self) -> Result<(), ExeclineError> {
         if self.engine_step("close", json!({}))? {
             self.emit_mes("close", 1)?;
+        } else {
+            self.emit_mes_if_missing("close", 1)?;
         }
         Ok(())
     }
@@ -553,10 +571,15 @@ impl OrderLifecycleDriver {
     }
 
     /// 发一条 MES 事件（经写缝：文件正本必写，CH 下游在对账面统一）。
-    /// event_id 用账本序号保唯一。写失败 = 记账事故，向上传播不静默。
+    /// event_id 用账本序号保唯一（首发 = 该 op 成功记录刚落账的序号）。
+    /// 写失败 = 记账事故，向上传播不静默。
     fn emit_mes(&mut self, kind: &str, quantity: u64) -> Result<(), ExeclineError> {
-        let stable_id = self.order.stable_id().as_str().to_string();
         let seq = self.ledger.seq();
+        self.emit_mes_seq(kind, quantity, seq)
+    }
+
+    fn emit_mes_seq(&mut self, kind: &str, quantity: u64, seq: u64) -> Result<(), ExeclineError> {
+        let stable_id = self.order.stable_id().as_str().to_string();
         let event = af_mes::MesEvent::new(
             stable_id.clone(),
             self.clock.now_ms(),
@@ -569,6 +592,31 @@ impl OrderLifecycleDriver {
         self.mes.append(&event)?;
         self.drive_mes.push(event);
         Ok(())
+    }
+
+    /// 重放路径的 MES 对账补发（红队 W1-C35）：引擎 op 已成功（幂等键在
+    /// 账本）但正本文件缺该 event_id——此前 emit_mes 写失败错误上抛、事件
+    /// 两处皆无，重放 skip 即永久缺席 MES 账面（对账真值源恰是那份没写
+    /// 进去的文件，sync 也救不回）。按 event_id 对账正本，缺则按**该 op
+    /// 首次成功记录的序号**补发（重放期间 replay_skip 行会推高账本 seq，
+    /// 不得用当前 seq 重构 id），幂等。
+    fn emit_mes_if_missing(&mut self, kind: &str, quantity: u64) -> Result<(), ExeclineError> {
+        let Some(seq) = self
+            .ledger
+            .records()
+            .iter()
+            .rev()
+            .find(|r| r.op == kind && r.ok)
+            .map(|r| r.seq)
+        else {
+            return Ok(());
+        };
+        let stable_id = self.order.stable_id().as_str().to_string();
+        let event_id = format!("{stable_id}:{kind}:{seq}");
+        if self.mes.has_event(&event_id)? {
+            return Ok(());
+        }
+        self.emit_mes_seq(kind, quantity, seq)
     }
 }
 

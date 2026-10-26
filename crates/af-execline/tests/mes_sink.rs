@@ -330,6 +330,7 @@ fn engine_client() -> EngineClient {
 
 fn driver_config(order_id: &str, out_dir: PathBuf) -> DriverConfig {
     DriverConfig {
+        task_sha256: None,
         order_id: order_id.to_string(),
         graph_version: "g-poc-1".to_string(),
         sla: Sla::new(None, Priority::Normal),
@@ -547,4 +548,131 @@ fn drive_unit_failed_still_runs_mes_sync_once() {
         vec!["release", "start"],
         "已发生事件恰为 release/start（execute 之后皆未发生）"
     );
+}
+
+// ---------- 红队 W1-C35：emit_mes 一次性易失 → 重放按 event_id 补发 ----------
+
+/// start 事件首写失败的 sink（包真 MesFileWriter——其余事件真落盘）。
+struct FailStartOnceSink {
+    inner: MesFileWriter,
+    fixed: Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl MesSink for FailStartOnceSink {
+    fn append(&mut self, event: &MesEvent) -> Result<(), ExeclineError> {
+        if event.kind == "start" && !self.fixed.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(ExeclineError::MesCh {
+                detail: "注入失败：start 首写失败（W1-C35 用例）".into(),
+            });
+        }
+        self.inner.append(event)
+    }
+    fn sync(&mut self) -> Result<MesSyncReport, ExeclineError> {
+        Ok(MesSyncReport::file_stub())
+    }
+    fn path(&self) -> &Path {
+        self.inner.path()
+    }
+}
+
+/// C-35：MES 写失败的跃迁此前永久缺席账本（幂等键已落、重放 skip 不再发、
+/// 对账真值源恰是没写进去的文件）。修复后：重放路径按 event_id 对账正本，
+/// 缺则按该 op 首次成功记录的序号补发——二驱后四类跃迁齐、无重复。
+#[test]
+fn replay_backfills_mes_event_lost_by_first_write_failure() {
+    let dir = Scratch(scratch("w1-c35"));
+    let order_id = "wo-mes-w1c35";
+    let fixed = Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    // 一驱：start 的 MES 首写失败 → drive 报错；release 事件已入正本。
+    {
+        let sink = FailStartOnceSink {
+            inner: MesFileWriter::new(dir.0.join("mes-events.jsonl")),
+            fixed: fixed.clone(),
+        };
+        let mut driver = OrderLifecycleDriver::open_with_sink(
+            driver_config(order_id, dir.0.clone()),
+            engine_client(),
+            Box::new(FixedClock::new(1_767_225_600_000)),
+            Box::new(sink),
+        )
+        .unwrap();
+        let err = match driver.drive(&StubExecuteUnit::qualified_final(format!("fa-{order_id}"))) {
+            Err(err) => err,
+            Ok(_) => panic!("start 首写失败应上抛"),
+        };
+        assert!(err.to_string().contains("W1-C35"), "{err}");
+    }
+    let kinds1: Vec<String> = MesFileWriter::load(&dir.0.join("mes-events.jsonl"))
+        .unwrap()
+        .into_iter()
+        .map(|e| e.kind)
+        .collect();
+    assert_eq!(kinds1, vec!["release".to_string()], "start 写失败缺席正本");
+
+    // 二驱（重放，sink 修好）：start 按账本序号补发，complete/close 照发。
+    fixed.store(true, std::sync::atomic::Ordering::SeqCst);
+    {
+        let mut driver = OrderLifecycleDriver::open(
+            driver_config(order_id, dir.0.clone()),
+            engine_client(),
+            Box::new(FixedClock::new(1_767_225_600_000)),
+        )
+        .unwrap();
+        driver
+            .drive(&StubExecuteUnit::qualified_final(format!("fa-{order_id}")))
+            .expect("二驱应走通（重放 + 补发）");
+    }
+    let events = MesFileWriter::load(&dir.0.join("mes-events.jsonl")).unwrap();
+    let mut kinds: Vec<&str> = events.iter().map(|e| e.kind.as_str()).collect();
+    kinds.sort_unstable();
+    assert_eq!(
+        kinds,
+        vec!["close", "complete", "release", "start"],
+        "四类跃迁齐（start 补发），无重复"
+    );
+    // event_id 全局无重复（补发 id = 原 op 记录序号）。
+    let mut ids: Vec<&str> = events.iter().map(|e| e.event_id.as_str()).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), 4, "补发不产生重复 event_id");
+}
+
+/// 红队 W1-C63：同 event_id 异 line_id = 身份面冲突——event_id 无 line
+/// 判别量（stable_id+kind+seq），同 order_id 跨线/跨根的两单事件逐字节同
+/// id；此前差量按 event_id 去重会互相吞账（正本 4 条、CH 永少一笔且无
+/// 告警）。修复后 sync fail-loud 拒并。
+#[test]
+fn ch_sink_same_event_id_different_line_fails_loud() {
+    let mock = MockClickHouse::start();
+    let dir = Scratch(scratch("w1-c63"));
+    // CH 已有该 event_id，记账于 line-A。
+    let ch_row = af_mes::MesEvent::new(
+        "sid-dup".to_string(),
+        1_767_225_600_000,
+        "sid-dup:release:4".to_string(),
+        "line-A".to_string(),
+        "af-order-cli".to_string(),
+        "release",
+        1,
+    );
+    let raw = seed_ch_row(&mock, &dir.0, &ch_row);
+    mock.enqueue_query_body(raw);
+
+    let mut sink = MesChSink::open(&MesChTarget::Url(mock.url().to_string()), &dir.0).unwrap();
+    // 本正本：同一 event_id，记账于 line-B（跨线复用同 order_id）。
+    let local = af_mes::MesEvent::new(
+        "sid-dup".to_string(),
+        1_767_225_600_001,
+        "sid-dup:release:4".to_string(),
+        "line-B".to_string(),
+        "af-order-cli".to_string(),
+        "release",
+        1,
+    );
+    sink.append(&local).unwrap();
+    let err = sink.sync().unwrap_err();
+    assert!(err.to_string().contains("身份面冲突"), "{err}");
+    assert!(err.to_string().contains("line-A"), "{err}");
+    assert!(err.to_string().contains("line-B"), "{err}");
 }

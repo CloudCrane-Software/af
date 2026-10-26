@@ -35,6 +35,11 @@ pub struct VoucherRecord {
     pub order_id: String,
     pub stable_id: String,
     pub amount: u64,
+    /// 产线绑定（红队 W1-C41：身份面字段一并钉死——凭证面对 amount 变更
+    /// fail-loud（OR2003「预算不可经重放偷改」），line 同属身份面却无防线，
+    /// 换 line 重放被静默吞掉；旧行无此键 = None，不核对（历史盘兼容）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     pub payload: String,
@@ -74,6 +79,19 @@ pub fn issue_or_load(
                 ),
             });
         }
+        // 红队 W1-C41：line 身份面核对——盘上有 line（新凭证）而本次不符
+        // = 换线重放，与换预算同性质 fail-loud（OR2003 同码）。
+        if let Some(recorded_line) = &record.line_id {
+            if recorded_line != &spec.line.line_id {
+                return Err(OrderError::Voucher {
+                    detail: format!(
+                        "已有凭证与本单不符: 盘上 line_id={}，本次 line_id={}（产线绑定不可经重放偷改——\
+                         身份面字段与预算同纪律，红队 W1-C41）",
+                        recorded_line, spec.line.line_id
+                    ),
+                });
+            }
+        }
         return Ok((budget_voucher(&record), record));
     }
 
@@ -98,6 +116,7 @@ pub fn issue_or_load(
         order_id: spec.order_id.clone(),
         stable_id: stable_id.as_str().to_string(),
         amount: spec.budget,
+        line_id: Some(spec.line.line_id.clone()),
         note: spec.note.clone(),
         payload,
         algorithm: SIGNATURE_ALGORITHM_ED25519.to_string(),

@@ -118,6 +118,8 @@ fn drive(unit: &ReportExecuteUnit, base: &Path, task_dir: &Path) -> af_execline:
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).expect("真环单元全相应走通")
@@ -138,6 +140,8 @@ fn drive_err(unit: &ReportExecuteUnit, base: &Path, task_dir: &Path) -> Execline
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).unwrap_err()
@@ -385,10 +389,24 @@ fn ring_fake_reader_writer_drive_passes_envelope_and_judges() {
         assert_eq!(l.max_tokens, Some(32000));
         assert_eq!(l.per_turn, 1, "llm.cents 每 turn 1 分（swev 同款预算记账）");
         assert_eq!(l.completion_signals, vec!["REPORT_DONE".to_string()]);
-        assert_eq!(l.spend_cap_cents, 300);
+        // 红队 W1-C33：环级共享预算账本——reader 拿环级满帽（300¢ = min
+        // (spec 帽, plan cost_cap)），writer 拿剩余额度（扣 reader 已用
+        // 2¢——此前每成员各拿满份帽，图级上限 4×300¢）。
         assert_eq!(l.tool_spend_cents, 1);
         assert!(l.budget_ledger_cents > 0, "预算账本绑定在场");
     }
+    assert_eq!(
+        launches[0].spend_cap_cents, 300,
+        "reader 拿环级满帽（W1-C33 共享账本）"
+    );
+    assert_eq!(
+        launches[1].spend_cap_cents, 298,
+        "writer 拿剩余额度（环级帽 300 − reader 已用 2¢，W1-C33）"
+    );
+    assert!(
+        launches[1].spend_cap_cents < launches[0].spend_cap_cents,
+        "环内后续成员帽须收敛到剩余额度"
+    );
     assert_eq!(reader.max_turns, 40, "spec v1 图面口径 turns 40");
     assert_eq!(reader.tool_free_turn_limit, 3);
 
@@ -756,5 +774,36 @@ fn real_model_ring_smoke_minimal_plan() {
         v1["usage"]["unit_calls"].as_u64().unwrap() >= 2,
         "真模型调用>0：{rows}"
     );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+/// 红队 W1-C33：环级预算熔断——reader + writer 轮共享单一预算账本
+///（min(spec 帽, plan cost_cap)），账本耗尽即拒起下一成员；此前每成员
+/// 各拿满份帽（图级上限 4×300¢）。
+#[test]
+fn ring_budget_is_shared_across_members_and_circuit_breaks() {
+    let runner = FakeRingRunner::happy();
+    let base = std::env::temp_dir().join(format!("g5-ring-w1c33-{}", std::process::id()));
+    std::fs::remove_dir_all(&base).ok();
+    std::fs::create_dir_all(&base).unwrap();
+    let plan_src = real_report_plan();
+    let task_dir = ring_task_package(&base, &plan_src);
+    // 环级帽 = 2¢（spec 帽压到 2；FakeRingRunner reader 耗 2¢）——reader
+    // 跑完账本即尽，writer 第 1 轮熔断拒起。
+    let mut spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+    spec.spend_cap_cents = 2;
+    let unit = ReportExecuteUnit::new(
+        spec.clone(),
+        draft_fn_real_ring(runner.clone(), spec),
+        Arc::new(LocalFileFetcher),
+    )
+    .expect("真环单元装载应过三重门");
+    let err = drive_err(&unit, &base, &task_dir);
+    assert!(
+        err.to_string().contains("报告环预算熔断"),
+        "环级共享账本耗尽应熔断：{err}"
+    );
+    // 恰 reader 一个 launch：writer 因熔断门未起。
+    assert_eq!(runner.captured().len(), 1, "熔断后不得再起 writer");
     std::fs::remove_dir_all(&base).ok();
 }

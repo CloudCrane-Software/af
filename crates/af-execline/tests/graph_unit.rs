@@ -310,6 +310,8 @@ fn drive(
         data_root,
         attempt_dir: attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
         trial: false,
     };
     unit.execute(&ctx)
@@ -419,7 +421,10 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     assert_eq!(output.artifacts.len(), 1);
     assert!(output.artifacts[0].is_final && output.artifacts[0].qualified);
 
-    // v1 行：records.jsonl 恰一行，带 plan_id 与节点计数。
+    // v1 行：records.jsonl 恰一行，按 af.plan.record.v1 契约键投影（红队
+    // W1-C36：图行与 swev/report 同一契约面——node_id/item_id/attempt/
+    // host_alias/status/evidence.run_dir/gate/usage.quota/wall_ms/note 齐，
+    // 无 suite/order_id/nodes/cents_used 契约外键）。
     let rows: Vec<Value> = std::fs::read_to_string(out.join("records.jsonl"))
         .unwrap()
         .lines()
@@ -427,11 +432,43 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
     assert_eq!(rows.len(), 1);
-    assert!(rows[0]["plan_id"]
+    let row = &rows[0];
+    assert!(row["plan_id"]
         .as_str()
         .unwrap()
         .starts_with("plan.sweng_sop_full@1.1+"));
-    assert_eq!(rows[0]["nodes"], json!(4));
+    for key in [
+        "plan_id",
+        "node_id",
+        "item_id",
+        "attempt",
+        "host_alias",
+        "unit_id",
+        "unit_version",
+        "status",
+        "verdict",
+        "gate",
+        "wall_ms",
+        "note",
+    ] {
+        assert!(row.get(key).is_some(), "v1 契约键 {key} 缺席：{row}");
+    }
+    assert!(!row.is_null());
+    // 契约外键不得混入。
+    for key in ["suite", "order_id", "nodes", "cents_used", "tokens_used"] {
+        assert!(row.get(key).is_none(), "契约外键 {key} 不得混入：{row}");
+    }
+    // evidence.run_dir 指向实际 run 目录（trace 工具 L1→L2 父子边）。
+    let run_dir = row["evidence"]["run_dir"].as_str().unwrap();
+    assert!(
+        Path::new(run_dir).is_dir(),
+        "evidence.run_dir 须指向实际 run 目录：{run_dir}"
+    );
+    // usage.quota 三分账在案（FakeRunner 每节点 in=100/out=50/cache=10 ×3）。
+    assert_eq!(row["usage"]["quota"]["input"], json!(300));
+    assert_eq!(row["usage"]["quota"]["output"], json!(150));
+    assert_eq!(row["usage"]["quota"]["cache_read"], json!(30));
+    assert_eq!(row["item_id"], json!(TASK));
 
     // 容器清理必达（RAII）：rm -f 恰两次（setup 前清残件 + 收尾）。
     assert!(
@@ -1007,6 +1044,7 @@ policies:
     };
     let runner = Arc::new(GraphFakeRunner::new(scripted));
     let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ = _bridge;
 
     let output = drive(&unit, &data_root, &attempt, &out).expect("aci_schema+human_gate 链应走通");
 
@@ -1485,6 +1523,7 @@ policies:
         fed: Mutex::new(false),
     });
     let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ = _bridge;
 
     let output = drive(&unit, &data_root, &attempt, &out)
         .expect("裸 declare 被拒后修正重调应完成（复活剧本）");
@@ -1621,4 +1660,407 @@ fn permissive_declare_face_unchanged_for_patch_shaped_ports() {
     let envelope: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(envelope["derived"], json!(["diff", "files"]));
     assert_eq!(output.verdict, Some(true));
+}
+
+// ============================================================
+// 红队修复批（W1）：C-31/C-32/C-34/C-37/C-38
+// ============================================================
+
+/// 带 graph_version 期待的驱动（红队 W1-C32 测试缝）。
+fn drive_with_gv(
+    unit: &GraphExecuteUnit,
+    data_root: &Path,
+    attempt: &Path,
+    out: &Path,
+    graph_version: Option<&str>,
+) -> Result<af_execline::ExecOutput, af_execline::ExeclineError> {
+    std::fs::create_dir_all(attempt).unwrap();
+    std::fs::create_dir_all(out).unwrap();
+    let sink = FileRecordSink::open(out).unwrap();
+    let ctx = ExecContext {
+        order_id: "wo-graph-w1",
+        stable_id: "sid-graph-w1",
+        line_id: "line-A",
+        out_dir: out,
+        task_id: TASK,
+        task_sha256: None,
+        host_alias: "local",
+        data_root,
+        attempt_dir: attempt,
+        record_sink: &sink,
+        trial: false,
+        graph_version,
+    };
+    unit.execute(&ctx)
+}
+
+/// C-31 测试 Runner：planner/coder 走 declare 面（声明 = 端口键控全键，
+/// 含无类型 shadow 端口）；reviewer 走终态消息 JSON（回退源双源覆盖）。
+struct UntypedPortRunner {
+    planner_declare_params: Mutex<Value>,
+}
+
+impl af_execline::AgentRunner for UntypedPortRunner {
+    fn run(
+        &self,
+        launch: af_execline::AgentLaunch<'_>,
+    ) -> Result<af_execline::AgentRunOutcome, af_execline::AgentRunFailure> {
+        let node = launch
+            .run_id
+            .strip_prefix(&format!("{TASK}-"))
+            .unwrap_or_default()
+            .to_string();
+        let (final_text, via_declare) = match node.as_str() {
+            "planner" => (
+                json!({
+                    "plan": {"instance_id": TASK, "steps": [
+                        {"id": "s1", "action": "locate", "target": "django/db/models"}
+                    ]},
+                    "shadow": {"note": "untyped port payload"}
+                })
+                .to_string(),
+                true,
+            ),
+            "coder" => (
+                json!({"files": [
+                    {"path": "django/db/models/foo.py", "content_ref": "workspace#1"}
+                ]})
+                .to_string(),
+                true,
+            ),
+            "reviewer" => (
+                json!({"review": {"approved": true, "issues": []}}).to_string(),
+                false,
+            ),
+            other => {
+                return Err(af_execline::AgentRunFailure {
+                    message: format!("UntypedPortRunner 无节点 {other} 脚本"),
+                    http_retries: 0,
+                })
+            }
+        };
+        if via_declare {
+            if node == "planner" {
+                *self
+                    .planner_declare_params
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = launch
+                    .spec
+                    .toolset
+                    .iter()
+                    .find(|t| t.name == "declare")
+                    .map(|t| t.parameters.clone())
+                    .unwrap_or(Value::Null);
+            }
+            let binding = launch
+                .extra_tools
+                .iter()
+                .find(|t| t.name == "declare")
+                .expect("declare 面必在");
+            let args: Value = serde_json::from_str(&final_text).unwrap();
+            (binding.handler)(&args).expect("全键声明应被 strict 闭包采纳");
+        }
+        Ok(af_execline::AgentRunOutcome {
+            report: af_harness::RunReport {
+                run_id: launch.run_id,
+                status: af_harness::RunStatus::Completed {
+                    signal: "TASK_COMPLETE".into(),
+                },
+                turns: 3,
+                model_calls: 5,
+                effect_replays: 0,
+                effect_fresh: 2,
+                transcript: vec![
+                    af_harness::TranscriptItem::User {
+                        text: launch.user_message.clone(),
+                    },
+                    af_harness::TranscriptItem::Assistant {
+                        text: final_text.clone(),
+                        tool_calls: Vec::new(),
+                        usage: None,
+                    },
+                ],
+                whitelist: Vec::new(),
+                tokens: af_harness::TokenTotals {
+                    input: 100,
+                    output: 50,
+                    cache_read: 10,
+                },
+            },
+            http_retries: 0,
+        })
+    }
+}
+
+/// C-31：多端口 task 节点带「无 r#type 且非 is_final」端口——strict declare
+/// 的 required/accepted 键集 = 全部 artifact_contract 端口（无类型端口仅进
+/// required 不给 schema）；declare 交全键 → commit 相 EX4006 不再致死。
+/// 此前两相键集互斥：只交类型端口 → commit EX4006 全灭；补交无类型端口 →
+/// 闭包「未知键」拒收——重试环无出口（系统性死锁，红队 W1-C31）。
+#[test]
+fn strict_declare_covers_untyped_nonfinal_ports_end_to_end() {
+    let root = temp_root("w1-c31");
+    let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+    let planner = plan["body"]["node_exec"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|n| n["node_id"] == json!("planner"))
+        .unwrap();
+    planner["artifact_contract"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"name": "shadow", "is_final": false}));
+    let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+    let runner = Arc::new(UntypedPortRunner {
+        planner_declare_params: Mutex::new(Value::Null),
+    });
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ = _bridge;
+
+    let output = drive(&unit, &data_root, &attempt, &out)
+        .expect("无类型非终态端口不得致死（required=全部端口 + 无类型不核形）");
+    assert_eq!(output.verdict, Some(true), "终态 qa_report.pass=true");
+
+    // API 面：required 含全键；properties 只含有类型端口（无类型端口不给
+    // schema——形状留白，键到位即可）。
+    let params = runner
+        .planner_declare_params
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    let required = params["required"].as_array().unwrap().clone();
+    assert!(
+        required.contains(&json!("plan")),
+        "required 应含类型端口：{params}"
+    );
+    assert!(
+        required.contains(&json!("shadow")),
+        "required 应含无类型端口（W1-C31）：{params}"
+    );
+    assert!(
+        params["properties"].get("plan").is_some(),
+        "有类型端口应给 schema：{params}"
+    );
+    assert!(
+        params["properties"].get("shadow").is_none(),
+        "无类型端口不给 schema：{params}"
+    );
+}
+
+/// C-32：WorkOrder 一次性绑定的 graph_version 作装订外部期待——与计划
+/// compiled_from.graph_version 不符即拒（此前期待分支恒空 = 死代码，换
+/// graph_version 漂移的计划照样装订执行）。
+#[test]
+fn graph_version_expectation_mismatch_rejects_binding() {
+    let root = temp_root("w1-c32");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    // 期待漂移 → EX4004 口径装订拒绝，零节点驱动、零容器。
+    let err = drive_with_gv(&unit, &data_root, &attempt, &out, Some("9.9"))
+        .expect_err("graph_version 漂移应拒装订");
+    assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{err}");
+    assert!(err.to_string().contains("graph_version"), "{err}");
+    assert!(runner.launches().is_empty());
+    assert!(bridge.calls().is_empty(), "装订失败不起容器");
+
+    // 期待一致（sop_full 图版本 1.1）→ 正常走通。
+    drive_with_gv(&unit, &data_root, &attempt, &out, Some("1.1")).expect("期待一致应走通");
+}
+
+/// C-34：预算面收口——强制面外的 dimension/scope 组合 fail-loud 拒收
+/// （此前 plan 级五维与节点级非 turns 条目被静默忽略 = 声明帽得到无预算
+/// 运行，与本函数正典 id 门的 fail-loud 纪律自相矛盾）。
+#[test]
+fn unsupported_budget_dimension_scope_combos_rejected() {
+    for (tag, entry) in [
+        (
+            "plan-clock",
+            json!({"id": "wall", "dimension": "clock_ms", "scope": "plan", "cap": 1000}),
+        ),
+        (
+            "plan-modelcalls",
+            json!({"id": "calls", "dimension": "model_calls", "scope": "plan", "cap": 10}),
+        ),
+        (
+            "node-cents",
+            json!({"id": "nc", "dimension": "cents", "scope": "node:coder", "cap": 100}),
+        ),
+        (
+            "loop-turns",
+            json!({"id": "lt", "dimension": "turns", "scope": "loop:study", "cap": 10}),
+        ),
+        (
+            "dangling-node",
+            json!({"id": "dt", "dimension": "turns", "scope": "node:ghost", "cap": 10}),
+        ),
+    ] {
+        let root = temp_root(&format!("w1-c34-{tag}"));
+        let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+        plan["body"]["budget"]["budgets"]
+            .as_array_mut()
+            .unwrap()
+            .push(entry.clone());
+        let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+        let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+        let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+        let err = drive(&unit, &data_root, &attempt, &out)
+            .expect_err(&format!("{tag} 应 fail-loud 拒收"));
+        assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{tag}: {err}");
+        assert!(
+            err.to_string().contains("强制集") || err.to_string().contains("强制面"),
+            "{tag}: {err}"
+        );
+    }
+}
+
+/// C-37：同一 (to, input) 端口被多条边命中 = 编排真相二义——入边装配取
+/// 后边、提示词装配取前边，载荷静默分叉；装订器先拒。
+#[test]
+fn duplicate_to_input_edges_rejected_at_bind() {
+    let root = temp_root("w1-c37");
+    let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+    let edges = plan["body"]["graph"]["edges"].as_array().unwrap().clone();
+    let first = edges
+        .iter()
+        .find(|e| e["to"] == json!("coder"))
+        .expect("coder 入边在案")
+        .clone();
+    plan["body"]["graph"]["edges"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({
+            "from": "reviewer", "output": "review",
+            "to": first["to"], "input": first["input"], "checkpoint": false
+        }));
+    let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("重复 (to,input) 边应拒装订");
+    assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{err}");
+    assert!(err.to_string().contains("边级重影"), "{err}");
+}
+
+/// C-38：节点 id / 工件端口名过路径安全核——含分隔符或纯点号段即拒
+/// （手写 plan.json 不经 af-dsl 词法集，id 直接拼进节点目录与
+/// {node_id}.{port}.json 工件名，可写出 attempt_dir 之外）。
+#[test]
+fn path_unsafe_node_ids_and_ports_rejected_at_bind() {
+    for (tag, mutate) in [
+        (
+            "slash-id",
+            Box::new(|plan: &mut Value| {
+                for collection in ["nodes"] {
+                    for n in plan["body"]["graph"][collection].as_array_mut().unwrap() {
+                        if n["id"] == json!("planner") {
+                            n["id"] = json!("pl/../../escape");
+                        }
+                    }
+                }
+                for n in plan["body"]["node_exec"].as_array_mut().unwrap() {
+                    if n["node_id"] == json!("planner") {
+                        n["node_id"] = json!("pl/../../escape");
+                    }
+                }
+            }) as Box<dyn Fn(&mut Value)>,
+        ),
+        (
+            "dotdot-id",
+            Box::new(|plan: &mut Value| {
+                for n in plan["body"]["graph"]["nodes"].as_array_mut().unwrap() {
+                    if n["id"] == json!("planner") {
+                        n["id"] = json!("..");
+                    }
+                }
+                for n in plan["body"]["node_exec"].as_array_mut().unwrap() {
+                    if n["node_id"] == json!("planner") {
+                        n["node_id"] = json!("..");
+                    }
+                }
+            }) as Box<dyn Fn(&mut Value)>,
+        ),
+        (
+            "slash-port",
+            Box::new(|plan: &mut Value| {
+                for n in plan["body"]["node_exec"].as_array_mut().unwrap() {
+                    if n["node_id"] == json!("planner") {
+                        n["artifact_contract"][0]["name"] = json!("pl/an");
+                    }
+                }
+            }) as Box<dyn Fn(&mut Value)>,
+        ),
+    ] {
+        let root = temp_root(&format!("w1-c38-{tag}"));
+        let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+        mutate(&mut plan);
+        let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+        let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+        let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+        let err = drive(&unit, &data_root, &attempt, &out).expect_err(&format!("{tag} 应拒"));
+        assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{tag}: {err}");
+        assert!(
+            err.to_string().contains("路径分隔符") || err.to_string().contains("纯点号段"),
+            "{tag}: {err}"
+        );
+    }
+}
+
+/// C-59①：任务包判据面摘要钉死——门面 submit 期待的 sha256 与盘上
+/// task.json 不符即拒（判分真值源被换，清空判据即可绕判分的面收口）。
+#[test]
+fn task_digest_mismatch_rejects_execution() {
+    let root = temp_root("w1-c59");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+    std::fs::create_dir_all(&attempt).unwrap();
+    std::fs::create_dir_all(&out).unwrap();
+    let bad = "0".repeat(64);
+    let err = {
+        let sink_b = FileRecordSink::open(&out).unwrap();
+        let ctx_b = ExecContext {
+            order_id: "wo-graph-w1c59",
+            stable_id: "sid-graph-w1c59",
+            line_id: "line-A",
+            out_dir: &out,
+            task_id: TASK,
+            host_alias: "local",
+            data_root: &data_root,
+            attempt_dir: &attempt,
+            record_sink: &sink_b,
+            trial: false,
+            graph_version: None,
+            task_sha256: Some(bad.as_str()),
+        };
+        unit.execute(&ctx_b).expect_err("判据面摘要漂移应拒")
+    };
+    assert!(err.to_string().contains("判据面摘要不符"), "{err}");
+    assert!(runner.launches().is_empty(), "拒于执行前");
+    assert!(bridge.calls().is_empty(), "拒于起容器");
+
+    // 匹配摘要（盘上 task.json 实算）→ 正常走通。
+    let real = af_execline::file_sha256_hex(&data_root.join(TASK).join("task.json")).unwrap();
+    let output = {
+        std::fs::remove_dir_all(&out).ok();
+        std::fs::create_dir_all(&out).unwrap();
+        let sink2 = FileRecordSink::open(&out).unwrap();
+        let ctx2 = ExecContext {
+            order_id: "wo-graph-w1c59",
+            stable_id: "sid-graph-w1c59",
+            line_id: "line-A",
+            out_dir: &out,
+            task_id: TASK,
+            host_alias: "local",
+            data_root: &data_root,
+            attempt_dir: &attempt,
+            record_sink: &sink2,
+            trial: false,
+            graph_version: None,
+            task_sha256: Some(real.as_str()),
+        };
+        unit.execute(&ctx2)
+    };
+    output.expect("摘要匹配应走通");
 }

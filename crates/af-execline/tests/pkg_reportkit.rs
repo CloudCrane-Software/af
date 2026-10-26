@@ -668,6 +668,8 @@ fn drive_once(
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).expect("报告单元全相应走通（v1 缝）")
@@ -792,6 +794,8 @@ fn drive_err(unit: &ReportExecuteUnit, base: &Path, task_dir: &Path) -> Execline
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).unwrap_err()
@@ -850,4 +854,26 @@ fn execution_facts_reuse_for_report_suite() {
     let row = af_execline::record::swev_legacy_row(&facts);
     assert_eq!(row["suite"], "report");
     assert_eq!(row["reward"], true);
+}
+
+/// 红队 W1-C61：渲染器入指纹门——rubric 的 R5 判据 = report.md 与
+/// `render.render_markdown` 输出一致（渲染器既是生产者又是裁判基准），改
+/// render.py 一个函数即可翻转 R5 而两件钉死脚本字节不动；此前双指纹门只
+/// 盖 citation/rubric，第三件漂移照过。
+#[test]
+fn judge_fingerprint_gate_rejects_tampered_renderer_with_ex3002() {
+    let prod = ReportJudgeLocator::production();
+    let script = std::fs::read_to_string(&prod.render_script).unwrap();
+    let tampered = script.replace("def render_markdown", "def render_markdown_x");
+    let dir = kit_dir("fp-render");
+    let bad = dir.join("render_tampered.py");
+    std::fs::write(&bad, tampered).unwrap();
+    let locator = ReportJudgeLocator {
+        render_script: bad.clone(),
+        ..prod
+    };
+    let err = locator.check_fingerprints().unwrap_err();
+    assert_eq!(err.code(), ErrorCode::JudgeFingerprintMismatch, "{err}");
+    assert!(err.to_string().starts_with("EX3002"), "{err}");
+    std::fs::remove_dir_all(&dir).ok();
 }

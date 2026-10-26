@@ -44,6 +44,11 @@ pub struct ReportJudgeLocator {
     pub rubric_sha256: String,
     /// 同包确定性渲染器（report.md 与 rubric R5 的同一正本）。
     pub render_script: PathBuf,
+    /// 渲染器 sha256 锚（红队 W1-C61：rubric 的 R5 判据 = report.md 与
+    /// `render.render_markdown` 输出一致——渲染器既是生产者又是裁判基准，
+    /// 此前双指纹门只盖 citation/rubric 两脚本，改 render.py 一个函数即可
+    /// 翻转 R5 而两件钉死脚本字节不动；第三件入指纹门）。
+    pub render_sha256: String,
 }
 
 impl ReportJudgeLocator {
@@ -61,6 +66,8 @@ impl ReportJudgeLocator {
             rubric_sha256: "af63af2c0d16ff890d081938a77853d6e817f3e0a7b765fc4e5096a3e16d3654"
                 .into(),
             render_script: pkg_root.join("tools/render.py"),
+            render_sha256: "255f68f7795706637749a9559fbb85444afcd92687b2398012dd94b077b4db76"
+                .into(),
         }
     }
 
@@ -70,6 +77,8 @@ impl ReportJudgeLocator {
         for (script, anchor) in [
             (&self.citation_script, &self.citation_sha256),
             (&self.rubric_script, &self.rubric_sha256),
+            // 红队 W1-C61：渲染器入指纹门（R5 判据基准的第三件）。
+            (&self.render_script, &self.render_sha256),
         ] {
             let actual = crate::suite::swev::sha256_hex(script).ok_or_else(|| {
                 ExeclineError::JudgeFingerprintMismatch {
@@ -526,6 +535,12 @@ pub struct DraftInput {
     pub task_json: PathBuf,
     /// 计划 types 表提取的环面类型（envelope 校验正本）。
     pub plan_types: RingTypes,
+    /// 环级成本帽（红队 W1-C33：= min(spec.spend_cap_cents, plan 级
+    /// cost_cap)——reader + 全部 writer 轮**共享单一预算账本**。此前每
+    /// 成员各拿整份 spend_cap_cents + 全新账本，图级上限 = 4×300¢，
+    /// 与 spec 自述「图面口径 cents 300」不符；plan.body.budget 此前
+    /// 零消费。None = 无 plan 级帽（仅 spec 帽生效）。
+    pub ring_cents_cap: Option<i64>,
 }
 
 /// 起草产出：报告 JSON + 环用量（reader/writer 双节点聚合——进行落盘 usage）。
@@ -708,6 +723,17 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
             Ok(Value::String(signal.clone()))
         }) as crate::agent::ToolFn;
 
+        // 环级共享预算账本（红队 W1-C33）：reader + 全部 writer 轮共用一份
+        // 帽（llm.cents 口径 1 模型调用 = 1¢，与图执行器 account_node 同源）
+        // ——此前每成员各拿整份 spec.spend_cap_cents + 全新 budget_ledger，
+        // 图级上限 4×300¢，spec 自述「图面口径 cents 300」名不副实；plan 级
+        // cost_cap 在场时取小（plan.body.budget 此前零消费）。
+        let ring_cap_cents = spec
+            .spend_cap_cents
+            .min(input.ring_cents_cap.unwrap_or(i64::MAX));
+        let mut ring_spent_cents: i64 = 0;
+        let ring_remaining = |spent: i64| -> i64 { (ring_cap_cents - spent).max(1) };
+
         let reader_user = format!(
             "研究焦点：{focus}\n\n论文（摄取快照 paper_doc）：\n- url: {url}\n- title: {title}\n\
              - sha256: {sha}\n- snapshot_ref: {snap}\n\n论文快照正文（截头）：\n{head}\n\n\
@@ -751,9 +777,9 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                 "[harness] bash 不在报告环工具集——用 submit_notes 提交".to_string()
             }),
             key_cmd: profile.key_cmd,
-            spend_cap_cents: spec.spend_cap_cents,
+            spend_cap_cents: ring_remaining(ring_spent_cents),
             tool_spend_cents: spec.tool_spend_cents,
-            budget_ledger_cents: spec.spend_cap_cents,
+            budget_ledger_cents: ring_remaining(ring_spent_cents),
             extra_tools: vec![
                 crate::agent::ToolBinding {
                     name: "web_fetch".into(),
@@ -784,6 +810,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
         };
         usage.turns += reader_report.turns;
         usage.model_calls += reader_report.model_calls;
+        ring_spent_cents += reader_report.model_calls as i64;
         usage.tokens.input += reader_report.tokens.input;
         usage.tokens.output += reader_report.tokens.output;
         usage.tokens.cache_read += reader_report.tokens.cache_read;
@@ -831,6 +858,15 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
         let mut last_draft: Option<String> = None;
         for round in 1..=RING_MAX_ITERATIONS {
             usage.iterations = round;
+            // 环级熔断门（W1-C33）：共享账本耗尽即拒起下一成员（与图执行器
+            // 预算 gate 同纪律——超限 fail-loud，不再各拿满份帽）。
+            if ring_spent_cents >= ring_cap_cents {
+                return Err(format!(
+                    "报告环预算熔断：环内累计 {ring_spent_cents}¢ ≥ 环级帽 {ring_cap_cents}¢ \
+                     （= min(spec {spec}¢, plan cost_cap)——reader+writer 共享单一账本）",
+                    spec = spec.spend_cap_cents,
+                ));
+            }
             let report_slot: Arc<Mutex<Option<Value>>> = Arc::new(Mutex::new(None));
             let slot = report_slot.clone();
             let signal = spec.completion_signal.clone();
@@ -902,9 +938,9 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                     "[harness] bash 不在报告环工具集——用 submit_report 提交".to_string()
                 }),
                 key_cmd: profile.key_cmd,
-                spend_cap_cents: spec.spend_cap_cents,
+                spend_cap_cents: ring_remaining(ring_spent_cents),
                 tool_spend_cents: spec.tool_spend_cents,
-                budget_ledger_cents: spec.spend_cap_cents,
+                budget_ledger_cents: ring_remaining(ring_spent_cents),
                 extra_tools: vec![crate::agent::ToolBinding {
                     name: "submit_report".into(),
                     handler: submit_report_tool,
@@ -929,6 +965,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
             };
             usage.turns += writer_report.turns;
             usage.model_calls += writer_report.model_calls;
+            ring_spent_cents += writer_report.model_calls as i64;
             usage.tokens.input += writer_report.tokens.input;
             usage.tokens.output += writer_report.tokens.output;
             usage.tokens.cache_read += writer_report.tokens.cache_read;
@@ -1139,6 +1176,8 @@ impl ExecuteUnit for ReportExecuteUnit {
         // ---- setup 相：任务包装载 + 计划装订三核对（planbind 唯一正本）----
         let task_dir = ctx.data_root.join(ctx.task_id);
         let task_json = task_dir.join("task.json");
+        // 红队 W1-C59①：判据面 digest 钉死核对（门面 submit 时计算）。
+        crate::exec::verify_task_digest(&task_json, ctx.task_sha256)?;
         let task: ReportTask =
             serde_json::from_str(&std::fs::read_to_string(&task_json).map_err(|err| {
                 self.fail(format!("读任务包失败 {}: {err}", task_json.display()))
@@ -1156,7 +1195,12 @@ impl ExecuteUnit for ReportExecuteUnit {
                 &self.spec.reader_template_ref,
                 &self.spec.writer_template_ref,
             ],
-            &BindExpectations::default(),
+            // 红队 W1-C32：WorkOrder 一次性绑定的 graph_version 作装订外部
+            // 期待（此前期待分支恒空 = 死代码，图版本漂移的计划照样装订）。
+            &BindExpectations {
+                graph_version: ctx.graph_version.map(str::to_string),
+                line_id: None,
+            },
         )?;
         let min_citations = task
             .rubric_params
@@ -1202,6 +1246,16 @@ impl ExecuteUnit for ReportExecuteUnit {
             attempt_dir: attempt_dir.to_path_buf(),
             task_json: task_json.clone(),
             plan_types,
+            // W1-C33：消费 plan.body.budget 的 cost_cap（plan 级 cents 帽）
+            // ——与 spec.spend_cap_cents 取小作为环级共享账本。
+            ring_cents_cap: bound
+                .plan
+                .body
+                .budget
+                .budgets
+                .iter()
+                .find(|e| e.scope == "plan" && e.id == "cost_cap")
+                .map(|e| e.cap as i64),
         };
         let draft =
             (self.draft)(&draft_input).map_err(|err| self.fail(format!("起草失败: {err}")))?;

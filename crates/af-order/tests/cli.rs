@@ -412,3 +412,52 @@ fn bad_spec_is_rejected_with_reason() {
     let out = run(&["submit", "--spec", "x.json"]);
     assert_eq!(out.status.code(), Some(2), "缺 --state 是用法错误");
 }
+
+// ---------- 红队修复批（W1）：C-41 / C-64 ----------
+
+/// C-41：换 line 重放被拒——身份面字段与预算同纪律（OR2003）。
+#[test]
+fn resubmit_with_different_line_is_rejected() {
+    let state = scratch("w1c41");
+    let spec = write_spec(&state, "order.json", &spec_text("wo-cli-w1c41", 7));
+    let first = submit(&spec, &state);
+    expect_ok(&first);
+
+    // 同 order_id、换 line（预算不变）：凭证面 line 钉死 → OR2003 拒绝。
+    let swapped = write_spec(
+        &state,
+        "order2.json",
+        &r#"{"order_id":"wo-cli-w1c41","line":{"line_id":"line-other","line_version":"lv-1"},"budget":7}"#,
+    );
+    let second = submit(&swapped, &state);
+    assert!(
+        !second.status.success(),
+        "换 line 重放应拒绝：{}",
+        String::from_utf8_lossy(&second.stdout)
+    );
+    let err_text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&second.stderr),
+        String::from_utf8_lossy(&second.stdout)
+    );
+    assert!(err_text.contains("OR2003"), "稳定码 OR2003：{err_text}");
+    assert!(err_text.contains("line_id"), "点名字段：{err_text}");
+}
+
+/// C-64：stub 冒烟档 MES line_id 加 stub: 前缀——冒烟单与真单在 MES 账面
+/// 可判别（此前逐字段同形，mes_line_hour_mv 会把冒烟产量计入产线）。
+#[test]
+fn stub_submit_marks_mes_line_with_stub_prefix() {
+    let state = scratch("w1c64");
+    let spec = write_spec(&state, "order.json", &spec_text("wo-cli-w1c64", 7));
+    let out = submit(&spec, &state);
+    expect_ok(&out);
+    let events = MesFileWriter::load(&order_dir(&state, "wo-cli-w1c64").join("mes-events.jsonl"))
+        .expect("MES 可重载");
+    assert_eq!(events.len(), 4);
+    assert!(
+        events.iter().all(|e| e.line_id == "stub:line-poc"),
+        "冒烟档 MES line_id 应带 stub: 前缀：{:?}",
+        events.iter().map(|e| e.line_id.clone()).collect::<Vec<_>>()
+    );
+}

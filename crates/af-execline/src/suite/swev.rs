@@ -296,12 +296,29 @@ pub fn verify(
             let text = String::from_utf8_lossy(&output.stdout);
             match serde_json::from_str::<serde_json::Value>(text.trim()) {
                 Ok(row) => {
-                    let resolved = row.get("resolved").and_then(serde_json::Value::as_bool);
+                    let mut resolved = row.get("resolved").and_then(serde_json::Value::as_bool);
+                    // 红队 W1-C59②：零测试判据 fail-loud——tests_collected=0
+                    // 表示判分器没从日志收集到任何测试（含任务包判据被清空
+                    // 的形态：swebench 对空清单 f2p=p2p=1 → RESOLVED_FULL，
+                    // 不改任何冻结指纹即可让冻结判分链对零测试任务包返回
+                    // resolved=true）；judge 明写 0 而消费侧不核 = 可作弊面。
+                    let zero_tests = row
+                        .get("tests_collected")
+                        .and_then(serde_json::Value::as_u64)
+                        .is_some_and(|n| n == 0);
+                    if zero_tests {
+                        resolved = resolved.filter(|r| !r);
+                    }
                     // D-20 项 3 消费端：judge JSON 带 log_parsed 时在 note 前缀如实透传
                     // （截断日志的判 false 与"真失败"不再同貌）。
                     let parsed_note = match row.get("log_parsed") {
                         Some(serde_json::Value::Bool(false)) => "[log_parsed=false] ".to_string(),
                         _ => String::new(),
+                    };
+                    let zero_note = if zero_tests {
+                        "[tests_collected=0 判据面可疑，不当成功] ".to_string()
+                    } else {
+                        String::new()
                     };
                     let timeout_note = if eval_timed_out {
                         format!("eval 超时击杀（已落标记 {EVAL_TIMEOUT_SEC}s）；")
@@ -310,7 +327,10 @@ pub fn verify(
                     };
                     (
                         resolved,
-                        format!("{timeout_note}{parsed_note}judge: {}", text.trim()),
+                        format!(
+                            "{timeout_note}{parsed_note}{zero_note}judge: {}",
+                            text.trim()
+                        ),
                         eval_sha256,
                     )
                 }

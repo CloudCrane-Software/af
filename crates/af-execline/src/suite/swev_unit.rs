@@ -162,6 +162,8 @@ impl ExecuteUnit for SwevExecuteUnit {
             return Err(self.setup_failed_row(ctx, &err));
         };
         let task_json = ctx.data_root.join(format!("{}.json", ctx.task_id));
+        // 红队 W1-C59①：判据面 digest 钉死核对（门面 submit 时计算）。
+        crate::exec::verify_task_digest(&task_json, ctx.task_sha256)?;
         let env = swev::setup(
             self.bridge.as_ref(),
             ctx.host_alias,

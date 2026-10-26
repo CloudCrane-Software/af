@@ -216,7 +216,28 @@ fn run_submit(
         path: spec_path.display().to_string(),
         detail: err.to_string(),
     })?;
-    let spec = parse_spec(&text)?;
+    let mut spec = parse_spec(&text)?;
+
+    // 红队批（W1）三件先行计算（均在凭证签发前——凭证/订单/MES 三面同值）：
+    // ① 单元路由（stub 判别）；② 任务包判据面 sha256（W1-C59）；③ 计划
+    //    graph_version（W1-C32：门面按计划图版本取值，统一值域）。
+    let selected = resolve_unit(unit, exec)?;
+    let task_digest = pin_task_digest(&selected, exec);
+    let plan_graph_version = read_plan_graph_version(&selected, exec)
+        .unwrap_or_else(|| DEFAULT_GRAPH_VERSION.to_string());
+    // W1-C64：stub 冒烟档 MES line_id 加 stub: 前缀——冒烟单与真单此前在
+    // MES 账面逐字段不可区分（同 kind/quantity/station/line），下游
+    // mes_line_hour_mv 按线聚合会把冒烟产量计入产线；前缀即判别量，
+    // 产线聚合口径按前缀排除。凭证/订单绑定/MES 三面用同一前缀值。
+    let line_binding = match selected {
+        crate::exec::SelectedUnit::Stub => af_workorder::LineBinding {
+            line_id: format!("stub:{}", spec.line.line_id),
+            line_version: spec.line.line_version.clone(),
+        },
+        _ => spec.line.clone(),
+    };
+    // 凭证面 line 钉死（W1-C41）与 MES/订单面用同一值：冒烟档即 stub: 前缀。
+    spec.line = line_binding.clone();
 
     // 状态目录与订单目录（order_id 已过路径安全校验）
     let state = StateDir::new(state_root);
@@ -238,9 +259,13 @@ fn run_submit(
     // 占位（stub 单元不消费这些字段）。
     let cfg = DriverConfig {
         order_id: spec.order_id.clone(),
-        graph_version: DEFAULT_GRAPH_VERSION.to_string(),
+        // W1-C32：门面按任务包计划图版本取值（graph/report 档 = 计划
+        // compiled_from.graph_version；无计划档回落骨架缺省）——与
+        // planbind 装订期待同一值域，一次性绑定真核对。
+        graph_version: plan_graph_version.clone(),
         sla: Sla::new(None, Priority::Normal),
-        line: spec.line.clone(),
+        line: line_binding,
+        task_sha256: task_digest,
         voucher,
         out_dir: order_dir.clone(),
         station_id: DEFAULT_STATION_ID.to_string(),
@@ -275,7 +300,6 @@ fn run_submit(
     // 单元路由（裁决7：--unit swev|report|graph|stub；缺省=现行为）。报告臂装载期
     // 即过 planbind 三重门（指纹/模板/档案）+ 任务包材料核对（fail-loud）；
     // 图臂 = 图执行器（planbind 四核对 + 拓扑序逐节点驱动）。
-    let selected = resolve_unit(unit, exec)?;
     let report = match selected {
         SelectedUnit::Swev => {
             let exec = exec.expect("resolve 已保证 Swev 携三件套");
@@ -605,5 +629,111 @@ mod tests {
             assert!(matches!(err, OrderError::Usage { .. }), "{err}");
             assert_eq!(err.exit_code(), 2, "{err}");
         }
+    }
+}
+
+// ---------- 红队批（W1）辅助：判据面摘要钉死 + 计划图版本读取 ----------
+
+/// W1-C59①：门面 submit 时计算任务包判据面 sha256——swev 档 =
+/// `<data_root>/<task>.json`（判分真值源 fail_to_pass/pass_to_pass 所在）；
+/// graph/report 档 = `<data_root>/<task>/task.json`（图输入与 check 节点
+/// test_command 所在）。执行单元消费前核对（exec::verify_task_digest），
+/// 漂移即拒。文件缺席（缺省冒烟/材料后置）= None，不核对。
+fn pin_task_digest(selected: &SelectedUnit, exec: Option<&RealExec>) -> Option<String> {
+    let exec = exec?;
+    let path = match selected {
+        SelectedUnit::Swev => exec.data_root.join(format!("{}.json", exec.task)),
+        SelectedUnit::Graph | SelectedUnit::Report => {
+            exec.data_root.join(&exec.task).join("task.json")
+        }
+        SelectedUnit::Stub => return None,
+    };
+    af_execline::file_sha256_hex(&path)
+}
+
+/// W1-C32：任务包计划 compiled_from.graph_version（graph/report 档）。
+/// 文件缺席/缺键 = None（回落 DEFAULT_GRAPH_VERSION）。
+fn read_plan_graph_version(selected: &SelectedUnit, exec: Option<&RealExec>) -> Option<String> {
+    let exec = exec?;
+    if !matches!(selected, SelectedUnit::Graph | SelectedUnit::Report) {
+        return None;
+    }
+    let plan_path = exec.data_root.join(&exec.task).join("plan.json");
+    let plan: Value = serde_json::from_str(&fs::read_to_string(plan_path).ok()?).ok()?;
+    plan.pointer("/body/compiled_from/graph_version")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+#[cfg(test)]
+mod w1_tests {
+    use super::*;
+
+    /// C-59①：pin_task_digest 对 swev/graph/report 各取其判据真值源文件。
+    #[test]
+    fn pin_task_digest_reads_criteria_source_per_unit() {
+        let dir = std::env::temp_dir().join(format!("af-order-w1-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("task-x")).unwrap();
+        fs::write(dir.join("task-x.json"), b"swev-task-json").unwrap();
+        fs::write(dir.join("task-x/task.json"), b"graph-task-json").unwrap();
+        let exec = |task: &str| RealExec {
+            data_root: dir.clone(),
+            task: task.to_string(),
+            host: "local".into(),
+            profile: "glm-cp".into(),
+            max_turns: 60,
+            spend_cap_cents: 300,
+        };
+        let swev = pin_task_digest(&SelectedUnit::Swev, Some(&exec("task-x")));
+        assert_eq!(
+            swev,
+            af_execline::file_sha256_hex(&dir.join("task-x.json")),
+            "swev 档 = <data_root>/<task>.json"
+        );
+        let graph = pin_task_digest(&SelectedUnit::Graph, Some(&exec("task-x")));
+        assert_eq!(
+            graph,
+            af_execline::file_sha256_hex(&dir.join("task-x/task.json")),
+            "graph 档 = <data_root>/<task>/task.json"
+        );
+        assert_eq!(
+            pin_task_digest(&SelectedUnit::Stub, Some(&exec("task-x"))),
+            None,
+            "stub 档无判据面"
+        );
+        assert_eq!(pin_task_digest(&SelectedUnit::Swev, None), None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// C-32：read_plan_graph_version 取任务包计划 compiled_from.graph_version。
+    #[test]
+    fn read_plan_graph_version_reads_compiled_from() {
+        let dir = std::env::temp_dir().join(format!("af-order-w1gv-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("task-y")).unwrap();
+        fs::write(
+            dir.join("task-y/plan.json"),
+            r#"{"v":1,"body":{"compiled_from":{"graph_version":"9.9","registry_digest":"0"}}}"#,
+        )
+        .unwrap();
+        let exec = RealExec {
+            data_root: dir.clone(),
+            task: "task-y".into(),
+            host: "local".into(),
+            profile: "glm-cp".into(),
+            max_turns: 60,
+            spend_cap_cents: 300,
+        };
+        assert_eq!(
+            read_plan_graph_version(&SelectedUnit::Graph, Some(&exec)),
+            Some("9.9".to_string())
+        );
+        assert_eq!(
+            read_plan_graph_version(&SelectedUnit::Swev, Some(&exec)),
+            None,
+            "非计划档不取"
+        );
+        let _ = fs::remove_dir_all(&dir);
     }
 }

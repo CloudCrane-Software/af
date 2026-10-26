@@ -167,6 +167,7 @@ impl ExecuteUnit for GraphExecuteUnit {
     }
 
     fn execute(&self, ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
+        let started = std::time::Instant::now();
         // ---- setup 相①：任务包 + 计划装订四核对（planbind 唯一正本，先例术语）----
         let task_dir = ctx.data_root.join(ctx.task_id);
         let plan_src = std::fs::read_to_string(task_dir.join("plan.json")).map_err(|err| {
@@ -174,8 +175,11 @@ impl ExecuteUnit for GraphExecuteUnit {
                 "读计划失败（v1 约定：计划随任务包 <data_root>/<task>/plan.json；submit 级 --plan 档=开放问题 8 留 v0.2）: {err}"
             ))
         })?;
+        let task_json_path = task_dir.join("task.json");
+        // 红队 W1-C59①：判据面 digest 钉死核对（门面 submit 时计算）。
+        crate::exec::verify_task_digest(&task_json_path, ctx.task_sha256)?;
         let input: Value = serde_json::from_str(
-            &std::fs::read_to_string(task_dir.join("task.json"))
+            &std::fs::read_to_string(&task_json_path)
                 .map_err(|err| self.fail(format!("读任务包 task.json 失败: {err}")))?,
         )
         .map_err(|err| self.fail(format!("task.json 不是合法 JSON: {err}")))?;
@@ -187,7 +191,13 @@ impl ExecuteUnit for GraphExecuteUnit {
             &plan_src,
             &self.spec.registry_root,
             &refs,
-            &BindExpectations::default(),
+            // 红队 W1-C32：WorkOrder 一次性绑定的 graph_version 作装订外部
+            // 期待——与 plan.compiled_from.graph_version 核对，漂移即拒
+            // （此前期待分支恒空 = 死代码，换计划图版本照样装订执行）。
+            &BindExpectations {
+                graph_version: ctx.graph_version.map(str::to_string),
+                line_id: None,
+            },
         )?;
         let plan = &bound.plan;
 
@@ -333,19 +343,54 @@ impl ExecuteUnit for GraphExecuteUnit {
             .and_then(Value::as_bool)
             .or(Some(true));
         let artifact_id = format!("graph-{}-{}", plan.body.interface.output_from, final_port);
-        let row = serde_json::json!({
-            "suite": "graph",
-            "plan_id": plan.body.plan_id,
-            "order_id": ctx.order_id,
-            "task_id": ctx.task_id,
-            "profile": self.spec.profile,
-            "nodes": order.len(),
-            "cents_used": stage.cents_used,
-            "tokens_used": stage.tokens_used,
-            "verdict": verdict,
-            "unit": self.unit_id(),
-            "unit_version": self.spec.unit_version,
-        });
+        // 红队 W1-C36：结果行改走 af.plan.record.v1 统一行契约（swev/report
+        // 同款投影 record::swev_v1_row）——此前手拼行缺 node_id/item_id/
+        // attempt/host_alias/status/evidence/gate/usage/wall_ms/note 契约键、
+        // 混入 suite/order_id/nodes/cents_used 等契约外键（「执行单元必须
+        // 按此落行」被破）；evidence.run_dir 同步闭合 trace 工具 L1→L2
+        // 父子边（graph 布局支持面缺口同根）。
+        let facts = crate::record::ExecutionFacts {
+            suite: "graph",
+            task_id: ctx.task_id.to_string(),
+            profile: self.spec.profile.clone(),
+            trial: ctx.trial,
+            reward: verdict,
+            status: "completed".to_string(),
+            scaffold: "graph-v1",
+            reasoning_tier: "off",
+            run_dir: Some(attempt_dir.display().to_string()),
+            eval_sha256: None,
+            gate: if verdict == Some(true) {
+                "ok"
+            } else {
+                "verify_failed"
+            }
+            .to_string(),
+            attempts: 1,
+            http_retries: 0,
+            turns: stage.turns as u32,
+            model_calls: stage.model_calls,
+            tokens: af_harness::TokenTotals {
+                input: stage.tokens_in,
+                output: stage.tokens_out,
+                cache_read: stage.tokens_cache,
+            },
+            agent_wall_ms: started.elapsed().as_millis() as u64,
+            verifier_note: format!(
+                "graph nodes={} cents={} tokens_total={}",
+                order.len(),
+                stage.cents_used,
+                stage.tokens_used
+            ),
+        };
+        let row = crate::record::swev_v1_row(
+            &facts,
+            plan.body.plan_id.as_str(),
+            ctx.line_id,
+            ctx.host_alias,
+            self.unit_id(),
+            self.spec.unit_version,
+        );
         ctx.record_sink
             .append_v1(&row.to_string())
             .map_err(|err| self.fail(format!("写 records 失败: {err}")))?;
@@ -469,16 +514,24 @@ impl GraphExecuteUnit {
         // - 非可推导端口在场 → strict（API 面 schema 注入 + 闭环内校验门）。
         // 逐端口契约材料：端口名 + 类型表达式（emits 面；旧计划 is_final 端口
         // 回退 interface.output_type）+ 物化 schema（命名类型内联）。
-        let port_contracts: Vec<(String, String, Option<Value>)> = node
+        // 红队 W1-C31：契约键集 = **全部** artifact_contract 端口（无类型
+        // 且非终态端口此前被 filter_map 丢弃——strict declare 的 required
+        // 只含类型端口，而 commit 相要求产出键集==全部端口，双面键集互斥
+        // = 系统性死锁：只交类型端口 → commit EX4006；补交无类型端口 →
+        // 闭包「未知键」拒收，重试环无出口）。无类型端口仅进 required、
+        // 不给 schema/类型核对（与 commit 相「无类型声明 = 不核」同口径）。
+        let port_contracts: Vec<(String, Option<String>, Option<Value>)> = node
             .artifact_contract
             .iter()
-            .filter_map(|a| {
+            .map(|a| {
                 let expr = a
                     .r#type
                     .clone()
-                    .or_else(|| a.is_final.then(|| plan.body.interface.output_type.clone()))?;
-                let materialized = materialize_schema(&plan.body.types, &expr);
-                Some((a.name.clone(), expr, materialized))
+                    .or_else(|| a.is_final.then(|| plan.body.interface.output_type.clone()));
+                let materialized = expr
+                    .as_deref()
+                    .and_then(|e| materialize_schema(&plan.body.types, e));
+                (a.name.clone(), expr, materialized)
             })
             .collect();
         let bare_derivable = node.artifact_contract.len() == 1
@@ -495,9 +548,12 @@ impl GraphExecuteUnit {
             let note = port_contracts
                 .iter()
                 .filter_map(|(port, expr, schema)| {
-                    schema
-                        .as_ref()
-                        .map(|s| format!("    {port:?} (type {expr}): {s}"))
+                    schema.as_ref().map(|s| {
+                        format!(
+                            "    {port:?} (type {}): {s}",
+                            expr.clone().unwrap_or_default()
+                        )
+                    })
                 })
                 .collect::<Vec<_>>()
                 .join(",\n");
@@ -831,13 +887,20 @@ struct GraphTask {
 
 impl GraphTask {
     fn parse(input: &Value) -> Result<Self, ExeclineError> {
+        // 红队 W1-C39：image 的硬性必填系**执行器容器 setup 的要求**（起
+        // 容器要镜像名），非 swe_task_input schema 面要求（schema 里 image
+        // 非必填、validate_schema 放行）——文案如实区分两门，不再把执行器
+        // 自加的要求说成 schema 面的要求。
         let str_field = |name: &str| {
             input
                 .get(name)
                 .and_then(Value::as_str)
                 .map(str::to_string)
                 .ok_or_else(|| ExeclineError::UnitFailed {
-                    detail: format!("图输入缺 {name} 字段（swe_task_input 面）"),
+                    detail: format!(
+                        "图输入缺 {name} 字段（执行器容器 setup 硬性必填——起容器需要镜像名；\
+                         非 swe_task_input schema 必填项）"
+                    ),
                 })
         };
         Ok(Self {
@@ -975,11 +1038,12 @@ impl PlanBudgets {
     fn of(plan: &ExecutablePlan) -> Result<Self, ExeclineError> {
         let mut b = Self::default();
         for entry in &plan.body.budget.budgets {
-            if entry.scope != "plan" {
-                continue;
-            }
-            match entry.dimension {
-                BudgetDimension::Cents => {
+            // 红队 W1-C34：预算面半开半闭收口——**强制面外的 dimension/scope
+            // 组合一律 fail-loud 拒收**（与本函数正典 id 门同一纪律：改名即
+            // 静默免帽 → 拒收；此前 scope!=plan 与 plan 级其余五维被静默
+            // 忽略，声明 clock_ms 帽得到无预算运行）。
+            match (entry.scope.as_str(), entry.dimension) {
+                ("plan", BudgetDimension::Cents) => {
                     if entry.id != "cost_cap" {
                         return Err(ExeclineError::PlanBindMismatch {
                             detail: format!(
@@ -991,7 +1055,7 @@ impl PlanBudgets {
                     }
                     b.cost_cap = Some(entry.cap);
                 }
-                BudgetDimension::TokensTotal => {
+                ("plan", BudgetDimension::TokensTotal) => {
                     if entry.id != "token_cap" {
                         return Err(ExeclineError::PlanBindMismatch {
                             detail: format!(
@@ -1003,7 +1067,31 @@ impl PlanBudgets {
                     }
                     b.token_cap = Some(entry.cap);
                 }
-                _ => {}
+                // 节点级 turns：强制面 = 节点 launch turns 帽（node_exec[].budget，
+                // drive_task_node 消费）——要求投影确实落在某 node_exec 上，
+                // 悬空 node: 路径（投影缺席 = 无人强制）同样拒收。
+                (scope, BudgetDimension::Turns) if scope.starts_with("node:") => {
+                    let path = &scope["node:".len()..];
+                    if !plan.body.node_exec.iter().any(|n| n.node_id == path) {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "节点级 turns 预算 id {} 作用域 {scope:?} 不落在任何 \
+                                 node_exec 投影（声明无强制面，拒收）",
+                                entry.id
+                            ),
+                        });
+                    }
+                }
+                (scope, dim) => {
+                    return Err(ExeclineError::PlanBindMismatch {
+                        detail: format!(
+                            "预算条目 id {}（dimension={:?}, scope={:?}）不在执行面强制集内\
+                             （强制集：plan 级 cost_cap(cents)/token_cap(tokens_total) + 节点级\
+                             turns；其余组合声明即须强制，静默忽略=免帽，拒收）",
+                            entry.id, dim, scope
+                        ),
+                    });
+                }
             }
         }
         Ok(b)
@@ -1058,7 +1146,12 @@ struct Drive {
     envelope_files: BTreeMap<(String, String), PathBuf>,
     cents_used: u64,
     tokens_used: u64,
+    /// tokens 三分账（in/out/cache_read——v1 行 usage.quota 投影用）。
+    tokens_in: u64,
+    tokens_out: u64,
+    tokens_cache: u64,
     model_calls: u64,
+    turns: u64,
 }
 
 impl Drive {
@@ -1073,6 +1166,10 @@ impl Drive {
     fn account_node(&mut self, report: &af_harness::RunReport) {
         self.model_calls += report.model_calls;
         self.cents_used += report.model_calls;
+        self.turns += report.turns as u64;
+        self.tokens_in += report.tokens.input;
+        self.tokens_out += report.tokens.output;
+        self.tokens_cache += report.tokens.cache_read;
         self.tokens_used += report.tokens.input + report.tokens.output + report.tokens.cache_read;
     }
 
@@ -1224,7 +1321,7 @@ fn declare_tool(ports: &[&str]) -> (ToolDecl, ToolFn, DeclarationCell) {
 ///   （畸形不入单元）。
 fn declare_tool_strict(
     node_id: &str,
-    contracts: &[(String, String, Option<Value>)],
+    contracts: &[(String, Option<String>, Option<Value>)],
     types: Arc<BTreeMap<String, Value>>,
 ) -> (ToolDecl, ToolFn, DeclarationCell) {
     let cell: DeclarationCell = Arc::new(std::sync::Mutex::new(None));
@@ -1274,9 +1371,11 @@ fn declare_tool_strict(
     // 闭环内校验门：闭包捕获 (node, 端口→类型表达式, types 词典)，逐调用
     // 校验——与 commit 相 check_typed 同源（采纳即必过 commit）。
     let node = node_id.to_string();
+    // 类型核对只覆盖有类型表达式的端口（无类型端口 = 键到位即可，与
+    // commit 相「无类型声明 = 不核」同口径——红队 W1-C31）。
     let port_types: Vec<(String, String)> = contracts
         .iter()
-        .map(|(p, e, _)| (p.clone(), e.clone()))
+        .filter_map(|(p, e, _)| e.clone().map(|e| (p.clone(), e)))
         .collect();
     let on_call: ToolFn = Arc::new(move |args: &Value| {
         let shape_hint =

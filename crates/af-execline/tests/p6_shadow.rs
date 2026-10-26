@@ -251,6 +251,8 @@ fn new_path_run(
         data_root,
         attempt_dir: &attempt_dir,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
         trial: false,
     };
     let output = unit.execute(&ctx).expect("新路全流程应 Ok");
@@ -890,6 +892,7 @@ fn l1_mes_mapping_dimension_via_driver() {
             EngineClient::locate(&workspace_root, &target_dir).expect("真 af-engine 子进程定位");
         let out = root.join("order-out");
         let cfg = DriverConfig {
+            task_sha256: None,
             order_id: "wo-p6-mes".into(),
             graph_version: "g-p6-1".into(),
             sla: af_workorder::Sla::new(None, af_workorder::Priority::Normal),
