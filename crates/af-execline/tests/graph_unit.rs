@@ -397,17 +397,23 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     );
 
     // tester（check 节点）：uses.unit 经注册表 impl 解析直调——容器内跑
-    // task.json 声明的 test_command，零模型调用。
-    let exec_calls: Vec<String> = bridge
+    // task.json 声明的 test_command，零模型调用；W2-C49 判据留档另有一次
+    // 工作区 diff 取证（capture_diff）。
+    let test_execs: Vec<String> = bridge
         .calls()
         .into_iter()
-        .filter(|s| s.contains("docker exec"))
+        .filter(|s| s.contains("docker exec") && s.contains("python -m pytest"))
         .collect();
-    assert_eq!(exec_calls.len(), 1, "tester 恰一次容器执行: {exec_calls:?}");
-    assert!(
-        exec_calls[0].contains("python -m pytest"),
-        "test_command 来自任务包: {}",
-        exec_calls[0]
+    assert_eq!(test_execs.len(), 1, "tester 恰一次测试容器执行: {test_execs:?}");
+    let diff_execs: Vec<String> = bridge
+        .calls()
+        .into_iter()
+        .filter(|s| s.contains("core.fileMode=false diff"))
+        .collect();
+    assert_eq!(
+        diff_execs.len(),
+        1,
+        "W2-C49：tester 判据留档恰一次工作区 diff 取证: {diff_execs:?}"
     );
 
     // typed envelope 落 attempt 工件面（artifact_contract 端口名）。
@@ -428,6 +434,41 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     .unwrap();
     assert_eq!(report["port"], json!("report"), "envelope 结构带端口名");
     assert_eq!(report["payload"]["pass"], json!(true), "tester 判定 pass");
+
+    // 红队 W2-C49：test_unit 判据留档——pass=true 也不许丢观察：tester 节点
+    // 目录必须齐 test.log（完整观察文本）+ test-evidence.json（命令/退出码/
+    // 判定/体量口径）+ agent.diff（工作区取证），envelope 带 evidence 指针，
+    // 订单证据树自此可复核 pass 与外部评审结论并存的依据面。
+    let tester_dir = attempt.join("nodes").join("tester");
+    let test_log = std::fs::read_to_string(tester_dir.join("test.log"))
+        .expect("W2-C49：pass=true 也须留 test.log");
+    assert!(
+        test_log.contains("Ran 12 tests") && test_log.contains("exit=0"),
+        "test.log 须为完整观察文本（含 exit= 尾行）: {test_log:?}"
+    );
+    let evidence_json: Value = serde_json::from_str(
+        &std::fs::read_to_string(tester_dir.join("test-evidence.json"))
+            .expect("W2-C49：pass=true 也须留 test-evidence.json"),
+    )
+    .unwrap();
+    assert_eq!(evidence_json["pass"], json!(true));
+    assert_eq!(evidence_json["exit_code"], json!(0));
+    assert!(
+        evidence_json["command"].as_str().unwrap_or("").contains("python -m pytest"),
+        "evidence 记命令: {evidence_json}"
+    );
+    let diff_text = std::fs::read_to_string(tester_dir.join("agent.diff"))
+        .expect("W2-C49：tester 节点目录须留 agent.diff");
+    assert!(diff_text.contains("diff --git"), "agent.diff 内容: {diff_text:?}");
+    assert_eq!(
+        report["payload"]["evidence"]["log"], json!("test.log"),
+        "envelope 带 evidence 指针"
+    );
+    assert!(
+        report["payload"]["evidence"]["diff"]["sha256"].is_string(),
+        "envelope evidence 带 diff 指纹: {}",
+        report["payload"]["evidence"]
+    );
 
     // 终态：qa_report.pass=true → verdict + 合格终态工件（is_final=report）。
     assert_eq!(output.verdict, Some(true));

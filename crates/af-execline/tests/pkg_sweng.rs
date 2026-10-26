@@ -725,7 +725,7 @@ fn u3_test_unit_verdict_from_exit_code_and_tail_lines() {
     let env = fake_env();
     // 通过臂：exit=0 → pass=true，无 failures。
     let bridge = FakeBridge::new(vec![Ok((true, "Ran 2 tests\nOK\n__AF_RC=0".into()))]);
-    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, None);
     assert_eq!(v["pass"], true);
     assert_eq!(v["failures"], json!([]));
 
@@ -734,7 +734,7 @@ fn u3_test_unit_verdict_from_exit_code_and_tail_lines() {
         false,
         "FAIL test_a\nFAIL test_b\n__AF_RC=1".into(),
     ))]);
-    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, None);
     assert_eq!(v["pass"], false);
     assert_eq!(v["failures"], json!(["FAIL test_a", "FAIL test_b"]));
 
@@ -745,6 +745,7 @@ fn u3_test_unit_verdict_from_exit_code_and_tail_lines() {
         &env,
         "./runtests.py",
         Some("python -m pytest tests/x"),
+        None,
     );
     assert_eq!(v["pass"], true);
     assert!(
@@ -759,7 +760,7 @@ fn u3_test_unit_caps_failure_lines_at_ten_and_handles_no_command() {
     let env = fake_env();
     let body: String = (0..15).map(|i| format!("FAIL case_{i}\n")).collect();
     let bridge = FakeBridge::new(vec![Ok((false, format!("{body}__AF_RC=1")))]);
-    let v = sweng::test_unit(&bridge, &env, "cmd", None);
+    let v = sweng::test_unit(&bridge, &env, "cmd", None, None);
     let failures = v["failures"].as_array().unwrap();
     assert_eq!(failures.len(), 10, "末 N=10 行：{failures:?}");
     assert_eq!(failures[0], "FAIL case_5");
@@ -767,7 +768,7 @@ fn u3_test_unit_caps_failure_lines_at_ten_and_handles_no_command() {
 
     // 命令源双缺 → fail-closed 观察而非崩溃。
     let bridge = FakeBridge::new(vec![]);
-    let v = sweng::test_unit(&bridge, &env, "", None);
+    let v = sweng::test_unit(&bridge, &env, "", None, None);
     assert_eq!(v["pass"], false);
     assert!(
         v["failures"][0]
@@ -778,6 +779,50 @@ fn u3_test_unit_caps_failure_lines_at_ten_and_handles_no_command() {
         v
     );
     assert!(bridge.calls().is_empty());
+}
+
+/// 红队 W2-C49：evidence_dir 给定时无论成败一律留档——test.log（完整观察
+/// 文本含 __AF_RC/exit 尾行）+ test-evidence.json（命令/退出码/判定/体量），
+/// envelope 带 evidence 指针；不给目录 = 无 evidence 键（行为同旧）。
+#[test]
+fn u3_test_unit_archives_evidence_pass_or_fail() {
+    let env = fake_env();
+    let dir = std::env::temp_dir().join(format!("u3-evidence-{}", std::process::id()));
+
+    // pass 臂：观察不丢（旧行为在此把 body 整体丢弃）。
+    let bridge = FakeBridge::new(vec![Ok((true, "Ran 2 tests\nOK\n__AF_RC=0".into()))]);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, Some(&dir));
+    assert_eq!(v["pass"], true);
+    assert_eq!(v["evidence"]["log"], json!("test.log"));
+    assert_eq!(v["evidence"]["exit_code"], json!(0));
+    let log = std::fs::read_to_string(dir.join("test.log")).expect("test.log 在盘");
+    assert!(
+        log.contains("Ran 2 tests") && log.contains("exit=0"),
+        "观察文本含 exit= 尾行: {log:?}"
+    );
+    let summary: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("test-evidence.json")).unwrap())
+            .unwrap();
+    assert_eq!(summary["pass"], json!(true));
+    assert_eq!(summary["exit_code"], json!(0));
+    assert_eq!(summary["command"], json!("./runtests.py"));
+
+    // fail 臂：同目录复用（覆盖写），evidence 如实。
+    let bridge = FakeBridge::new(vec![Ok((false, "FAIL a\n__AF_RC=1".into()))]);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, Some(&dir));
+    assert_eq!(v["pass"], false);
+    assert_eq!(v["evidence"]["exit_code"], json!(1));
+    let summary: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("test-evidence.json")).unwrap())
+            .unwrap();
+    assert_eq!(summary["pass"], json!(false));
+
+    // 不给目录：无 evidence 键（旧 envelope 形状不变）。
+    let bridge = FakeBridge::new(vec![Ok((true, "OK\n__AF_RC=0".into()))]);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, None);
+    assert!(v.get("evidence").is_none(), "{}", v);
+
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 // ============================================================
@@ -1080,6 +1125,7 @@ fn real_container_sampling_tools_and_units() {
         &tb,
         "python3 -V",
         Some("python3 -c 'raise SystemExit(3)'"),
+        None,
     );
     assert_eq!(v["pass"], false, "U3 真退出码：{v}");
 
