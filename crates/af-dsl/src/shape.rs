@@ -119,9 +119,7 @@ fn schema_node_violation(
         if ty == "object" {
             if let Some(props) = obj.get("properties") {
                 let Some(map) = props.as_object() else {
-                    return Some(format!(
-                        "{subject} 的 schema（{path}）properties 非对象"
-                    ));
+                    return Some(format!("{subject} 的 schema（{path}）properties 非对象"));
                 };
                 for (k, v) in map {
                     if let Some(detail) =

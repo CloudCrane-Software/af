@@ -636,10 +636,7 @@ fn g3p2_selector_tamper_detection() {
 fn port_base_name(expr: &str) -> &str {
     let mut cur = expr;
     loop {
-        if let Some(inner) = cur
-            .strip_prefix("list<")
-            .and_then(|s| s.strip_suffix('>'))
-        {
+        if let Some(inner) = cur.strip_prefix("list<").and_then(|s| s.strip_suffix('>')) {
             cur = inner;
             continue;
         }

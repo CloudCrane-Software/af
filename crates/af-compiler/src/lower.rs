@@ -153,10 +153,7 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
 fn port_base_name(expr: &str) -> &str {
     let mut cur = expr;
     loop {
-        if let Some(inner) = cur
-            .strip_prefix("list<")
-            .and_then(|s| s.strip_suffix('>'))
-        {
+        if let Some(inner) = cur.strip_prefix("list<").and_then(|s| s.strip_suffix('>')) {
             cur = inner;
             continue;
         }
@@ -188,9 +185,11 @@ fn ensure_used_builtin_type_entries(body: &mut IrBody) {
         || port_base_name(&body.interface.output_type) == "signal"
         || body.node_exec.values().any(|n| {
             n.consumes.values().any(|t| port_base_name(t) == "signal")
-                || n.artifacts
-                    .values()
-                    .any(|a| a.r#type.as_deref().is_some_and(|t| port_base_name(t) == "signal"))
+                || n.artifacts.values().any(|a| {
+                    a.r#type
+                        .as_deref()
+                        .is_some_and(|t| port_base_name(t) == "signal")
+                })
         });
     if uses_signal {
         body.types
@@ -565,23 +564,22 @@ const CEL_WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
 
 /// compile + 引用提取（大栈线程内执行的最小单元；`Program` 不出线程）。
 fn compile_cel_roots(source: &str) -> Result<BTreeSet<String>, LowerError> {
-    let program = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        Program::compile(source)
-    })) {
-        Ok(Ok(p)) => p,
-        Ok(Err(e)) => {
-            return Err(LowerError::CelCompile {
-                source: source.into(),
-                detail: e.to_string(),
-            })
-        }
-        Err(_) => {
-            return Err(LowerError::CelCompile {
-                source: source.into(),
-                detail: "cel-parser 内部 panic（antlr4rust 错误恢复路径）".into(),
-            })
-        }
-    };
+    let program =
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Program::compile(source))) {
+            Ok(Ok(p)) => p,
+            Ok(Err(e)) => {
+                return Err(LowerError::CelCompile {
+                    source: source.into(),
+                    detail: e.to_string(),
+                })
+            }
+            Err(_) => {
+                return Err(LowerError::CelCompile {
+                    source: source.into(),
+                    detail: "cel-parser 内部 panic（antlr4rust 错误恢复路径）".into(),
+                })
+            }
+        };
     Ok(program
         .references()
         .variables()
