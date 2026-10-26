@@ -334,6 +334,7 @@ fn tb_scenario<R>(
         record_sink: &sink,
         graph_version: None,
         task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     let outcome = unit.execute(&ctx);
@@ -611,6 +612,7 @@ fn tb_task_load_failure_is_setup_failed_row() {
         record_sink: &sink,
         graph_version: None,
         task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     let err = unit.execute(&ctx).expect_err("装载失败 → EX3001");

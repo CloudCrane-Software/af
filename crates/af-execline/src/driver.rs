@@ -57,6 +57,10 @@ pub struct DriverConfig {
     pub data_root: PathBuf,
     /// 目标题（swe-v = instance_id；换题=换 ctx）。
     pub task_id: String,
+    /// 任务包计划面摘要钉死（红队 W2-C55：graph/report 预算帽全在
+    /// plan.json——判据面钉死不覆盖计划面；门面 submit 时计算，凭证面
+    /// 重放对账 + 单元执行前复核双门）。
+    pub plan_sha256: Option<String>,
     /// 任务包判据面摘要钉死（红队 W1-C59①：判分真值源 fail_to_pass/
     /// pass_to_pass 全部来自任务包 JSON，此前无 digest 钉死——清空判据
     /// 即可让冻结判分链对零测试任务包返回 resolved=true）。门面 submit 时
@@ -156,6 +160,31 @@ pub struct OrderLifecycleDriver {
     drive_mes: Vec<af_mes::MesEvent>,
     /// 本次驱动跳过的重放次数（`drive` 重置；用于报告 replayed）。
     replay_hits: usize,
+    /// 运行实例判别量（红队 W2-C53）：订单目录规范路径的 sha256 前 16 hex。
+    /// event_id 原口径 = stable_id（order_id 纯函数）+ kind + ledger seq——
+    /// 同 order_id 跨 --state 根/跨产线复用即逐字节同 id，CH 侧按 event_id
+    /// 去重的差量送批会互相吞掉对方记账事件（第二单 shipped=0/
+    /// already_in_ch=N 且零告警）。并入本判别量后同根重放路径串不变
+    /// （幂等不破），跨根同 id 不再相撞。
+    instance: String,
+}
+
+/// 运行实例判别量（红队 W2-C53）：订单目录**规范路径**的 sha256 前 16 hex。
+/// 规范化为的是同--state 根的不同书写形态（相对/绝对/./ 前缀）不产生不同
+/// 标签（否则同根重放会被判为两个实例、幂等补发与 CH 去重双双失效）；
+/// 目录尚不可规范化的极端情形回落「cwd 拼接」（仍确定性）。
+fn instance_tag(out_dir: &Path) -> String {
+    use sha2::{Digest, Sha256};
+    let canonical = std::fs::canonicalize(out_dir).unwrap_or_else(|_| {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(out_dir))
+            .unwrap_or_else(|_| out_dir.to_path_buf())
+    });
+    Sha256::digest(canonical.to_string_lossy().as_bytes())
+        .iter()
+        .take(8)
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
 }
 
 impl OrderLifecycleDriver {
@@ -207,6 +236,7 @@ impl OrderLifecycleDriver {
             .map(str::to_string)
             .collect();
         Ok(Self {
+            instance: instance_tag(&cfg.out_dir),
             cfg,
             client,
             clock,
@@ -354,8 +384,14 @@ impl OrderLifecycleDriver {
             // 红队 W1-C32：WorkOrder 一次性绑定的 graph_version 进执行上下文
             // ——graph/report 单元装订时与 plan.compiled_from.graph_version
             // 核对（此前期待分支是死代码，「一次性绑定」有账无核）。
-            graph_version: Some(self.cfg.graph_version.as_str()),
+            // 红队 W2-C37：期待源取**订单快照的不可变绑定**
+            // （self.order.graph_version()），不再取 cfg 值——cfg 由门面每次
+            // submit 从当前 plan.json 重读，与之比对等于自指（换计划图版本
+            // 重放时期待值随新计划同步变化、恒真）；订单快照值在账本恢复时
+            // 保持首绑，换版重放即期待(旧) vs 计划(新) 不符而被拒。
+            graph_version: Some(self.order.graph_version().as_str()),
             task_sha256: self.cfg.task_sha256.as_deref(),
+            plan_sha256: self.cfg.plan_sha256.as_deref(),
         };
         let output = match unit.execute(&ctx) {
             Ok(output) => output,
@@ -583,7 +619,10 @@ impl OrderLifecycleDriver {
         let event = af_mes::MesEvent::new(
             stable_id.clone(),
             self.clock.now_ms(),
-            format!("{stable_id}:{kind}:{seq}"),
+            // 红队 W2-C53：instance 判别量殿后——同 order_id 跨 state 根/跨
+            // 产线复用不再产生逐字节相同的 event_id（CH 差量按 id 去重，相撞
+            // 即互吞记账事件且无告警）。
+            format!("{stable_id}:{kind}:{seq}:{}", self.instance),
             self.cfg.line.line_id.clone(),
             self.cfg.station_id.clone(),
             kind,
@@ -612,7 +651,7 @@ impl OrderLifecycleDriver {
             return Ok(());
         };
         let stable_id = self.order.stable_id().as_str().to_string();
-        let event_id = format!("{stable_id}:{kind}:{seq}");
+        let event_id = format!("{stable_id}:{kind}:{seq}:{}", self.instance);
         if self.mes.has_event(&event_id)? {
             return Ok(());
         }

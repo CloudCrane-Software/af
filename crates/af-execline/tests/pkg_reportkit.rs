@@ -670,6 +670,7 @@ fn drive_once(
         record_sink: &sink,
         graph_version: None,
         task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).expect("报告单元全相应走通（v1 缝）")
@@ -796,6 +797,7 @@ fn drive_err(unit: &ReportExecuteUnit, base: &Path, task_dir: &Path) -> Execline
         record_sink: &sink,
         graph_version: None,
         task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).unwrap_err()
@@ -875,5 +877,31 @@ fn judge_fingerprint_gate_rejects_tampered_renderer_with_ex3002() {
     let err = locator.check_fingerprints().unwrap_err();
     assert_eq!(err.code(), ErrorCode::JudgeFingerprintMismatch, "{err}");
     assert!(err.to_string().starts_with("EX3002"), "{err}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn judge_fingerprint_gate_rejects_planted_pyc_shadow() {
+    // 红队 W2-C52：判分目录出现 __pycache__/*.pyc 即拒——rubric_unit.py 经
+    // `import render` 动态加载渲染器，Python 对在场且头部 mtime/size 匹配的
+    // pyc 优先于源文件加载：不改一个锚定 .py 字节即可用影子字节码翻转 R5
+    // 判据（投毒复现在案）。-B 只禁写，读取侧由此门兜底。
+    let prod = ReportJudgeLocator::production();
+    let dir = kit_dir("pyc-shadow");
+    std::fs::create_dir_all(dir.join("__pycache__")).unwrap();
+    std::fs::write(dir.join("__pycache__").join("render.cpython-314.pyc"), b"\x00\x00").unwrap();
+    let locator = ReportJudgeLocator {
+        render_script: dir.join("render.py"),
+        ..prod
+    };
+    // 真脚本逐位复刻（过 sha256 锚）——使失败点唯一地落在 pyc 在场性门。
+    std::fs::write(&locator.render_script, std::fs::read_to_string(&prod.render_script).unwrap())
+        .unwrap();
+    let err = locator.check_fingerprints().unwrap_err();
+    assert_eq!(err.code(), ErrorCode::JudgeFingerprintMismatch, "{err}");
+    assert!(
+        err.to_string().contains("__pycache__"),
+        "拒收文案须点名影子字节码：{err}"
+    );
     std::fs::remove_dir_all(&dir).ok();
 }

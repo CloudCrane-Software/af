@@ -15,7 +15,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command as StdCommand, Output};
 
 use af_order::cli::{parse_args, Command};
-use af_order::exec::{parse_exec_flags, swev_unit_spec_for, RealExec, DEFAULT_HOST};
+use af_order::exec::{
+    graph_unit_for, parse_exec_flags, report_unit_for, swev_unit_spec_for, RealExec,
+    DEFAULT_HOST,
+};
 use af_workorder::StableId;
 
 fn args(parts: &[&str]) -> Vec<String> {
@@ -421,4 +424,107 @@ fn submit_mes_ch_bad_target_fails_loud_ex2003() {
     assert!(!out.status.success(), "坏目标必须非零退出");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(stderr.contains("EX2003"), "{stderr}");
+}
+
+#[test]
+fn spend_cap_nonpositive_rejected_at_parse() {
+    // 红队 W2-C40：负/零 spend 帽在 CLI 解析期前置拒绝——此前负帽直到执行面
+    // 凭证签发才被拒，订单目录/账本/MES release/start 已产生，留下卡
+    // InProgress 的污染订单（失败代价远大于一次用法错误）。
+    for cap in ["-5", "0"] {
+        let err = parse_args(&args(
+            &[
+                vec!["submit", "--spec", "o.json", "--state", "st"],
+                vec![
+                    "--task", "t", "--profile", "p", "--data-root", "/d",
+                    "--spend-cap-cents", cap,
+                ],
+            ]
+            .concat(),
+        ))
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("OR1001") && err.to_string().contains("> 0"),
+            "cap={cap} 应拒为用法错误：{err}"
+        );
+        assert_eq!(err.exit_code(), 2, "用法错误退出码 2");
+    }
+    // 保留语义：max_turns=0 的零模型调用探针（spec-F4a3 同款）不被顺带禁掉。
+    match parse_args(&args(
+        &[
+            vec!["submit", "--spec", "o.json", "--state", "st"],
+            vec![
+                "--task", "t", "--profile", "p", "--data-root", "/d",
+                "--max-turns", "0", "--spend-cap-cents", "5",
+            ],
+        ]
+        .concat(),
+    ))
+    .expect("max_turns=0 + 正帽应可解析")
+    {
+        Command::Submit { exec, .. } => {
+            let exec = exec.expect("三件套齐备应带 exec 档");
+            assert_eq!(exec.max_turns, 0, "零模型探针语义保留");
+            assert_eq!(exec.spend_cap_cents, 5);
+        }
+        other => panic!("应解析为 Submit，实得 {other:?}"),
+    }
+}
+
+#[test]
+fn graph_and_report_specs_map_budget_flags() {
+    // 红队 W2-C54：--max-turns/--spend-cap-cents 接入 graph/report 两臂——
+    // 此前只 swev 臂覆写，两臂完全不读而订单输出 JSON 照回显，预算生效是
+    // 假象；graph 的 spend_cap 语义 = 订单级总闸（plan 无 cost_cap 时 N
+    // 节点收敛到同一总额），report 的 spend_cap = 环级总帽。
+    let repo = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_path_buf();
+    let root = std::env::temp_dir().join(format!("af-order-w2c54-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let task_dir = root.join("data").join("django__django-11099");
+    std::fs::create_dir_all(&task_dir).unwrap();
+    std::fs::write(
+        task_dir.join("task.json"),
+        serde_json::json!({
+            "registry_root": repo.join("af/packages").display().to_string(),
+            "repo": "django/django",
+            "instance_id": "django__django-11099",
+            "problem_statement": "probe",
+            "image": "swebench/sweb.eval.x86_64.django-11099:latest"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    // plan.json 用仓库正本 reportkit 图编译产物（graph/report 两臂只验在场+digest）。
+    std::fs::write(
+        task_dir.join("plan.json"),
+        std::fs::read_to_string(
+            repo.join("ci/out/g4/paper_report.plan.json"),
+        )
+        .expect("仓库正本 paper_report 计划应在 ci/out/g4"),
+    )
+    .unwrap();
+    let exec = RealExec {
+        task: "django__django-11099".into(),
+        profile: "glm-cp".into(),
+        data_root: root.join("data"),
+        host: "anolis".into(),
+        max_turns: 42,
+        spend_cap_cents: 123,
+    };
+    let report = report_unit_for(&exec).expect("report 材料面应可构造");
+    assert_eq!(report.max_turns, 42, "report 臂 turns 旗标覆写");
+    assert_eq!(report.spend_cap_cents, 123, "report 环级总帽 = 旗标值");
+    let graph = graph_unit_for(&exec).expect("graph 材料面应可构造");
+    assert_eq!(graph.default_node_turns, 42, "graph 节点 turns 缺省 = 旗标值");
+    assert_eq!(
+        graph.order_spend_cap_cents,
+        Some(123),
+        "graph 订单级总闸 = 旗标值（plan 无 cost_cap 时顶上）"
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }

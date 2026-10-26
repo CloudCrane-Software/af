@@ -97,19 +97,67 @@ impl ReportJudgeLocator {
                 });
             }
         }
+        // 红队 W2-C52：判分目录字节码在场性门——rubric_unit.py 经
+        // `import render` 动态加载渲染器，Python 对在场且头部 mtime/size
+        // 匹配的 `__pycache__/render.*.pyc` 会**优先于源文件**加载（-B 只禁
+        // 写不禁读）：三个被 sha256 锚住的 .py 之外若存在任何字节码，即是
+        // 独立于源码锚的影子执行面——不改一个锚定字节即可翻转 R5 判据
+        // （投毒复现：pyc 的 render_markdown 返回攻击者串 ⇒ R5 由 false 翻
+        // true）。判分子进程 -B 只防再生，读取侧由此门兜底：判分目录
+        // （三脚本所在目录）出现 __pycache__/*.pyc 一律 fail-loud。
+        let mut judge_dirs: Vec<PathBuf> = Vec::new();
+        for script in [
+            &self.citation_script,
+            &self.rubric_script,
+            &self.render_script,
+        ] {
+            if let Some(parent) = script.parent() {
+                if !judge_dirs.iter().any(|d| d == parent) {
+                    judge_dirs.push(parent.to_path_buf());
+                }
+            }
+        }
+        for dir in judge_dirs {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name == "__pycache__" || name.ends_with(".pyc") {
+                    return Err(ExeclineError::JudgeFingerprintMismatch {
+                        script: entry.path().display().to_string(),
+                        expected: "判分目录不得存在字节码（__pycache__/*.pyc——影子执行面，禁写+禁读）"
+                            .into(),
+                        actual: "在场".into(),
+                    });
+                }
+            }
+        }
         Ok(())
     }
 }
 
 /// citation 验证器子进程调用（argv 契约：恰三位置参数
 /// `[task.json, report.json, sources_dir]`；不注入 env、不经 wrapper shell）。
+/// 判分/渲染子进程统一构造（红队 W2-C52）：`-B` +
+/// `PYTHONDONTWRITEBYTECODE=1`——禁写 `__pycache__` 字节码。rubric_unit.py
+/// 以 `import render` 动态加载渲染器（R5 判据基准），Python 对**已在场**的
+/// 有效 .pyc 仍会优先加载（-B 只禁写不禁读），故读取侧由
+/// [`ReportExecuteUnit::check_fingerprints`] 的 pyc 在场性门兜底。
+fn judge_python(locator: &ReportJudgeLocator) -> Command {
+    let mut cmd = Command::new(&locator.python);
+    cmd.arg("-B");
+    cmd.env("PYTHONDONTWRITEBYTECODE", "1");
+    cmd
+}
+
 pub fn invoke_citation(
     locator: &ReportJudgeLocator,
     task_json: &Path,
     report_json: &Path,
     sources_dir: &Path,
 ) -> std::io::Result<std::process::Output> {
-    Command::new(&locator.python)
+    judge_python(locator)
         .arg(&locator.citation_script)
         .arg(task_json)
         .arg(report_json)
@@ -123,7 +171,7 @@ pub fn invoke_rubric(
     task_json: &Path,
     report_json: &Path,
 ) -> std::io::Result<std::process::Output> {
-    Command::new(&locator.python)
+    judge_python(locator)
         .arg(&locator.rubric_script)
         .arg(task_json)
         .arg(report_json)
@@ -1304,6 +1352,9 @@ impl ExecuteUnit for ReportExecuteUnit {
                 "读计划失败（v1 约定：计划随任务包 plan.json）: {err}"
             ))
         })?;
+        // 红队 W2-C55：计划面摘要复核（先于装订）——报告环预算帽（cost_cap/
+        // token_cap/turns）全在 plan.json；摘要漂移 = 计划面被换，拒绝执行。
+        crate::exec::verify_plan_digest(&task_dir.join("plan.json"), ctx.plan_sha256)?;
         let bound = planbind::bind(
             &plan_src,
             &self.spec.registry_root,
@@ -1379,7 +1430,7 @@ impl ExecuteUnit for ReportExecuteUnit {
             .map_err(|err| self.fail(format!("写 report.json 失败: {err}")))?;
 
         // report.md：与 rubric R5 同一渲染器（同构性由同一脚本保证）。
-        let render_out = Command::new(&self.spec.judges.python)
+        let render_out = judge_python(&self.spec.judges)
             .arg(&self.spec.judges.render_script)
             .arg(attempt_dir.join("report.json"))
             .output()

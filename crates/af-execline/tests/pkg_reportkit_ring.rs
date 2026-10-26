@@ -120,6 +120,7 @@ fn drive(unit: &ReportExecuteUnit, base: &Path, task_dir: &Path) -> af_execline:
         record_sink: &sink,
         graph_version: None,
         task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).expect("真环单元全相应走通")
@@ -142,6 +143,7 @@ fn drive_err(unit: &ReportExecuteUnit, base: &Path, task_dir: &Path) -> Execline
         record_sink: &sink,
         graph_version: None,
         task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).unwrap_err()

@@ -89,8 +89,23 @@ pub fn parse_exec_flags(flags: &[(&str, String)]) -> Result<Option<RealExec>, Or
                 .unwrap_or_else(|| DEFAULT_HOST.into()),
             max_turns: parse_u32_flag(value("--max-turns"), "--max-turns")?
                 .unwrap_or(DEFAULT_MAX_TURNS),
-            spend_cap_cents: parse_i64_flag(value("--spend-cap-cents"), "--spend-cap-cents")?
-                .unwrap_or(DEFAULT_SPEND_CAP_CENTS),
+            spend_cap_cents: {
+                // 红队 W2-C40：负/零帽在 CLI 解析期前置拒绝——此前只拒非整数，
+                // 负帽直到执行面凭证签发才被 af-harness 拒，彼时订单目录、
+                // 账本 op 与 MES release/start 均已产生，失败代价远大于一次
+                // 用法错误且留下卡 InProgress 的污染订单。max_turns=0 的
+                // 零模型调用探针语义保留（spec-F4a3 同款），不在此禁。
+                let cap = parse_i64_flag(value("--spend-cap-cents"), "--spend-cap-cents")?
+                    .unwrap_or(DEFAULT_SPEND_CAP_CENTS);
+                if cap <= 0 {
+                    return Err(OrderError::Usage {
+                        detail: format!(
+                            "--spend-cap-cents 必须 > 0（美分；零模型调用探针用 --max-turns 0）: {cap}"
+                        ),
+                    });
+                }
+                cap
+            },
         })),
         _ => Err(OrderError::Usage {
             detail: "真实执行需要 --task/--profile/--data-root 三件同给（或全不给走 stub 冒烟档）"
@@ -233,11 +248,18 @@ pub fn report_unit_for(exec: &RealExec) -> Result<ReportUnitSpec, OrderError> {
         .and_then(|v| v.as_str())
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_REGISTRY_ROOT));
-    Ok(ReportUnitSpec::v1(
+    // 红队 W2-C54：--max-turns/--spend-cap-cents 接入 report 臂（此前只 swev
+    // 臂覆写，report/graph 两臂完全不读这两个旗标，订单输出 JSON 却把它们
+    // 当预算回显）。spec.spend_cap_cents 即环级总帽（RingBudgets 取
+    // min(spec, plan cost_cap)）——旗标语义 = 本单总预算，与 graph 臂一致。
+    let mut spec = ReportUnitSpec::v1(
         exec.profile.clone(),
         af_execline::ReportJudgeLocator::production(),
         registry_root,
-    ))
+    );
+    spec.max_turns = exec.max_turns;
+    spec.spend_cap_cents = exec.spend_cap_cents;
+    Ok(spec)
 }
 
 // ============================================================
@@ -272,8 +294,12 @@ pub fn graph_unit_for(exec: &RealExec) -> Result<af_execline::GraphUnitSpec, Ord
         .and_then(|v| v.as_str())
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(DEFAULT_REGISTRY_ROOT));
-    Ok(af_execline::GraphUnitSpec::v1(
-        exec.profile.clone(),
-        registry_root,
-    ))
+    // 红队 W2-C54：graph 臂接线——max_turns = 节点级 turns 缺省覆写；
+    // spend_cap_cents = 订单级总预算（plan 无 cost_cap 时作总闸，N 节点
+    // 收敛到同一总额；plan 有 cost_cap 时以 plan 为准、旗标仅作无计划
+    // 形态的兜底）。
+    let mut spec = af_execline::GraphUnitSpec::v1(exec.profile.clone(), registry_root);
+    spec.default_node_turns = exec.max_turns;
+    spec.order_spend_cap_cents = Some(exec.spend_cap_cents);
+    Ok(spec)
 }

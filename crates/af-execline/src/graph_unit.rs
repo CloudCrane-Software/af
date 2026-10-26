@@ -89,6 +89,10 @@ pub struct GraphUnitSpec {
     pub default_node_turns: u32,
     /// 单节点 launch 成本硬顶缺省。
     pub spend_cap_cents: i64,
+    /// 订单级总预算帽（红队 W2-C54：门面 `--spend-cap-cents` 的 graph 臂接线
+    /// ——plan 未声明 cost_cap 时以此为**总闸**，N 个节点收敛到同一总额；
+    /// 此前两臂旗标完全不读，落硬编码 300¢/节点且跨 N 节点无总闸）。
+    pub order_spend_cap_cents: Option<i64>,
     /// 工具单次开销（swev 环同款记账面）。
     pub tool_spend_cents: i64,
     /// swebench_eval 判定单元的判分锚（B 席嫁接，合流批；None = 该单元
@@ -107,6 +111,7 @@ impl GraphUnitSpec {
             profile: profile.into(),
             default_node_turns: DEFAULT_NODE_TURNS,
             spend_cap_cents: DEFAULT_NODE_SPEND_CAP_CENTS,
+            order_spend_cap_cents: None,
             tool_spend_cents: 1,
             judge: None,
             unit_version: "0.1.0",
@@ -187,6 +192,9 @@ impl ExecuteUnit for GraphExecuteUnit {
         // node_exec[].context[].template_ref。
         let template_refs = collect_template_refs(&plan_src);
         let refs: Vec<&str> = template_refs.iter().map(String::as_str).collect();
+        // 红队 W2-C55：计划面摘要复核（先于装订）——预算帽全在 plan.json，
+        // 判据面（task.json）钉死不覆盖它；摘要漂移 = 计划面被换，拒绝执行。
+        crate::exec::verify_plan_digest(&task_dir.join("plan.json"), ctx.plan_sha256)?;
         let bound = planbind::bind(
             &plan_src,
             &self.spec.registry_root,
@@ -224,7 +232,16 @@ impl ExecuteUnit for GraphExecuteUnit {
             )));
         }
         let order = linearize(plan)?;
-        let budget = PlanBudgets::of(plan)?;
+        let mut budget = PlanBudgets::of(plan)?;
+        // 红队 W2-C54：plan 未声明 cost_cap 时，门面订单级总帽顶上——
+        // 否则每节点各发 spec.spend_cap_cents（300¢ 硬编码缺省）、N 节点
+        // 300N¢ 无总闸（运营侧无旗标可压）。
+        if budget.cost_cap.is_none() {
+            budget.cost_cap = self
+                .spec
+                .order_spend_cap_cents
+                .and_then(|cap| u64::try_from(cap).ok());
+        }
 
         // ---- setup 相③：任务材料 + 容器（swev 环模式复用）----
         let task = GraphTask::parse(&input)?;

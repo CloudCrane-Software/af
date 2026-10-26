@@ -461,3 +461,61 @@ fn stub_submit_marks_mes_line_with_stub_prefix() {
         events.iter().map(|e| e.line_id.clone()).collect::<Vec<_>>()
     );
 }
+
+#[test]
+fn same_order_id_across_state_roots_gets_distinct_event_ids() {
+    // 红队 W2-C53：同 order_id + 同 line 落在两个 --state 根时，event_id 必须
+    // 带上运行实例判别量（订单目录规范路径哈希）——此前 event_id = stable_id
+    // （order_id 纯函数）+ kind + seq，两单逐字节同 id，CH 侧按 event_id 去重
+    // 的差量送批把第二单 4 条记账事件全部吞掉（shipped=0/already_in_ch=4）
+    // 且零告警（C-63 的 line 冲突判据只覆盖异 line，不覆盖跨 state 根）。
+    let root_a = scratch("xroot-a");
+    let root_b = scratch("xroot-b");
+    let spec = write_spec(&root_a, "order.json", &spec_text("wo-xroot", 5));
+
+    let first = submit(&spec, &root_a);
+    expect_ok(&first);
+    let second = submit(&spec, &root_b);
+    expect_ok(&second);
+
+    let events = |root: &Path| -> Vec<String> {
+        MesFileWriter::load(&order_dir(root, "wo-xroot").join("mes-events.jsonl"))
+            .expect("MES 可重载")
+            .into_iter()
+            .map(|event| event.event_id)
+            .collect()
+    };
+    let (a, b) = (events(&root_a), events(&root_b));
+    assert_eq!(a.len(), 4, "A 根四类跃迁齐全");
+    assert_eq!(b.len(), 4, "B 根四类跃迁齐全");
+    assert!(
+        a.iter().all(|id| !b.contains(id)),
+        "跨 state 根同 order_id 的 event_id 不得相撞（相撞即差量互吞）：A={a:?} B={b:?}"
+    );
+    // 同根内四事件仍互异（kind/seq 判别不破）。
+    assert_eq!(a.iter().collect::<std::collections::BTreeSet<_>>().len(), 4);
+}
+
+#[test]
+fn show_rejects_path_unsafe_order_ids() {
+    // 红队 W2-C39：show 的位置参数与 submit 共用 order_id 路径安全门——绝对
+    // 路径（Path::join 替换 state 根）、`..` 穿越、分隔符在此拒尽，不得读出
+    // state/orders/ 之外的账本（只读影响，但跨目录可读任意 ledger.jsonl）。
+    let state = scratch("show-unsafe");
+    for bad in ["../rogue", "/etc", "a/b", ".."] {
+        let out = run(&["show", bad, "--state", state.to_str().unwrap()]);
+        assert!(!out.status.success(), "show {bad:?} 应被拒");
+        // 错误面走 stderr（main.rs 薄壳接线）。
+        let text = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            text.contains("OR1001") && text.contains("目录名"),
+            "show {bad:?} 应拒为用法错误（点名目录名约束）：{text}"
+        );
+        assert_eq!(out.status.code(), Some(2), "用法错误退出码 2");
+    }
+    // 对照：安全 id 照旧走 OrderNotFound（不误伤正常查询路径）。
+    let ok = run(&["show", "rogue", "--state", state.to_str().unwrap()]);
+    assert!(!ok.status.success(), "不存在的订单仍失败");
+    let text = String::from_utf8_lossy(&ok.stderr);
+    assert!(text.contains("OR2004"), "安全 id 走订单不存在：{text}");
+}

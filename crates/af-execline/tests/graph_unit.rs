@@ -324,6 +324,7 @@ fn drive(
         record_sink: &sink,
         graph_version: None,
         task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx)
@@ -1696,6 +1697,7 @@ fn drive_with_gv(
         out_dir: out,
         task_id: TASK,
         task_sha256: None,
+        plan_sha256: None,
         host_alias: "local",
         data_root,
         attempt_dir: attempt,
@@ -2045,6 +2047,7 @@ fn task_digest_mismatch_rejects_execution() {
             trial: false,
             graph_version: None,
             task_sha256: Some(bad.as_str()),
+            plan_sha256: None,
         };
         unit.execute(&ctx_b).expect_err("判据面摘要漂移应拒")
     };
@@ -2071,6 +2074,7 @@ fn task_digest_mismatch_rejects_execution() {
             trial: false,
             graph_version: None,
             task_sha256: Some(real.as_str()),
+            plan_sha256: None,
         };
         unit.execute(&ctx2)
     };
@@ -2215,6 +2219,49 @@ fn http_retries_are_recorded_in_graph_v1_row() {
     assert_eq!(
         row["usage"]["http_retries"], 21,
         "供给面重试须入 v1 行 usage.http_retries（3 个模型节点 × 7，stage 累账口径）"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn plan_digest_mismatch_rejects_before_binding() {
+    // 红队 W2-C55：plan.json 摘要漂移即拒（先于装订）——graph 臂全部预算帽
+    // （cost_cap/token_cap/节点 turns）都写在 plan.json，判据面（task.json）
+    // 钉死不覆盖它；同 graph_version/registry_digest 换一份 plan.json 即可
+    // 放宽预算且装订四核对全放行——故计划面须独立钉死。
+    let root = temp_root("w2-planhash");
+    let data_root = probe_task_package(&root, &compile_plan(&single_node_graph_src(
+        "  budgets: []\n  stop: []\n  failures: []\n",
+    )));
+    let runner = Arc::new(GraphFakeRunner::new(payload_resolved_true));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    std::fs::create_dir_all(&attempt).unwrap();
+    std::fs::create_dir_all(&out).unwrap();
+    let sink = FileRecordSink::open(&out).unwrap();
+    let bad_digest = "0".repeat(64);
+    let ctx = ExecContext {
+        order_id: "wo-graph-1",
+        stable_id: "sid-graph-1",
+        line_id: "line-A",
+        out_dir: &out,
+        task_id: TASK,
+        host_alias: "local",
+        data_root: &data_root,
+        attempt_dir: &attempt,
+        record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
+        plan_sha256: Some(bad_digest.as_str()),
+        trial: false,
+    };
+    let err = unit.execute(&ctx).expect_err("计划面摘要不符应拒");
+    assert!(
+        err.to_string().contains("计划面摘要不符"),
+        "拒因须点名计划面摘要：{err}"
+    );
+    assert!(
+        runner.launches().is_empty(),
+        "拒在执行前，零 launch"
     );
     let _ = std::fs::remove_dir_all(&root);
 }

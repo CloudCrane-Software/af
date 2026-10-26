@@ -236,6 +236,7 @@ fn swev_unit(tag: &str, bridge: Arc<FakeBridge>, runner: Arc<FakeRunner>) -> Swe
 fn swev_config(order_id: &str, out_dir: PathBuf, data_root: PathBuf) -> DriverConfig {
     DriverConfig {
         task_sha256: None,
+        plan_sha256: None,
         order_id: order_id.to_string(),
         graph_version: "g-p5-1".to_string(),
         sla: Sla::new(None, Priority::Normal),

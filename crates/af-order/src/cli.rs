@@ -223,6 +223,7 @@ fn run_submit(
     //    graph_version（W1-C32：门面按计划图版本取值，统一值域）。
     let selected = resolve_unit(unit, exec)?;
     let task_digest = pin_task_digest(&selected, exec);
+    let plan_digest = pin_plan_digest(&selected, exec);
     let plan_graph_version = read_plan_graph_version(&selected, exec)
         .unwrap_or_else(|| DEFAULT_GRAPH_VERSION.to_string());
     // W1-C64：stub 冒烟档 MES line_id 加 stub: 前缀——冒烟单与真单此前在
@@ -248,7 +249,8 @@ fn run_submit(
 
     // 签发预算凭证（ed25519；重复 submit 读回原凭证，不重签）
     let stable_id = StableId::generate(&spec.order_id);
-    let (voucher, voucher_record) = voucher::issue_or_load(&order_dir, &spec, &stable_id)?;
+    let (voucher, voucher_record) =
+        voucher::issue_or_load(&order_dir, &spec, &stable_id, plan_digest.as_deref())?;
 
     // 真引擎子进程客户端（定位或构建 af-engine；EX1001/EX1002 fail-loud）
     let (workspace, target_dir) = resolve_build_dirs(workspace, target_dir);
@@ -266,6 +268,7 @@ fn run_submit(
         sla: Sla::new(None, Priority::Normal),
         line: line_binding,
         task_sha256: task_digest,
+        plan_sha256: plan_digest,
         voucher,
         out_dir: order_dir.clone(),
         station_id: DEFAULT_STATION_ID.to_string(),
@@ -449,6 +452,12 @@ fn run_list(state_root: &Path) -> Result<String, OrderError> {
 // ---------- show ----------
 
 fn run_show(order_id: &str, state_root: &Path) -> Result<String, OrderError> {
+    // 红队 W2-C39：order_id 位置参数与 submit 共用同一路径安全门——绝对
+    // 路径（Path::join 会替换 state 根）、分隔符、`..` 段在此拒尽，不得
+    // 读出 state/orders/ 之外的账本。
+    crate::spec::validate_order_id(order_id).map_err(|err| OrderError::Usage {
+        detail: format!("order_id 不当作目录名（{err}）"),
+    })?;
     let order_dir = StateDir::new(state_root).order_dir(order_id);
     let ledger_path = order_dir.join(state::LEDGER_FILE);
     if !ledger_path.is_file() {
@@ -633,6 +642,20 @@ mod tests {
 }
 
 // ---------- 红队批（W1）辅助：判据面摘要钉死 + 计划图版本读取 ----------
+
+/// W2-C55：任务包计划面 sha256（graph/report 档 = `<data_root>/<task>/plan.json`）
+/// ——提交时钉死、凭证面留档（重放对账）、执行前由单元复核。graph/report 两臂
+/// 全部预算帽（cost_cap/token_cap/节点 turns）都写在 plan.json 里，而 C-59 的
+/// digest 只覆盖 task.json——不钉计划面即可「同 graph_version、同
+/// registry_digest 换一份 plan.json」放宽预算且所有装订检查放行。文件缺席
+/// = None，不核对。
+fn pin_plan_digest(selected: &SelectedUnit, exec: Option<&RealExec>) -> Option<String> {
+    let exec = exec?;
+    if !matches!(selected, SelectedUnit::Graph | SelectedUnit::Report) {
+        return None;
+    }
+    af_execline::file_sha256_hex(&exec.data_root.join(&exec.task).join("plan.json"))
+}
 
 /// W1-C59①：门面 submit 时计算任务包判据面 sha256——swev 档 =
 /// `<data_root>/<task>.json`（判分真值源 fail_to_pass/pass_to_pass 所在）；

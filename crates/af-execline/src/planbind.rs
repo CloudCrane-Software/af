@@ -59,6 +59,35 @@ pub fn bind(
             detail: format!("信封版本 {} != {PLAN_VERSION}", plan.version),
         });
     }
+    // ④ L4 逃逸面接线门（红队 W2-C30）：计划携带 escape 节点时装订期即拒——
+    // 执行面（v1）对 `plan.body.escapes` 零处置（env_boot 一类
+    // kind=env_adapter 节点带进来只会在首节点以错向的 EX3001「无 uses.model」
+    // 失败，其 impl_ref=executor:builtin/sweng.env_boot@af-execline 在 sweng
+    // 内置表中亦不存在）。逃逸分派实现并登记支持集前，编译 exit 0 不构成
+    // E2E 可执行证据——不得把未接线节点带进执行相。
+    if !plan.body.escapes.is_empty() {
+        let mut listed: Vec<String> = plan
+            .body
+            .escapes
+            .iter()
+            .map(|(path, e)| {
+                format!(
+                    "{path} → {}（kind={:?}, owner={}, reason={}）",
+                    e.impl_ref, e.kind, e.owner, e.reason
+                )
+            })
+            .collect();
+        listed.sort();
+        return Err(ExeclineError::PlanBindMismatch {
+            detail: format!(
+                "计划携带 L4 逃逸节点 {} 个（{}）——执行面逃逸分派未接线（v1 驱 \
+                 动面 = task|check 直驱），装订期拒收；实现 env_boot 分派并登记 \
+                 支持集后放行，此前不得以编译 exit 0 充当 E2E 可执行证据",
+                plan.body.escapes.len(),
+                listed.join("；")
+            ),
+        });
+    }
     // ② E9004：本地注册表重算 digest 对计划携带值（唯一消费者正本）。
     let registry =
         ComponentRegistry::load(registry_root).map_err(|err| ExeclineError::PlanBindMismatch {

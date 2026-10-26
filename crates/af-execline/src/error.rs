@@ -20,6 +20,9 @@ pub enum ErrorCode {
     EngineBadResponse,
     /// af-engine 协议内拒绝（Gate / Decision / BadRequest / RejectionEnvelope）。
     EngineRejected,
+    /// af-engine 二进制验真失败：在场但 sha256 ≠ 信任锚（或被替换后无锚可
+    /// 验）——存在即用改为「存在且验过即用；验不过即重建/拒用」（红队 W2-C56）。
+    EngineBinaryUntrusted,
     /// ledger 文件读写失败。
     LedgerIo,
     /// ledger 内容损坏：序号不连续、坏行、身份不一致。
@@ -71,6 +74,7 @@ impl ErrorCode {
             Self::EngineCrashed => "EX1004",
             Self::EngineBadResponse => "EX1005",
             Self::EngineRejected => "EX1006",
+            Self::EngineBinaryUntrusted => "EX1007",
             Self::LedgerIo => "EX2001",
             Self::LedgerCorrupt => "EX2002",
             Self::MesCh => "EX2003",
@@ -96,6 +100,7 @@ impl ErrorCode {
             Self::EngineCrashed => "ENGINE_CRASHED",
             Self::EngineBadResponse => "ENGINE_BAD_RESPONSE",
             Self::EngineRejected => "ENGINE_REJECTED",
+            Self::EngineBinaryUntrusted => "ENGINE_BINARY_UNTRUSTED",
             Self::LedgerIo => "LEDGER_IO",
             Self::LedgerCorrupt => "LEDGER_CORRUPT",
             Self::MesCh => "MES_CH",
@@ -138,6 +143,8 @@ pub enum ExeclineError {
         op: String,
         rejection: EngineRejection,
     },
+    #[error("EX1007: af-engine 二进制验真失败: {detail}")]
+    EngineBinaryUntrusted { detail: String },
     #[error("EX2001: ledger IO 失败: {detail}")]
     LedgerIo { detail: String },
     #[error("EX2002: ledger 损坏: {detail}")]
@@ -195,6 +202,7 @@ impl ExeclineError {
             Self::EngineCrashed { .. } => ErrorCode::EngineCrashed,
             Self::EngineBadResponse { .. } => ErrorCode::EngineBadResponse,
             Self::EngineRejected { .. } => ErrorCode::EngineRejected,
+            Self::EngineBinaryUntrusted { .. } => ErrorCode::EngineBinaryUntrusted,
             Self::LedgerIo { .. } => ErrorCode::LedgerIo,
             Self::LedgerCorrupt { .. } => ErrorCode::LedgerCorrupt,
             Self::MesCh { .. } => ErrorCode::MesCh,

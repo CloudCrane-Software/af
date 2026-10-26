@@ -1329,6 +1329,7 @@ fn run_case(base_plan: &Value, base_task: &Value, case: &Case) -> (Verdict, Vec<
         record_sink: &sink,
         graph_version: None,
         task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
 

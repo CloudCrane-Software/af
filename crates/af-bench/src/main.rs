@@ -552,6 +552,7 @@ fn run_swev(args: &Args) -> Result<(), String> {
             record_sink: &sink,
             graph_version: None,
             task_sha256: None,
+            plan_sha256: None,
             trial: args.trial,
         };
         let outcome = unit.execute(&ctx);
@@ -643,6 +644,7 @@ fn run_tb(args: &Args) -> Result<(), String> {
             record_sink: &sink,
             graph_version: None,
             task_sha256: None,
+            plan_sha256: None,
             trial: args.trial,
         };
         let outcome = unit.execute(&ctx);

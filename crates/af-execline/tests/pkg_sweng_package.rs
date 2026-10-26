@@ -177,3 +177,34 @@ fn sop_graphs_materialized_with_resolvable_template_refs() {
         }
     }
 }
+
+#[test]
+fn fix_swe_task_escape_plan_rejected_at_bind() {
+    // 红队 W2-C30：fix_swe_task 的 env_boot（kind=env_adapter，
+    // impl_ref=executor:builtin/sweng.env_boot@af-execline）在执行面零接线——
+    // 装订期即拒（点名 impl_ref），不得带到执行相才以错向 EX3001 失败，也不
+    // 得以编译 exit 0 充当 E2E 可执行证据。
+    let root = repo_packages_root();
+    let src = std::fs::read_to_string(root.join("sweng/graphs/fix_swe_task@1.0.afb"))
+        .expect("fix_swe_task 图正本应在盘");
+    let doc = af_dsl::load_str(&src).expect("图应装载");
+    assert!(af_dsl::validate(&doc).is_ok(), "图应过 af-dsl 校验");
+    let reg = af_compiler::ComponentRegistry::load(&root).expect("注册表应装载");
+    let plan_src = af_compiler::plan_json(&doc, &reg).expect("计划应生成（编译面）");
+    let err = af_execline::planbind::bind(
+        &plan_src,
+        &root,
+        &["pkg.sweng.swev_system@1"],
+        &af_execline::planbind::BindExpectations::default(),
+    )
+    .expect_err("携带 escape 节点的计划应在装订期拒收");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("executor:builtin/sweng.env_boot@af-execline"),
+        "拒收文案须点名未接线的 impl_ref：{msg}"
+    );
+    assert!(
+        msg.contains("逃逸"),
+        "拒收文案须归因 L4 逃逸面未接线：{msg}"
+    );
+}

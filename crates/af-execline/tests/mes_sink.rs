@@ -331,6 +331,7 @@ fn engine_client() -> EngineClient {
 fn driver_config(order_id: &str, out_dir: PathBuf) -> DriverConfig {
     DriverConfig {
         task_sha256: None,
+        plan_sha256: None,
         order_id: order_id.to_string(),
         graph_version: "g-poc-1".to_string(),
         sla: Sla::new(None, Priority::Normal),

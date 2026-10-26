@@ -451,6 +451,7 @@ fn execute_scenario<R>(
         record_sink: &parts.sink,
         graph_version: None,
         task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     let outcome = parts.unit.execute(&ctx);
@@ -941,6 +942,7 @@ fn sink_write_failure_fails_loud() {
             record_sink: &sink,
             graph_version: None,
             task_sha256: None,
+            plan_sha256: None,
             trial: false,
         };
         let err = unit.execute(&ctx).expect_err("行写失败必须上抛");
