@@ -33,8 +33,8 @@ fn graph_exec(data_root: &str) -> RealExec {
         profile: "glm-cp".into(),
         data_root: PathBuf::from(data_root),
         host: "anolis".into(),
-        max_turns: 60,
-        spend_cap_cents: 300,
+        max_turns: Some(60),
+        spend_cap_cents: Some(300),
     }
 }
 

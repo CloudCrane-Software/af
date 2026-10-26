@@ -8,8 +8,11 @@
 //!   （`SwevExecuteUnit`：SshBridge + HarnessRunner + 冻结判分指纹门）；
 //!   全不给 = **stub 冒烟档**（`StubExecuteUnit`：既有测试与冒烟面，
 //!   非生产执行路径——保留为显式分档，不退役）；
-//! - `--host/--max-turns/--spend-cap-cents` 预算硬顶注入，缺省 = fix2 代际
-//!   （`anolis` / 250 轮 / $3；F-首单/二单任务包口径 60/$1 为显式覆写）；
+//! - `--host/--max-turns/--spend-cap-cents` 预算硬顶注入：`--host` 缺省
+//!   `anolis`；`--max-turns/--spend-cap-cents` 缺席 = 各单元自载缺省
+//!   （swev = fix2 代际 250 轮/$3；graph = 节点 60 轮、总额归 plan
+//!   cost_cap；report = 40 轮/$3——红队 W2-C33：CLI 缺省值不覆写单元
+//!   缺省；F-首单/二单任务包口径 60/$1 为显式覆写）；
 //! - `--mes-ch auto|url` 是**记账声明**，与执行面正交（冒烟档同样可声明）：
 //!   只把 CH 目标转交 af-execline 驱动缝（[`MesChSink`] 读侧 event_id
 //!   对账差量送批）——本 crate 零 CH 写侧。落在 `Command::Submit::mes_ch`，
@@ -43,10 +46,13 @@ pub struct RealExec {
     pub data_root: PathBuf,
     /// 容器宿主别名（anolis/local）。
     pub host: String,
-    /// 轮数上限。
-    pub max_turns: u32,
-    /// 单题成本上限（美分）。
-    pub spend_cap_cents: i64,
+    /// 轮数上限（红队 W2-C33：`None` = 用户未给 `--max-turns`——各单元
+    /// 自载缺省保留，swev 250 / graph 60 / report 40；不得拿 CLI 缺省
+    /// 250 无条件覆写，否则 graph/report 的帽被静默放宽 4-6 倍）。
+    pub max_turns: Option<u32>,
+    /// 单题成本上限（美分；`None` = 用户未给旗标——swev/report 用 $3
+    /// 代际缺省，graph 退回 plan cost_cap 治理）。
+    pub spend_cap_cents: Option<i64>,
 }
 
 /// submit 接受的全部执行面旗标（供 cli::split_flags 白名单；
@@ -87,24 +93,26 @@ pub fn parse_exec_flags(flags: &[(&str, String)]) -> Result<Option<RealExec>, Or
             host: value("--host")
                 .cloned()
                 .unwrap_or_else(|| DEFAULT_HOST.into()),
-            max_turns: parse_u32_flag(value("--max-turns"), "--max-turns")?
-                .unwrap_or(DEFAULT_MAX_TURNS),
+            // 红队 W2-C33：旗标缺席 = None（单元自载缺省保留），不得把
+            // CLI 缺省值当用户意图覆写 graph/report 的 turns 帽。
+            max_turns: parse_u32_flag(value("--max-turns"), "--max-turns")?,
             spend_cap_cents: {
                 // 红队 W2-C40：负/零帽在 CLI 解析期前置拒绝——此前只拒非整数，
                 // 负帽直到执行面凭证签发才被 af-harness 拒，彼时订单目录、
                 // 账本 op 与 MES release/start 均已产生，失败代价远大于一次
                 // 用法错误且留下卡 InProgress 的污染订单。max_turns=0 的
                 // 零模型调用探针语义保留（spec-F4a3 同款），不在此禁。
-                let cap = parse_i64_flag(value("--spend-cap-cents"), "--spend-cap-cents")?
-                    .unwrap_or(DEFAULT_SPEND_CAP_CENTS);
-                if cap <= 0 {
-                    return Err(OrderError::Usage {
-                        detail: format!(
-                            "--spend-cap-cents 必须 > 0（美分；零模型调用探针用 --max-turns 0）: {cap}"
-                        ),
-                    });
+                match parse_i64_flag(value("--spend-cap-cents"), "--spend-cap-cents")? {
+                    None => None,
+                    Some(cap) if cap <= 0 => {
+                        return Err(OrderError::Usage {
+                            detail: format!(
+                                "--spend-cap-cents 必须 > 0（美分；零模型调用探针用 --max-turns 0）: {cap}"
+                            ),
+                        })
+                    }
+                    Some(cap) => Some(cap),
                 }
-                cap
             },
         })),
         _ => Err(OrderError::Usage {
@@ -138,12 +146,14 @@ fn parse_i64_flag(raw: Option<&String>, name: &str) -> Result<Option<i64>, Order
     }
 }
 
-/// 真实执行单元 spec：fix2 代际基底 + 调用方预算硬顶覆写 + 现产冻结判分锚
-/// （a292547f…，装载期/入口双重指纹门）。
+/// 真实执行单元 spec：fix2 代际基底 + 调用方预算硬顶覆写（红队 W2-C33：
+/// 旗标未给 = 单元自载缺省——swev 的 fix2 缺省恰为 250/$3，与 CLI 代际
+/// 缺省同值，此处 unwrap_or 为恒等兜底）+ 现产冻结判分锚（a292547f…，
+/// 装载期/入口双重指纹门）。
 pub fn swev_unit_spec_for(exec: &RealExec) -> SwevUnitSpec {
     let mut spec = SwevUnitSpec::fix2(exec.profile.clone(), JudgeLocator::production());
-    spec.max_turns = exec.max_turns;
-    spec.spend_cap_cents = exec.spend_cap_cents;
+    spec.max_turns = exec.max_turns.unwrap_or(DEFAULT_MAX_TURNS);
+    spec.spend_cap_cents = exec.spend_cap_cents.unwrap_or(DEFAULT_SPEND_CAP_CENTS);
     spec
 }
 
@@ -252,13 +262,19 @@ pub fn report_unit_for(exec: &RealExec) -> Result<ReportUnitSpec, OrderError> {
     // 臂覆写，report/graph 两臂完全不读这两个旗标，订单输出 JSON 却把它们
     // 当预算回显）。spec.spend_cap_cents 即环级总帽（RingBudgets 取
     // min(spec, plan cost_cap)）——旗标语义 = 本单总预算，与 graph 臂一致。
+    // 红队 W2-C33：仅用户显式给旗标时覆写——单元 v1 缺省（turns 40 /
+    // spend 300）不在场时保留，不被 CLI 缺省值静默放宽。
     let mut spec = ReportUnitSpec::v1(
         exec.profile.clone(),
         af_execline::ReportJudgeLocator::production(),
         registry_root,
     );
-    spec.max_turns = exec.max_turns;
-    spec.spend_cap_cents = exec.spend_cap_cents;
+    if let Some(turns) = exec.max_turns {
+        spec.max_turns = turns;
+    }
+    if let Some(cap) = exec.spend_cap_cents {
+        spec.spend_cap_cents = cap;
+    }
     Ok(spec)
 }
 
@@ -297,9 +313,13 @@ pub fn graph_unit_for(exec: &RealExec) -> Result<af_execline::GraphUnitSpec, Ord
     // 红队 W2-C54：graph 臂接线——max_turns = 节点级 turns 缺省覆写；
     // spend_cap_cents = 订单级总预算（plan 无 cost_cap 时作总闸，N 节点
     // 收敛到同一总额；plan 有 cost_cap 时以 plan 为准、旗标仅作无计划
-    // 形态的兜底）。
+    // 形态的兜底）。红队 W2-C33：仅用户显式给旗标时覆写——单元 v1 缺省
+    // （节点 turns 60 / 订单总帽 None=plan cost_cap 治理）不在场时保留，
+    // 不被 CLI 缺省值静默放宽 4-6 倍。
     let mut spec = af_execline::GraphUnitSpec::v1(exec.profile.clone(), registry_root);
-    spec.default_node_turns = exec.max_turns;
-    spec.order_spend_cap_cents = Some(exec.spend_cap_cents);
+    if let Some(turns) = exec.max_turns {
+        spec.default_node_turns = turns;
+    }
+    spec.order_spend_cap_cents = exec.spend_cap_cents;
     Ok(spec)
 }
