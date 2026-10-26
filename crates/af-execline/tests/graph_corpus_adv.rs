@@ -986,6 +986,44 @@ fn corpus() -> Vec<Case> {
         }),
         Expect::Ex(ErrorCode::EnvelopeMismatch),
     );
+    // 红队 W2-C34：深层 list<list<...>> 嵌套（手写计划面）——物化须干净拒收
+    // （EX4006），不在契约构造位无界递归/栈溢出（此前裸递归即 abort）。
+    c(
+        "type",
+        "deep-list-nesting-32",
+        Box::new(|p, _, _| {
+            let deep = format!("{}code_file{}", "list<".repeat(32), ">".repeat(32));
+            node_exec_mut(p, "coder")["artifact_contract"][0]["type"] = json!(deep);
+            None
+        }),
+        Expect::Ex(ErrorCode::EnvelopeMismatch),
+    );
+    // 红队 W2-C35：plan 预算 node: 条目与 node_exec 投影 cap 互核——手改计划
+    // 把声明改小、投影留大 = 静默免帽（执行面消费投影值），装订期拒收。
+    c(
+        "budget",
+        "node-turns-projection-mismatch",
+        Box::new(|p, _, _| {
+            for b in p["body"]["budget"]["budgets"].as_array_mut().unwrap() {
+                if b["scope"] == json!("node:coder") {
+                    b["cap"] = json!(30); // 投影留 60
+                }
+            }
+            None
+        }),
+        Expect::Ex(ErrorCode::PlanBindMismatch),
+    );
+    // 红队 W2-C36：计划携带 line_id 与订单已绑定 line 冲突——携带其他产线
+    // 的手写计划可跨线运行无感（planbind ③ line 复验此前恒 None = 死代码）。
+    c(
+        "line",
+        "carried-line-conflicts-with-order",
+        Box::new(|p, _, _| {
+            p["body"]["line"]["line_id"] = json!("line-B");
+            None
+        }),
+        Expect::Ex(ErrorCode::PlanBindMismatch),
+    );
 
     // ---- 族 10：kind / unit 分派面 ----------------------------------------
     c(

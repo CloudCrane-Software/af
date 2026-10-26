@@ -196,7 +196,11 @@ impl ExecuteUnit for GraphExecuteUnit {
             // （此前期待分支恒空 = 死代码，换计划图版本照样装订执行）。
             &BindExpectations {
                 graph_version: ctx.graph_version.map(str::to_string),
-                line_id: None,
+                // 红队 W2-C36：订单已绑定的 line 作装订期待（driver bind_line
+                // 先于 execute）——此前两单元恒传 None，planbind ③ 的 line
+                // 复验分支在生产是死代码，携带其他产线 line_id 的手写计划可
+                // 跨线运行无感。
+                line_id: Some(ctx.line_id.to_string()),
             },
         )?;
         let plan = &bound.plan;
@@ -312,6 +316,12 @@ impl ExecuteUnit for GraphExecuteUnit {
             };
             // envelope 结构校验 + 落工件面 + 入交接账。
             stage.commit(plan, node_id, node, envelopes, &artifacts_dir)?;
+            // 双相熔断第二相（红队 W2-C31）：成员**完成后**对账——此前只在
+            // 起动前 gate，终态节点超帽仍会继续 check_typed/判定/落行照常
+            // 完工并判合格（cents/tokens_total 均无收尾门；launch 面无
+            // tokens 帽字段，收敛只能靠相位门）。任一维度超帽即 EX4007，
+            // 终态超帽不得完工。
+            budget.gate(&stage)?;
         }
 
         // ---- 收尾相：终态工件 schema 校验 + 订单面产出 ----
@@ -336,12 +346,19 @@ impl ExecuteUnit for GraphExecuteUnit {
             &plan.body.interface.output_type,
             &final_payload,
         )?;
-        // 判定语义：判定型终态（含 boolean pass 字段，如 qa_report）取其值；
-        // 非判定型（如 patch）产出即合格——envelope 已过结构校验。
-        let verdict = final_payload
-            .get("pass")
-            .and_then(Value::as_bool)
-            .or(Some(true));
+        // 判定语义（红队 W2-C29 收紧）：判定型终态按其**类型 schema 声明**的
+        // 布尔判定字段取值（pass 优先、resolved 次之——swebench 官方判分
+        // 口径）；无判定字段 = 产物型终态（如 patch），产出即合格
+        // （envelope 已过结构校验）。此前硬编码
+        // `get("pass").or(Some(true))`——swebench_eval/human_gate/
+        // aci_schema 三类无 pass 终态的失败形态（resolved=false、error
+        // 非空）被「缺字段推定成功」放行、合格工件 close（fix_swe_task 的
+        // verdict 型只声明 resolved，失败判分照过）——缺字段不得推定成功。
+        let verdict = terminal_verdict(
+            &plan.body.types,
+            &plan.body.interface.output_type,
+            &final_payload,
+        );
         let artifact_id = format!("graph-{}-{}", plan.body.interface.output_from, final_port);
         // 红队 W1-C36：结果行改走 af.plan.record.v1 统一行契约（swev/report
         // 同款投影 record::swev_v1_row）——此前手拼行缺 node_id/item_id/
@@ -367,7 +384,7 @@ impl ExecuteUnit for GraphExecuteUnit {
             }
             .to_string(),
             attempts: 1,
-            http_retries: 0,
+            http_retries: stage.http_retries,
             turns: stage.turns as u32,
             model_calls: stage.model_calls,
             tokens: af_harness::TokenTotals {
@@ -652,9 +669,25 @@ impl GraphExecuteUnit {
             budget_ledger_cents: spend_cap,
         };
         let report = match self.runner.run(launch) {
-            Ok(AgentRunOutcome { report, .. }) => report,
-            Err(AgentRunFailure { message, .. }) => {
-                return Err(self.fail(format!("节点 {} 模型环失败: {message}", node.node_id)))
+            // 红队 W2-C33：http_retries 两路径均累加入账（此前 Ok 路径随
+            // `..` 丢弃、Drive 无此字段、facts 硬编码 0——401 重取等供给面
+            // 重试在 graph 行不可见；swev/tb/report 环都记，唯 graph 遗漏）。
+            Ok(AgentRunOutcome {
+                report,
+                http_retries,
+            }) => {
+                stage.http_retries += http_retries;
+                report
+            }
+            Err(AgentRunFailure {
+                message,
+                http_retries,
+            }) => {
+                stage.http_retries += http_retries;
+                return Err(self.fail(format!(
+                    "节点 {} 模型环失败（http_retries={}）: {message}",
+                    node.node_id, http_retries
+                )))
             }
         };
         stage.account_node(&report);
@@ -1072,12 +1105,36 @@ impl PlanBudgets {
                 // 悬空 node: 路径（投影缺席 = 无人强制）同样拒收。
                 (scope, BudgetDimension::Turns) if scope.starts_with("node:") => {
                     let path = &scope["node:".len()..];
-                    if !plan.body.node_exec.iter().any(|n| n.node_id == path) {
+                    let Some(projection) = plan
+                        .body
+                        .node_exec
+                        .iter()
+                        .find(|n| n.node_id == path)
+                    else {
                         return Err(ExeclineError::PlanBindMismatch {
                             detail: format!(
                                 "节点级 turns 预算 id {} 作用域 {scope:?} 不落在任何 \
                                  node_exec 投影（声明无强制面，拒收）",
                                 entry.id
+                            ),
+                        });
+                    };
+                    // 红队 W2-C35：plan 预算条目与 node_exec 投影是同一事实的
+                    // 两份拷贝（执行面消费投影值）——装订期逐项互核 cap，手改
+                    // 计划把 plan 级 node:<id> turns 改小、投影留大即静默免帽
+                    // （C-34「静默忽略=免帽」纪律的半开面）。不一致即拒收。
+                    let projected = projection
+                        .budget
+                        .iter()
+                        .find(|b| b.dimension == BudgetDimension::Turns)
+                        .map(|b| b.cap);
+                    if projected != Some(entry.cap) {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "节点级 turns 预算 id {}：plan.body.budget 声明 cap={} 与 \
+                                 node_exec 投影 cap={:?} 不一致（同一事实两份拷贝必须互核；\
+                                 手改计划改小声明留大投影 = 静默免帽，拒收）",
+                                entry.id, entry.cap, projected
                             ),
                         });
                     }
@@ -1152,6 +1209,9 @@ struct Drive {
     tokens_cache: u64,
     model_calls: u64,
     turns: u64,
+    /// HTTP 层退避重试累计（红队 W2-C33：供给面重试审计——两路径累加，
+    /// 进 v1 行 usage.http_retries）。
+    http_retries: u64,
 }
 
 impl Drive {
@@ -1415,11 +1475,27 @@ fn declare_tool_strict(
 /// 内联（深度帽 16，与 [`SchemaValidator`] 同口径——API 面无词典可查）；
 /// 解析失败 → None（不静默造形——校验相 fail-loud 报基名缺席）。
 fn materialize_schema(types: &BTreeMap<String, Value>, type_expr: &str) -> Option<Value> {
+    materialize_schema_at(types, type_expr, 0)
+}
+
+/// 深度帽（红队 W2-C34）：与 inline_named_refs（16）同口径——手写计划的
+/// `list<list<...>>` 深层嵌套在此干净拒收（None = 该端口无 schema，下游
+/// check_typed 按「基名不在 types」转 EX4006），不在契约构造位无界递归/
+/// 栈溢出（此前裸递归，100k 深嵌套即 abort 而非干净拒收）。
+fn materialize_schema_at(
+    types: &BTreeMap<String, Value>,
+    type_expr: &str,
+    depth: u8,
+) -> Option<Value> {
+    const MAX_SCHEMA_DEPTH: u8 = 16;
+    if depth >= MAX_SCHEMA_DEPTH {
+        return None;
+    }
     if let Some(inner) = type_expr
         .strip_prefix("list<")
         .and_then(|t| t.strip_suffix('>'))
     {
-        let items = materialize_schema(types, inner)?;
+        let items = materialize_schema_at(types, inner, depth + 1)?;
         return Some(serde_json::json!({ "type": "array", "items": items }));
     }
     let schema = types.get(type_expr)?;
@@ -2050,6 +2126,48 @@ fn envelope_check(
 /// 类型表达式核对（envelope 正门）：list<T> 拆包逐项、命名类型对 plan.types
 /// 解析；值不符 = EX4006 点名节点/端口/类型。types 词典单参（plan.body.types
 /// 的投影）——校验器可独立单测。
+/// 终态判定字段解析（红队 W2-C29）：类型 schema 的布尔属性里 `pass` 优先、
+/// `resolved` 次取（swebench 判分惯例）；均无 = None（产物型终态）。
+/// list<T> 取元素 schema（终态载荷为数组时字段取值自然落空 = 不 qualified，
+/// fail-closed）。schema 未登记/无 properties = None（不可证明，不推定）。
+fn terminal_verdict_field(
+    types: &BTreeMap<String, Value>,
+    output_type: &str,
+) -> Option<&'static str> {
+    let base = output_type
+        .strip_prefix("list<")
+        .and_then(|t| t.strip_suffix('>'))
+        .unwrap_or(output_type);
+    let props = types
+        .get(base)?
+        .get("properties")
+        .and_then(Value::as_object)?;
+    for cand in ["pass", "resolved"] {
+        let is_bool = props
+            .get(cand)
+            .and_then(|p| p.get("type"))
+            .and_then(Value::as_str)
+            == Some("boolean");
+        if is_bool {
+            return Some(cand);
+        }
+    }
+    None
+}
+
+/// 终态 verdict：判定型取声明字段值（缺字段 = None = 不 qualified）；
+/// 产物型（无判定字段）= Some(true)（产出即合格，既有语义）。
+fn terminal_verdict(
+    types: &BTreeMap<String, Value>,
+    output_type: &str,
+    payload: &Value,
+) -> Option<bool> {
+    match terminal_verdict_field(types, output_type) {
+        Some(field) => payload.get(field).and_then(Value::as_bool),
+        None => Some(true),
+    }
+}
+
 fn check_typed(
     types: &BTreeMap<String, Value>,
     node_id: &str,

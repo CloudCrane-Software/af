@@ -79,3 +79,18 @@ fn valid_envelope_proceeds_to_shape_layer() {
         other => panic!("期望形状层拒绝，实得 {other:?}"),
     }
 }
+
+#[test]
+fn version_u64_above_i64_max_is_e0003_not_e0002() {
+    // 红队 W2-C25：u64 > i64::MAX 是「整数≠1」（E0003），不是「非整数」
+    // （E0002）——as_integer 的 i64 窄化失败曾被误归 E0002，与 RESULT-M1
+    // 码表语义（E0002=串/浮/布尔，E0003=整数≠1 含越界大整数）相悖。
+    assert_eq!(
+        envelope_codes("version: 9223372036854775808\n"),
+        ["E0003"]
+    );
+    assert_eq!(
+        envelope_codes("version: 18446744073709551615\n"),
+        ["E0003"]
+    );
+}

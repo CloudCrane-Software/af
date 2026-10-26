@@ -436,3 +436,26 @@ fn comments_are_skipped_by_lex_scan() {
     let err = err_of("/* has(input.q) */ true", &e);
     assert_eq!(err.code.code(), "E1051");
 }
+
+// ---------- 红队修复批（W2）：has 宏不得被 // 行注释隔断绕闸 ----------
+
+#[test]
+fn has_macro_across_line_comment_is_still_rejected() {
+    // 红队 W2-C24：`has //注释\n(...)`——词法扫描进入行注释时曾清掉
+    // pending_has，注释后的 `(` 不再置 has_macro，保守子集闸被绕
+    // （cel-parser 把注释作 HIDDEN 通道照常解析出 has 宏）。
+    let e = env(&[("input", vmap(&[("q", vstr("x"))]))]);
+    for src in [
+        "has //comment\n(input.q)",
+        "has//c\n(input.q)",
+        "has // 中文注释\n(input.q)",
+    ] {
+        let err = err_of(src, &e);
+        assert_eq!(err.code.code(), "E1052", "{src:?} 应拦宏：{err:?}");
+    }
+    // 对照：注释后的空白不改变判定（pending_has 跨越注释保持）。
+    // 对照：除号不是注释——`has / x` 之后 ident 已清，不构成宏隔断误判面，
+    // 真正的宏调用（无注释）仍由既有用例钉住。
+    check("true // has(input.q)", &e)
+        .unwrap_or_else(|err| panic!("注释文本内 has( 不误伤（W1-C23 口径不回退）：{err:?}"));
+}

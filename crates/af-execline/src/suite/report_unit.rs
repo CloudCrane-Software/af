@@ -1315,7 +1315,11 @@ impl ExecuteUnit for ReportExecuteUnit {
             // 期待（此前期待分支恒空 = 死代码，图版本漂移的计划照样装订）。
             &BindExpectations {
                 graph_version: ctx.graph_version.map(str::to_string),
-                line_id: None,
+                // 红队 W2-C36：订单已绑定的 line 作装订期待（driver bind_line
+                // 先于 execute）——此前恒传 None，planbind ③ 的 line 复验
+                // 分支在生产是死代码，携带其他产线 line_id 的手写计划可跨线
+                // 运行无感。
+                line_id: Some(ctx.line_id.to_string()),
             },
         )?;
         let min_citations = task

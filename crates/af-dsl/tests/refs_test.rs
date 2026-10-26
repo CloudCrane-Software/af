@@ -485,3 +485,52 @@ fn dual_same_type_emit_ports_ambiguate_output() {
     let src = base().replace("emits: { answer: a }", "emits: { answer: a, shadow: a }");
     assert_eq!(check(&src), ["E2202"]);
 }
+
+// ---------- 红队修复批（W2）：内建端口显式声明不重复计数 ----------
+
+#[test]
+fn explicit_builtin_done_declaration_is_not_double_counted() {
+    // 红队 W2-C23：loop 节点显式 `emits: {done: signal}` 与内建 done 同
+    // 名同型——emits 循环与 builtin_ports 循环各 push 一次即假拒合法
+    // 文档（违例文案自证 ["done","done"]）。端口名去重后应零违例。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: signal, from: l1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { done: signal }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}
+
+#[test]
+fn explicit_builtin_passed_declaration_is_not_double_counted() {
+    // 同上去重：gate 节点显式 emits passed:boolean + 内建 passed。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: { type: boolean }, from: c1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n    emits: { passed: { type: boolean } }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}
+
+#[test]
+fn two_distinct_same_type_ports_still_reject_as_e2202() {
+    // 反向钉：去重不得放松「恰一端口」——两个不同名同型端口仍 E2202。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a, shadow: a }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), ["E2202"]);
+}

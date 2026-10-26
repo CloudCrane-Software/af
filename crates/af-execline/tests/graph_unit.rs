@@ -149,6 +149,8 @@ struct GraphFakeRunner {
     launches: Mutex<Vec<CapturedLaunch>>,
     /// 节点名 → 终态 assistant 文本（envelope 载荷）。未列节点 → 空轮失败。
     scripted: fn(&str) -> Option<String>,
+    /// HTTP 层退避重试回数（红队 W2-C33：供给面重试审计面）。
+    http_retries: u64,
 }
 
 /// 走 declare 工具面的节点集。
@@ -159,6 +161,16 @@ impl GraphFakeRunner {
         Self {
             launches: Mutex::new(Vec::new()),
             scripted,
+            http_retries: 0,
+        }
+    }
+
+    /// 非零 http_retries（W2-C33 测试缝）。
+    fn with_http_retries(scripted: fn(&str) -> Option<String>, retries: u64) -> Self {
+        Self {
+            launches: Mutex::new(Vec::new()),
+            scripted,
+            http_retries: retries,
         }
     }
 
@@ -274,7 +286,7 @@ impl af_execline::AgentRunner for GraphFakeRunner {
         };
         Ok(af_execline::AgentRunOutcome {
             report,
-            http_retries: 0,
+            http_retries: self.http_retries,
         })
     }
 }
@@ -2063,4 +2075,146 @@ fn task_digest_mismatch_rejects_execution() {
         unit.execute(&ctx2)
     };
     output.expect("摘要匹配应走通");
+}
+
+
+/// 探针任务包（W2：单节点图 input=in_t，required q——task.json 须满足）。
+fn probe_task_package(root: &Path, plan_src: &str) -> PathBuf {
+    let data_root = root.join("data");
+    let task_dir = data_root.join(TASK);
+    std::fs::create_dir_all(&task_dir).unwrap();
+    std::fs::write(task_dir.join("plan.json"), plan_src).unwrap();
+    // in_t schema 要 q；执行器容器 setup 另要 instance_id/image（W2-C39 归属
+    // 文案：非 schema 必填项）——两者齐备才能过图输入双门。
+    std::fs::write(
+        task_dir.join("task.json"),
+        json!({"q": "x", "repo": "django/django", "instance_id": TASK,
+               "problem_statement": "probe", "image": "swebench/sweb.eval.x86_64.django-11099:latest"})
+            .to_string(),
+    )
+    .unwrap();
+    data_root
+}
+
+// ============================================================
+// 红队修复批（W2）：终态判定字段 / 双相熔断 / 供给面重试记账
+// ============================================================
+
+/// 单 task 节点终态图源（W2-C29/C-31 探针）：worker 发射 result: verdict_t
+/// （verdict_t 声明布尔 `resolved`——swebench 判分口径，非 pass）。
+fn single_node_graph_src(budgets: &str) -> String {
+    format!(
+        r#"version: 1
+meta:
+  name: w2probe
+  graph_version: "1.0"
+  entry: worker
+  input: in_t
+  output: {{ ref: verdict_t, from: worker }}
+types:
+  - {{ name: in_t, schema: {{ type: object, required: [q], properties: {{ q: {{ type: string }} }} }} }}
+  - {{ name: verdict_t, schema: {{ type: object, required: [resolved], properties: {{ resolved: {{ type: boolean }} }} }} }}
+nodes:
+  - id: worker
+    kind: task
+    uses: {{ model: route.main@1 }}
+    emits: {{ result: verdict_t }}
+edges: []
+policies:
+{budgets}"#
+    )
+}
+
+/// 终态消息按端口名包裹（envelope 契约 = 端口键）：{"result": {"resolved": …}}。
+fn payload_resolved_false(node: &str) -> Option<String> {
+    match node {
+        "worker" => Some(json!({"result": {"resolved": false}}).to_string()),
+        _ => None,
+    }
+}
+
+fn payload_resolved_true(node: &str) -> Option<String> {
+    match node {
+        "worker" => Some(json!({"result": {"resolved": true}}).to_string()),
+        _ => None,
+    }
+}
+
+#[test]
+fn terminal_verdict_reads_declared_resolved_field_not_pass_default() {
+    // 红队 W2-C29：终态类型声明 `resolved`（swebench 判分口径）时判据取
+    // resolved——此前硬编码 get("pass").or(Some(true))，无 pass 的失败判分
+    // （resolved=false）被缺字段推定成功、合格工件 close。
+    for (payload, expect) in [
+        (payload_resolved_false as fn(&str) -> Option<String>, Some(false)),
+        (payload_resolved_true as fn(&str) -> Option<String>, Some(true)),
+    ] {
+        let root = temp_root("w2-verdict");
+        let src = single_node_graph_src("  budgets: []\n  stop: []\n  failures: []\n");
+        let data_root = probe_task_package(&root, &compile_plan(&src));
+        let runner = Arc::new(GraphFakeRunner::new(payload));
+        let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+        let output = drive(&unit, &data_root, &attempt, &out).expect("单节点链应走通");
+        assert_eq!(
+            output.verdict, expect,
+            "终态判据须取声明的 resolved 字段（非 pass 缺省推定）"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
+#[test]
+fn terminal_token_overshoot_circuit_breaks_before_completion() {
+    // 红队 W2-C31：双相熔断第二相——终态节点跑完后对账，超 tokens_total 帽
+    // 不得完工（此前只在起动前 gate，终态超帽照常 check_typed/判定/落行）。
+    // FakeRunner 每节点 tokens=160（100+50+10）；帽 100 → 起动前 0<100 过、
+    // 完成后 160≥100 熔断。
+    let root = temp_root("w2-tokgate");
+    let src = single_node_graph_src(
+        "  budgets:\n    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 100 }\n  stop: []\n  failures: []\n",
+    );
+    let data_root = probe_task_package(&root, &compile_plan(&src));
+    let runner = Arc::new(GraphFakeRunner::new(payload_resolved_true));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let err = drive(&unit, &data_root, &attempt, &out)
+        .expect_err("终态超 token 帽应在完工前熔断（双相第二相）");
+    match err {
+        af_execline::ExeclineError::BudgetCapExceeded {
+            dimension,
+            spent,
+            cap,
+            ..
+        } => {
+            assert_eq!(dimension, "tokens_total", "熔断维度 = tokens_total");
+            assert!(spent >= cap, "累计 {spent} ≥ 帽 {cap}");
+        }
+        other => panic!("应 EX4007 预算熔断，实得 {other:?}"),
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn http_retries_are_recorded_in_graph_v1_row() {
+    // 红队 W2-C33：graph v1 行须记 http_retries（此前 Ok 路径随 `..` 丢弃、
+    // facts 硬编码 0——401 重取等供给面重试不可审计；swev/report 环都记）。
+    let root = temp_root("w2-retries");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::with_http_retries(sop_full_payloads, 7));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let output = drive(&unit, &data_root, &attempt, &out).expect("sop_full 应走通");
+    assert_eq!(output.verdict, Some(true));
+    let row: Value = serde_json::from_str(
+        &std::fs::read_to_string(out.join("records.jsonl"))
+            .unwrap()
+            .lines()
+            .last()
+            .unwrap()
+            .to_string(),
+    )
+    .expect("v1 行应合法 JSON");
+    assert_eq!(
+        row["usage"]["http_retries"], 21,
+        "供给面重试须入 v1 行 usage.http_retries（3 个模型节点 × 7，stage 累账口径）"
+    );
+    let _ = std::fs::remove_dir_all(&root);
 }

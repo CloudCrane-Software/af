@@ -153,11 +153,18 @@ fn lex_scan(source: &str) -> LexScan {
         if slash_pending {
             slash_pending = false;
             if c == '/' {
+                // 行注释：隐藏通道到行尾。pending_has/ident **跨越注释保持**
+                // （红队 W2-C24）——此前 `/` 分支预清 pending_has，`has //c\n
+                // (x)` 的注释后 `(` 不再置 has_macro，保守子集闸被绕（解析器
+                // 把注释作 HIDDEN 通道照常解析出 has 宏）。保持后注释后的
+                // `(` 仍能确认宏调用；注释文本自身的内容不计入。
                 line_comment = true;
                 continue;
             }
-            // 非注释：`/` 本身按普通符号（除号）处理——ident/pending_has
-            // 已清，当前字符继续走正常分支。
+            // 非注释：`/` 是除号——宏调用形 `has (…` 被除号隔断不成立，
+            // ident/pending_has 在此才清（此前预清即误伤注释形态）。
+            ident.clear();
+            pending_has = false;
         }
         match c {
             '\'' | '"' => {
@@ -183,8 +190,9 @@ fn lex_scan(source: &str) -> LexScan {
                 depth = depth.saturating_sub(1);
             }
             '/' => {
-                ident.clear();
-                pending_has = false;
+                // `/` 悬置等下一字符判 `//`（注释）或除号——**不预清**
+                // ident/pending_has（红队 W2-C24）：注释形态下 pending_has
+                // 须跨越注释存活，除号形态在 slash_pending 分支才清。
                 slash_pending = true;
             }
             c if c.is_alphanumeric() || c == '_' => {

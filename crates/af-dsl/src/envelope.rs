@@ -31,17 +31,13 @@ pub fn check(value: &serde_yaml::Value) -> Result<(), LoadError> {
             report.push(ErrorCode::MissingVersion, "envelope", "缺 version 键");
             return Err(LoadError::Envelope(report));
         }
-        Some(serde_yaml::Value::Number(n)) => match as_integer(n) {
-            Some(1) => {}
-            Some(v) => {
-                report.push(
-                    ErrorCode::VersionNotOne,
-                    "envelope",
-                    format!("version = {v}，只支持 1"),
-                );
-                return Err(LoadError::Envelope(report));
-            }
-            None => {
+        Some(serde_yaml::Value::Number(n)) => {
+            // 红队 W2-C25：整性判定与 i64 窄化分离——u64 > i64::MAX 是
+            // 「整数≠1」（E0003），不是「非整数」（E0002）：as_integer 的
+            // 窄化失败曾被误归 E0002，与 RESULT-M1 码表语义（E0002=串/浮/
+            // 布尔，E0003=整数≠1，含负数与越界大整数）相悖。
+            let is_integer = n.as_i64().is_some() || n.as_u64().is_some();
+            if !is_integer {
                 report.push(
                     ErrorCode::VersionNotInteger,
                     "envelope",
@@ -49,7 +45,27 @@ pub fn check(value: &serde_yaml::Value) -> Result<(), LoadError> {
                 );
                 return Err(LoadError::Envelope(report));
             }
-        },
+            match as_integer(n) {
+                Some(1) => {}
+                Some(v) => {
+                    report.push(
+                        ErrorCode::VersionNotOne,
+                        "envelope",
+                        format!("version = {v}，只支持 1"),
+                    );
+                    return Err(LoadError::Envelope(report));
+                }
+                None => {
+                    // 整性已确认但 i64 窄化失败 ⇒ u64 > i64::MAX，必 ≠1。
+                    report.push(
+                        ErrorCode::VersionNotOne,
+                        "envelope",
+                        format!("version = {n}（超出 i64 表示域的大整数），只支持 1"),
+                    );
+                    return Err(LoadError::Envelope(report));
+                }
+            }
+        }
         Some(other) => {
             report.push(
                 ErrorCode::VersionNotInteger,

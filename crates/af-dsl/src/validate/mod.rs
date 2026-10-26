@@ -18,6 +18,7 @@ mod m4;
 mod refs;
 
 use crate::error::{ErrorCode, Report};
+use crate::validate::refs::TYPE_DEPTH;
 use crate::model::{Document, EdgeDecl, LoopDecl, NodeDecl, PortType, StoreDecl};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -281,6 +282,19 @@ impl<'a> Index<'a> {
             }
         }
     }
+}
+
+/// from_body/内建端口推导类型（公开面，红队 W2-C26）：按 Index/emit_type
+/// **同规则**求值——内建端口（loop/map done:signal、check/gate
+/// passed:boolean）+ emits 表（Type 直取、FromBody 递归推导、map 包
+/// list<>）。af-compiler lowering 的 is_final 判定、执行面 consume 校验
+/// 均经此函数取类型，杜绝「IR 另复制一套推导器」的双实现漂移。
+/// 不可解析（悬空/超深/环）= None（调用方按「不可证明」处理，不推定）。
+pub fn derived_emit_type(doc: &Document, node_path: &str, port: &str) -> Option<PortType> {
+    let mut sink = Report::default();
+    let ix = Index::build(doc, &mut sink);
+    let node = ix.resolve_root_path(node_path)?;
+    ix.emit_type(node, port, TYPE_DEPTH)
 }
 
 /// 构造节点的体 scope 标签（loop/map 皆有则取 loop 体）。

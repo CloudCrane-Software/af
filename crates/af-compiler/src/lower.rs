@@ -71,6 +71,7 @@ impl std::error::Error for LowerError {}
 /// `Document` → `IrProgram`（纯函数）。
 pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
     let mut lw = Lowering {
+        doc,
         graph_name: doc.meta.name.clone(),
         graph_version: doc.meta.graph_version.clone(),
         output_from: doc.meta.output.from.clone(),
@@ -120,7 +121,10 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
 }
 
 /// 逐作用域降维状态（根图 + 嵌套体共用）。
-struct Lowering {
+struct Lowering<'a> {
+    /// 全量文档（红队 W2-C26：from_body 端口的 is_final 类型推导经
+    /// `af_dsl::derived_emit_type` 同规则求值，不另复制推导器）。
+    doc: &'a m::Document,
     graph_name: String,
     graph_version: String,
     /// `meta.output.from`（终态工件发射者，is_final 判定用）。
@@ -135,7 +139,7 @@ struct Lowering {
     escapes: BTreeMap<String, EscapeSpec>,
 }
 
-impl Lowering {
+impl<'a> Lowering<'a> {
     /// 子图名：`<图名>/<构造节点路径>`（路径中 `.` → `/`；§3.2 降维命名
     /// 确定性——机械拼接，不依赖哈希或计数器状态）。
     fn subgraph_name(&self, owner_path: &str) -> String {
@@ -287,8 +291,26 @@ impl Lowering {
                             m::EmitSpec::Type(t) => (Some(t.display()), None),
                             m::EmitSpec::FromBody { from_body } => (None, Some(from_body.clone())),
                         };
+                        // 终态判定（红队 W2-C26 收紧）：显式类型端口按
+                        // 类型串相等（既有口径）；from_body 端口必须经
+                        // af-dsl emit_type **同规则推导**且推导类型等于
+                        // meta.output.ref 才置 is_final——此前
+                        // `fb.is_some()` 析取项对 from_body 不看类型，
+                        // 非同型 from_body 端口被误标终态（执行面
+                        // final_artifact_port 取首个 is_final 即选错工件，
+                        // 与 af-dsl E2202「恰一端口匹配」不闭环）。推导
+                        // 不出（不可解析）= 不可证明，不置（fail-closed）。
                         let is_final = path == self.output_from
-                            && (ty.as_deref() == Some(self.output_type.as_str()) || fb.is_some());
+                            && match (&ty, &fb) {
+                                (Some(t), _) => t == &self.output_type,
+                                (None, Some(_)) => af_dsl::derived_emit_type(
+                                    self.doc,
+                                    path,
+                                    port,
+                                )
+                                .is_some_and(|derived| derived.display() == self.output_type),
+                                (None, None) => false,
+                            };
                         (
                             port.clone(),
                             ArtifactSpec {

@@ -13,8 +13,9 @@ use super::{construct_body_scope, Index, NodeRef};
 use crate::error::{ErrorCode, Report};
 use crate::model::{Document, EmitSpec, PortType, TypeExpr};
 
-/// 端口类型递归上限（from_body 链防环）。
-const TYPE_DEPTH: u8 = 32;
+/// 端口类型递归上限（from_body 链防环）。pub(crate)：af-compiler lowering
+/// 的 is_final 推导复用同一深度（红队 W2-C26 同源口径）。
+pub(crate) const TYPE_DEPTH: u8 = 32;
 
 pub(crate) fn check(doc: &Document, ix: &Index<'_>, report: &mut Report) {
     check_meta(doc, ix, report);
@@ -100,7 +101,12 @@ fn check_meta(doc: &Document, ix: &Index<'_>, report: &mut Report) {
     }
     for port in builtin_ports(from) {
         if let Some(t) = ix.emit_type(from, port, TYPE_DEPTH) {
-            if t == doc.meta.output.r#ref {
+            // 端口名去重（红队 W2-C23）：emits 显式声明的内建端口名
+            // （loop/map done、check/gate passed）与 builtin_ports 表同名
+            // 同型，是两个来源的**同一端口**——此前各 push 一次即假拒合法
+            // 文档（违例文案自证 ["done","done"]）。不同名端口仍按「恰一」
+            // 严判（refs_test 反向用例钉住）。
+            if t == doc.meta.output.r#ref && !matched.contains(&port) {
                 matched.push(port);
             }
         }

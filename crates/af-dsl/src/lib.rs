@@ -57,7 +57,7 @@ pub fn validate(doc: &Document) -> Report {
 }
 
 /// 带可配置项的语义校验（M2 起：context 配额总量上限等）。
-pub use validate::validate_with;
+pub use validate::{derived_emit_type, validate_with};
 
 /// 语义校验可配置项。
 pub use validate::ValidateOptions;

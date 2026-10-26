@@ -573,3 +573,62 @@ fn sop_full_v1_1_token_cap_calibrated_to_f4c_measurement() {
         "reviewer_turns 不动"
     );
 }
+
+#[test]
+fn from_body_port_is_final_requires_derived_type_match() {
+    // 红队 W2-C26：from_body 端口的 is_final 必须经 af-dsl emit_type 同规则
+    // 推导且等于 meta.output.ref——此前 lower.rs 的 `fb.is_some()` 析取项
+    // 对 from_body 不看类型，非同型 from_body 端口被误标终态（执行面
+    // final_artifact_port 取首个 is_final 即选错工件，与 af-dsl E2202
+    // 「恰一端口匹配」不闭环）。
+    let src = r#"version: 1
+meta:
+  name: t
+  graph_version: "1.0"
+  entry: collector
+  input: in_t
+  output: { ref: out_t, from: collector }
+types:
+  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }
+  - { name: out_t, schema: { type: object, required: [text], properties: { text: { type: string } } } }
+  - { name: other_t, schema: { type: object, required: [num], properties: { num: { type: integer } } } }
+nodes:
+  - id: collector
+    kind: task
+    loop:
+      body:
+        nodes:
+          - { id: worker, kind: task, uses: { model: route.main@1 }, emits: { good: out_t, bad: other_t } }
+          - { id: g, kind: gate, assert: "true" }
+        edges: []
+      max_iterations: 2
+      safety_points: [ { node: g, kind: gate } ]
+    emits:
+      final: { from_body: worker.good }
+      extra: { from_body: worker.bad }
+edges: []
+policies:
+  budgets: []
+  stop: []
+  failures: []
+"#;
+    let doc = af_dsl::load_str(src).expect("探针文档应装载");
+    let report = af_dsl::validate(&doc);
+    assert!(report.is_ok(), "应过 af-dsl 校验（恰一匹配）：{report}");
+    let ir = lower(&doc).expect("lowering 应成功");
+    let node = ir
+        .body
+        .node_exec
+        .get("collector")
+        .expect("collector 投影应在场（键=点号路径）");
+    let final_port = node.artifacts.get("final").expect("final 端口应在场");
+    let extra_port = node.artifacts.get("extra").expect("extra 端口应在场");
+    assert!(
+        final_port.is_final,
+        "from_body 推导类型 out_t = meta.output.ref，承终态位"
+    );
+    assert!(
+        !extra_port.is_final,
+        "from_body 推导类型 other_t ≠ out_t，不得置终态（W2-C26：误标即选错工件）"
+    );
+}
