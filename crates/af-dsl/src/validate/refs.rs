@@ -189,6 +189,55 @@ fn builtin_ports(node: &NodeRef<'_>) -> Vec<&'static str> {
     out
 }
 
+/// 内建端口的固定类型（与 [`Index::emit_type`] 内建短路同一模型）。
+fn builtin_port_type(port: &str) -> Option<PortType> {
+    match port {
+        "done" => Some(PortType::signal()),
+        "passed" => Some(PortType::boolean()),
+        _ => None,
+    }
+}
+
+/// 内建端口显式声明核对（红队 W3-C17）：emit_type/port_exists 对内建端口
+/// （loop/map done:signal、check/gate passed:boolean）**先于** emits 表判定
+/// ——显式声明与内建固定类型冲突（或以 from_body 声明被内建短路）时声明面
+/// 被静默遮蔽：E2202 按声明 spec 比对、边类型核对面按 emit_type（内建）、
+/// CEL 合成按声明 spec、af-compiler is_final 经 derived_emit_type 继承内建
+/// 优先——同一次校验对同一端口给出互相矛盾的类型答案。fail-loud：冲突声明
+/// E1003 拒绝，使存活文档的声明面/内建面恒一致（同型显式声明仍合法——
+/// W2-C23 去重语义不受影响）。
+fn check_builtin_port_declarations(nref: &NodeRef<'_>, report: &mut Report) {
+    let Some(emits) = &nref.node.emits else {
+        return;
+    };
+    for port in builtin_ports(nref) {
+        let Some(spec) = emits.get(port) else {
+            continue;
+        };
+        let builtin = builtin_port_type(port).expect("内建端口名必有固定类型");
+        let conflict = match spec {
+            EmitSpec::Type(t) => *t != builtin,
+            // from_body 声明在 emit_type 内建短路下永不生效（装饰性死声明）。
+            EmitSpec::FromBody { .. } => true,
+        };
+        if conflict {
+            report.push(
+                ErrorCode::TypeMismatch,
+                &nref.scope,
+                format!(
+                    "节点 {:?} 的 emits.{port} 显式声明与内建端口固定类型 {} 冲突——内建端口名 \
+                     （loop/map done:signal、check/gate passed:boolean）在 port_exists/emit_type \
+                     先于 emits 表判定，冲突或 from_body 声明会被静默遮蔽，致声明面/边核对面/\
+                     终态推导面口径分裂；显式声明须与内建同型（done: signal / passed: \
+                     {{type: boolean}}）或不声明（红队 W3-C17）",
+                    nref.path,
+                    builtin.display()
+                ),
+            );
+        }
+    }
+}
+
 /// 类型引用是否全部可解析（names 表内；内建 signal 与内联原始类型恒真）。
 fn type_resolves(ix: &Index<'_>, t: &PortType) -> bool {
     match t {
@@ -270,6 +319,7 @@ fn check_stores(ix: &Index<'_>, report: &mut Report) {
 fn check_nodes(doc: &Document, ix: &Index<'_>, report: &mut Report) {
     for nref in ix.nodes.values() {
         let node = nref.node;
+        check_builtin_port_declarations(nref, report);
         for w in node.writes.iter().flatten() {
             if !ix.stores.contains_key(w) {
                 report.push(
@@ -400,6 +450,35 @@ fn check_from_body(
                         owner.path, target_id
                     ),
                 );
+                return;
+            }
+            // map.from_body 转发内联原始型（红队 W3-C20）：map 构造的
+            // from_body 自动包 list<>，而类型表达式文法的泛型载荷只收已登记
+            // 类型名或 signal——`list<原始型>` 不可表达，emit_type 恒 None
+            // ⇒ E2202 判 undecidable 静默放行、lowering is_final=false ⇒
+            // 计划零终态工件、执行面 final_artifact_port 必拒（编译过执行
+            // 拒）。af-dsl 阶段 fail-loud 显式拒绝（E2213）；loop 构造不包
+            // list<>，from_body 转发内联原始型合法（W3-C19 终态路径），不受
+            // 本判定影响。
+            if owner.node.map.is_some() {
+                if let Some(inner) = ix.emit_type(target, tport, TYPE_DEPTH) {
+                    if matches!(inner, PortType::Inline(_)) {
+                        report.push(
+                            ErrorCode::MapFrombodyInlineType,
+                            &owner.scope,
+                            format!(
+                                "节点 {:?} 的 emits.{port} 经 map.from_body 转发体内端口 \
+                                 {:?}.{tport:?}，其类型为内联原始型 {}——list<原始型> 不在类型\
+                                 表达式文法（泛型载荷须为已登记类型名或 signal），转发端口类型\
+                                 不可表达 ⇒ 终态推导恒失败；将体内端口改为显式 emits 命名类型，\
+                                 或不经 map 转发（红队 W3-C20）",
+                                owner.path,
+                                target_id,
+                                inner.display()
+                            ),
+                        );
+                    }
+                }
             }
         }
     }

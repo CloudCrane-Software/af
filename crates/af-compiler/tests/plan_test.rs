@@ -707,3 +707,76 @@ policies:
         "全计划应恰一 is_final 工件（执行面 final_artifact_port 门槛）"
     );
 }
+
+#[test]
+fn builtin_passed_frombody_final_registers_boolean_type_entry() {
+    // 红队 W3-C19：内联原始型登记只从 emits/consumes 收集、内建类型只补
+    // signal——「meta.output.ref 为内联原始型 + 终态 from_body 派生自
+    // check/gate 内建 passed:boolean」路径产出 interface.output_type=
+    // "boolean" 而 plan.types 无 boolean 条目的计划（编译 rc=0）；执行面
+    // 终态 typed 正门（graph_unit check_typed 按基名查 plan.types）必以
+    // EX4006 硬拒——「编译过、执行拒」。本测钉计划自包含契约的两半：
+    // ①types 含 output 基名条目（执行面 check_typed 查询位）；②from_body
+    // 派生内建 passed 的终态端口 is_final=true（执行面 final_artifact_port
+    // 门槛）。loop 体不包 list<>，内建 passed:boolean 与内联 boolean ref
+    // 同型转发合法。
+    let src = r#"version: 1
+meta:
+  name: t_builtin_passed_final
+  graph_version: "1.0"
+  entry: collector
+  input: in_t
+  output: { ref: { type: boolean }, from: collector }
+types:
+  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }
+nodes:
+  - id: collector
+    kind: task
+    loop:
+      body:
+        nodes:
+          - { id: chk, kind: check, assert: "true" }
+        edges: []
+      max_iterations: 2
+      safety_points: [ { node: chk, kind: check } ]
+    emits:
+      final: { from_body: chk.passed }
+edges: []
+policies:
+  budgets: []
+  stop: []
+  failures: []
+"#;
+    let doc = af_dsl::load_str(src).expect("探针文档应装载");
+    let report = af_dsl::validate(&doc);
+    assert!(
+        report.is_ok(),
+        "loop.from_body 转发内建 passed 与内联 boolean ref 同型，应零违例：{report}"
+    );
+    let ir = lower(&doc).expect("lowering 应成功");
+    assert_eq!(ir.body.interface.output_type, "boolean");
+    // ①执行面 check_typed 契约：output 基名必须在 plan.types 有条目。
+    let boolean =
+        ir.body.types.get("boolean").expect(
+            "内联 output.ref 的基名 boolean 必须入 plan.types（W3-C19，否则执行面 EX4006）",
+        );
+    assert_eq!(
+        boolean.get("type").and_then(|t| t.as_str()),
+        Some("boolean"),
+        "内联原始型条目 = {{type: <prim>}} 形"
+    );
+    // ②执行面 final_artifact_port 契约：全计划恰一 is_final 工件。
+    let finals: Vec<&str> = ir
+        .body
+        .node_exec
+        .values()
+        .flat_map(|n| n.artifacts.values())
+        .filter(|a| a.is_final)
+        .map(|_| "final")
+        .collect();
+    assert_eq!(
+        finals.len(),
+        1,
+        "from_body 派生内建 passed 应承终态位（全计划恰一 is_final）"
+    );
+}
