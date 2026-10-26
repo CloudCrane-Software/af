@@ -1091,11 +1091,10 @@ policies:
     assert_eq!(output.verdict, Some(true));
 }
 
-/// swebench_eval 分派面 fail-loud：spec.judge 未配置（None）时拒载点名
-/// 「判分锚」——不静默跳判（B 席嫁接口径）。
-#[test]
-fn swebench_eval_without_judge_fails_loud() {
-    let graph_src = r#"
+/// sweng_g4_sweeval 图源（actor(task) → evaluator(check: swebench_eval)）：
+/// fail-loud 用例与 W2-C51 判分锚在场路由用例共用。
+fn sweeval_graph_src() -> String {
+    r#"
 version: 1
 meta:
   name: sweng_g4_sweeval
@@ -1163,9 +1162,17 @@ policies:
     - class: budget_exhausted
       terminal: true
       outcome: failed
-"#;
+"#
+    .to_string()
+}
+
+/// swebench_eval 分派面 fail-loud：spec.judge 未配置（None）时拒载点名
+/// 「判分锚」——不静默跳判（B 席嫁接口径）。
+#[test]
+fn swebench_eval_without_judge_fails_loud() {
+    let graph_src = sweeval_graph_src();
     let root = temp_root("g4sweeval");
-    let data_root = task_package(&root, &compile_plan(graph_src));
+    let data_root = task_package(&root, &compile_plan(&graph_src));
     let scripted = |node: &str| -> Option<String> {
         match node {
             "actor" => Some(
@@ -2322,4 +2329,96 @@ fn plan_digest_mismatch_rejects_before_binding() {
     );
     assert!(runner.launches().is_empty(), "拒在执行前，零 launch");
     let _ = std::fs::remove_dir_all(&root);
+}
+
+// ============================================================
+// ⑩ 红队 W2-C51：判分锚在场 → swebench_eval 越过拒载门进入 verify 链
+// ============================================================
+
+/// diff 取证必败桥：`git diff` 取证脚本返回 Err——verify 链在取证步
+/// 短路返回未决 verdict（不触 docker/judge 真子进程），但足以证明
+/// 分派面已越过「spec.judge 未配置」拒载门、冻结判分链真实启动。
+struct FailDiffBridge {
+    calls: Mutex<Vec<String>>,
+}
+
+impl FailDiffBridge {
+    fn new() -> Self {
+        Self {
+            calls: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+}
+
+impl af_execline::HostBridge for FailDiffBridge {
+    fn run(&self, _host: &str, script: &str, _t: u32) -> Result<(bool, String), String> {
+        self.calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(script.to_string());
+        if script.contains("git -c core.fileMode=false diff") {
+            Err("注入失败：diff 取证不可达（W2-C51 用例）".into())
+        } else {
+            Ok((true, String::new()))
+        }
+    }
+}
+
+/// W2-C51：spec.judge 在场（订单层 graph_unit_for 同款注入；此处指向
+/// 测试自写假脚本 + 实算 sha256——指纹门可过、又不触真判分子进程）时，
+/// swebench_eval 检查节点不再 fail-loud 拒载，而是真实进入 swev::verify
+/// 链（指纹门 → capture_diff → …）。至此图臂冻结判分链从 spec 装配到
+/// 分派执行全链可达。
+#[test]
+fn swebench_eval_with_judge_passes_gate_into_verify_chain() {
+    let root = temp_root("g4sweeval-c51");
+    let graph_src = sweeval_graph_src();
+    let data_root = task_package(&root, &compile_plan(&graph_src));
+    let scripted = |node: &str| -> Option<String> {
+        match node {
+            "actor" => Some(
+                json!({"action": {"thought": "t", "command": "c", "submit": false}}).to_string(),
+            ),
+            _ => None,
+        }
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let bridge = Arc::new(FailDiffBridge::new());
+    let mut spec = GraphUnitSpec::v1(PROFILE, repo_packages());
+    let fake_script = root.join("fake-judge.py");
+    std::fs::write(&fake_script, "print('fake judge')\n").unwrap();
+    spec.judge = Some(af_execline::JudgeLocator {
+        python: fake_script.clone(),
+        script: fake_script.clone(),
+        script_sha256: af_execline::file_sha256_hex(&fake_script).expect("假判分脚本应可读"),
+    });
+    let unit =
+        GraphExecuteUnit::new(spec, bridge.clone(), runner.clone()).expect("图单元装载应通过");
+    let attempt = root.join("attempt");
+    let out = root.join("out");
+
+    let err = drive(&unit, &data_root, &attempt, &out)
+        .expect_err("取证必败应使 evaluator 失败（非拒载）");
+    let text = err.to_string();
+    assert!(
+        !(text.contains("spec.judge") && text.contains("判分锚")),
+        "judge 在场不得再走拒载门：{err}"
+    );
+    assert_eq!(
+        runner.order(),
+        ["actor"],
+        "actor 已跑、evaluator 进 verify 链后失败"
+    );
+    assert!(
+        bridge
+            .calls()
+            .iter()
+            .any(|c| c.contains("git -c core.fileMode=false diff")),
+        "verify 链真实启动过（diff 取证确经桥）：{:?}",
+        bridge.calls()
+    );
 }

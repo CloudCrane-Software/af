@@ -27,7 +27,7 @@ use crate::suite::swev::sha256_hex;
 
 /// 判分器定位（方案 §3.2-2 / R2：路径参数化，默认 = 本机现产值；
 /// P4 起进 SwevUnitSpec 声明，随 unit_version 版本化）。
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct JudgeLocator {
     /// 判分 venv 的 python 解释器（swebench 4.1 装于其中，swev.rs:205）。
     pub python: PathBuf,

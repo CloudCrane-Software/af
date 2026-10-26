@@ -317,6 +317,12 @@ pub fn graph_unit_for(exec: &RealExec) -> Result<af_execline::GraphUnitSpec, Ord
     // （节点 turns 60 / 订单总帽 None=plan cost_cap 治理）不在场时保留，
     // 不被 CLI 缺省值静默放宽 4-6 倍。
     let mut spec = af_execline::GraphUnitSpec::v1(exec.profile.clone(), registry_root);
+    // 红队 W2-C51：graph 臂与 swev/report 两臂同源注入现产判分锚——
+    // GraphUnitSpec.judge 此前恒 None（装配面三层里唯一没接线的一层），
+    // 任何含 pkg.sweagent.swebench_eval 检查节点的图计划经 CLI 提交必然
+    // 在分派面 fail-loud 拒载，图臂唯一走冻结判分链的单元从下单入口
+    // 永不可达（已交付图单全部改走 pkg.sweng.test_unit 侧证）。
+    spec.judge = Some(af_execline::JudgeLocator::production());
     if let Some(turns) = exec.max_turns {
         spec.default_node_turns = turns;
     }
