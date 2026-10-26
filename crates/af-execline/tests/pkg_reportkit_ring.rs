@@ -807,3 +807,116 @@ fn ring_budget_is_shared_across_members_and_circuit_breaks() {
     assert_eq!(runner.captured().len(), 1, "熔断后不得再起 writer");
     std::fs::remove_dir_all(&base).ok();
 }
+
+// ---- 红队 W1-C33（完整化）：plan turns/token 帽强制 + 强制集外条目拒收 ----
+
+/// 改写真计划 plan.body.budget.budgets 后重建任务包（JSON 面 mutate）。
+fn ring_task_package_mutated(base: &Path, mutate: impl FnOnce(&mut Value)) -> PathBuf {
+    let mut plan: Value = serde_json::from_str(&real_report_plan()).expect("真计划应可解析");
+    mutate(&mut plan);
+    ring_task_package(base, &plan.to_string())
+}
+
+/// plan 级 turns 帽（study_turns，loop:study 作用域）：reader 恰耗 2 turns
+/// （FakeRingRunner reader 用量），帽压到 2 → writer 第 1 轮前熔断；且
+/// reader 单 launch 的 max_turns 收敛到剩余额度（min(spec 40, 2)）。
+#[test]
+fn ring_plan_turns_cap_circuit_breaks_before_next_launch() {
+    let runner = FakeRingRunner::happy();
+    let base = std::env::temp_dir().join(format!("g5-ring-w1c33-turns-{}", std::process::id()));
+    std::fs::remove_dir_all(&base).ok();
+    std::fs::create_dir_all(&base).unwrap();
+    let task_dir = ring_task_package_mutated(&base, |plan| {
+        for e in plan["body"]["budget"]["budgets"].as_array_mut().unwrap() {
+            if e["id"] == "study_turns" {
+                e["cap"] = json!(2);
+            }
+        }
+    });
+    let mut spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+    spec.spend_cap_cents = 300; // cents 帽留足，隔离 turns 维
+    let unit = ReportExecuteUnit::new(
+        spec.clone(),
+        draft_fn_real_ring(runner.clone(), spec),
+        Arc::new(LocalFileFetcher),
+    )
+    .expect("真环单元装载应过三重门");
+    let err = drive_err(&unit, &base, &task_dir);
+    assert!(
+        err.to_string().contains("turns"),
+        "plan turns 帽应熔断拒起下一成员：{err}"
+    );
+    assert_eq!(runner.captured().len(), 1, "turns 熔断后不得再起 writer");
+    assert_eq!(
+        runner.captured()[0].max_turns,
+        2,
+        "reader 单 launch turns 帽收敛到剩余额度（min(spec 40, plan 2)）"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+/// plan 级 token_cap（tokens_total，plan 作用域）：reader 耗 1000+200=1200
+/// tokens，帽压到 1000 → writer 第 1 轮前熔断（口径 in+out+cache_read，
+/// 与图执行器 account_node 同源）。
+#[test]
+fn ring_plan_token_cap_circuit_breaks_before_next_launch() {
+    let runner = FakeRingRunner::happy();
+    let base = std::env::temp_dir().join(format!("g5-ring-w1c33-tok-{}", std::process::id()));
+    std::fs::remove_dir_all(&base).ok();
+    std::fs::create_dir_all(&base).unwrap();
+    let task_dir = ring_task_package_mutated(&base, |plan| {
+        for e in plan["body"]["budget"]["budgets"].as_array_mut().unwrap() {
+            if e["id"] == "token_cap" {
+                e["cap"] = json!(1000);
+            }
+        }
+    });
+    let mut spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+    spec.spend_cap_cents = 300;
+    let unit = ReportExecuteUnit::new(
+        spec.clone(),
+        draft_fn_real_ring(runner.clone(), spec),
+        Arc::new(LocalFileFetcher),
+    )
+    .expect("真环单元装载应过三重门");
+    let err = drive_err(&unit, &base, &task_dir);
+    assert!(
+        err.to_string().contains("tokens_total"),
+        "plan token 帽应熔断拒起下一成员：{err}"
+    );
+    assert_eq!(runner.captured().len(), 1, "token 熔断后不得再起 writer");
+    std::fs::remove_dir_all(&base).ok();
+}
+
+/// plan 预算强制集外条目（clock_ms/plan）一律 fail-loud 拒收——与图执行器
+/// PlanBudgets::of 同纪律：静默忽略 = 声明帽免帽（W1-C34 同源）。
+#[test]
+fn ring_plan_budget_unsupported_entry_is_rejected() {
+    let runner = FakeRingRunner::happy();
+    let base = std::env::temp_dir().join(format!("g5-ring-w1c33-rej-{}", std::process::id()));
+    std::fs::remove_dir_all(&base).ok();
+    std::fs::create_dir_all(&base).unwrap();
+    let task_dir = ring_task_package_mutated(&base, |plan| {
+        plan["body"]["budget"]["budgets"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "id": "wall_clock", "dimension": "clock_ms", "scope": "plan", "cap": 99999 }));
+    });
+    let spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+    let unit = ReportExecuteUnit::new(
+        spec.clone(),
+        draft_fn_real_ring(runner.clone(), spec),
+        Arc::new(LocalFileFetcher),
+    )
+    .expect("真环单元装载应过三重门");
+    let err = drive_err(&unit, &base, &task_dir);
+    assert!(
+        err.to_string().contains("强制集"),
+        "强制集外预算条目应拒收（不得静默免帽）：{err}"
+    );
+    assert!(
+        runner.captured().is_empty(),
+        "拒收发生在起环之前，零 launch"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}

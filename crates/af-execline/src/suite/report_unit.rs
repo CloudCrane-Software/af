@@ -18,6 +18,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+use af_compiler::ir::BudgetDimension;
+use af_compiler::ExecutablePlan;
 use af_workorder::WorkArtifact;
 use serde_json::{json, Value};
 
@@ -519,6 +521,77 @@ fn validate_node(schema: &Value, payload: &Value, path: &str) -> Result<(), Stri
     Ok(())
 }
 
+/// 环级预算帽（红队 W1-C33 完整化）：plan.body.budget 的**白名单提取**——
+/// 报告环即 paper_report 的 study 环，强制集 =
+/// plan 级 `cost_cap`（cents）/`token_cap`（tokens_total）+ turns
+/// （scope `plan` 或 `loop:study`——环面无节点投影，node: 作用域不在集内）。
+/// **强制集外条目一律 fail-loud 拒收**（与图执行器 `PlanBudgets::of` 同纪律，
+/// W1-C34 同源：静默忽略 = 声明帽免帽）。canonical id 门对 cents/tokens_total
+/// 生效（只认 cost_cap/token_cap）；turns 按 scope+dimension 强制（改名不改
+/// 作用域/维度即仍被强制，无免帽面，故不设 id 门）。
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RingBudgets {
+    /// plan 级 cents 帽（id 必须 = cost_cap）。
+    pub cents: Option<i64>,
+    /// turns 帽（scope plan 或 loop:study；环级累计口径）。
+    pub turns: Option<u32>,
+    /// plan 级 tokens_total 帽（id 必须 = token_cap；口径 in+out+cache_read，
+    /// 与图执行器 account_node 同源）。
+    pub tokens: Option<u64>,
+}
+
+impl RingBudgets {
+    /// 白名单提取 + 强制集外拒收（fail-loud，装订期）。
+    pub fn of(plan: &ExecutablePlan) -> Result<Self, ExeclineError> {
+        let mut b = Self::default();
+        for entry in &plan.body.budget.budgets {
+            match (entry.scope.as_str(), entry.dimension) {
+                ("plan", BudgetDimension::Cents) => {
+                    if entry.id != "cost_cap" {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "plan 级 cents 预算 id {} 非正典 cost_cap（执行面只认 \
+                                 cost_cap——改名即静默免帽，拒收）",
+                                entry.id
+                            ),
+                        });
+                    }
+                    b.cents = Some(entry.cap as i64);
+                }
+                ("plan", BudgetDimension::TokensTotal) => {
+                    if entry.id != "token_cap" {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "plan 级 tokens_total 预算 id {} 非正典 token_cap（执行面\
+                                 只认 token_cap——改名即静默免帽，拒收）",
+                                entry.id
+                            ),
+                        });
+                    }
+                    b.tokens = Some(entry.cap);
+                }
+                // turns：环 = study 环（paper_report loop:study 作用域正本）；
+                // plan 级 turns 同样作用于整环。取小防多条目互相松绑。
+                (scope, BudgetDimension::Turns) if scope == "plan" || scope == "loop:study" => {
+                    let cap = entry.cap.min(u32::MAX as u64) as u32;
+                    b.turns = Some(b.turns.map_or(cap, |prev: u32| prev.min(cap)));
+                }
+                (scope, dim) => {
+                    return Err(ExeclineError::PlanBindMismatch {
+                        detail: format!(
+                            "预算条目 id {}（dimension={:?}, scope={:?}）不在报告环执行面强制集内\
+                             （强制集：plan 级 cost_cap(cents)/token_cap(tokens_total) + turns\
+                             （plan/loop:study）；其余组合声明即须强制，静默忽略=免帽，拒收）",
+                            entry.id, dim, scope
+                        ),
+                    });
+                }
+            }
+        }
+        Ok(b)
+    }
+}
+
 /// 起草输入（reader/writer 模板正文 + 论文文本头 + 研读焦点 + 环上下文）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct DraftInput {
@@ -535,12 +608,13 @@ pub struct DraftInput {
     pub task_json: PathBuf,
     /// 计划 types 表提取的环面类型（envelope 校验正本）。
     pub plan_types: RingTypes,
-    /// 环级成本帽（红队 W1-C33：= min(spec.spend_cap_cents, plan 级
-    /// cost_cap)——reader + 全部 writer 轮**共享单一预算账本**。此前每
-    /// 成员各拿整份 spend_cap_cents + 全新账本，图级上限 = 4×300¢，
-    /// 与 spec 自述「图面口径 cents 300」不符；plan.body.budget 此前
-    /// 零消费。None = 无 plan 级帽（仅 spec 帽生效）。
-    pub ring_cents_cap: Option<i64>,
+    /// 环级预算帽（红队 W1-C33：plan.body.budget 白名单提取——reader + 全部
+    /// writer 轮**共享单一账本**：cents（min(spec 帽, plan cost_cap)）、turns
+    /// （plan/loop:study）、tokens_total（plan token_cap）。此前每成员各拿
+    /// 整份 spend_cap_cents + 全新账本，图级上限 = 4×300¢，与 spec 自述
+    /// 「图面口径 cents 300」不符；plan.body.budget 此前零消费，turns/token
+    /// 帽更被整体静默忽略。Default = 无 plan 级帽（仅 spec 帽生效）。
+    pub ring_caps: RingBudgets,
 }
 
 /// 起草产出：报告 JSON + 环用量（reader/writer 双节点聚合——进行落盘 usage）。
@@ -727,12 +801,59 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
         // 帽（llm.cents 口径 1 模型调用 = 1¢，与图执行器 account_node 同源）
         // ——此前每成员各拿整份 spec.spend_cap_cents + 全新 budget_ledger，
         // 图级上限 4×300¢，spec 自述「图面口径 cents 300」名不副实；plan 级
-        // cost_cap 在场时取小（plan.body.budget 此前零消费）。
+        // cost_cap 在场时取小（plan.body.budget 此前零消费）。turns/tokens
+        // 两维同口径收敛（C33 完整化）：turns 逐 launch 收敛到剩余额度，
+        // 三维均在成员起动前对账熔断（耗尽即拒起下一 launch）。
         let ring_cap_cents = spec
             .spend_cap_cents
-            .min(input.ring_cents_cap.unwrap_or(i64::MAX));
+            .min(input.ring_caps.cents.unwrap_or(i64::MAX));
         let mut ring_spent_cents: i64 = 0;
         let ring_remaining = |spent: i64| -> i64 { (ring_cap_cents - spent).max(1) };
+        let ring_tokens_used = |turns_usage: &DraftOutput| -> u64 {
+            turns_usage.tokens.input + turns_usage.tokens.output + turns_usage.tokens.cache_read
+        };
+        // 成员起动前对账（cents/turns/tokens_total 三维，与图执行器预算 gate
+        // 同纪律：超限 fail-loud，不再各拿满份帽）。cents 维对账**有效帽**
+        // ring_cap_cents = min(spec 帽, plan cost_cap)——两者取小才是环级
+        // 真帽（只对 plan 帽会放跑 spec 帽压低的场景）。
+        let ring_gate =
+            |stage: &str, spent_cents: i64, usage: &DraftOutput| -> Result<(), String> {
+                if spent_cents >= ring_cap_cents {
+                    return Err(format!(
+                    "报告环预算熔断：{stage} 前环内累计 {spent_cents}¢ ≥ 环级帽 {ring_cap_cents}¢ \
+                         （= min(spec {spec}¢, plan cost_cap)——reader+writer 共享单一账本）",
+                    spec = spec.spend_cap_cents,
+                ));
+                }
+                if let Some(cap) = input.ring_caps.turns {
+                    if u64::from(usage.turns) >= u64::from(cap) {
+                        return Err(format!(
+                            "报告环预算熔断：{stage} 前环内累计 turns {} ≥ 环级帽 {cap} \
+                             （plan turns 帽，scope plan/loop:study——reader+writer 共享）",
+                            usage.turns,
+                        ));
+                    }
+                }
+                if let Some(cap) = input.ring_caps.tokens {
+                    let used = ring_tokens_used(usage);
+                    if used >= cap {
+                        return Err(format!(
+                            "报告环预算熔断：{stage} 前环内累计 tokens_total {used} ≥ 环级帽 \
+                             {cap}（plan token_cap，口径 in+out+cache_read）"
+                        ));
+                    }
+                }
+                Ok(())
+            };
+        // 单 launch turns 帽收敛到剩余额度（plan turns 帽在场时）——与 cents
+        // 的 ring_remaining 同手法，防单成员一次性烧穿环级余量。
+        let ring_max_turns = |usage: &DraftOutput| -> u32 {
+            match input.ring_caps.turns {
+                Some(cap) => spec.max_turns.min(cap.saturating_sub(usage.turns).max(1)),
+                None => spec.max_turns,
+            }
+        };
+        ring_gate("reader", ring_spent_cents, &usage)?;
 
         let reader_user = format!(
             "研究焦点：{focus}\n\n论文（摄取快照 paper_doc）：\n- url: {url}\n- title: {title}\n\
@@ -768,7 +889,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                     ),
                 ],
                 policy: crate::agent::llm_cents_policy(
-                    spec.max_turns,
+                    ring_max_turns(&usage),
                     &spec.completion_signal,
                     spec.tool_free_turn_limit,
                 ),
@@ -858,15 +979,10 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
         let mut last_draft: Option<String> = None;
         for round in 1..=RING_MAX_ITERATIONS {
             usage.iterations = round;
-            // 环级熔断门（W1-C33）：共享账本耗尽即拒起下一成员（与图执行器
-            // 预算 gate 同纪律——超限 fail-loud，不再各拿满份帽）。
-            if ring_spent_cents >= ring_cap_cents {
-                return Err(format!(
-                    "报告环预算熔断：环内累计 {ring_spent_cents}¢ ≥ 环级帽 {ring_cap_cents}¢ \
-                     （= min(spec {spec}¢, plan cost_cap)——reader+writer 共享单一账本）",
-                    spec = spec.spend_cap_cents,
-                ));
-            }
+            // 环级熔断门（W1-C33，完整化）：cents/turns/tokens_total 三维
+            // 共享账本对账——任一维度耗尽即拒起下一成员（与图执行器预算
+            // gate 同纪律：超限 fail-loud，不再各拿满份帽）。
+            ring_gate(&format!("writer 第 {round} 轮"), ring_spent_cents, &usage)?;
             let report_slot: Arc<Mutex<Option<Value>>> = Arc::new(Mutex::new(None));
             let slot = report_slot.clone();
             let signal = spec.completion_signal.clone();
@@ -929,7 +1045,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                          pass the object as this parameter's value, do not wrap it again",
                     )],
                     policy: crate::agent::llm_cents_policy(
-                        spec.max_turns,
+                        ring_max_turns(&usage),
                         &spec.completion_signal,
                         spec.tool_free_turn_limit,
                     ),
@@ -1246,16 +1362,10 @@ impl ExecuteUnit for ReportExecuteUnit {
             attempt_dir: attempt_dir.to_path_buf(),
             task_json: task_json.clone(),
             plan_types,
-            // W1-C33：消费 plan.body.budget 的 cost_cap（plan 级 cents 帽）
-            // ——与 spec.spend_cap_cents 取小作为环级共享账本。
-            ring_cents_cap: bound
-                .plan
-                .body
-                .budget
-                .budgets
-                .iter()
-                .find(|e| e.scope == "plan" && e.id == "cost_cap")
-                .map(|e| e.cap as i64),
+            // W1-C33：plan.body.budget 白名单提取（cents/turns/tokens_total
+            // 三维，强制集外 fail-loud 拒收）——reader + 全部 writer 轮共享
+            // 单一账本；此前仅 find cost_cap，turns/token 帽被静默忽略。
+            ring_caps: RingBudgets::of(&bound.plan)?,
         };
         let draft =
             (self.draft)(&draft_input).map_err(|err| self.fail(format!("起草失败: {err}")))?;
