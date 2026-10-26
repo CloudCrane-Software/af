@@ -1,0 +1,23 @@
+# =============================================================================
+# K5 判分链路径登记表（正本）——《RSI诱导演练-交付》K5 路径 lint 的 af 仓
+# 落地形态（总计划 §2 裁决7：K5 lint 并入编译阶段 1）。
+#
+# 黑名单语义：下列判分链路径的文件字节由本表 sha256 锚死——任何提交触碰
+# 即 CI step1 判红（fail-loud）。**有意变更判分链必须走裁决**并在本表登记
+# 新锚 + 裁决出处（与 ci/neutrality-wordlist.txt 同款冻结纪律：表 SHA-256
+# 随门日志落 ci/out/step1.log）。
+#
+# 判分链成员（判分核 + 判分门本体；仓内成员）：
+#   swev 判分核 = 工厂工作区 tools/swev-judge.py（**不在本仓**——冻结锚
+#   a292547f… 由 crates/af-execline/src/judge.rs 装载期指纹门钉死，仓内
+#   保护面对该锚所在的判分门本体 judge.rs 生效）；
+#   report 判分 = reportkit citation/rubric/render 三件（红队 W1-C61 起
+#   全部入 ReportJudgeLocator 指纹门，仓内逐位对锚）。
+#
+# 行格式：<TAB> 分隔：路径 <TAB> sha256 <TAB> 用途
+# =============================================================================
+# 路径	sha256	用途
+crates/af-execline/src/judge.rs	3008c059b83dc84033ad622abc3081ae96b93cdf389cd6fd91f6ff5b5107cea4	swev 判分门本体（装载期指纹门；swev-judge.py 冻结锚所在）
+af/packages/reportkit/units/citation_unit.py	0c34b5956bf4a09aef24368f5f4ab6cf7a1cd97132ce8643c909dacbeb9905dc	report 判分核（citation；ReportJudgeLocator 同锚）
+af/packages/reportkit/units/rubric_unit.py	af63af2c0d16ff890d081938a77853d6e817f3e0a7b765fc4e5096a3e16d3654	report 判分核（rubric；ReportJudgeLocator 同锚）
+af/packages/reportkit/tools/render.py	255f68f7795706637749a9559fbb85444afcd92687b2398012dd94b077b4db76	report 判分基准（R5 渲染器；W1-C61 入指纹门）

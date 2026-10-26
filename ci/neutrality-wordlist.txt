@@ -34,6 +34,9 @@
 #
 # 基线实测（2026-10-25 本 commit HEAD，ci/neutrality_scan.py）：
 #   核心 src（af-dsl+af-compiler，含 src/bin）全量命中 14 条，全部入白名单段——
+#   红队 W1-C60（2026-10-26）：词边界改 ASCII 口径（\b 的 \w 含 CJK，中文
+#   注释邻接面失明）后基线 17 条（13 白名单豁免 + 4 新见条目登记如下；
+#   可执行标识符零领域词不变）。
 #   可执行标识符零领域词；code/repo/patch/diff/commit/rubric/citation/video/
 #   web_search 两包敏感词 0 命中。
 # =============================================================================
@@ -94,8 +97,11 @@ gptswarm	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制�
 metagpt	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制注释	同上（MetaGPT）	2026-10-25
 adaskit	白名单	crates/af-dsl/src/registry.rs:92	2	组件名·挂载机制注释	pkg.adaskit.* 组合引用示例（注释文本+代码示例串各 1 处）	2026-10-25
 git	白名单	crates/af-dsl/src/registry.rs:228	1	VCS 目录名·homonym	.git 隐藏目录跳过（目录名非 git 工具域）	2026-10-25
-sweng	白名单	crates/af-compiler/src/components.rs:59	1	组件名·挂载机制注释	pkg.sweng.locate 引用形示例（装载器 doc 注释）	2026-10-25
+sweng	白名单	crates/af-compiler/src/components.rs:62	1	组件名·挂载机制注释	pkg.sweng.locate 引用形示例（装载器 doc 注释；红队 W1-C60 ASCII 词边界后行号 59→62 漂移修正）	2026-10-26
 langgraph	白名单	crates/af-compiler/src/ir.rs:121	1	出处注记	checkpoint 语义出处（提案 B 互译表引注）	2026-10-25
 langgraph	白名单	crates/af-compiler/src/ir.rs:151	1	出处注记	interrupt(response_schema) 对应物语义出处	2026-10-25
 terminal	白名单	crates/af-compiler/src/ir.rs:578	1	规范词	failures[].terminal 终态义投影字段	2026-10-25
 terminal	白名单	crates/af-compiler/src/lower.rs:523	2	规范词	lowering 投影行 terminal: f.terminal 行内 2 处（字段名+访问表达式）	2026-10-25
+voyager	白名单	crates/af-compiler/src/ir.rs:23	1	图名示例·机制注释	sample6 子图路径示例 voyager_curriculum/explore/acquire（构造体路径键机制；红队 W1-C60 ASCII 词边界后可见，原 \b 口径对 CJK 邻接失明）	2026-10-26
+debate	白名单	crates/af-compiler/src/ir.rs:58	1	图名示例·机制注释	体内节点全局唯一连接键示例 rounds.debate_map（提案 B 路径键机制示例；红队 W1-C60 补见）	2026-10-26
+debate	白名单	crates/af-dsl/src/validate/mod.rs:29	1	图名示例·机制注释	点号路径示例 "rounds.debate_map.debater"（NodeRef.path 机制示例；红队 W1-C60 补见）	2026-10-26

@@ -79,9 +79,9 @@ fi
 echo "  [0] 预检 OK（工具/组件/workspace manifest）"
 
 # ---- 1. cargo fmt --check ---------------------------------------------------
-echo "== step1 cargo fmt --check"
-step 1 "cargo fmt --check" -- \
-  bash -c "cd '$AF_ROOT' && cargo fmt --check --all"
+echo "== step1 cargo fmt --check + K5 判分链路径 lint（总计划 §2 裁决7：K5 并入编译阶段 1）"
+step 1 "cargo fmt --check + K5 判分链路径 lint" -- \
+  bash -c "cd '$AF_ROOT' && cargo fmt --check --all && python3 ci/k5-path-lint.py"
 
 # ---- 2. clippy + 警告基线门 --------------------------------------------------
 echo "== step2 clippy（基线门：新增警告才 fail）"
@@ -249,9 +249,26 @@ fv_advisory() {
         PATH="$KDIR/bin:$PATH" \
         CARGO_TARGET_DIR="$HOME/afbuild-phase2fv-kani" \
         timeout 100 cargo kani > "$OUT/step9-kani.log" 2>&1); then
-      echo "9b Kani INV 镜像快检: exit=0"
-      grep -E '^Complete - ' "$OUT/step9-kani.log" | tail -1 || \
-        echo "（日志缺 Complete 汇总行——见 ci/out/step9-kani.log）"
+      # 9b 判定不再只看退出码（红队 W1-C44）：cargo kani 对「harness 被删减
+      #     甚至全删」仍 exit 0（No proof harnesses found 也是 0）——解析
+      #     Complete 汇总行并断言 harness 计数恰 32（INV 镜像面契约）且
+      #     0 failures；缺行/计数漂移均 FAIL（证明集缩水此前零防护）。
+      #     有意变更 harness 数须同步更新本断言与 INV 镜像契约登记。
+      local complete verified_k failures_k total_k
+      complete=$(grep -E '^Complete - ' "$OUT/step9-kani.log" | tail -1)
+      if [ -z "$complete" ]; then
+        echo "9b FAIL: 日志缺 Complete 汇总行（见 ci/out/step9-kani.log）"
+        rc=1
+      else
+        verified_k=$(echo "$complete" | grep -oE '[0-9]+ successfully verified harnesses' | grep -oE '^[0-9]+')
+        failures_k=$(echo "$complete" | grep -oE '[0-9]+ failures' | grep -oE '^[0-9]+')
+        total_k=$(echo "$complete" | grep -oE '[0-9]+ total' | grep -oE '^[0-9]+')
+        echo "9b Kani INV 镜像快检: exit=0 | $complete"
+        if [ "${verified_k:-0}" -ne 32 ] || [ "${failures_k:-1}" -ne 0 ] || [ "${total_k:-0}" -ne 32 ]; then
+          echo "9b FAIL: harness 计数断言不过（期望 32 verified / 0 failures / 32 total，实得 ${verified_k:-缺}/${failures_k:-缺}/${total_k:-缺}——证明集被删减或有失败）"
+          rc=1
+        fi
+      fi
     else
       echo "9b WARN: Kani 快检非零退出（超时 100s 或验证失败——详见 ci/out/step9-kani.log）"
       tail -5 "$OUT/step9-kani.log" 2>/dev/null | sed 's/^/      | /'

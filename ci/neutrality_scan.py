@@ -59,12 +59,42 @@ def load_wordlist(path):
     return blacklist, whitelist
 
 
-def main():
-    blacklist, whitelist = load_wordlist(WORDLIST)
-    # 长词在前防前缀吞并（词边界下双保险）
+def self_test() -> int:
+    """中文语境对抗自检（红队 W1-C60）：ASCII 词边界口径下，中文注释里与
+    汉字相邻的领域词必须命中（旧 \\b 口径对 CJK 邻接结构性失明），ASCII
+    复合标识符不误伤。独立可跑：python3 ci/neutrality_scan.py --self-test"""
+    blacklist, _ = load_wordlist(WORDLIST)
     ordered = sorted(blacklist, key=len, reverse=True)
     pattern = re.compile(
-        r"\b(" + "|".join(re.escape(w) for w in ordered) + r")\b", re.IGNORECASE
+        r"(?<![A-Za-z])(" + "|".join(re.escape(w) for w in ordered) + r")(?![A-Za-z])",
+        re.IGNORECASE,
+    )
+    probe = "本模块实现git仓库的patch提取与diff比对，详见commit记录"
+    hits = {w.lower() for w in pattern.findall(probe)}
+    expect = {"git", "patch", "diff", "commit"}
+    assert hits == expect, f"中文语境领域词须全命中：{hits} != {expect}"
+    for ident in ["ErrorCode", "BindReport", "digit", "repository", "commitment"]:
+        found = pattern.findall(ident)
+        assert not found, f"ASCII 复合标识符不误伤：{ident!r} 命中 {found}"
+    print("self-test PASS：中文语境 4 词全命中 / ASCII 复合标识符 5 例零误伤")
+    return 0
+
+
+def main():
+    if "--self-test" in sys.argv[1:]:
+        sys.exit(self_test())
+    blacklist, whitelist = load_wordlist(WORDLIST)
+    # 长词在前防前缀吞并（词边界下双保险）。边界口径（红队 W1-C60）：
+    # ASCII 词边界 (?<![A-Za-z]) 词 (?![A-Za-z])——Python \b 的 \w 含 CJK，
+    # 领域词与汉字相邻时（中文注释里「执行git仓库的patch提取」）\b 不成立，
+    # 此前 R6 零容忍门对中文技术注释结构性失明（与方案 §2.3 声明的
+    # grep -rniE 基线口径背离）；ASCII 边界 = 词不与 ASCII 字母相连即命中
+    #（前缀/后缀数字或 CJK 均算独立词；ErrorCode/BindReport 等 ASCII 复合
+    # 标识符不误伤——与旧 \b 同一面，只是把 CJK 邻接面补上）。
+    ordered = sorted(blacklist, key=len, reverse=True)
+    pattern = re.compile(
+        r"(?<![A-Za-z])(" + "|".join(re.escape(w) for w in ordered) + r")(?![A-Za-z])",
+        re.IGNORECASE,
     )
 
     hits = []  # (relpath, lineno, word, linetext)
