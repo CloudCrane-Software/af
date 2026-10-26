@@ -624,6 +624,7 @@
         ],
         "type": "object"
       },
+      "signal": {},
       "stall_state": {
         "properties": {
           "note": {

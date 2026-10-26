@@ -41,8 +41,8 @@
 | `T02_Vec稳定排序.v` | §C-03 | 通过 | Permutation + 键唯一 ⇒ 排序输出 = 输入多重集的规范函数（与构建序无关） | 键唯一（nodup_keys）显式入前提；排序契约（置换 + 有序）与字典序性质为 Hypothesis |
 | `T03_route归一化互定.v` | §C-04 | 通过 | 纯函数性（不依赖隐藏状态）+ 注入性，两半合取 =「一一互定」 | 相等取归一化产物结构相等；注入性依赖归一化不商掉信息 |
 | `T04_route守卫恰一命中.v` | §B-14 + §B-15 | B-14/B-15 均修订后通过 | B-14：归一化守卫（when_i ∧ ¬前缀析取）两两不交，由构造归纳；B-15：互斥 ∧ 恒真 ⇒ 恰一命中 | 守卫语义代数（sat 与 ¬/∨/∧/⊥ 对应）= CEL 求值通道契约 |
-| `T05_INV2写者集合恰一.v` | §A-07 | 通过 | 写者集合基数 ≠ 1 ∨ ≠ 声明 writer ⇒ 编译拒绝 + Report 含 E2311 | writer_set = writes[] 解析集合抽象；declared_writer 取 option |
-| `T06_单写者无并发写冲突.v` | §A-10 | 通过 | ①闭包通过 ⇒ 恰单点且不因 E2311/E2312 拒；②执行写事件无并发写冲突（性质由机制兑现） | ②「按 writer 路由」为显式 TCB 假设（【矩阵】:49） |
+| `T05_INV2写者集合恰一.v` | §A-07 | 通过 | 写者集合非空 ∧（基数 ≠ 1 ∨ ≠ 声明 writer）⇒ 编译拒绝 + Report 含 E2311 | writer_set = writes[] 解析集合抽象；declared_writer 取 option；**零写者前提** `0 < set_card (writer_set d s)`（红队 W2-C44，见 §八） |
+| `T06_单写者无并发写冲突.v` | §A-10 | 通过 | ①闭包通过 ⇒ 逐 store 恰单点（零写者 store 不在取域）且不因 E2311/E2312 拒；②执行写事件无并发写冲突（性质由机制兑现） | ②「按 writer 路由」为显式 TCB 假设（【矩阵】:49）；①**零写者前提** `0 < set_card (writer_set d s)`（红队 W2-C44，见 §八） |
 | `T07_carried覆盖E2211.v` | §A-09 | 通过 | 覆盖缺口 ⇒ 拒 + E2211；覆盖通过 ⇒ 不因 E2211 拒（双向） | 三集合（体内写/体外声明/carried）抽象；绑定完备性代位（E900x 缺席） |
 | `T08_loop迭代边界E2002.v` | §B-01 | 修订后通过 | 守卫面：缺失→E1002、=0→E2002；运行时面：iter ∈ [1, max_iterations] 恒成立、耗尽且 exit_when 未命中 ⇒ 不开新轮 | 驱动器单步契约（单调/只按完成轮 +1/预算门/max 恒定且 >0）为 Hypothesis |
 | `T09_安全点必经E2004.v` | §B-06 | 修订后通过 | 守卫面：缺失→E1002、空→E2004；运行时面：计入完成 ⇒ 经安全点判定（及其逆否） | 「判定输出」按 :28 原词抽象（UNCERTAIN 照草稿口径）；E2322 属 A-13 未入本批 |
@@ -58,8 +58,8 @@
 | T03 | `C04_normalize_mutually_determined` | 归一化输出唯一决定（规则列表，文档序）——注入性 |
 | T04 | `B14_normalized_guards_pairwise_disjoint` | ¬ 前缀展开构造的守卫两两不交（对规则表归纳，无需图分析） |
 | T04 | `B15_route_exactly_one_hit` | 互斥 ∧ 恒真 ⇒ 每条出边恰被一个守卫命中 |
-| T05 | `A07_inv2_writer_set_exactly_one_soundness` | 写者集合违例 ⇒ 拒绝 + E2311 |
-| T06 | `A10_writer_closure_completeness` | 闭包通过 ⇒ 恰单点 + 不因 E2311/E2312 拒 |
+| T05 | `A07_inv2_writer_set_exactly_one_soundness` | 写者集合非空且违例 ⇒ 拒绝 + E2311 |
+| T06 | `A10_writer_closure_completeness` | 闭包通过 ⇒ 逐 store 恰单点（零写者不在取域）+ 不因 E2311/E2312 拒 |
 | T06 | `A10_no_concurrent_write_conflict` | 路由 TCB 前提下任意 store 无并发写冲突 |
 | T07 | `A09_carried_coverage_soundness` | 覆盖缺口 ⇒ 拒绝 + E2211 |
 | T07 | `A09_carried_coverage_completeness` | 覆盖通过 ⇒ 不因 E2211 拒 |
@@ -114,7 +114,7 @@ for f in T*.v; do echo "== $f"; coqc "$f" || exit 1; done
 
 ## 七、修订记录 v0.1（2026-10-25 · 保真审计后修订）
 
-保真审计（2026-10-25）判定 10 文件中 3 处失真（1 wrong + 2 weakened），逐处修订；**其余 7 文件一字未动**。每处修订依据（审计条目 + 义务原文）已同步记入对应 `.v` 文件头注释的「修订记录 v0.1」块。
+保真审计（2026-10-25）判定 10 文件中 3 处失真（1 wrong + 2 weakened），逐处修订；**其余 7 文件在 v0.1 时点一字未动**（此后 T05/T06 经红队 W2-C44 再修订，见 §八——「7 文件未动」自 v0.2 起不再成立）。每处修订依据（审计条目 + 义务原文）已同步记入对应 `.v` 文件头注释的「修订记录 v0.1」块。
 
 ### 1. 三处修订依据（义务原文以 `../theorems-v1.md` 为准）
 
@@ -135,3 +135,14 @@ for f in T*.v; do echo "== $f"; coqc "$f" || exit 1; done
 
 - 修订批报告的「类型门 7/10」系**假红**：修订员返回的 file 字段含目录前缀，编排者门脚本再前置 DIR_ABS 造成双拼路径，coqc 对不存在文件报非零。编排者以正确单一路径复跑全量：**10/10 通过**（T04/T07/T08 修订版含内）。
 - 本库终态：v0.1，10 义务陈述、10/10 coqc 通过、10/10 保真 faithful（首轮 7 + 修订 3 全部 faithful）。证明本体待后续证明战役。
+
+## 八、修订记录 v0.2（2026-10-26 · 红队 W2-C44 零写者前提）
+
+T05/T06 两文件的定理取域补**零写者前提** `0 < set_card (writer_set d s)`（违例谓词与结论本体不动）；原因：conflict-demo 机器反例（Kani镜像员-INV组/CONFLICTS.md #2/#2b）实证——零写者 store ∧ 声明 writer 已解析时实装**不报** E2311（inv2.rs 判定式 = len>1 ∨ (len==1 ∧ ≠声明)，无 len==0 支），而字面违例谓词在 card=0 时成真（0 ≠ 1）⇒ T05 soundness 字面陈述被证伪、T06「恰一」结论对零写者 store 空指。与 Kani 侧 a07_soundness 的 cnt≥1 前提同口径（RUNLOG §3 在案）。
+
+| 文件 | 修订处 | 依据 | 验证 |
+|---|---|---|---|
+| `T05_INV2写者集合恰一.v` | `A07_inv2_writer_set_exactly_one_soundness` 取域补 `0 < set_card (writer_set d s) ->`（:86） | CONFLICTS.md #2/#2b 机器反例；建模说明头注「零写者前提（红队 W2-C44 补入）」 | 10 文件 coqc 全过（2026-10-27 复跑 10/10） |
+| `T06_单写者无并发写冲突.v` | `A10_writer_closure_completeness` 恰单点结论取域补同一前提（:72-73） | 同上：零写者 store 不在「恰一」结论取域 | 同上 |
+
+语义归宿：v0.2 议程 A-07 修订（判定域 = 基数 ≥ 1）落地后该前提即可撤（T05 头注已预告，届时按议程对账登记同步修订）。

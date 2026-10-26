@@ -89,27 +89,27 @@ fn declared_type_names(doc: &Document) -> std::collections::BTreeSet<String> {
 }
 
 fn schema_node_violation(
-    type_name: &str,
+    subject: &str,
     path: &str,
     schema: &serde_json::Value,
     declared: &std::collections::BTreeSet<String>,
 ) -> Option<String> {
     let Some(obj) = schema.as_object() else {
         return Some(format!(
-            "类型 {type_name} 的 schema（{path}）非 JSON 对象（实为 {}）——schema 必须是内联 \
+            "{subject} 的 schema（{path}）非 JSON 对象（实为 {}）——schema 必须是内联 \
              JSON Schema 对象（唯一 schema 家），标量/数组/null 形状拒收",
             json_kind_name(schema)
         ));
     };
     let Some(ty) = obj.get("type").and_then(|t| t.as_str()) else {
         return Some(format!(
-            "类型 {type_name} 的 schema（{path}）缺 type 段或 type 非字符串——JSON Schema \
+            "{subject} 的 schema（{path}）缺 type 段或 type 非字符串——JSON Schema \
              节点必须声明原始六型之一（object/string/integer/number/boolean/array）"
         ));
     };
     if !SCHEMA_PRIMITIVE_TYPES.contains(&ty) && !declared.contains(ty) {
         return Some(format!(
-            "类型 {type_name} 的 schema（{path}）type={ty:?} 不在原始六型 \
+            "{subject} 的 schema（{path}）type={ty:?} 不在原始六型 \
              （object/string/integer/number/boolean/array）也不是已声明类型名——\
              对象 schema 必须住 types 表（命名引用指向同文档 types 条目）"
         ));
@@ -119,13 +119,11 @@ fn schema_node_violation(
         if ty == "object" {
             if let Some(props) = obj.get("properties") {
                 let Some(map) = props.as_object() else {
-                    return Some(format!(
-                        "类型 {type_name} 的 schema（{path}）properties 非对象"
-                    ));
+                    return Some(format!("{subject} 的 schema（{path}）properties 非对象"));
                 };
                 for (k, v) in map {
                     if let Some(detail) =
-                        schema_node_violation(type_name, &format!("{path}.{k}"), v, declared)
+                        schema_node_violation(subject, &format!("{path}.{k}"), v, declared)
                     {
                         return Some(detail);
                     }
@@ -135,7 +133,7 @@ fn schema_node_violation(
         if ty == "array" {
             if let Some(items) = obj.get("items") {
                 if let Some(detail) =
-                    schema_node_violation(type_name, &format!("{path}[]"), items, declared)
+                    schema_node_violation(subject, &format!("{path}[]"), items, declared)
                 {
                     return Some(detail);
                 }
@@ -145,15 +143,36 @@ fn schema_node_violation(
     None
 }
 
-/// types[].schema 形状检查（E1003 值域/形状面；随 validate 一次收齐）。
+/// schema 形状检查（E1003 值域/形状面；随 validate 一次收齐）。两个裸
+/// `serde_json::Value` schema 位同门：types[].schema（W3-C18）与
+/// human.resume.schema（红队 W2-C-24）——后者同为裸 Value 且同走
+/// cel::synth_from_schema（validate/m4.rs add_resume），漏门则标量/数组/null
+/// resume schema 零违例过审、human 节点 route 的 CEL 布尔判定静默无证据。
 pub fn check_schema_shape(doc: &Document) -> Vec<crate::error::Violation> {
     let mut out = Vec::new();
     let declared = declared_type_names(doc);
     for t in &doc.types {
-        if let Some(detail) = schema_node_violation(&t.name, "schema", &t.schema, &declared) {
+        if let Some(detail) =
+            schema_node_violation(&format!("类型 {}", t.name), "schema", &t.schema, &declared)
+        {
             out.push(crate::error::Violation::new(
                 ErrorCode::TypeMismatch,
                 "types",
+                detail,
+            ));
+        }
+    }
+    for n in &doc.nodes {
+        let Some(h) = &n.human else { continue };
+        if let Some(detail) = schema_node_violation(
+            &format!("节点 {} human.resume", n.id),
+            "schema",
+            &h.resume.schema,
+            &declared,
+        ) {
+            out.push(crate::error::Violation::new(
+                ErrorCode::TypeMismatch,
+                "human",
                 detail,
             ));
         }

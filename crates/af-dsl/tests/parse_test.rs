@@ -476,3 +476,43 @@ fn non_object_schema_is_e1003() {
     let ok = "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\ntypes:\n  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }\n  - { name: a, schema: { type: object, required: [items], properties: { items: { type: array, items: { type: integer } }, flag: { type: boolean } } } }\nnodes:\n  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n";
     assert_eq!(codes(ok), Vec::<&str>::new(), "合法 schema 形状零违例");
 }
+
+// ---------- 红队 W2-C-24：human.resume.schema 同门（E1003） ----------
+
+#[test]
+fn human_resume_schema_shapes_are_gated_e1003() {
+    // human.resume.schema 与 types[].schema 同为裸 serde_json::Value、同走
+    // cel::synth_from_schema（validate/m4.rs add_resume）——W3-C18 只门了
+    // types 面，标量/数组/null resume schema 仍零违例过审：resume 绑定退化为
+    // Null、human 节点 route 的 CEL 布尔判定静默无证据。同规则 fail-loud。
+    let bad_schemas = [
+        ("字符串标量", "x"),
+        ("数字", "42"),
+        ("数组", "[1, 2]"),
+        ("布尔", "true"),
+        ("null", "null"),
+        ("空对象（无 type）", "{}"),
+        ("type 非六型且非声明名", "{ type: blob }"),
+        (
+            "properties 子节点无 type",
+            "{ type: object, properties: { approved: {} } }",
+        ),
+    ];
+    for (label, schema) in bad_schemas {
+        let src = format!(
+            "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: {{ ref: a, from: n1 }}\ntypes:\n  - {{ name: in_t, schema: {{ type: object }} }}\n  - {{ name: a, schema: {{ type: object }} }}\nnodes:\n  - id: n1\n    kind: task\n    human: {{ station: s1, role: approver, resume: {{ schema: {schema} }} }}\n    emits: {{ answer: a }}\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n"
+        );
+        assert_eq!(
+            codes(&src),
+            ["E1003"],
+            "{label} 应被 human.resume.schema 形状门拒（E1003）"
+        );
+    }
+    // 正例：合法对象（六型 + 递归 properties + 已声明类型命名引用）零违例。
+    let ok = "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\ntypes:\n  - { name: in_t, schema: { type: object } }\n  - { name: a, schema: { type: object } }\nnodes:\n  - id: n1\n    kind: task\n    human:\n      station: s1\n      role: approver\n      resume:\n        schema: { type: object, required: [approved], properties: { approved: { type: boolean }, note: { type: in_t } } }\n    emits: { answer: a }\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n";
+    assert_eq!(
+        codes(ok),
+        Vec::<&str>::new(),
+        "合法 human.resume.schema 零违例"
+    );
+}

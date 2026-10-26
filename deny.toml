@@ -10,8 +10,8 @@ ignore = [
   { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 经 biscuit-auth 6 传入；无安全升级路径，钉版观察（处置单 F4）" },
   { id = "RUSTSEC-2024-0436", reason = "paste 经 cel-interpreter 0.10 传入；unmaintained 无漏洞记录，钉版观察（处置单 F4）" },
   # RUSTSEC-2024-0449: unsafe-libyaml 0.2.11 unmaintained（链路 unsafe-libyaml ← serde_yaml 0.9.34+deprecated ← af-dsl）。
-  # D-10 后置迁移（serde_yaml→维护中 fork，专项 TDD 批），豁免理由：unmaintained≠漏洞，本地受信输入（编排者裁决 2026-10-25）
-  { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml 经 serde_yaml 0.9.34 传入 af-dsl；D-10 后置迁移，豁免理由：unmaintained≠漏洞，本地受信输入" },
+  # D-44 后置迁移（serde_yaml→维护中 fork，专项 TDD 批；计划/技术债登记.md:53），豁免理由：unmaintained≠漏洞，本地受信输入（编排者裁决 2026-10-25）
+  { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml 经 serde_yaml 0.9.34 传入 af-dsl；D-44 后置迁移，豁免理由：unmaintained≠漏洞，本地受信输入" },
 ]
 
 [licenses]

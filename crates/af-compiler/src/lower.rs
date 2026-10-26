@@ -98,7 +98,7 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
         escapes: BTreeMap::new(),
     };
     let (nodes, edges) = lw.scope(&doc.nodes, &doc.edges, "")?;
-    let body = IrBody {
+    let mut body = IrBody {
         graph: GraphTemplate {
             graph_version: doc.meta.graph_version.clone(),
             name: doc.meta.name.clone(),
@@ -142,10 +142,60 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
         // trust 注记一等占位（ADR-010 §5）：v0.1 恒空
         trust: BTreeMap::new(),
     };
+    ensure_used_builtin_type_entries(&mut body);
     Ok(IrProgram {
         ir_version: IR_VERSION,
         body,
     })
+}
+
+/// 类型表达式的基名（剥 list<>/envelope<> 包裹；YAML 面无嵌套泛型）。
+fn port_base_name(expr: &str) -> &str {
+    let mut cur = expr;
+    loop {
+        if let Some(inner) = cur.strip_prefix("list<").and_then(|s| s.strip_suffix('>')) {
+            cur = inner;
+            continue;
+        }
+        if let Some(inner) = cur
+            .strip_prefix("envelope<")
+            .and_then(|s| s.strip_suffix('>'))
+        {
+            cur = inner;
+            continue;
+        }
+        break;
+    }
+    cur
+}
+
+/// 使用面内建类型条目补登记（红队 W2-C-27）：`signal` 是语言内建控制类型
+/// （`m::TypeExpr::Signal`；af-dsl refs 对其 type_resolves 恒真——声明面
+/// 无条目也合法可用），而执行面 check_typed（graph_unit）按基名查
+/// plan.types：MetaGPT/SWE-agent 等六份合法 DSL 语料产出 signal 型端口/
+/// 终态，进图即 EX4006「基名 signal 不在 plan.types」——计划自含（单文件
+/// 即编排真相）对该类型面不成立。与内联原始型（W3-C20）同法收口：扫描
+/// interface 输入/终态 + 全节点 consumes/emits 的类型表达式，使用面出现
+/// signal 基名而声明面无同名条目时补 `{}`（空 JSON Schema = 无形状约束
+/// ——signal 载荷形状由组件定义、计划侧不核，与 af-dsl 恒真解析同口径）；
+/// 声明面已有同名时声明优先。其余基名（Named 型）af-dsl 已强制可解析，
+/// 不在此兜底。
+fn ensure_used_builtin_type_entries(body: &mut IrBody) {
+    let uses_signal = port_base_name(&body.interface.input_type) == "signal"
+        || port_base_name(&body.interface.output_type) == "signal"
+        || body.node_exec.values().any(|n| {
+            n.consumes.values().any(|t| port_base_name(t) == "signal")
+                || n.artifacts.values().any(|a| {
+                    a.r#type
+                        .as_deref()
+                        .is_some_and(|t| port_base_name(t) == "signal")
+                })
+        });
+    if uses_signal {
+        body.types
+            .entry("signal".to_string())
+            .or_insert_with(|| serde_json::json!({}));
+    }
 }
 
 /// 逐作用域降维状态（根图 + 嵌套体共用）。
@@ -340,8 +390,17 @@ impl<'a> Lowering<'a> {
                         let is_final = path == self.output_from
                             && match (&ty, &fb) {
                                 (Some(t), _) => t == &self.output_type,
-                                (None, Some(_)) => af_dsl::derived_emit_type(self.doc, path, port)
-                                    .is_some_and(|derived| derived.display() == self.output_type),
+                                (None, Some(_)) => {
+                                    // 红队 W2-C-26：推导类型经 norm_type_expr
+                                    // 规范化后再比——`display()` 对内联原始型
+                                    // 返回哨兵串 "{type:string}"，与 output_type
+                                    // 的裸名规范形永不等，af-dsl E2202 认可的
+                                    // 内联 ref 终态发射者被错误剥夺 is_final
+                                    // （全计划零终态工件 → 执行面必拒）。
+                                    af_dsl::derived_emit_type(self.doc, path, port).is_some_and(
+                                        |derived| norm_type_expr(&derived) == self.output_type,
+                                    )
+                                }
                                 (None, None) => false,
                             };
                         (
@@ -488,29 +547,82 @@ impl<'a> Lowering<'a> {
 /// 规范 JSON `{"roots":[…],"source":"…"}`——serde_json Map 默认 BTreeMap 序，
 /// 键序=字典序，确定性成立）。cel-parser 0.10.1 对畸形串的 antlr4rust 错误
 /// 恢复 panic 以 catch_unwind 兜底归一（承 af-graph `predicate.rs` 纪律）。
-fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
-    let compile = || Program::compile(source);
-    let program = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(compile)) {
-        Ok(Ok(p)) => p,
-        Ok(Err(e)) => {
-            return Err(LowerError::CelCompile {
-                source: source.into(),
-                detail: e.to_string(),
-            })
-        }
-        Err(_) => {
-            return Err(LowerError::CelCompile {
-                source: source.into(),
-                detail: "cel-parser 内部 panic（antlr4rust 错误恢复路径）".into(),
-            })
-        }
-    };
-    let roots: BTreeSet<String> = program
+///
+/// 解析在受控大栈工作线程上执行（红队 W2-C-21，承 af-dsl cel.rs W3-C16
+/// 同一纪律）：antlr4rust 递归下降的栈帧随构建档差一个数量级——E1054
+/// 深度阈值 1000 按 release 档标定，debug 档（cargo build/test 默认档，
+/// 生产 CLI 即此档）在调用方 8MB 主栈上深约 59 即 SIGABRT（exit 134），
+/// 「深>1000 前置拒」在真实运行档位形同虚设；且栈溢出是 abort 非 unwind
+/// panic，catch_unwind 兜不住。解析改在固定大栈工作线程上跑后，可达深度
+/// 与调用方栈大小/构建档解耦。`Program` 含 `Rc` 不可跨线程，故
+/// compile→引用提取全链条在线程内完成、仅回传 `BTreeSet<String>`（Send）。
+/// 线程构建失败（极少见）回退调用方线程执行——行为不劣于修复前。
+// 256MB 与 af-dsl cel.rs 同一标定：debug 档 antlr4rust 帧约 80KB/层，
+// E1054 上限深 1000 需 ~80MB，留 3 倍余量；线程栈为虚拟内存预留（非实
+// 提交），不构成实存压力。
+const CEL_WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
+
+/// compile + 引用提取（大栈线程内执行的最小单元；`Program` 不出线程）。
+fn compile_cel_roots(source: &str) -> Result<BTreeSet<String>, LowerError> {
+    let program =
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Program::compile(source))) {
+            Ok(Ok(p)) => p,
+            Ok(Err(e)) => {
+                return Err(LowerError::CelCompile {
+                    source: source.into(),
+                    detail: e.to_string(),
+                })
+            }
+            Err(_) => {
+                return Err(LowerError::CelCompile {
+                    source: source.into(),
+                    detail: "cel-parser 内部 panic（antlr4rust 错误恢复路径）".into(),
+                })
+            }
+        };
+    Ok(program
         .references()
         .variables()
         .into_iter()
         .map(str::to_owned)
-        .collect();
+        .collect())
+}
+
+fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
+    let source_owned = source.to_owned();
+    let cell = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let cell2 = cell.clone();
+    let spawned = std::thread::Builder::new()
+        .name("af-compiler-cel-parse".into())
+        .stack_size(CEL_WORKER_STACK_BYTES)
+        .spawn(move || {
+            let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                compile_cel_roots(&source_owned)
+            }));
+            *cell2.lock().unwrap_or_else(|e| e.into_inner()) = Some(out);
+        });
+    let roots: BTreeSet<String> = match spawned {
+        Ok(handle) => {
+            if handle.join().is_err() {
+                return Err(LowerError::CelCompile {
+                    source: source.into(),
+                    detail: "cel-parser 工作线程异常退出（红队 W2-C-21 大栈线程 \
+                             fail-loud，不在调用方栈上重试）"
+                        .into(),
+                });
+            }
+            match cell.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                Some(Ok(Ok(roots))) => roots,
+                _ => {
+                    return Err(LowerError::CelCompile {
+                        source: source.into(),
+                        detail: "cel-parser 内部 panic（antlr4rust 错误恢复路径）".into(),
+                    })
+                }
+            }
+        }
+        Err(_) => compile_cel_roots(source)?,
+    };
     let canonical = serde_json::json!({ "roots": roots, "source": source });
     let text = serde_json::to_string(&canonical)
         .map_err(|e| LowerError::Serialize(format!("CelRef 规范序列化失败：{e}")))?;
