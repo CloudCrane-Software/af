@@ -14,3 +14,5 @@
 | [ADR-007](007-tdd-discipline.md) | TDD 开发规约：红-绿-重构、小模块自包含可审计 | 已裁决 2026-10-24 |
 | [ADR-008](008-bench-retirement.md) | 旧 bench 基础设施退役纪律（单一入口终态） | 已裁决 2026-10-24 |
 | [ADR-009](009-resource-discipline.md) | 资源并行纪律（与 AB 测试会话共存） | 已裁决 2026-10-24 |
+| [ADR-010](010-expert-feedback.md) | 专家高维意见的讨论与吸纳裁决（补登索引，红队 W1 批） | 已裁决 2026-10-24 |
+| [ADR-011](011-redteam-w1-fixes.md) | 红队修复批（W1）：执行面范围裁定（mcode headless 推迟/tb 库形态/转换器冻结/MARBLE 退出）+ 判分链/预算面/装订面收口 | 已裁决 2026-10-26 |

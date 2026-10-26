@@ -23,6 +23,14 @@ af-bench 的 swev/tb 模块**迁移而非重写**（保留判分三件套契约�
 - gitea 远端与 GitHub 镜像统一覆盖，无新仓库管理面；
 - 组件仓库（使命指令 COMPONENT_REPO）以 `packages/` 目录 + manifest 承担，不另建外部仓。
 
+## 勘误（2026-10-26，红队 W1-C04）
+
+- af-order 门面命令面按实交付为 **submit / list / show** 三子命令：submit
+  一命令走通全生命周期（`OrderLifecycleDriver` 内部驱动 release/start/
+  complete/close，引擎 9-op 在役），approve/close 不设门面子命令——本文与
+  总计划 §0 的「submit/approve/list/close」四命令枚举由本勘误修订（详见
+  [ADR-011](011-redteam-w1-fixes.md) 裁决 5）。
+
 ## 边界
 
 - 不修改 af-workorder/af-engine 既有语义（订单模型是底座资产）；确需扩展 op 集走新 ADR。

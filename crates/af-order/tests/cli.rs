@@ -427,7 +427,7 @@ fn resubmit_with_different_line_is_rejected() {
     let swapped = write_spec(
         &state,
         "order2.json",
-        &r#"{"order_id":"wo-cli-w1c41","line":{"line_id":"line-other","line_version":"lv-1"},"budget":7}"#,
+        r#"{"order_id":"wo-cli-w1c41","line":{"line_id":"line-other","line_version":"lv-1"},"budget":7}"#,
     );
     let second = submit(&swapped, &state);
     assert!(

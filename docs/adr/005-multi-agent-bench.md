@@ -1,6 +1,10 @@
 # ADR-005: 多 agent bench 选型——MARBLE 主 + TaskBench 备
 
-- 状态：已裁决（2026-10-24，编排者）
+- 状态：已裁决（2026-10-24，编排者）；**部分被 [ADR-011](011-redteam-w1-fixes.md)
+  取代（2026-10-26）**：裁决 1「主选 MARBLE」作废（MARBLE 退出第二阶段，
+  W2 裁决 + 多 agent 走 AFB 原生图）；裁决 3 的 bench→WorkOrder 转换协议
+  冻结（转换器推迟至扩量期）。裁决 2「备选 TaskBench」相应转入冻结。
+  本文件正文保留为裁决时点原貌（ADR README 纪律：不原地改写）。
 
 ## 依据
 

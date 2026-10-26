@@ -1,4 +1,4 @@
-== step8 neutrality 门开始 2026-10-25 23:32:47
+== step8 neutrality 门开始 2026-10-26 08:11:29
 [PASS] Z0-pre 沙箱 /home/pan-ding/afb-neut-sbx（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，11M）；target=/home/pan-ding/afbuild-neutrality
 -- 阶段1 对照臂（包原样）
   对照臂 af-dsl exit=0
@@ -17,9 +17,11 @@
 [PASS] P-B 空包根下 MetaGPT exit=1 + E2001（selector 候选图未声明，×3)
 [PASS] P-C 空包根下 ReAct exit=1 + E9001（uses.* 未注册，注册表共 0 条）
 -- 阶段4 N2 扫描 + N3 登记闭集
-[PASS] S1 领域词扫描白名单外命中 = 0（命中 14 处）
+[PASS] S1 领域词扫描白名单外命中 = 0（命中 17 处）
 [PASS] R7 闭集守卫 OK：21 份 IR golden 与登记互为闭集
-词表 SHA-256：70970efcceebee93e5757ef67c683895c3c3ec9725e710f5f5b5bbbdf831b72c
-[PASS] Z0 正仓 git status 前后零差（沙箱只读正仓）
-== step8 汇总：PASS=12 FAIL=0（判据 C1/I1/I2/I3/I4/P-A/P-B/P-C/S1/R7/Z0）
-== step8 neutrality 门全绿
+词表 SHA-256：9665f68def0b6c5c1edfb3fdd4e64fa2affe97f109e5a18b5e7bc2425364e142
+[FAIL] Z0 正仓被写（R0 前置破坏）：0a1,2
+>  M docs/adr/002-crate-layout.md
+>  M docs/adr/005-multi-agent-bench.md
+== step8 汇总：PASS=11 FAIL=1（判据 C1/I1/I2/I3/I4/P-A/P-B/P-C/S1/R7/Z0）
+== step8 neutrality 门红（见 /home/pan-ding/workspace/af-wt-redteam/ci/out/step8-neutrality.log）

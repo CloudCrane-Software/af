@@ -21,6 +21,13 @@
 - 组合规则：`pkg.{package}.{name}@{version}` —— 恰为文档中
   `topology_selector` 的候选图引用形（`af-dsl` `validate::m4` 按
   `ValidateOptions.declared_graphs` 精确串匹配）。
+  例外登记（红队 W1-C69，2026-10-26）：**reportkit 包的组件名段为
+  `pkg.report.*`（非包目录名 `reportkit`）**——六件
+  web_search/web_fetch/pdf_extract/citation_unit/rubric_unit/mem.notes
+  落 `pkg.report.*` 段，而同包 template_ref 用 `pkg.reportkit.*`（G4 施工
+  裁决 10/12 后的模板面），同包两段并存。G4「组件名段匹配包目录」约定对
+  reportkit 不成立，登记为已知例外（更名牵动注册表/计划快照/golden 联动，
+  收益不成比例；消费者按 components.json 实况解析，不按目录名推导）。
 - 唯一性：同清单内、跨包间组合引用均不得重复（装载即拒，首声者路径在案）。
 - 扫描规则：**目录即包候选**——`af/packages/` 下每个非隐藏目录必须有
   `manifest.json`；非目录条目（README.md、`.gitkeep` 等）不是包，跳过；
@@ -98,15 +105,22 @@ sweng 首批先例：装载期只登记引用，实现本体归 G4/执行面）�
   与 route.main/cheap 同端点面——plan/manager/judge/reflect 主力档
   GLM-5.3、alt 备档 GLM-5.3-Flash）+ tool 28 + unit 13 + memory 4
   = 50；总计 7 + 50 = **57 条声明**。
+  （红队 W1-C54 勘误，2026-10-26：G4 reportkit 建包 +6（web_search/
+  web_fetch/pdf_extract/citation_unit/rubric_unit/mem.notes），终态总量
+  **63 条**——`registry_decl_test.rs` 断言 component_count()==63、
+  `bind_test.rs` 断言 63；本行保留 P2-L12 时点数，正本口径以 63 为准。）
 - 落位：**已有包**补包级清单——adaskit（task_loader/verifier）、
   autogen（tool.search/calc、team.stall/term_unit、mem.list）、sweng
   （publish_task_finished）；**未建包**（aflowkit/agensh/camelkit/
   crewkit/debatekit/reactkit/reflexkit/sweagent/langgraph/openworld 十
-  包，尚无图清单）的 35 件暂驻**根级** components.json 的 `pkg.*` 命名
-  空间段。不新建空包目录：`af-dsl::registry` 规则「包目录必须有
+  包，尚无图清单）的暂驻**根级** components.json 的 `pkg.*` 命名空间段
+  （红队 W1-C65 勘误，2026-10-26：十包实为 **37 件**——aflowkit 2 /
+  agensh 8 / camelkit 1 / crewkit 7 / debatekit 2 / reactkit 2 /
+  reflexkit 3 / sweagent 10 / langgraph 1 / openworld 1，aff4f1a 落地当天
+  即 37；历史文书中的「35 件」均误抄 2 件）。不新建空包目录：`af-dsl::registry` 规则「包目录必须有
   manifest.json 且 graphs 至少一项」（registry.rs:230-234/:152）——十包
   无图可声明（selector 闭包 14 图属 adaskit/autogen/swarmkit/sweng 四包），
-  建 dir 即造空清单或伪图，两皆不可。G4 建包时将 35 件迁包级。
+  建 dir 即造空清单或伪图，两皆不可。G4 建包时将暂驻件迁包级。
 - 版本：版本化引用对齐稿内 `@1`；未版本化引用的 7 名
   （pkg.agensh.inspect/local_edit/local_run/publish_update、
   pkg.reactkit.hopqa_api/lookup、pkg.sweng.publish_task_finished）恰好
