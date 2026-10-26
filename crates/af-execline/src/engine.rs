@@ -176,16 +176,38 @@ fn build_engine(workspace_root: &Path, target_dir: &Path) -> Result<(), Execline
 }
 
 /// 落信任锚（红队 W2-C56）：`<sha256>  <workspace 根>` 一行。
+///
+/// 原子落盘（红队合龙期九门 step3 修复）：`std::fs::write` 的「截断→写」
+/// 两段非原子——并发 `anchor_read` 会读到空行/半行（实测复现：读者读到
+/// `""` 与 32 字符截断行），`starts_with(hash)` 判假 → 误触案例③ 删 bin
+/// 重建 → 并发线程定位好正待 spawn 时 bin 被删 → `EngineSpawnFailed`
+/// ENOENT。改同目录临时件 + `rename`（POSIX rename 原子）：读者只许见到
+/// 「不在场」或「完整一行」。
 fn write_trust_anchor(
     anchor: &Path,
     hash: &str,
     workspace_root: &Path,
 ) -> Result<(), ExeclineError> {
-    std::fs::write(anchor, format!("{hash}  {}\n", workspace_root.display())).map_err(|err| {
-        ExeclineError::EngineBinaryUntrusted {
+    let tmp = anchor.with_file_name(format!(
+        "{}.{}.tmp",
+        anchor
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("af-engine.sha256"),
+        std::process::id()
+    ));
+    if let Err(err) = std::fs::write(&tmp, format!("{hash}  {}\n", workspace_root.display())) {
+        return Err(ExeclineError::EngineBinaryUntrusted {
             detail: format!("信任锚 {} 写入失败: {err}", anchor.display()),
-        }
-    })
+        });
+    }
+    if let Err(err) = std::fs::rename(&tmp, anchor) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(ExeclineError::EngineBinaryUntrusted {
+            detail: format!("信任锚 {} 落盘失败: {err}", anchor.display()),
+        });
+    }
+    Ok(())
 }
 
 /// 信任锚旁车路径（红队 W2-C56）：与二进制同目录同根，`af-engine.sha256`。
@@ -211,6 +233,18 @@ fn sha256_of(path: &Path) -> Option<String> {
             .collect(),
     )
 }
+
+/// `locate` 全程互斥锁（红队合龙期九门 step3 修复）。
+///
+/// 场景：lifecycle/p5_wiring 套件多线程并发 `locate`（8 线程同款并发度），
+/// 案例③ 会 `cargo clean -p af-engine` 删 bin 再从源码重建。缺陷态下一线程
+/// 读到另一线程写了一半的锚 → 误判不符 → 删 bin 重建 → 其他线程已定位好、
+/// 正待 spawn 时 bin 被删 → `EngineSpawnFailed` ENOENT（两次全管道跑分别
+/// 2/6 例，standalone 跑又因状态自洽而全绿——纯竞态，九门硬线绝不容赌）。
+/// 互斥后：验/建/删/重建全程持锁，等待线程复验后走「验过即用」——任何线程
+/// 的在用 bin 不会被并发 locate 删除。持锁线程若 panic（中毒）不放大故障：
+/// 锚/币状态由复验逻辑与终核自判，直接恢复守卫继续用。
+static LOCATE_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 /// af-engine 客户端。
 #[derive(Debug, Clone)]
@@ -242,6 +276,11 @@ impl EngineClient {
     ///
     /// 构建失败 = EX1002，构建后仍找不到二进制 = EX1001——都不静默跳过。
     pub fn locate(workspace_root: &Path, target_dir: &Path) -> Result<Self, ExeclineError> {
+        // 全程互斥：见 LOCATE_LOCK 注记（并发 locate 的删 bin 重建不得与他线程
+        // 的在用定位交叠）。中毒锁也恢复继续用——状态自洽由下方复验+终核保证。
+        let _guard = LOCATE_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let bin = target_dir.join("debug").join("af-engine");
         let anchor = trust_anchor_path(&bin);
         if bin.is_file() {
@@ -513,4 +552,118 @@ fn engine_binary_tamper_is_detected_and_rebuilt() {
     );
 
     let _ = std::fs::remove_dir_all(&target);
+}
+
+/// 落锚原子性：并发读者只见「不在场」或「完整一行」。
+///
+/// 红队合龙期九门 step3 实测缺陷（2026-10-27）：`write_trust_anchor` 用
+/// `std::fs::write`（截断 + 写两段非原子），lifecycle 套件 8 线程并发
+/// `locate` 时，读者可读到空行/半行 → `starts_with(hash)` 假 → 误判
+/// 「锚不符」→ 案例③ `cargo clean -p af-engine` 删 bin 重建 → 其他线程
+/// 已定位好、正待 spawn 时 bin 被删 → `EngineSpawnFailed` ENOENT
+/// （两次全管道跑分别 2/6 例）。本钉死要求落锚原子（临时件 + rename）。
+#[test]
+fn trust_anchor_write_is_atomic_for_concurrent_readers() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    let dir = std::env::temp_dir().join(format!("af-engine-anchor-atomic-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).expect("临时目录");
+    let anchor = dir.join("af-engine.sha256");
+    let hash = "a".repeat(64);
+    let expected = format!("{hash}  {}", dir.display());
+
+    let stop = Arc::new(AtomicBool::new(false));
+    let mut readers = Vec::new();
+    for _ in 0..4 {
+        let anchor = anchor.clone();
+        let expected = expected.clone();
+        let stop = Arc::clone(&stop);
+        readers.push(std::thread::spawn(move || {
+            let mut reads = 0u64;
+            while !stop.load(Ordering::Relaxed) {
+                if let Some(record) = anchor_read(&anchor) {
+                    assert_eq!(
+                        record, expected,
+                        "并发读者只许见到完整一行（原子落锚），实读 {record:?}"
+                    );
+                    reads += 1;
+                }
+            }
+            reads
+        }));
+    }
+    let writer = {
+        let anchor = anchor.clone();
+        let hash = hash.clone();
+        let dir = dir.clone();
+        let stop = Arc::clone(&stop);
+        std::thread::spawn(move || {
+            let mut writes = 0u64;
+            while !stop.load(Ordering::Relaxed) {
+                write_trust_anchor(&anchor, &hash, &dir).expect("落锚应成功");
+                writes += 1;
+            }
+            writes
+        })
+    };
+    std::thread::sleep(std::time::Duration::from_millis(300));
+    stop.store(true, Ordering::Relaxed);
+    let _ = writer.join().expect("写者线程");
+    let reads: u64 = readers
+        .into_iter()
+        .map(|reader| reader.join().expect("读者线程不得 panic"))
+        .sum();
+    assert!(reads > 0, "读者应至少完整读到一次锚（实读 {reads} 次）");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// 并发 locate（锚不在场的首用建档路径）：全部 Ok、同一 bin、零重建。
+///
+/// 与上一条同源：缺陷态下并发写锚/读锚交叠会误触发案例③ 的删 bin 重建，
+/// 把并发线程的定位结果打脸。修复态（locate 全程互斥 + 落锚原子）下：
+/// 首线程案例② 建档，其余线程复验后案例① 验过即用——目标目录不得出现
+/// 任何 cargo 产物（零重建即零 `deps`）。
+#[test]
+fn concurrent_locate_absent_anchor_never_rebuilds_or_destroys_bin() {
+    let dir = std::env::temp_dir().join(format!("af-engine-anchor-conc-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let debug = dir.join("debug");
+    std::fs::create_dir_all(&debug).expect("临时 debug 目录");
+    let bin = debug.join("af-engine");
+    std::fs::write(&bin, b"fake-engine-bin-for-concurrent-locate").expect("假 bin 可写");
+
+    // 无锚：首用建档路径。8 线程 = lifecycle 套件同款并发度。
+    let handles: Vec<_> = (0..8)
+        .map(|_| {
+            let dir = dir.clone();
+            std::thread::spawn(move || {
+                EngineClient::locate(&dir, &dir).map(|client| client.bin().to_path_buf())
+            })
+        })
+        .collect();
+    for handle in handles {
+        let found = handle
+            .join()
+            .expect("线程不得 panic")
+            .expect("并发 locate 全部应 Ok（无人被删件/半行锚打脸）");
+        assert_eq!(found, bin, "全部线程应定位到同一 bin");
+    }
+
+    assert!(bin.is_file(), "并发定位后 bin 必须仍在场");
+    let anchor = trust_anchor_path(&bin);
+    assert!(
+        anchor_read(&anchor)
+            .expect("锚应已建档")
+            .starts_with(&sha256_of(&bin).expect("bin 可读")),
+        "建档后锚与 bin 自洽"
+    );
+    assert!(
+        !dir.join("deps").exists(),
+        "首用建档路径零 cargo 调用（出现 deps 即有人误触重建）"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
 }

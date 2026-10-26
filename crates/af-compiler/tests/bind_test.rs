@@ -600,31 +600,31 @@ fn duplicate_memory_refs_dedup_after_resolution() {
         ]}"#,
     );
     let reg = ComponentRegistry::load(&root).unwrap();
-    let doc = af_dsl::load_str(&format!(
+    let doc = af_dsl::load_str(
         r#"version: 1
 meta:
   name: mem_dedup_probe
   graph_version: "1.0"
   entry: worker
   input: probe_input
-  output: {{ ref: answer, from: hatch }}
+  output: { ref: answer, from: hatch }
   intent: "W1-C27 memory 面去重探针"
 types:
   - name: probe_input
     schema:
       type: object
       required: [x]
-      properties: {{ x: {{ type: string }} }}
+      properties: { x: { type: string } }
   - name: answer
     schema:
       type: object
       required: [y]
-      properties: {{ y: {{ type: string }} }}
+      properties: { y: { type: string } }
 nodes:
   - id: worker
     kind: task
-    uses: {{ model: route.main@1, memory: ["pkg.crewkit.mem.longterm@1", "pkg.crewkit.mem.longterm"] }}
-    emits: {{ answer: answer }}
+    uses: { model: route.main@1, memory: ["pkg.crewkit.mem.longterm@1", "pkg.crewkit.mem.longterm"] }
+    emits: { answer: answer }
   - id: hatch
     kind: task
     escape:
@@ -633,15 +633,14 @@ nodes:
       reason: "动作词表运行时解析（测试探针）"
       owner: g2b-team
       share_budget_pct: 10
-    consumes: {{ answer: answer }}
-    emits: {{ action_space: answer }}
+    consumes: { answer: answer }
+    emits: { action_space: answer }
 edges:
-  - {{ from: worker, output: answer, to: hatch, input: answer }}
+  - { from: worker, output: answer, to: hatch, input: answer }
 policies:
   budgets:
-    - {{ id: cap, dimension: cents, scope: plan, cap: 100 }}
-"#,
-    ))
+    - { id: cap, dimension: cents, scope: plan, cap: 100 }
+    "#)
     .unwrap_or_else(|e| panic!("探针装载失败：{e}"));
     let report = af_dsl::validate(&doc);
     assert!(report.is_ok(), "探针应过全量校验：{report}");
