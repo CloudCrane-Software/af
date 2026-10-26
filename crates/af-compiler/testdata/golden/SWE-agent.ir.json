@@ -478,6 +478,7 @@
         ],
         "type": "object"
       },
+      "signal": {},
       "swe_input": {
         "properties": {
           "base_commit": {

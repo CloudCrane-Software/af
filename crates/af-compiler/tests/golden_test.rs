@@ -259,6 +259,13 @@ fn sample4_sample5_projection_facts() {
 // `testdata/src/`、IR 快照入 `testdata/golden/`。核验口径与 CLI
 // `af-compiler-snapshot` 完全一致：load → 全量校验 → lower → pretty 序列化
 // + 换行（writeln 的产物），golden 文件即 CLI stdout 的逐字节落盘。
+//
+// 再生成登记（红队 W2-C-27，2026-10-27）：plan.types 补登记使用面内建
+// signal 类型（`{}`，声明面无同名时）——MetaGPT/SWE-agent/sample4 等合法
+// DSL 语料产出 signal 型端口/终态，此前进图执行器 check_typed 即 EX4006
+// 「基名不在 plan.types」。7 份用 signal 的语料快照经 af-compiler-snapshot
+// 全量再生成（diff 恰各 +1 行 `"signal": {}`），17+4 全份重出、未触及其它
+// 字节；不变量钉 = plan_types_cover_every_port_type_base_name。
 // ---------------------------------------------------------------------------
 
 /// G3 入库清单（闭集）：文件名与 `testdata/src/` 一致。C10 变更纪律——
@@ -623,4 +630,81 @@ fn g3p2_selector_tamper_detection() {
 
     std::fs::write(&copy, &original).expect("恢复 golden 副本失败");
     assert_golden_byte_exact_with_registry_at(SELECTOR_TAMPER_TARGET, &copy);
+}
+
+/// 端口类型表达式的基名（剥 list<>/envelope<> 包裹；YAML 面无嵌套泛型）。
+fn port_base_name(expr: &str) -> &str {
+    let mut cur = expr;
+    loop {
+        if let Some(inner) = cur
+            .strip_prefix("list<")
+            .and_then(|s| s.strip_suffix('>'))
+        {
+            cur = inner;
+            continue;
+        }
+        if let Some(inner) = cur
+            .strip_prefix("envelope<")
+            .and_then(|s| s.strip_suffix('>'))
+        {
+            cur = inner;
+            continue;
+        }
+        break;
+    }
+    cur
+}
+
+/// 红队 W2-C-27 不变量钉：计划自含（单文件即编排真相）——全部端口类型
+/// 基名（interface 输入/终态 + 全节点 consumes + 显式 emits 类型）必须在
+/// plan.types 有条目，否则合法 DSL 产物进图执行器 check_typed 即
+/// EX4006「基名不在 plan.types」（MetaGPT 等 signal 端口语料的实证后果）。
+/// 语料 = 全部 21 份（17 裸链 + 4 registry 注入链）。
+#[test]
+fn plan_types_cover_every_port_type_base_name() {
+    fn assert_covered(name: &str, p: &IrProgram) {
+        let mut used = std::collections::BTreeSet::new();
+        used.insert(port_base_name(&p.body.interface.input_type).to_string());
+        used.insert(port_base_name(&p.body.interface.output_type).to_string());
+        for n in p.body.node_exec.values() {
+            for t in n.consumes.values() {
+                used.insert(port_base_name(t).to_string());
+            }
+            for a in n.artifacts.values() {
+                if let Some(t) = &a.r#type {
+                    used.insert(port_base_name(t).to_string());
+                }
+            }
+        }
+        let missing: Vec<&String> = used
+            .iter()
+            .filter(|b| !p.body.types.contains_key(b.as_str()))
+            .collect();
+        assert!(
+            missing.is_empty(),
+            "{name}: 端口类型基名 {missing:?} 不在 plan.types（计划不自含，执行面 EX4006）"
+        );
+    }
+
+    for name in G3_CORPUS {
+        let src = std::fs::read_to_string(corpus_src_path(name))
+            .unwrap_or_else(|e| panic!("读取 {name}：{e}"));
+        let doc = af_dsl::load_str(&src).unwrap_or_else(|e| panic!("{name} 装载失败：{e}"));
+        let report = af_dsl::validate(&doc);
+        assert!(report.is_ok(), "{name} 应过裸链全量校验：{report}");
+        let p = af_compiler::lower(&doc).unwrap_or_else(|e| panic!("{name} lowering 失败：{e}"));
+        assert_covered(name, &p);
+    }
+    for name in G3_SELECTOR_CORPUS {
+        let src_path = corpus_src_path(name);
+        let src =
+            std::fs::read_to_string(&src_path).unwrap_or_else(|e| panic!("读取 {src_path:?}：{e}"));
+        let doc = af_dsl::load_str(&src).unwrap_or_else(|e| panic!("{name} 装载失败：{e}"));
+        let reg = af_dsl::registry::Registry::load(repo_packages_root())
+            .unwrap_or_else(|e| panic!("{name} registry 装载失败：{e}"));
+        let report = af_dsl::validate_with(&doc, &reg.options());
+        assert!(report.is_ok(), "{name} 应过注入链全量校验：{report}");
+        let p = af_compiler::lower(&doc).unwrap_or_else(|e| panic!("{name} lowering 失败：{e}"));
+        assert_covered(name, &p);
+    }
 }

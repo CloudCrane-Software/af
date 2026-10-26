@@ -642,6 +642,7 @@
         ],
         "type": "object"
       },
+      "signal": {},
       "task_output": {
         "properties": {
           "artifact_ref": {
