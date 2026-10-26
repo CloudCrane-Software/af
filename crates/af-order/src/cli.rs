@@ -869,3 +869,115 @@ mod w1_tests {
         let _ = fs::remove_dir_all(&dir);
     }
 }
+
+/// 红队批（W3-C24）回归：--unit 路由矩阵用法错误的拒绝必须发生在解析期
+/// （早于订单目录创建/凭证签发）。主线 438fa6d 曾是「先 create_dir_all →
+/// issue_or_load 签凭证 → 才 resolve_unit」——被拒命令在盘上留下
+/// voucher.json + 0600 voucher-key.seed，随后同 order_id 改预算的合法
+/// submit 被 OR2003「预算不可经重放偷改」永久误拒（合法请求被先前非法
+/// 请求毒化）。W1 修复分支序（resolve_unit 先行）合龙后，本测试三段钉死：
+/// ①非法 stub+三件套 → OR1001 且 state 根零文件；②改预算合法重放 →
+/// 不得 OR2003（引擎定位在凭证签发之后才 fail-loud）；③盘上凭证
+/// amount=新预算——重放不被旧值毒化。
+#[test]
+fn unit_matrix_violation_leaves_zero_residue_and_does_not_poison_budget_replay() {
+    let root = std::env::temp_dir().join(format!("af-order-w3c24-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let state = root.join("state");
+    let spec = |budget: u64, name: &str| {
+        let path = root.join(name);
+        fs::write(
+            &path,
+            format!(
+                r#"{{"order_id":"wo-w3c24","line":{{"line_id":"line-A","line_version":"1.0"}},"budget":{budget}}}"#
+            ),
+        )
+        .unwrap();
+        path
+    };
+
+    // ① 非法形态：--unit stub 与执行三件套同提 = OR1001，state 根零残留
+    //    （订单目录、voucher.json、种子一律不得落盘）。
+    let spec42 = spec(42, "order-42.json");
+    let err = run(&[
+        "submit".into(),
+        "--spec".into(),
+        spec42.display().to_string(),
+        "--state".into(),
+        state.display().to_string(),
+        "--unit".into(),
+        "stub".into(),
+        "--task".into(),
+        "t".into(),
+        "--profile".into(),
+        "p".into(),
+        "--data-root".into(),
+        root.display().to_string(),
+    ])
+    .unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("OR1001") && msg.contains("互斥"), "{msg}");
+    fn residue_count(dir: &Path) -> usize {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .map(|entry| {
+                if entry.path().is_dir() {
+                    1 + residue_count(&entry.path())
+                } else {
+                    1
+                }
+            })
+            .sum()
+    }
+    assert_eq!(
+        residue_count(&state),
+        0,
+        "被拒命令零残留（拒绝发生在解析期，早于目录创建/凭证签发）"
+    );
+
+    // ② 改预算合法重放（budget 42→99，合法 stub 形态）：--workspace 指向
+    //    空 Cargo 目录 → af-engine 定位/构建 fail-loud（EX1001/EX1002），
+    //    该失败点在凭证签发**之后**——能走到它本身就证明 OR2003 毒化门已过。
+    let empty_ws = root.join("empty-ws");
+    fs::create_dir_all(&empty_ws).unwrap();
+    let spec99 = spec(99, "order-99.json");
+    let err2 = run(&[
+        "submit".into(),
+        "--spec".into(),
+        spec99.display().to_string(),
+        "--state".into(),
+        state.display().to_string(),
+        "--unit".into(),
+        "stub".into(),
+        "--workspace".into(),
+        empty_ws.display().to_string(),
+        "--target-dir".into(),
+        root.join("td").display().to_string(),
+    ])
+    .unwrap_err();
+    let msg2 = err2.to_string();
+    assert!(
+        !msg2.contains("OR2003"),
+        "合法改预算重放不得被先前被拒命令的残留误拒（毒化路径）: {msg2}"
+    );
+    assert!(
+        msg2.contains("EX1001") || msg2.contains("EX1002"),
+        "引擎面失败发生在凭证签发后（测试缝）: {msg2}"
+    );
+
+    // ③ 盘上凭证按新预算签发 = 预算变更被采纳，不被旧值 42 毒化。
+    let voucher: Value = serde_json::from_str(
+        &fs::read_to_string(state.join("orders").join("wo-w3c24").join("voucher.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        voucher["amount"],
+        serde_json::json!(99),
+        "凭证 amount 必须是新预算 99（残留毒化则此处为 42 或 OR2003）"
+    );
+    let _ = fs::remove_dir_all(&root);
+}
