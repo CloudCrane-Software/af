@@ -45,8 +45,21 @@
    文档注记登记依据，正本回填随规范 v0.2 议程。
    红队修复批新增/收紧（红队 W2-C47 补登记；裁决依据 ADR-011 裁决 6 与
    W2 批 commit ff68d80/fa0ec74，正本回填随规范 v0.2 议程）：
-   · **E2209 `construct_conflict`**：同节点 loop+map 双构造并存 fail-closed
-     拒绝（解析域取 loop 体/类型域包 list<> 自相矛盾）。
+   · **E2212 `construct_conflict`**：同节点 loop+map 双构造并存 fail-closed
+     拒绝（解析域取 loop 体/类型域包 list<> 自相矛盾）。**码位迁移（红队
+     W3-C16 勘误 2026-10-27）**：原登 E2209 与提案-B §6 既有分派「E2209 ops
+     参数不闭合」撞码——迁至未分配的 E2212，E2209 归还 ops 参数闭合
+     （§6 表已同步登记）。
+   · **E2213 `map_frombody_inline_type`（红队 W3 补登 2026-10-27）**：
+     map.from_body 转发的体内端口类型为内联原始型即拒——`list<原始型>`
+     不在类型表达式文法（泛型载荷须已登记名或 signal），转发端口类型不可
+     表达 ⇒ 终态推导恒失败；af-dsl 阶段 fail-loud，禁止编译出无 is_final
+     终态工件的计划。
+   · **E1003 内建端口声明冲突（红队 W3-C17 补登 2026-10-27）**：内建端口
+     名（loop/map done:signal、check/gate passed:boolean）的显式 emits
+     声明须与内建固定类型同型，冲突类型或 from_body 死声明 → E1003 拒
+     （声明面否则被 emit_type 内建短路静默遮蔽，E2202/边核对/终态推导
+     三判定面口径分裂）。
    · **E2202 恰一端口匹配**：meta.output.from 的同型匹配端口须恰一（同型
      双端口=终态工件不可单义识别）；判定面 = emits ∪ 内建端口（loop/map
      done:signal、check/gate passed:boolean）且按端口名去重（显式同名声明
