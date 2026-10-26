@@ -488,9 +488,26 @@ impl<'a> Lowering<'a> {
 /// 规范 JSON `{"roots":[…],"source":"…"}`——serde_json Map 默认 BTreeMap 序，
 /// 键序=字典序，确定性成立）。cel-parser 0.10.1 对畸形串的 antlr4rust 错误
 /// 恢复 panic 以 catch_unwind 兜底归一（承 af-graph `predicate.rs` 纪律）。
-fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
-    let compile = || Program::compile(source);
-    let program = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(compile)) {
+///
+/// 解析在受控大栈工作线程上执行（红队 W2-C-21，承 af-dsl cel.rs W3-C16
+/// 同一纪律）：antlr4rust 递归下降的栈帧随构建档差一个数量级——E1054
+/// 深度阈值 1000 按 release 档标定，debug 档（cargo build/test 默认档，
+/// 生产 CLI 即此档）在调用方 8MB 主栈上深约 59 即 SIGABRT（exit 134），
+/// 「深>1000 前置拒」在真实运行档位形同虚设；且栈溢出是 abort 非 unwind
+/// panic，catch_unwind 兜不住。解析改在固定大栈工作线程上跑后，可达深度
+/// 与调用方栈大小/构建档解耦。`Program` 含 `Rc` 不可跨线程，故
+/// compile→引用提取全链条在线程内完成、仅回传 `BTreeSet<String>`（Send）。
+/// 线程构建失败（极少见）回退调用方线程执行——行为不劣于修复前。
+// 256MB 与 af-dsl cel.rs 同一标定：debug 档 antlr4rust 帧约 80KB/层，
+// E1054 上限深 1000 需 ~80MB，留 3 倍余量；线程栈为虚拟内存预留（非实
+// 提交），不构成实存压力。
+const CEL_WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
+
+/// compile + 引用提取（大栈线程内执行的最小单元；`Program` 不出线程）。
+fn compile_cel_roots(source: &str) -> Result<BTreeSet<String>, LowerError> {
+    let program = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        Program::compile(source)
+    })) {
         Ok(Ok(p)) => p,
         Ok(Err(e)) => {
             return Err(LowerError::CelCompile {
@@ -505,12 +522,49 @@ fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
             })
         }
     };
-    let roots: BTreeSet<String> = program
+    Ok(program
         .references()
         .variables()
         .into_iter()
         .map(str::to_owned)
-        .collect();
+        .collect())
+}
+
+fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
+    let source_owned = source.to_owned();
+    let cell = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let cell2 = cell.clone();
+    let spawned = std::thread::Builder::new()
+        .name("af-compiler-cel-parse".into())
+        .stack_size(CEL_WORKER_STACK_BYTES)
+        .spawn(move || {
+            let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                compile_cel_roots(&source_owned)
+            }));
+            *cell2.lock().unwrap_or_else(|e| e.into_inner()) = Some(out);
+        });
+    let roots: BTreeSet<String> = match spawned {
+        Ok(handle) => {
+            if handle.join().is_err() {
+                return Err(LowerError::CelCompile {
+                    source: source.into(),
+                    detail: "cel-parser 工作线程异常退出（红队 W2-C-21 大栈线程 \
+                             fail-loud，不在调用方栈上重试）"
+                        .into(),
+                });
+            }
+            match cell.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                Some(Ok(Ok(roots))) => roots,
+                _ => {
+                    return Err(LowerError::CelCompile {
+                        source: source.into(),
+                        detail: "cel-parser 内部 panic（antlr4rust 错误恢复路径）".into(),
+                    })
+                }
+            }
+        }
+        Err(_) => compile_cel_roots(source)?,
+    };
     let canonical = serde_json::json!({ "roots": roots, "source": source });
     let text = serde_json::to_string(&canonical)
         .map_err(|e| LowerError::Serialize(format!("CelRef 规范序列化失败：{e}")))?;
