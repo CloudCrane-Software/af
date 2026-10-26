@@ -356,11 +356,20 @@ pub fn html_to_text(html: &str) -> String {
 /// arXiv web 摄取（F-第五单真实出网面；anolis 出网预检 2026-10-25：
 /// export.arxiv.org abs/api HTTPS 200 直连可用、PDF 200 但慢）。
 ///
-/// 域白名单外一律拒（不静默放行、不经代理绕行）；抓取用 curl 子进程
+/// 域白名单外一律拒（不静默放行、不经代理绕行）。抓取用 curl 子进程
 /// （判分子进程同款纪律——argv 直传不经 shell，无注入面）。host 统一改写
 /// export.arxiv.org（arXiv 官方导出面），路径原样保留。
+///
+/// 红队 W2-C31：白名单必须在**每一跳**成立——curl 不再 `-L` 裸跟（旧行为
+/// 跟随任意 host/scheme 重定向且事后不复核，白名单外主机的响应体可进
+/// citation 判据面），改由本面逐跳手跟：每个落点过 [`Self::check_hop`]，
+/// 白名单外即拒（不落盘）；快照 url 记**最终实际取数 URL**（非请求原 URL，
+/// 溯源不失真）。
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ArxivWebFetcher;
+
+/// 重定向跳数上限（与旧 `--max-redirs 5` 同值）。
+const MAX_REDIRECT_HOPS: usize = 5;
 
 impl ArxivWebFetcher {
     /// 出网前域名核对（https + 白名单）。
@@ -380,16 +389,62 @@ impl ArxivWebFetcher {
         Ok(format!("https://export.arxiv.org{path}"))
     }
 
-    /// 抓取核心：白名单核对 → curl → title/html_to_text → FetchedDoc。
-    pub fn fetch_to_doc(source: &str) -> Result<FetchedDoc, String> {
-        let url = Self::normalize_url(source)?;
+    /// 红队 W2-C31：重定向落点核对（https + 白名单 host）——返回
+    /// `(host, path)`；非白名单/非 https 即拒。pub=离线测试缝（html_to_text
+    /// 同款）。
+    pub fn check_hop(url: &str) -> Result<(&str, &str), String> {
+        let rest = url.strip_prefix("https://").ok_or_else(|| {
+            format!("web 摄取仅支持 https（重定向目标非 https：{url}）——协议面不因重定向放宽")
+        })?;
+        let (host, path) = match rest.find('/') {
+            Some(pos) => (&rest[..pos], &rest[pos..]),
+            None => (rest, "/"),
+        };
+        if !ARXIV_HOSTS.contains(&host) {
+            return Err(format!(
+                "web 摄取域白名单（设计 §2.2：v1 限 arxiv.org 域）拒绝重定向落点 {host}——{url}"
+            ));
+        }
+        Ok((host, path))
+    }
+
+    /// 红队 W2-C31：相对 Location 解析（curl `%{redirect_url}` 恒为绝对
+    /// URL；此处兜根相对与直给路径两种写法，其余 fail-loud）。pub=离线测试缝。
+    pub fn resolve_redirect(base: &str, location: &str) -> Result<String, String> {
+        let loc = location.trim();
+        if let Some(rest) = loc.strip_prefix("https://") {
+            let _ = rest;
+            return Ok(loc.to_string());
+        }
+        if loc.contains("://") {
+            return Err(format!(
+                "web 摄取仅支持 https 重定向（Location={loc}）——协议面不因重定向放宽"
+            ));
+        }
+        let (host, base_path) = Self::check_hop(base)?;
+        if let Some(path) = loc.strip_prefix('/') {
+            return Ok(format!("https://{host}/{path}"));
+        }
+        // 同目录相对（RFC 3986 merge）：去掉 base 最后一段后拼接。
+        let dir = match base_path.rfind('/') {
+            Some(pos) => &base_path[..pos],
+            None => "",
+        };
+        Ok(format!("https://{host}{dir}/{loc}"))
+    }
+
+    /// 单跳 curl（绝不 -L——重定向由本面逐跳核 host 后手跟）。返回
+    /// `(http_code, redirect_url)`，响应体落 `body_path`。
+    fn curl_once(url: &str, body_path: &Path) -> Result<(String, String), String> {
         let out = Command::new("curl")
-            .arg("-sSL")
-            .arg("--max-redirs")
-            .arg("5")
+            .arg("-sS")
             .arg("-m")
             .arg(WEB_FETCH_TIMEOUT_SECS.to_string())
-            .arg(&url)
+            .arg("-o")
+            .arg(body_path)
+            .arg("-w")
+            .arg("%{http_code} %{redirect_url}")
+            .arg(url)
             .output()
             .map_err(|err| format!("拉起 curl 失败（web 摄取需本机 curl）: {err}"))?;
         if !out.status.success() {
@@ -399,12 +454,66 @@ impl ArxivWebFetcher {
                 String::from_utf8_lossy(&out.stderr)
             ));
         }
-        let body = String::from_utf8_lossy(&out.stdout).into_owned();
-        if body.trim().is_empty() {
-            return Err(format!("抓取 {url} 空响应体"));
+        let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let (code, redirect) = line
+            .split_once(' ')
+            .map(|(c, r)| (c.trim().to_string(), r.trim().to_string()))
+            .unwrap_or_else(|| (line.clone(), String::new()));
+        if code.len() != 3 || !code.chars().all(|c| c.is_ascii_digit()) {
+            return Err(format!("curl 未返回可解析 HTTP 状态（{url} → {line:?}）"));
         }
-        let title = extract_html_title(&body).unwrap_or_else(|| url.clone());
-        Ok(FetchedDoc::from_text(source, title, &html_to_text(&body)))
+        Ok((code, redirect))
+    }
+
+    /// 抓取核心：白名单核对 → 逐跳（每跳核 host）→ title/html_to_text →
+    /// FetchedDoc（url=最终实际取数 URL）。
+    pub fn fetch_to_doc(source: &str) -> Result<FetchedDoc, String> {
+        let mut url = Self::normalize_url(source)?;
+        let body_path = std::env::temp_dir().join(format!(
+            "af-arxiv-fetch-{}-{}.body",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = Self::check_hop(&url)?; // 首跳同门（normalize 已核，双保险）
+        let mut hops = 0usize;
+        let final_url;
+        loop {
+            let (code, redirect) = Self::curl_once(&url, &body_path)?;
+            if code.as_str() >= "300" && code.as_str() < "400" {
+                hops += 1;
+                if hops > MAX_REDIRECT_HOPS {
+                    let _ = std::fs::remove_file(&body_path);
+                    return Err(format!(
+                        "web 摄取重定向超过 {MAX_REDIRECT_HOPS} 跳（{source}）"
+                    ));
+                }
+                if redirect.is_empty() {
+                    let _ = std::fs::remove_file(&body_path);
+                    return Err(format!("web 摄取收到 {code} 重定向但无 Location（{url}）"));
+                }
+                url = Self::resolve_redirect(&url, &redirect)?;
+                Self::check_hop(&url)?;
+                continue;
+            }
+            if !code.starts_with('2') {
+                let _ = std::fs::remove_file(&body_path);
+                return Err(format!("web 摄取 HTTP {code}（{url}）"));
+            }
+            final_url = url;
+            break;
+        }
+        let body = std::fs::read_to_string(&body_path)
+            .map_err(|err| format!("抓取响应体不可读（{final_url}）: {err}"))?;
+        let _ = std::fs::remove_file(&body_path);
+        if body.trim().is_empty() {
+            return Err(format!("抓取 {final_url} 空响应体"));
+        }
+        let title = extract_html_title(&body).unwrap_or_else(|| final_url.clone());
+        // 快照 url=最终实际取数 URL（红队 W2-C31：溯源不再记请求原 URL）。
+        Ok(FetchedDoc::from_text(final_url, title, &html_to_text(&body)))
     }
 }
 
