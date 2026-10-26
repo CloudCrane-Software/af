@@ -724,6 +724,7 @@ pub fn aci_schema(action: &Value) -> Value {
 ///   问题（「review issue: …」前置，退出码失败行照录）；
 /// - `approved=true` → 维持退出码判定，证据摘要留评审面（approved+issues）；
 /// - 载荷缺 `approved` 布尔 = 类型化数据边失信，fail-closed 按否决处置并点名。
+///
 /// 图未声明 review 边（手写计划面）= 纯退出码判据，`review=None` 行为不变。
 ///
 /// 红队 W2-C49：`evidence_dir` 给定时**无论成败**一律留档——`test.log`（完整
