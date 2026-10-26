@@ -50,7 +50,7 @@ W1-C14 的遗留表总数 3,043,489→3,042,489 手工加总勘误与决策定�
    route_exit_guard 增位）。
 7. **执行面/门面修复清单**（详 commit ecb5d99）：strict declare 键集=全部
    artifact_contract 端口（C-31 死锁收口）；graph_version 一次性绑定真核对
-   +门面按计划图版本取值（C-32）；报告环共享预算账本（C-33）；预算面强制集
+   +门面按计划图版本取值（C-32）；报告环共享预算账本（C-33——cents/turns/tokens_total 三维白名单强制，plan turns/token 帽不得静默忽略，强制集外条目拒收；完整化见 commit 53c2504）；预算面强制集
    外组合 fail-loud（C-34）；MES 写失败跃迁重放补发（C-35）；图行 af.plan.
    record.v1 契约化（C-36，evidence.run_dir 同步闭合 trace L1→L2）；边级重影
    与路径安全核（C-37/C-38）；判据面 digest 钉死 + tests_collected=0 不当成功
