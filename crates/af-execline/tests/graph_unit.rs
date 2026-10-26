@@ -397,17 +397,23 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     );
 
     // tester（check 节点）：uses.unit 经注册表 impl 解析直调——容器内跑
-    // task.json 声明的 test_command，零模型调用。
-    let exec_calls: Vec<String> = bridge
+    // task.json 声明的 test_command，零模型调用；W2-C49 判据留档另有一次
+    // 工作区 diff 取证（capture_diff）。
+    let test_execs: Vec<String> = bridge
         .calls()
         .into_iter()
-        .filter(|s| s.contains("docker exec"))
+        .filter(|s| s.contains("docker exec") && s.contains("python -m pytest"))
         .collect();
-    assert_eq!(exec_calls.len(), 1, "tester 恰一次容器执行: {exec_calls:?}");
-    assert!(
-        exec_calls[0].contains("python -m pytest"),
-        "test_command 来自任务包: {}",
-        exec_calls[0]
+    assert_eq!(test_execs.len(), 1, "tester 恰一次测试容器执行: {test_execs:?}");
+    let diff_execs: Vec<String> = bridge
+        .calls()
+        .into_iter()
+        .filter(|s| s.contains("core.fileMode=false diff"))
+        .collect();
+    assert_eq!(
+        diff_execs.len(),
+        1,
+        "W2-C49：tester 判据留档恰一次工作区 diff 取证: {diff_execs:?}"
     );
 
     // typed envelope 落 attempt 工件面（artifact_contract 端口名）。
@@ -428,6 +434,41 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     .unwrap();
     assert_eq!(report["port"], json!("report"), "envelope 结构带端口名");
     assert_eq!(report["payload"]["pass"], json!(true), "tester 判定 pass");
+
+    // 红队 W2-C49：test_unit 判据留档——pass=true 也不许丢观察：tester 节点
+    // 目录必须齐 test.log（完整观察文本）+ test-evidence.json（命令/退出码/
+    // 判定/体量口径）+ agent.diff（工作区取证），envelope 带 evidence 指针，
+    // 订单证据树自此可复核 pass 与外部评审结论并存的依据面。
+    let tester_dir = attempt.join("nodes").join("tester");
+    let test_log = std::fs::read_to_string(tester_dir.join("test.log"))
+        .expect("W2-C49：pass=true 也须留 test.log");
+    assert!(
+        test_log.contains("Ran 12 tests") && test_log.contains("exit=0"),
+        "test.log 须为完整观察文本（含 exit= 尾行）: {test_log:?}"
+    );
+    let evidence_json: Value = serde_json::from_str(
+        &std::fs::read_to_string(tester_dir.join("test-evidence.json"))
+            .expect("W2-C49：pass=true 也须留 test-evidence.json"),
+    )
+    .unwrap();
+    assert_eq!(evidence_json["pass"], json!(true));
+    assert_eq!(evidence_json["exit_code"], json!(0));
+    assert!(
+        evidence_json["command"].as_str().unwrap_or("").contains("python -m pytest"),
+        "evidence 记命令: {evidence_json}"
+    );
+    let diff_text = std::fs::read_to_string(tester_dir.join("agent.diff"))
+        .expect("W2-C49：tester 节点目录须留 agent.diff");
+    assert!(diff_text.contains("diff --git"), "agent.diff 内容: {diff_text:?}");
+    assert_eq!(
+        report["payload"]["evidence"]["log"], json!("test.log"),
+        "envelope 带 evidence 指针"
+    );
+    assert!(
+        report["payload"]["evidence"]["diff"]["sha256"].is_string(),
+        "envelope evidence 带 diff 指纹: {}",
+        report["payload"]["evidence"]
+    );
 
     // 终态：qa_report.pass=true → verdict + 合格终态工件（is_final=report）。
     assert_eq!(output.verdict, Some(true));
@@ -1089,6 +1130,140 @@ policies:
     );
     // 终态（gate_verdict 无 pass 判定字段）→ 非判定型产出即合格。
     assert_eq!(output.verdict, Some(true));
+}
+
+/// 红队 W2-C29：aci_schema 载荷必须按 consumes 契约取 agent_action 端口，
+/// 禁 `inputs.values().next()`——inputs 是 BTreeMap，values().next()=端口名
+/// 字典序最小者。本图给 verifier 两条入边：agent_action 端口声明在前、
+/// 字典序在后（target > probe），诱饵工件恰含 thought/command/submit 三字段
+/// （结构上过得了 aci_schema 校验）——旧码会把结构校验跑在字典序最小的诱饵
+/// 上并输出其 submit，真 action 漏校。
+#[test]
+fn aci_schema_picks_contract_port_not_lexicographic_first() {
+    let graph_src = r#"
+version: 1
+meta:
+  name: sweng_aci_port_contract
+  graph_version: "1.0"
+  entry: actor
+  input: swe_task_input
+  output: { ref: schema_verdict, from: verifier }
+  intent: "W2-C29：aci_schema 多入边按 consumes 契约取 agent_action，不取字典序首"
+
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: agent_action
+    schema:
+      type: object
+      required: [thought, command, submit]
+      properties:
+        thought: { type: string }
+        command: { type: string }
+        submit: { type: boolean }
+  - name: decoy_payload
+    schema:
+      type: object
+      required: [thought, command, submit]
+      properties:
+        thought: { type: string }
+        command: { type: string }
+        submit: { type: boolean }
+  - name: schema_verdict
+    schema:
+      type: object
+      required: [error, submit]
+      properties:
+        error: { type: string }
+        submit: { type: boolean }
+
+nodes:
+  - id: actor
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { target: agent_action }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 400 }
+
+  - id: observer
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { probe: decoy_payload }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 400 }
+
+  - id: verifier
+    kind: check
+    uses: { unit: pkg.sweagent.aci_schema@1 }
+    consumes: { target: agent_action, probe: decoy_payload }
+    emits: { verdict: schema_verdict }
+
+edges:
+  - { from: actor, output: target, to: verifier, input: target }
+  - { from: observer, output: probe, to: verifier, input: probe }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 100 }
+  stop:
+    - { when: "last_tool.first_line in ['TASK_COMPLETE']", outcome: completed }
+    - { when: "steps.tool_free >= 3", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed
+"#;
+    let root = temp_root("aci_port_contract");
+    let data_root = task_package(&root, &compile_plan(graph_src));
+    let scripted = |node: &str| -> Option<String> {
+        let text = match node {
+            // 真 action（submit=true）：合同端口 target 的载荷。
+            "actor" => json!({"target": {
+                "thought": "run the tests", "command": "python -m pytest -q", "submit": true
+            }}),
+            // 诱饵（submit=false，thought 打标）：恰含三字段、结构过得 aci_schema。
+            "observer" => json!({"probe": {
+                "thought": "DECOY not an action", "command": "echo decoy", "submit": false
+            }}),
+            _ => return None,
+        };
+        Some(text.to_string())
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ = _bridge;
+
+    let _ = drive(&unit, &data_root, &attempt, &out).expect("双入边 aci_schema 链应走通");
+
+    let verdict: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("verifier.verdict.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        verdict["payload"]["error"],
+        json!(""),
+        "真 agent_action 过结构校验"
+    );
+    assert_eq!(
+        verdict["payload"]["submit"],
+        json!(true),
+        "aci_schema 必须校验 consumes 契约声明的 agent_action 端口（target），\
+         不是字典序最小的诱饵端口（probe——旧 values().next() 会输出其 submit=false）"
+    );
 }
 
 /// swebench_eval 分派面 fail-loud：spec.judge 未配置（None）时拒载点名

@@ -849,16 +849,73 @@ impl GraphExecuteUnit {
         }
         // v1.1 分发表：四件 builtin 判定单元（B 席嫁接面）。
         let value = match name.as_str() {
-            n if n == sweng::name_of(sweng::REF_SWENG_TEST_UNIT) => sweng::test_unit(
-                self.bridge.as_ref(),
-                &env,
-                task.test_command.as_deref().unwrap_or(DEFAULT_TEST_COMMAND),
-                None,
-            ),
+            n if n == sweng::name_of(sweng::REF_SWENG_TEST_UNIT) => {
+                // 红队 W2-C49：test_unit 判据留档——pass 与否一律建 tester
+                // 节点目录（nodes/<id>/：test.log + test-evidence.json +
+                // agent.diff），envelope 带证据指针；旧行为 pass=true 丢观察
+                // 且不建目录，订单证据树无从复核 pass 与评审结论并存的依据。
+                // diff 与 swebench_eval 支路同源 capture_diff（测试后工作区），
+                // 取证失败 fail-loud——证据完整性不静默降级。
+                let work_dir = ctx.attempt_dir.join("nodes").join(&node.node_id);
+                std::fs::create_dir_all(&work_dir).map_err(|err| {
+                    self.fail(format!("节点 {} 建 tester 证据目录失败: {err}", node.node_id))
+                })?;
+                let mut verdict = sweng::test_unit(
+                    self.bridge.as_ref(),
+                    &env,
+                    task.test_command.as_deref().unwrap_or(DEFAULT_TEST_COMMAND),
+                    None,
+                    Some(&work_dir),
+                );
+                match swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &work_dir) {
+                    Ok(diff) => {
+                        if let Some(ev) = verdict.get_mut("evidence") {
+                            ev["diff"] = serde_json::json!({
+                                "path": "agent.diff",
+                                "bytes": diff.len(),
+                                "sha256": swev::sha256_hex(&work_dir.join("agent.diff")),
+                            });
+                        }
+                    }
+                    Err(err) => {
+                        return Err(self.fail(format!(
+                            "节点 {} 测试判据 diff 取证失败: {err}",
+                            node.node_id
+                        )));
+                    }
+                }
+                verdict
+            }
             "pkg.sweagent.aci_schema" => {
-                let Some(action) = inputs.values().next() else {
+                // 红队 W2-C29：载荷按 consumes 契约取 agent_action 端口，禁
+                // values().next()——inputs 是 BTreeMap，values().next()=端口
+                // 名字典序最小者，多入边时结构校验会跑在任意工件上（诱饵恰含
+                // thought/command/submit 即静默放行未校验的真 action，或令真
+                // action 漏校）。合同面=consumes 中类型恰为 agent_action 的
+                // 恰一端口：按声明精确取；声明缺失/重复/端口无载荷一律
+                // fail-loud，不猜。
+                let mut declared = node
+                    .consumes
+                    .iter()
+                    .filter(|(_, ty)| ty.as_str() == "agent_action")
+                    .map(|(port, _)| port);
+                let port = match (declared.next(), declared.next()) {
+                    (Some(port), None) => port.clone(),
+                    _ => {
+                        return Err(self.fail(format!(
+                            "节点 {} aci_schema 需要 consumes 恰一声明一个 \
+                             agent_action 类型入边端口（合同面；声明 {} 个）",
+                            node.node_id,
+                            node.consumes
+                                .iter()
+                                .filter(|(_, ty)| ty.as_str() == "agent_action")
+                                .count()
+                        )));
+                    }
+                };
+                let Some(action) = inputs.get(&port) else {
                     return Err(self.fail(format!(
-                        "节点 {} aci_schema 需要入边工件（agent_action）",
+                        "节点 {} aci_schema 需要入边工件（agent_action 端口 {port}）",
                         node.node_id
                     )));
                 };

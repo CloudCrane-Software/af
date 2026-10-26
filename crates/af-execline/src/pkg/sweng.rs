@@ -711,14 +711,22 @@ pub fn aci_schema(action: &Value) -> Value {
 // U3 · pkg.sweng.test_unit（判定只取退出码与输出文本，零模型）
 // ============================================================
 
-/// U3：容器内跑测试命令并解析——`{pass, failures}`；pass 只取进程退出码，
-/// failures=输出末 10 非空行（截断）。命令源 = 入参指定或环境声明
-/// test_command（`default_test_command`）；双缺 → fail-closed 观察。
+/// U3：容器内跑测试命令并解析——`{pass, failures[, evidence]}`；pass 只取
+/// 进程退出码，failures=输出末 10 非空行（截断）。命令源 = 入参指定或环境
+/// 声明 test_command（`default_test_command`）；双缺 → fail-closed 观察。
+///
+/// 红队 W2-C49：`evidence_dir` 给定时**无论成败**一律留档——`test.log`（完整
+/// 观察文本，含 `__AF_RC` 标记与 `exit=` 尾行；保真上限=容器执行载体的 12k
+/// 双端截断契约，截断与否如实记入摘要）+ `test-evidence.json`（命令/退出码/
+/// 判定/体量口径）。旧行为 pass=true 时把观察整体丢弃、drive 相又不建节点
+/// 目录——终态 pass 与外部评审结论相悖时订单内无任何日志可判。留档失败不翻
+/// 判定，但在 envelope `evidence.error` 显形（不静默）。
 pub fn test_unit(
     bridge: &dyn HostBridge,
     env: &TbEnv,
     default_test_command: &str,
     test_cmd: Option<&str>,
+    evidence_dir: Option<&std::path::Path>,
 ) -> Value {
     let cmd = test_cmd
         .map(str::trim)
@@ -743,7 +751,42 @@ pub fn test_unit(
     if failures.len() > 10 {
         failures = failures.split_off(failures.len() - 10);
     }
-    json!({ "pass": pass, "failures": failures })
+    let truncated = text.contains("...[output truncated:");
+    let evidence = evidence_dir.map(|dir| -> Value {
+        let summary = json!({
+            "command": cmd,
+            "exit_code": rc,
+            "pass": pass,
+            "observation_bytes": text.len(),
+            "observation_truncated": truncated,
+            "observation_cap_bytes": 12_000usize,
+        });
+        let write = (|| -> std::io::Result<()> {
+            std::fs::create_dir_all(dir)?;
+            std::fs::write(dir.join("test.log"), &text)?;
+            std::fs::write(
+                dir.join("test-evidence.json"),
+                serde_json::to_string_pretty(&summary).unwrap_or_default(),
+            )?;
+            Ok(())
+        })();
+        match write {
+            Ok(()) => json!({
+                "dir": dir.file_name().map(|n| n.to_string_lossy().into_owned()),
+                "log": "test.log",
+                "summary": "test-evidence.json",
+                "exit_code": rc,
+                "observation_truncated": truncated,
+                "observation_bytes": text.len(),
+            }),
+            Err(err) => json!({ "error": format!("判据留档失败: {err}") }),
+        }
+    });
+    let mut out = json!({ "pass": pass, "failures": failures });
+    if let Some(ev) = evidence {
+        out["evidence"] = ev;
+    }
+    out
 }
 
 // ============================================================

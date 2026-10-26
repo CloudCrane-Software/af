@@ -678,6 +678,59 @@ fn arxiv_web_fetcher_whitelist_refuses_non_arxiv_offline() {
     assert!(ArxivWebFetcher.fetch("file:///tmp/x.txt").is_err());
 }
 
+/// 红队 W2-C31：重定向逐跳 host 复核——curl 不再 -L 裸跟，白名单必须在
+/// **每一跳**（含重定向落点）成立；本白名单外目标拒绝落盘。
+#[test]
+fn arxiv_web_fetcher_revalidates_every_redirect_hop_host() {
+    // 白名单内三 host 均可作重定向落点。
+    for url in [
+        "https://export.arxiv.org/abs/2401.00001",
+        "https://arxiv.org/abs/2401.00001",
+        "https://www.arxiv.org/abs/2401.00001",
+    ] {
+        assert!(
+            ArxivWebFetcher::check_hop(url).is_ok(),
+            "白名单内落点应放行：{url}"
+        );
+    }
+    // 白名单外/仿冒域/明文 http 一律拒。
+    for (url, why) in [
+        (
+            "https://attacker.example.com/abs/2401.00001",
+            "白名单外主机",
+        ),
+        ("https://arxiv.org.evil.io/abs/2401.00001", "仿冒域"),
+        ("https://evil-arxiv.org/abs/2401.00001", "形近域"),
+        ("http://export.arxiv.org/abs/2401.00001", "明文 http"),
+    ] {
+        let err = ArxivWebFetcher::check_hop(url).unwrap_err();
+        assert!(
+            err.contains("白名单") || err.contains("https"),
+            "{why}：{url} → {err}"
+        );
+    }
+}
+
+/// 红队 W2-C31：相对 Location 解析——绝对 https 原样、根相对并入现 host、
+/// 非 https 绝对目标拒绝（协议面不因重定向放宽）。
+#[test]
+fn arxiv_web_fetcher_resolves_relative_redirect_locations() {
+    let base = "https://export.arxiv.org/abs/2401.00001v1";
+    assert_eq!(
+        ArxivWebFetcher::resolve_redirect(base, "https://arxiv.org/abs/2401.00001").unwrap(),
+        "https://arxiv.org/abs/2401.00001",
+        "绝对 https Location 原样"
+    );
+    assert_eq!(
+        ArxivWebFetcher::resolve_redirect(base, "/abs/2401.00002").unwrap(),
+        "https://export.arxiv.org/abs/2401.00002",
+        "根相对 Location 并入现 host"
+    );
+    let err = ArxivWebFetcher::resolve_redirect(base, "http://arxiv.org/abs/2401.00001")
+        .unwrap_err();
+    assert!(err.contains("https"), "非 https 绝对 Location 拒绝：{err}");
+}
+
 #[test]
 fn html_to_text_strips_scripts_tags_and_entities() {
     let html = "<html><head><title>T</title><style>body{hidden}</style>\
