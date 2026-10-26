@@ -9,7 +9,7 @@
 | [ADR-002](002-crate-layout.md) | 落仓与 crate 划分（af-dsl/compiler/plan/order/execline + packages） | 已裁决 2026-10-24 |
 | [ADR-003](003-order-persistence.md) | 订单持久化走 af-engine+ledger+MES，Temporal 常驻化暂缓 | 已裁决 2026-10-24 |
 | [ADR-004](004-mes-unification.md) | MES 记账统一收敛到 af-mes crate | 已裁决 2026-10-24 |
-| [ADR-005](005-multi-agent-bench.md) | 多 agent bench 选型：MARBLE 主 + TaskBench 备 | 已裁决 2026-10-24 |
+| [ADR-005](005-multi-agent-bench.md) | 多 agent bench 选型：MARBLE 主 + TaskBench 备（**部分被 [ADR-011](011-redteam-w1-fixes.md) 取代 2026-10-26**：裁决 1 MARBLE 主选作废、裁决 3 bench→WorkOrder 转换协议冻结） | 已裁决 2026-10-24；部分取代 2026-10-26 |
 | [ADR-006](006-second-package.md) | 第二配置包 = 研究报告包（任务中立性证明件） | 已裁决 2026-10-24 |
 | [ADR-007](007-tdd-discipline.md) | TDD 开发规约：红-绿-重构、小模块自包含可审计 | 已裁决 2026-10-24 |
 | [ADR-008](008-bench-retirement.md) | 旧 bench 基础设施退役纪律（单一入口终态） | 已裁决 2026-10-24 |
