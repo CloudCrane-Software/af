@@ -449,6 +449,19 @@ impl GraphExecuteUnit {
             }
         };
         stage.account_node(&report);
+        // 红队 W2-C48：task 节点收尾即取工作区 diff（keyed-declare/终态消息
+        // 两路此前零取证——test_edit 记账在图臂整体不存在）；bare declare
+        // 路径的 envelope 推导复用本次取证（一次捕获两用）。碰测试面 =
+        // 判据被换（S0 D2 越权），记账进 stage 供终态判定收口。
+        let workspace_diff =
+            swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &node_dir).map_err(
+                |err| self.fail(format!("节点 {} 工作区取证失败: {err}", node.node_id)),
+            )?;
+        for touched in swev::diff_touches_tests(&workspace_diff) {
+            stage
+                .test_edit
+                .push(format!("{}:{touched}", node.node_id));
+        }
         // harness 侧预算耗尽归并（B 席嫁接）：RunStatus::BudgetExhausted 不当
         // 成功静默——EX4007 结构化熔断（launch 硬顶 = plan cost_cap 收敛面）。
         if let af_harness::RunStatus::BudgetExhausted { .. } = &report.status {
@@ -492,16 +505,12 @@ impl GraphExecuteUnit {
                     &node.artifact_contract[0],
                 );
                 if schema.as_ref().is_some_and(derivable_port_fields) {
-                    let diff =
-                        swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &node_dir)
-                            .map_err(|err| {
-                            self.fail(format!(
-                                "节点 {} 裸 declare 工作区取证失败: {err}",
-                                node.node_id
-                            ))
-                        })?;
-                    let payload =
-                        serde_json::json!({ "diff": diff, "files": files_of_diff(&diff) });
+                    // 红队 W2-C48：复用收尾相取证（workspace_diff）——不再二次
+                    // 过桥；test_edit 记账已在收尾相完成。
+                    let payload = serde_json::json!({
+                        "diff": workspace_diff,
+                        "files": files_of_diff(&workspace_diff)
+                    });
                     let mut ports = BTreeMap::new();
                     ports.insert(port.clone(), payload);
                     return Ok(NodeEnvelopes {
@@ -590,12 +599,53 @@ impl GraphExecuteUnit {
         }
         // v1.1 分发表：四件 builtin 判定单元（B 席嫁接面）。
         let value = match name.as_str() {
-            n if n == sweng::name_of(sweng::REF_SWENG_TEST_UNIT) => sweng::test_unit(
-                self.bridge.as_ref(),
-                &env,
-                task.test_command.as_deref().unwrap_or(DEFAULT_TEST_COMMAND),
-                None,
-            ),
+            n if n == sweng::name_of(sweng::REF_SWENG_TEST_UNIT) => {
+                // 红队 W2-C48 ①：判据命令必须随任务包冻结声明（task.json 经
+                // setup 相 verify_task_digest 钉死）——缺非空声明 fail-loud
+                // 拒载。缺省全仓 `python -m pytest -q` 判据面废除：那条命令
+                // 是计划 schema 根本没声明的 shell 串、对模型全权可控的
+                // /testbed 跑全仓测试，判据不受任何契约约束。
+                let test_cmd = task
+                    .test_command
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| {
+                        self.fail(format!(
+                            "check 节点 {} 判据命令未声明（task.json 缺非空 test_command）——\
+                             W2-C48 起缺省 pytest 判据面废除，判据命令必须随任务包冻结",
+                            node.node_id
+                        ))
+                    })?;
+                // ② 判据退化门：判分前取工作区 diff——模型碰测试面 = 判据
+                //    被换，退出码 0 亦不得授予 pass（评分 harness 拥有测试；
+                //    swev 臂同款防线，图臂此前为零道）。
+                let work_dir = ctx.attempt_dir.join("nodes").join(&node.node_id);
+                std::fs::create_dir_all(&work_dir)
+                    .map_err(|err| self.fail(format!("建节点目录失败: {err}")))?;
+                let diff =
+                    swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &work_dir)
+                        .map_err(|err| {
+                            self.fail(format!("节点 {} 判据面取证失败: {err}", node.node_id))
+                        })?;
+                let touched = swev::diff_touches_tests(&diff);
+                let mut verdict =
+                    sweng::test_unit(self.bridge.as_ref(), &env, "", Some(test_cmd));
+                if !touched.is_empty() {
+                    if verdict["pass"].as_bool() == Some(true) {
+                        verdict = serde_json::json!({
+                            "pass": false,
+                            "failures": [format!(
+                                "test_edit 判据退化门：模型改动测试面 {touched:?}——退出码判据作废"
+                            )],
+                            "test_edit": touched,
+                        });
+                    } else {
+                        verdict["test_edit"] = serde_json::json!(touched);
+                    }
+                }
+                verdict
+            }
             "pkg.sweagent.aci_schema" => {
                 let Some(action) = inputs.values().next() else {
                     return Err(self.fail(format!(
@@ -900,11 +950,19 @@ impl GraphExecuteUnit {
         // aci_schema 三类无 pass 终态的失败形态（resolved=false、error
         // 非空）被「缺字段推定成功」放行、合格工件 close（fix_swe_task 的
         // verdict 型只声明 resolved，失败判分照过）——缺字段不得推定成功。
-        let verdict = terminal_verdict(
+        let mut verdict = terminal_verdict(
             &plan.body.types,
             &plan.body.interface.output_type,
             &final_payload,
         );
+        // 红队 W2-C48：判据退化收口——任一节点取证到测试面改动（test_edit
+        // 记账在场），合格终态不得授予：判定压 None（qualified=false → close
+        // 门拒收），gate 如实记 test_edit（覆盖 ok/verify_failed——改过的
+        // 测试面「通过」不构成工作合格）。
+        let test_edited = !stage.test_edit.is_empty();
+        if test_edited && verdict == Some(true) {
+            verdict = None;
+        }
         let artifact_id = format!("graph-{}-{}", plan.body.interface.output_from, final_port);
         // 红队 W1-C36：结果行改走 af.plan.record.v1 统一行契约（swev/report
         // 同款投影 record::swev_v1_row）——此前手拼行缺 node_id/item_id/
@@ -923,7 +981,9 @@ impl GraphExecuteUnit {
             reasoning_tier: "off",
             run_dir: Some(attempt_dir.display().to_string()),
             eval_sha256: None,
-            gate: if verdict == Some(true) {
+            gate: if test_edited {
+                "test_edit"
+            } else if verdict == Some(true) {
                 "ok"
             } else {
                 "verify_failed"
@@ -939,12 +999,18 @@ impl GraphExecuteUnit {
                 cache_read: stage.tokens_cache,
             },
             agent_wall_ms: started.elapsed().as_millis() as u64,
-            verifier_note: format!(
-                "graph nodes={} cents={} tokens_total={}",
-                order.len(),
-                stage.cents_used,
-                stage.tokens_used
-            ),
+            verifier_note: {
+                let mut note = format!(
+                    "graph nodes={} cents={} tokens_total={}",
+                    order.len(),
+                    stage.cents_used,
+                    stage.tokens_used
+                );
+                if test_edited {
+                    note.push_str(&format!("；test_edit={:?}", stage.test_edit));
+                }
+                note
+            },
         };
         let row = crate::record::swev_v1_row(
             &facts,
@@ -982,7 +1048,6 @@ impl GraphExecuteUnit {
 
 /// check 节点测试命令缺省（task.json test_command 未声明时；fail-closed 面在
 /// test_unit 自身——命令为空即 pass=false 观察）。
-pub const DEFAULT_TEST_COMMAND: &str = "python -m pytest -q";
 
 // ============================================================
 // 图输入任务包
@@ -1290,6 +1355,11 @@ struct Drive {
     /// HTTP 层退避重试累计（红队 W2-C33：供给面重试审计——两路径累加，
     /// 进 v1 行 usage.http_retries）。
     http_retries: u64,
+    /// 判据退化记账（红队 W2-C48）：各 task 节点收尾取证的工作区 diff 中
+    /// 碰了测试面的 `(节点, 文件)`——此前图臂整体无此记账（keyed-declare
+    /// 支路连 diff 都不取），模型改测试后默认 pytest 通过即可翻绿。在场时
+    /// 合格终态不得授予（gate=test_edit，verdict 压 None）。
+    test_edit: Vec<String>,
 }
 
 impl Drive {

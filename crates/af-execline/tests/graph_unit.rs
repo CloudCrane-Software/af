@@ -397,18 +397,28 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     );
 
     // tester（check 节点）：uses.unit 经注册表 impl 解析直调——容器内跑
-    // task.json 声明的 test_command，零模型调用。
+    // task.json 声明的 test_command，零模型调用。（红队 W2-C48 起 task 节点
+    // 收尾与判据面各有一次 `git diff` 取证过桥——容器执行计数按判据命令
+    // 本体 pytest 统计。）
     let exec_calls: Vec<String> = bridge
         .calls()
         .into_iter()
-        .filter(|s| s.contains("docker exec"))
+        .filter(|s| s.contains("docker exec") && s.contains("pytest"))
         .collect();
-    assert_eq!(exec_calls.len(), 1, "tester 恰一次容器执行: {exec_calls:?}");
+    assert_eq!(exec_calls.len(), 1, "tester 恰一次判据执行: {exec_calls:?}");
     assert!(
         exec_calls[0].contains("python -m pytest"),
         "test_command 来自任务包: {}",
         exec_calls[0]
     );
+    // 红队 W2-C48：三 task 节点收尾取证 + tester 判据面取证，各恰一次
+    // `git diff` 过桥（keyed-declare/终态消息两路同样取证）。
+    let diff_calls = bridge
+        .calls()
+        .iter()
+        .filter(|s| s.contains("git -c core.fileMode=false diff"))
+        .count();
+    assert_eq!(diff_calls, 4, "取证面：3 task 节点 + 1 判据面: {}", bridge.calls().len());
 
     // typed envelope 落 attempt 工件面（artifact_contract 端口名）。
     for (node, port) in [
@@ -2533,5 +2543,181 @@ fn unit_failure_emits_setup_failed_row_ex4008() {
         rows[0]["run_dir"].is_null(),
         "setup_failed 行 run 目录未建 → null: {}",
         rows[0]
+    );
+}
+
+// ============================================================
+// ⑬ 红队 W2-C48：判据命令冻结契约 + test_edit 判据退化门
+// ============================================================
+
+/// 测试面被改的取证桥：git diff 返回碰测试文件的补丁（S0 D2 越权形态）。
+struct TestTamperBridge {
+    calls: Mutex<Vec<String>>,
+}
+
+impl TestTamperBridge {
+    fn new() -> Self {
+        Self {
+            calls: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl af_execline::HostBridge for TestTamperBridge {
+    fn run(&self, _host: &str, script: &str, _t: u32) -> Result<(bool, String), String> {
+        self.calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(script.to_string());
+        if script.starts_with("docker rm -f") || script.starts_with("docker run") {
+            Ok((true, String::new()))
+        } else if script.contains("git -c core.fileMode=false diff") {
+            Ok((
+                true,
+                "diff --git a/tests/test_foo.py b/tests/test_foo.py\n--- a/tests/test_foo.py\n+++ \
+                 b/tests/test_foo.py\n"
+                    .into(),
+            ))
+        } else if script.contains("docker exec") {
+            Ok((true, "Ran 12 tests in 3s\n\nOK\n__AF_RC=0".into()))
+        } else {
+            Ok((true, String::new()))
+        }
+    }
+}
+
+/// ① 判据命令必须随任务包冻结声明：task.json 缺非空 test_command →
+/// test_unit 检查节点 fail-loud 拒载，缺省全仓 `python -m pytest -q`
+/// 判据面废除（先红：缺声明静默落缺省命令、对模型全权可控的 /testbed
+/// 跑全仓测试）。
+#[test]
+fn test_unit_without_declared_command_fails_loud() {
+    let root = temp_root("w2c48-nocmd");
+    // 任务包不带 test_command 字段（task_package 除外手写）。
+    let data_root = root.join("data");
+    let task_dir = data_root.join(TASK);
+    std::fs::create_dir_all(&task_dir).unwrap();
+    std::fs::write(
+        task_dir.join("plan.json"),
+        compile_plan(&sop_full_src()),
+    )
+    .unwrap();
+    std::fs::write(
+        task_dir.join("task.json"),
+        json!({
+            "repo": "django/django",
+            "instance_id": TASK,
+            "problem_statement": "Fix the thing",
+            "image": "swebench/sweb.eval.x86_64.django-11099:latest"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("缺判据声明应拒载");
+    assert_eq!(err.code(), ErrorCode::UnitFailed, "{err}");
+    assert!(
+        err.to_string().contains("判据命令未声明") && err.to_string().contains("test_command"),
+        "拒载点名判据命令缺声明：{err}"
+    );
+    assert!(
+        !bridge
+            .calls()
+            .iter()
+            .any(|s| s.contains("docker exec") && s.contains("pytest")),
+        "缺声明零判据执行（缺省 pytest 面不再兜底）：{:?}",
+        bridge.calls()
+    );
+}
+
+/// ② test_edit 判据退化门：模型碰测试面（git diff 含 tests/）→ 退出码 0
+/// 的 pass 亦作废（failures 点名 test_edit），合格终态不授予（qualified=false、
+/// 行 gate=test_edit、verdict 如实）——判据不再仅凭任意 shell 退出码。
+#[test]
+fn test_unit_pass_revoked_when_model_touched_tests() {
+    let root = temp_root("w2c48-tamper");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let bridge = Arc::new(TestTamperBridge::new());
+    let spec = GraphUnitSpec::v1(PROFILE, repo_packages());
+    let unit = GraphExecuteUnit::new(spec, bridge.clone(), runner)
+        .expect("图单元装载（profile/注册表可解析）");
+    let attempt = root.join("attempt");
+    let out = root.join("out");
+
+    let output = drive(&unit, &data_root, &attempt, &out).expect("判据退化非执行错误（照走完）");
+    assert!(
+        !output.artifacts[0].qualified,
+        "碰测试面的通过不得授予合格终态"
+    );
+    // tester verdict envelope：pass 翻假 + failures 点名 test_edit。
+    let verdict: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("tester.report.json")).unwrap(),
+    )
+    .unwrap();
+    let payload = &verdict["payload"];
+    assert_eq!(payload["pass"], json!(false), "退出码 0 亦作废: {verdict}");
+    assert!(
+        payload["failures"]
+            .as_array()
+            .is_some_and(|f| f.iter().any(|x| x.as_str().unwrap_or("").contains("test_edit"))),
+        "退化门点名 test_edit: {verdict}"
+    );
+    // 行面：gate=test_edit、verdict 如实 false（非合格）。
+    let row: Value = serde_json::from_str(
+        &std::fs::read_to_string(out.join("records.jsonl"))
+            .unwrap()
+            .lines()
+        .last()
+        .expect("v1 行应在盘"),
+    )
+    .unwrap();
+    assert_eq!(row["gate"], json!("test_edit"), "gate 记账: {row}");
+}
+
+/// ③ 判据退化非门控面也记账：碰测试面且判据本就失败（rc!=0）时，verdict
+/// 上仍附 test_edit 清单（对账可查，不静默）。
+#[test]
+fn test_unit_failure_row_carries_test_edit_marker() {
+    let root = temp_root("w2c48-tamper-fail");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    // 桥：diff 碰测试面 + 判据命令失败（rc=1）。
+    struct TamperFailBridge;
+    impl af_execline::HostBridge for TamperFailBridge {
+        fn run(&self, _host: &str, script: &str, _t: u32) -> Result<(bool, String), String> {
+            if script.starts_with("docker rm -f") || script.starts_with("docker run") {
+                return Ok((true, String::new()));
+            }
+            if script.contains("git -c core.fileMode=false diff") {
+                return Ok((
+                    true,
+                    "diff --git a/conftest.py b/conftest.py\n--- a/conftest.py\n+++ b/conftest.py\n"
+                        .into(),
+                ));
+            }
+            Ok((true, "FAILED tests/test_x.py\n__AF_RC=1".into()))
+        }
+    }
+    let bridge = Arc::new(TamperFailBridge);
+    let spec = GraphUnitSpec::v1(PROFILE, repo_packages());
+    let unit = GraphExecuteUnit::new(spec, bridge, runner).expect("图单元装载应通过");
+    let attempt = root.join("attempt");
+    let out = root.join("out");
+
+    let output = drive(&unit, &data_root, &attempt, &out).expect("判据失败照走完（不 Err）");
+    assert!(!output.artifacts[0].qualified);
+    let verdict: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("tester.report.json")).unwrap(),
+    )
+    .unwrap();
+    let payload = &verdict["payload"];
+    assert_eq!(payload["pass"], json!(false));
+    assert_eq!(
+        payload["test_edit"],
+        json!(["conftest.py"]),
+        "失败判定也附 test_edit 清单: {verdict}"
     );
 }
