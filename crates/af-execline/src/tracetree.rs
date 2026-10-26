@@ -19,12 +19,14 @@
 //! critical `harness.stop` 交叉一致。失败订单（close 未过、终态 max_turns）
 //! 四层仍应完整——本工具核**树形状**，不核订单成败。
 //!
-//! run 目录两种布局（G5 正式批扩展，实证来源 F-第五单交付差异#1）：
+//! run 目录三种布局（G5 正式批扩展 + 红队 W2-C32 graph 图执行器补全；实证
+//! 来源 F-第五单交付差异#1 与 F4B-F4D 图真单 runs/<item>-a<n>/nodes/ 形态）：
 //!
 //! | 布局 | 形态 | L2 invoke_agent |
 //! |---|---|---|
 //! | swev 扁平 | `runs/<item>-a<n>/harness.db` 直挂 run 根 | 恰 1 个 |
 //! | report 环 | `runs/<item>-a<n>/ring/<成员>/harness.db`（reader/writer-i1…） | 每成员 1 个（多 agent 兄弟） |
+//! | graph 图执行 | `runs/<item>-a<n>/nodes/<节点>/harness.db`（planner/coder/…） | 每节点 1 个（多 agent 兄弟） |
 //!
 //! report 环口径（对照 F5c 实测）：plan_id 为注册表编译形态
 //! `plan.<包>@<版本>+<摘要>`（非订单 id）；records.quota 是**全环成员 token
@@ -78,6 +80,9 @@ pub struct TraceTreeReport {
     pub agent: Option<AgentLayer>,
     /// report 环布局的 invoke_agent 成员（`ring/<成员>` 各一；扁平布局空）。
     pub ring: Vec<AgentLayer>,
+    /// graph 图执行布局的 invoke_agent 成员（`nodes/<节点>` 各一；红队
+    /// W2-C32——此前 nodes/ 布局不在任何甄别分支，图单四层树不可工具核验）。
+    pub graph: Vec<AgentLayer>,
     /// 旁路 run 目录名（半途 attempt，不计入树）。
     pub side_runs: Vec<String>,
     /// 非空 = 树有断点（每条点名层级与证据）。
@@ -105,10 +110,10 @@ impl TraceTreeReport {
             self.ledger_entries,
             self.mes_kinds.join(","),
         ));
-        let agents: Vec<&AgentLayer> = if self.ring.is_empty() {
+        let agents: Vec<&AgentLayer> = if self.ring.is_empty() && self.graph.is_empty() {
             self.agent.iter().collect()
         } else {
-            self.ring.iter().collect()
+            self.ring.iter().chain(self.graph.iter()).collect()
         };
         match agents.len() {
             0 => out.push_str("└─ invoke_agent <缺失>\n"),
@@ -177,6 +182,7 @@ pub fn verify_order_dir(dir: &Path) -> TraceTreeReport {
     let mut quota: Option<(u64, u64, u64)> = None;
     let mut agent: Option<AgentLayer> = None;
     let mut ring: Vec<AgentLayer> = Vec::new();
+    let mut graph: Vec<AgentLayer> = Vec::new();
     let mut side_runs: Vec<String> = Vec::new();
     let mut referenced_run: Option<String> = None;
     let mut records_node = String::new();
@@ -336,10 +342,13 @@ pub fn verify_order_dir(dir: &Path) -> TraceTreeReport {
     if let Some(run_name) = &referenced_run {
         let run_dir = dir.join("runs").join(run_name);
         // 布局甄别：swev 扁平（harness.db 直挂 run 根）优先；report 环
-        // （ring/<成员>/harness.db）次之；两者皆无按扁平路径走——打开失败
-        // 的 finding 形态与既有行为一致。
+        // （ring/<成员>/harness.db）与 graph 图执行（nodes/<节点>/harness.db，
+        // 红队 W2-C32）次之；三者皆无按扁平路径走——打开失败的 finding 形态
+        // 与既有行为一致。
         let members = ring_members(&run_dir);
-        if run_dir.join("harness.db").is_file() || members.is_empty() {
+        let node_members = graph_node_members(&run_dir);
+        if run_dir.join("harness.db").is_file() || (members.is_empty() && node_members.is_empty())
+        {
             let a = verify_agent_unit(
                 &run_dir,
                 run_name.clone(),
@@ -350,6 +359,28 @@ pub fn verify_order_dir(dir: &Path) -> TraceTreeReport {
             chat_total = a.chat_events;
             token_sum = a.tokens;
             agent = Some(a);
+        } else if !node_members.is_empty() && members.is_empty() {
+            // graph 图执行：每节点一个 invoke_agent 兄弟节点（records.node_id
+            // 是图单元整体的线位，节点名取自 nodes/<名> 目录名——F4B-F4D 实测
+            // 形态；token 闭合口径与 report 环同：records.quota = 全节点和）。
+            for n in node_members {
+                let display = format!("nodes/{n}");
+                let a = verify_agent_unit(
+                    &run_dir.join("nodes").join(&n),
+                    display.clone(),
+                    n,
+                    records_attempt,
+                    &mut findings,
+                );
+                chat_total += a.chat_events;
+                token_sum.0 += a.tokens.0;
+                token_sum.1 += a.tokens.1;
+                token_sum.2 += a.tokens.2;
+                graph.push(a);
+            }
+            if graph.is_empty() {
+                findings.push("L2 invoke_agent: nodes/ 下无含 harness.db 的成员（层缺失）".into());
+            }
         } else {
             // report 环：每成员一个 invoke_agent 兄弟节点（records.node_id 是
             // 环整体的线位，成员名取自 ring/<成员> 目录名——F5c 实测形态）。
@@ -372,7 +403,7 @@ pub fn verify_order_dir(dir: &Path) -> TraceTreeReport {
                 findings.push("L2 invoke_agent: ring/ 下无含 harness.db 的成员（层缺失）".into());
             }
         }
-        if chat_total == 0 && agent.is_none() && ring.is_empty() {
+        if chat_total == 0 && agent.is_none() && ring.is_empty() && graph.is_empty() {
             // 单元一个都没建成（如 run 根与 ring/ 均无 harness.db）——单元级
             // findings 已点名具体缺失；此处兜底整层缺席。
             findings.push("L3 chat: 零 harness.model 事件（层缺失）".into());
@@ -409,6 +440,7 @@ pub fn verify_order_dir(dir: &Path) -> TraceTreeReport {
         mes_kinds,
         agent,
         ring,
+        graph,
         side_runs,
         findings,
     }
@@ -425,6 +457,25 @@ fn is_registry_plan_id(plan_id: &str) -> bool {
         Some((pkg, ver)) => !pkg.is_empty() && ver.contains('+'),
         None => false,
     }
+}
+
+/// graph 图执行节点：`run_dir/nodes/` 下含 harness.db 的子目录名（排序稳定）。
+/// nodes/ 不存在或无合格成员 → 空 vec（调用方回退其他布局；红队 W2-C32——
+/// graph_unit 逐节点 harness.db 落 nodes/<node_id>/，此前不在任何甄别分支）。
+fn graph_node_members(run_dir: &Path) -> Vec<String> {
+    let nodes = run_dir.join("nodes");
+    if !nodes.is_dir() {
+        return Vec::new();
+    }
+    let mut names: Vec<String> = std::fs::read_dir(&nodes)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir() && e.path().join("harness.db").is_file())
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
 }
 
 /// report 环成员：`run_dir/ring/` 下含 harness.db 的子目录名（排序稳定）。
