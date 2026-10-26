@@ -1,3 +1,9 @@
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/af-wt-redteam/deny.toml:28:4
+   │
+28 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
+
 warning[duplicate]: found 2 duplicate entries for crate 'base64'
    ┌─ /home/pan-ding/workspace/af-wt-redteam/Cargo.lock:38:1
    │  
@@ -969,12 +975,6 @@ warning[duplicate]: found 2 duplicate entries for crate 'rand_chacha'
                   │   ├── af-bench v0.1.0
                   │   └── (dev) af-order v0.1.0
                   └── (dev) af-order v0.1.0 (*)
-
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/af-wt-redteam/deny.toml:28:4
-   │
-28 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 3 duplicate entries for crate 'rand_core'
     ┌─ /home/pan-ding/workspace/af-wt-redteam/Cargo.lock:245:1
