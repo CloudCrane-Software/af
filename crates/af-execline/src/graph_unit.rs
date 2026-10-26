@@ -1918,24 +1918,43 @@ fn node_tool_fn(
     }
 }
 
-/// 终态工件端口（interface.output_from 的 is_final 端口；缺 → 线性链缺终态）。
+/// 终态工件端口（interface.output_from 的 is_final 端口；缺 → 线性链缺终态；
+/// **多于一个 → 拒收**——红队 W1-C28 第二半：终态类型匹配须恰一端口，
+/// 此前 `.find(|a| a.is_final)` 静默取首个，双终态手写计划的工件归属取决于
+/// 条目序，终态工件不可单义识别。编译面计划到不了这里（af-dsl E2202 恰一
+/// 端口匹配 fail-closed + lower is_final 推导同源），本门守 decode+planbind
+/// 可放行的手写计划面）。
 fn final_artifact_port(plan: &ExecutablePlan) -> Result<String, ExeclineError> {
-    plan.body
+    let finals: Vec<&str> = plan
+        .body
         .node_exec
         .iter()
         .find(|n| n.node_id == plan.body.interface.output_from)
-        .and_then(|n| {
+        .map(|n| {
             n.artifact_contract
                 .iter()
-                .find(|a| a.is_final)
-                .map(|a| a.name.clone())
+                .filter(|a| a.is_final)
+                .map(|a| a.name.as_str())
+                .collect()
         })
-        .ok_or_else(|| ExeclineError::EnvelopeMismatch {
+        .unwrap_or_default();
+    match finals.as_slice() {
+        [port] => Ok((*port).to_string()),
+        [] => Err(ExeclineError::EnvelopeMismatch {
             detail: format!(
                 "终态发射者 {} 无 is_final 工件端口",
                 plan.body.interface.output_from
             ),
-        })
+        }),
+        many => Err(ExeclineError::EnvelopeMismatch {
+            detail: format!(
+                "终态发射者 {} 有 {} 个 is_final 工件端口（{:?}）——终态工件不可单义识别，须恰一（红队 W1-C28）",
+                plan.body.interface.output_from,
+                many.len(),
+                many
+            ),
+        }),
+    }
 }
 
 /// JSON Schema 子集校验（sop 图 types 词典实际用到的面：type/required/

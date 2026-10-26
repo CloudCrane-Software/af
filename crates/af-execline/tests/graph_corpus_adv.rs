@@ -1256,6 +1256,44 @@ fn corpus() -> Vec<Case> {
         Expect::Ex(ErrorCode::EnvelopeMismatch),
     );
 
+    // 红队 W1-C28 第二半（fixHint：final_artifact_port 不得靠 find 吞掉歧义）：
+    // 手写计划给终态发射者塞**两个** is_final=true 端口——终态工件不可单义
+    // 识别，执行面须 fail-loud（此前 final_artifact_port 以
+    // `.find(|a| a.is_final)` 静默取首个，条目序决定选哪个工件）。编译面
+    // 计划到不了这里（af-dsl E2202 恰一端口匹配 + lower 推导同源），本例
+    // 钉的是 decode+planbind 可放行的手写计划面。终态发射者改指 planner
+    //（agent 面，declare 双键过 envelope 交接门）+ 原口位置 is_final +
+    // 追加同型 shadow 口——declare 交接面全过，直抵收尾相 final_artifact_port。
+    // （置于闭包借用区外：本例同时要 mutate + declare 两面。）
+    let dual_payload = json!({
+        "plan": {"instance_id": TASK, "steps": [
+            {"id": "s1", "action": "locate", "target": "django/db/models"}
+        ]},
+        "plan_shadow": {"instance_id": TASK, "steps": [
+            {"id": "s1", "action": "locate", "target": "django/db/models"}
+        ]}
+    });
+    cases.push(Case {
+        family: "type",
+        name: "dual-final-artifact-ports",
+        mutate: Box::new(|p, _, _| {
+            p["body"]["interface"]["output_from"] = json!("planner");
+            p["body"]["interface"]["output_type"] = json!("task_plan");
+            node_exec_mut(p, "planner")["artifact_contract"][0]["is_final"] = json!(true);
+            node_exec_mut(p, "planner")["artifact_contract"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({"name": "plan_shadow", "is_final": true, "type": "task_plan"}));
+            None
+        }),
+        expect: Expect::Ex(ErrorCode::EnvelopeMismatch),
+        declare: Some(DeclareScript {
+            target: "planner",
+            args: dual_payload.clone(),
+            final_text: Some(dual_payload.to_string()),
+        }),
+    });
+
     cases
 }
 
