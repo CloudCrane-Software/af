@@ -1,2 +1,1 @@
-CLIPPY GATE: FAIL —— 1 个签名出现新增警告（新增 1 条）:
-  +1 clippy::needless_borrow crates/af-order/tests/cli.rs（现 1 / 基线 0）
+CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）

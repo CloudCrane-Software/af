@@ -1,7 +1,4 @@
-   Compiling af-execline v0.1.0 (/home/pan-ding/workspace/af-wt-redteam/crates/af-execline)
-   Compiling af-order v0.1.0 (/home/pan-ding/workspace/af-wt-redteam/crates/af-order)
-   Compiling af-bench v0.1.0 (/home/pan-ding/workspace/af-wt-redteam/crates/af-bench)
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 25.03s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.18s
 warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
 note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
      Running unittests src/main.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_bench-331861ad09cb76fd)
@@ -23,16 +20,16 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 12 tests
 test dense_hourly_scan_3y_berlin_and_new_york ... ignored, 慢速全表扫描:约 10.5 万点,毫秒-秒级,验证用
-test night_shift_friday_22h_plus_4h_lands_saturday_02h ... ok
-test fall_back_ambiguous_instant_resolution ... ok
-test night_shift_saturday_2330_plus_1h_crosses_to_sunday ... ok
-test spring_forward_addition_into_missing_hour_lands_after_gap ... ok
-test spring_forward_gap_hour_not_counted_as_working_time ... ok
-test fall_back_repeated_hour_counts_once_as_elapsed_time ... ok
 test night_shift_semantics_identical_without_dst ... ok
+test spring_forward_addition_into_missing_hour_lands_after_gap ... ok
+test night_shift_friday_22h_plus_4h_lands_saturday_02h ... ok
 test due_at_window_start_is_not_completion_reachable ... ok
-test night_shift_with_holiday_and_makeup_override ... ok
+test night_shift_saturday_2330_plus_1h_crosses_to_sunday ... ok
+test fall_back_repeated_hour_counts_once_as_elapsed_time ... ok
+test spring_forward_gap_hour_not_counted_as_working_time ... ok
+test fall_back_ambiguous_instant_resolution ... ok
 test two_consecutive_nights_forward_reverse_roundtrip ... ok
+test night_shift_with_holiday_and_makeup_override ... ok
 test three_year_scan_6h_grid_berlin_and_new_york ... ok
 
 test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.09s
@@ -40,23 +37,23 @@ test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; fin
      Running tests/sla.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/sla-4ce9f80f0b926358)
 
 running 18 tests
-test overlapping_shifts_fail_validation ... ok
-test negative_duration_rejected ... ok
 test fixed_offset_input_also_accepted ... ok
-test friday_16h_order_4h_deadline_is_next_monday ... ok
-test latest_order_across_golden_week_and_offset_epoch ... ok
-test off_hours_and_weekend_roll_to_next_open ... ok
-test utc_consumer_gets_same_instant_in_utc ... ok
 test is_working_instant_respects_holiday_and_override ... ok
+test latest_order_across_golden_week_and_offset_epoch ... ok
+test exact_window_end_means_hours_exhausted_there ... ok
+test friday_16h_order_4h_deadline_is_next_monday ... ok
+test off_hours_and_weekend_roll_to_next_open ... ok
+test negative_duration_rejected ... ok
+test horizon_exceeded_when_never_enough_working_time ... ok
+test latest_order_roundtrip_forward_equals_due ... ok
+test overlapping_shifts_fail_validation ... ok
+test golden_week_crossing_holiday_table ... ok
+test multi_shift_calendar_skips_lunch ... ok
 test makeup_workday_saturday_counts_as_working ... ok
 test latest_order_is_maximal_even_when_due_off_shift ... ok
-test exact_window_end_means_hours_exhausted_there ... ok
-test multi_shift_calendar_skips_lunch ... ok
-test latest_order_roundtrip_forward_equals_due ... ok
-test golden_week_crossing_holiday_table ... ok
-test horizon_exceeded_when_never_enough_working_time ... ok
-test json_config_roundtrip_reproduces_deadline ... ok
+test utc_consumer_gets_same_instant_in_utc ... ok
 test utc_due_gives_utc_latest_order ... ok
+test json_config_roundtrip_reproduces_deadline ... ok
 test zero_duration_returns_next_startable_instant ... ok
 
 test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -65,7 +62,7 @@ test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 0 tests
 
-test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running unittests src/bin/af-compiler-plan.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_compiler_plan-3d198b9e4ad0a000)
 
@@ -89,37 +86,37 @@ test registry_rejects_tool_without_effect_class ... ok
 test registry_rejects_duplicate_refs_across_files ... ok
 test registry_rejects_key_ref_over_128_boundary_same_as_harness ... ok
 test components_files_do_not_touch_graph_manifest_surface ... ok
-test repo_components_registry_loads_deterministically ... ok
 test empty_registry_binds_doc_without_uses_refs ... ok
 test violations_are_collected_not_first_stopped ... ok
 test e9001_malformed_reference_string_is_rejected ... ok
 test e9001_unregistered_reference_is_rejected ... ok
-test e9002_unversioned_ref_on_multi_version_name_is_rejected ... ok
-test e9003_class_mismatch_is_rejected ... ok
 test e9002_version_mismatch_is_rejected ... ok
-test escape_injection_point_passes_escape_spec_through ... ok
+test e9002_unversioned_ref_on_multi_version_name_is_rejected ... ok
+test repo_components_registry_loads_deterministically ... ok
+test e9003_class_mismatch_is_rejected ... ok
 test duplicate_component_refs_dedup_after_resolution ... ok
+test escape_injection_point_passes_escape_spec_through ... ok
 test sample2_binds_all_uses_refs_with_first_class_fills ... ok
 test sample3_binds_nested_body_node_to_shared_route ... ok
 
-test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running tests/golden_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/golden_test-14a5b826c8b6e252)
 
 running 11 tests
 test g3_golden_corpus_manifest_closed ... ok
-test six_golden_samples_pass_full_validation ... ok
 test sample1_projection_facts ... ok
 test sample4_sample5_projection_facts ... ok
 test g3_golden_tamper_detection ... ok
-test g3p2_selector_injection_is_load_bearing ... ok
 test g3p2_selector_tamper_detection ... ok
-test g3p2_selector_golden_byte_exact ... ok
+test six_golden_samples_pass_full_validation ... ok
 test decode_roundtrip_equals_lowered ... ok
+test g3p2_selector_golden_byte_exact ... ok
+test g3p2_selector_injection_is_load_bearing ... ok
 test six_golden_deterministic_bitwise ... ok
 test g3_golden_corpus_byte_exact ... ok
 
-test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.32s
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
 
      Running tests/inline_body_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/inline_body_test-d1de67539bae9f7b)
 
@@ -129,21 +126,21 @@ test sample6_nested_loops_and_cross_layer_safety_points ... ok
 test sample4_sample2_subgraph_shapes ... ok
 test inline_body_dimensional_reduction_conserves_nodes_and_edges ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 
      Running tests/ir_schema_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/ir_schema_test-999e6943c2d03358)
 
 running 8 tests
 test envelope_version_is_one ... ok
-test envelope_rejects_non_integer_version ... ok
-test envelope_rejects_unknown_top_key ... ok
-test first_class_placeholder_values_are_empty_defaults ... ok
 test envelope_rejects_missing_version ... ok
+test first_class_placeholder_values_are_empty_defaults ... ok
 test envelope_rejects_version_not_one ... ok
+test envelope_rejects_unknown_top_key ... ok
+test envelope_rejects_non_integer_version ... ok
 test envelope_rejects_unknown_body_field_and_nested_field ... ok
 test first_class_fields_present_in_all_samples ... ok
 
-test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
 
      Running tests/lower_error_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/lower_error_test-ef27e2f7fd61bd37)
 
@@ -158,24 +155,24 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 10 tests
 test unbound_report_refuses_plan_generation ... ok
 test sop_full_v1_1_token_cap_calibrated_to_f4c_measurement ... ok
+test decode_plan_roundtrip_equals_generated ... ok
+test plan_projects_emits_types_and_consumes_contracts ... ok
 test sample2_plan_shape_matches_contract_skeleton ... ok
 test plan_node_exec_projects_context_sections ... ok
-test plan_projects_emits_types_and_consumes_contracts ... ok
-test decode_plan_roundtrip_equals_generated ... ok
 test gptswarm_plan_carries_escape_specs ... ok
 test plan_json_pretty_entry_matches_stepwise ... ok
 test plan_envelope_is_rejecting ... ok
 test gate_samples_ir_and_plan_deterministic_bitwise ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
 
      Running tests/registry_decl_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/registry_decl_test-6cc931b2fcfecaae)
 
 running 5 tests
 test decls_table_matches_gate_coverage_counts ... ok
+test unversioned_referenced_names_declare_exactly_one_version ... ok
 test repo_registry_total_is_57_after_p2l12_expansion ... ok
 test all_50_p2l12_declarations_resolve_with_expected_version_and_class ... ok
-test unversioned_referenced_names_declare_exactly_one_version ... ok
 test class_mismatch_against_repo_registry_is_rejected ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -188,7 +185,7 @@ test sample3_route_guards_mutual_exclusion ... ok
 test sample2_sample6_route_guards ... ok
 test cel_digest_stable_across_compiles ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
 
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_credential-478eaaaa6b90a7aa)
 
@@ -197,18 +194,18 @@ test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
 test clock::tests::system_clock_reads_unix_millis ... ok
 test root::tests::sqlite_pragmas_and_foreign_key ... ok
 test root::tests::schema_mismatch_fail_closed ... ok
-test root::tests::forged_key_file_is_not_replaced ... ok
-test root::tests::journal_bad_permissions_fail_closed ... ok
+test root::tests::tampered_bootstrap_fail_closed ... ok
 test root::tests::generation_gap_fail_closed ... ok
 test root::tests::corrupt_journal_fail_closed ... ok
-test root::tests::tampered_bootstrap_fail_closed ... ok
+test root::tests::forged_key_file_is_not_replaced ... ok
+test root::tests::journal_bad_permissions_fail_closed ... ok
 test root::tests::finding_a_crash_before_ready_does_not_publish_half_a_store ... ok
+test root::tests::wrong_signature_and_unknown_generation ... ok
 test root::tests::uncommitted_journal_is_rolled_back ... ok
 test root::tests::finding_a_half_store_names_quarantine_and_quarantine_unblocks ... ok
-test root::tests::wrong_signature_and_unknown_generation ... ok
 test root::tests::committed_journal_reexports_the_same_key ... ok
-test root::tests::finding_a_crash_after_ready_resumes_the_same_key ... ok
 test root::tests::finding_a_crash_after_db_rename_resumes_the_same_key ... ok
+test root::tests::finding_a_crash_after_ready_resumes_the_same_key ... ok
 
 test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
@@ -226,8 +223,8 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 4 tests
 test case4_neither_allows_deny ... ok
-test case3_token_has_but_cedar_denies ... ok
 test case1_both_allow_pass ... ok
+test case3_token_has_but_cedar_denies ... ok
 test case2_cedar_allows_but_token_lacks_deny ... ok
 
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
@@ -237,11 +234,11 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 13 tests
 test orphan_journal_does_not_create_a_key ... ok
 test rotate_missing_store_does_not_create_a_key ... ok
-test symlink_root_key_fail_closed ... ok
 test corrupt_key_fail_closed_does_not_regenerate ... ok
+test symlink_root_key_fail_closed ... ok
 test token_without_root_key_id_is_rejected ... ok
-test partial_store_fail_closed ... ok
 test declaration_mismatch_fail_closed ... ok
+test partial_store_fail_closed ... ok
 test bad_permissions_fail_closed_does_not_regenerate ... ok
 test zero_grace_rejects_old_immediately ... ok
 test created_reopen_replays_same_key_and_bootstrap ... ok
@@ -249,16 +246,16 @@ test concurrent_first_open_one_root ... ok
 test successive_rotations_keep_independent_grace ... ok
 test rotation_verify_matrix ... ok
 
-test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
 
      Running tests/yaml_snapshots.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/yaml_snapshots-422de631076f2d73)
 
 running 3 tests
-test rejection_error_structure ... ok
 test cents_issuance_payload ... ok
+test rejection_error_structure ... ok
 test two_policy_intersection_minimum ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_dsl-b6f3be11e8c52dc3)
 
@@ -270,10 +267,10 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 15 tests
 test operator_whitelist_locks_spec_fifteen ... ok
-test unknown_root_rejected_as_e2203 ... ok
-test size_function_rejected_as_e1052 ... ok
 test method_call_rejected_as_e1052 ... ok
+test unknown_root_rejected_as_e2203 ... ok
 test brackets_inside_string_literals_do_not_count_depth ... ok
+test size_function_rejected_as_e1052 ... ok
 test judgment_order_is_parse_then_operators_then_roots_then_boolean ... ok
 test non_boolean_rejected_as_e1053 ... ok
 test expr_bytes_over_limit_rejected_as_e1054 ... ok
@@ -285,7 +282,7 @@ test every_whitelisted_operator_is_accepted ... ok
 test sixteen_legal_fixtures_pass_all_three_judgments ... ok
 test nesting_depth_over_limit_rejected_as_e1054 ... ok
 
-test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
 
      Running tests/construct_conflict_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/construct_conflict_test-449a1ee38867111f)
 
@@ -298,13 +295,13 @@ test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/envelope_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/envelope_test-8aefc5c157050ea8)
 
 running 11 tests
-test negative_version_is_e0003 ... ok
-test string_version_is_e0002 ... ok
-test version_two_rejects_without_parsing_body ... ok
 test non_mapping_root_is_e0001 ... ok
+test string_version_is_e0002 ... ok
+test negative_version_is_e0003 ... ok
 test float_version_is_e0002 ... ok
-test unknown_top_key_is_e0004 ... ok
 test yaml_syntax_error_is_e0001 ... ok
+test unknown_top_key_is_e0004 ... ok
+test version_two_rejects_without_parsing_body ... ok
 test multiple_unknown_top_keys_collect_all ... ok
 test missing_version_key_is_e0001 ... ok
 test bool_version_is_e0002 ... ok
@@ -316,12 +313,12 @@ test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 14 tests
 test b60_empty_nodes_reports_e2001_not_panic ... ok
-test al08_failures_route_into_body_rejected_as_e2204 ... ok
-test iv48_dual_same_type_output_ports_now_e2202 ... ok
 test d209_blast_reports_e2205 ... ok
+test al08_failures_route_into_body_rejected_as_e2204 ... ok
 test m001_output_ref_unregistered_reports_e2205 ... ok
-test al09_budget_scope_into_body_is_confirmed_semantics ... ok
+test iv48_dual_same_type_output_ports_now_e2202 ... ok
 test entry_and_output_from_calibers_cannot_diverge_post_e1008 ... ok
+test al09_budget_scope_into_body_is_confirmed_semantics ... ok
 test alias_family_dotted_ids_rejected_as_e1008 ... ok
 test ce04_has_macro_rejected_as_e1052 ... ok
 test alias_false_kills_now_reject_for_e1008 ... ok
@@ -330,44 +327,44 @@ test off_table_flips_are_designed_rejections ... ok
 test cel_crashers_report_e1054_not_sigabrt ... ok
 test cel_threshold_passers_still_pass ... ok
 
-test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
 
      Running tests/inv1_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/inv1_test-4a1fb0d01be961a2)
 
 running 37 tests
-test llm_node_reads_unknown_store_is_e2001_only ... ok
-test map_implicit_item_not_visible_at_root_is_e2402 ... ok
-test non_llm_node_reads_store_is_fine ... ok
-test non_llm_node_in_edges_without_context_is_clean ... ok
 test latest_k_with_zero_k_is_e2401 ... ok
+test non_llm_node_reads_store_is_fine ... ok
 test llm_node_without_context_and_in_edges_is_e2304 ... ok
+test llm_node_reads_unknown_store_is_e2001_only ... ok
 test non_llm_node_with_context_in_port_not_sectioned_is_clean ... ok
 test all_context_codes_collected_in_one_report ... ok
-test llm_node_reads_mixed_stores_lists_declared_only_in_e2303 ... ok
-test arg_not_in_formals_is_e2402 ... ok
+test non_llm_node_in_edges_without_context_is_clean ... ok
 test latest_k_without_args_k_is_e2401 ... ok
-test llm_node_reads_store_is_e2303 ... ok
 test edge_port_not_incoming_is_e2301 ... ok
+test llm_node_reads_store_is_e2303 ... ok
+test arg_not_in_formals_is_e2402 ... ok
+test llm_node_reads_mixed_stores_lists_declared_only_in_e2303 ... ok
+test map_implicit_item_not_visible_at_root_is_e2402 ... ok
 test input_field_not_in_schema_is_e2301 ... ok
-test in_port_referenced_twice_is_e2304 ... ok
 test quota_zero_with_policy_none_on_non_store_is_e2401_and_e2302 ... ok
+test in_port_referenced_twice_is_e2304 ... ok
 test quota_zero_with_policy_none_on_store_is_legal ... ok
-test store_section_missing_store_name_is_e2301_and_e2401 ... ok
-test quota_zero_is_e2302 ... ok
 test policy_on_template_section_is_e2401 ... ok
+test quota_zero_is_e2302 ... ok
 test retrieve_without_args_k_is_e2401 ... ok
-test retrieve_without_component_is_e2401 ... ok
 test section_missing_source_field_is_e2301 ... ok
-test store_not_declared_is_e2301 ... ok
-test store_policy_missing_is_e2401 ... ok
-test template_vars_arg_dangling_is_e2403 ... ok
-test store_policy_unknown_is_e2401 ... ok
-test store_view_policy_on_input_section_is_e2401 ... ok
-test spec_inv1_fixture_triggers_exactly_e2301_e2303 ... ok
-test summarize_without_component_is_e2401 ... ok
+test retrieve_without_component_is_e2401 ... ok
+test store_section_missing_store_name_is_e2301_and_e2401 ... ok
 test template_vars_literal_and_valid_refs_are_clean ... ok
-test template_vars_empty_ref_is_e2403 ... ok
+test store_view_policy_on_input_section_is_e2401 ... ok
 test template_vars_input_field_dangling_is_e2403 ... ok
+test store_policy_missing_is_e2401 ... ok
+test store_not_declared_is_e2301 ... ok
+test store_policy_unknown_is_e2401 ... ok
+test template_vars_empty_ref_is_e2403 ... ok
+test summarize_without_component_is_e2401 ... ok
+test template_vars_arg_dangling_is_e2403 ... ok
+test spec_inv1_fixture_triggers_exactly_e2301_e2303 ... ok
 test uncovered_in_port_is_e2304 ... ok
 test arg_resolution_walks_scope_chain_outward ... ok
 test total_quota_cap_is_configurable_and_default_off ... ok
@@ -379,14 +376,14 @@ test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 11 tests
 test zero_writer_is_tolerated_in_m1 ... ok
-test sole_writer_mismatch_message_says_mismatch_not_multi ... ok
-test multi_writer_message_still_says_not_sole ... ok
 test sole_writer_differs_from_declared_is_e2311 ... ok
-test two_writers_is_e2311 ... ok
+test multi_writer_message_still_says_not_sole ... ok
 test spec_inv2_fixture_triggers_e2312_and_e2322 ... ok
-test uncovered_outer_store_written_in_body_is_e2211 ... ok
+test two_writers_is_e2311 ... ok
+test sole_writer_mismatch_message_says_mismatch_not_multi ... ok
 test writer_declared_as_body_path_matches ... ok
 test all_inv2_codes_collected_in_one_report ... ok
+test uncovered_outer_store_written_in_body_is_e2211 ... ok
 test nested_body_write_requires_outer_carried_too ... ok
 test six_golden_samples_pass_full_m1_validation ... ok
 
@@ -395,15 +392,15 @@ test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/inv3_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/inv3_test-101c417e6fdc036a)
 
 running 10 tests
-test indirect_self_verification_not_flagged_v01 ... ok
-test two_self_edges_report_two_e2321 ... ok
-test task_self_loop_is_not_e2321 ... ok
 test verifier_consuming_builtin_passed_of_other_check_is_clean ... ok
 test check_consuming_other_producer_is_clean ... ok
-test gate_self_loop_is_e2321 ... ok
+test task_self_loop_is_not_e2321 ... ok
+test indirect_self_verification_not_flagged_v01 ... ok
+test two_self_edges_report_two_e2321 ... ok
 test human_marked_node_self_loop_is_e2321 ... ok
 test loop_body_check_self_loop_is_e2321 ... ok
 test spec_inv3_fixture_triggers_exactly_e2321 ... ok
+test gate_self_loop_is_e2321 ... ok
 test six_golden_samples_pass_full_m3_validation ... ok
 
 test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
@@ -411,16 +408,16 @@ test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/inv4_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/inv4_test-e5c1f91aa5e9f45e)
 
 running 12 tests
-test non_eval_input_store_is_freely_readable ... ok
-test two_offenders_report_two_e2331_in_path_order ... ok
+test check_with_unit_reading_eval_input_store_is_clean ... ok
 test gate_with_unit_reading_eval_input_store_is_e2331 ... ok
+test writer_reading_own_eval_input_store_is_clean ... ok
+test non_eval_input_store_is_freely_readable ... ok
 test check_without_unit_reading_eval_input_store_is_e2331 ... ok
 test dangling_writer_suppresses_e2331_noise ... ok
-test writer_reading_own_eval_input_store_is_clean ... ok
-test check_with_unit_reading_eval_input_store_is_clean ... ok
-test spec_inv4_fixture_triggers_exactly_e2331_with_e2303 ... ok
+test two_offenders_report_two_e2331_in_path_order ... ok
 test plain_task_reading_eval_input_store_is_e2331 ... ok
 test section_reference_to_eval_input_store_is_e2331 ... ok
+test spec_inv4_fixture_triggers_exactly_e2331_with_e2303 ... ok
 test sample4_answers_ref_readers_stay_clean ... ok
 test six_golden_samples_pass_full_m3_validation ... ok
 
@@ -430,85 +427,85 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 18 tests
 test safety_point_human_on_human_node_is_clean ... ok
-test three_guards_collected_in_one_report ... ok
-test safety_point_on_task_node_is_e2322 ... ok
 test safety_point_check_on_check_is_clean ... ok
+test safety_point_on_task_node_is_e2322 ... ok
+test three_guards_collected_in_one_report ... ok
 test safety_point_message_carries_paths ... ok
-test empty_safety_points_is_e2004 ... ok
-test dangling_safety_point_stays_e2107_only ... ok
-test empty_safety_points_message_carries_loop_path ... ok
-test safety_point_human_on_plain_node_is_e2322 ... ok
-test zero_max_iterations_is_e2002 ... ok
-test safety_point_kind_mismatch_is_e2322 ... ok
-test carried_bytes_only_bound_is_clean ... ok
 test safety_point_gate_on_gate_is_clean ... ok
+test carried_bytes_only_bound_is_clean ... ok
+test safety_point_human_on_plain_node_is_e2322 ... ok
+test dangling_safety_point_stays_e2107_only ... ok
+test empty_safety_points_is_e2004 ... ok
+test safety_point_kind_mismatch_is_e2322 ... ok
+test zero_max_iterations_is_e2002 ... ok
+test empty_safety_points_message_carries_loop_path ... ok
 test unbounded_carried_and_uncovered_are_distinct_codes ... ok
-test unbounded_carried_is_e2002 ... ok
 test fully_guarded_loop_is_clean ... ok
-test two_loops_both_reported ... ok
+test unbounded_carried_is_e2002 ... ok
 test zero_max_iterations_message_carries_loop_path ... ok
+test two_loops_both_reported ... ok
 
-test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running tests/m4_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/m4_test-31d57ebf6f9c5059)
 
 running 15 tests
 test item_visible_inside_map_body_assert ... ok
 test assert_bare_inputs_value_is_not_boolean_e1053 ... ok
-test stop_when_node_id_root_not_in_global_vocabulary ... ok
-test item_assert_inside_map_body_judged_with_item_root ... ok
-test exit_when_non_boolean_is_e1053 ... ok
-test assert_inputs_binding_from_incoming_edges ... ok
 test stop_when_unknown_root_is_e2203 ... ok
-test cel_judgment_and_reference_checks_collect_together ... ok
+test item_assert_inside_map_body_judged_with_item_root ... ok
+test stop_when_node_id_root_not_in_global_vocabulary ... ok
+test assert_inputs_binding_from_incoming_edges ... ok
+test exit_when_non_boolean_is_e1053 ... ok
 test resume_visible_from_human_node_route_in_same_scope ... ok
-test exit_when_body_node_root_resolves_through_scope_chain ... ok
+test cel_judgment_and_reference_checks_collect_together ... ok
 test exit_when_attempt_and_scope_chain_roots_pass ... ok
+test exit_when_body_node_root_resolves_through_scope_chain ... ok
 test assert_unknown_root_is_e2203 ... ok
-test exit_when_unknown_root_is_e2203 ... ok
 test stop_when_non_boolean_is_e1053 ... ok
+test exit_when_unknown_root_is_e2203 ... ok
 test stop_when_valid_global_vocabulary_passes ... ok
 
-test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running tests/parse_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/parse_test-dc9edf44ec86b433)
 
 running 37 tests
-test non_numeric_max_iterations_is_e1003 ... ok
-test non_type_port_value_is_e1003 ... ok
+test malformed_type_expression_is_e1003 ... ok
 test nested_generic_type_expression_is_e1003 ... ok
 test escape_kind_outside_seven_is_e1004 ... ok
-test malformed_type_expression_is_e1003 ... ok
+test non_type_port_value_is_e1003 ... ok
+test non_numeric_max_iterations_is_e1003 ... ok
 test inline_object_schema_on_port_is_e1003 ... ok
-test node_without_id_is_e1002 ... ok
 test route_without_default_is_e1002 ... ok
-test escape_without_accounting_field_is_e1002 ... ok
+test body_without_nodes_is_e1002 ... ok
+test node_without_id_is_e1002 ... ok
 test edge_without_from_is_e1002 ... ok
 test topology_selector_parses_structurally ... ok
+test escape_without_accounting_field_is_e1002 ... ok
 test safety_point_kind_evaluator_is_e1004 ... ok
 test from_body_with_extra_key_is_rejected ... ok
-test body_without_nodes_is_e1002 ... ok
 test unknown_failure_class_is_e1004 ... ok
+test unknown_field_in_budget_is_e1001 ... ok
+test unknown_field_in_escape_is_e1001 ... ok
 test unknown_budget_dimension_is_e1004 ... ok
 test unknown_field_in_edge_is_e1001 ... ok
 test unknown_field_in_meta_is_e1001 ... ok
-test unknown_field_in_budget_is_e1001 ... ok
-test unknown_field_in_escape_is_e1001 ... ok
 test unknown_field_in_loop_is_e1001 ... ok
-test unknown_field_in_node_is_e1001 ... ok
 test unknown_field_in_human_is_e1001 ... ok
+test unknown_field_in_node_is_e1001 ... ok
+test unknown_field_in_carried_is_e1001 ... ok
 test unknown_field_in_op_is_e1001 ... ok
 test unknown_field_in_route_is_e1001 ... ok
-test unknown_field_in_carried_is_e1001 ... ok
-test unknown_field_in_section_is_e1001 ... ok
-test unknown_field_in_uses_is_e1001 ... ok
-test unknown_field_in_store_is_e1001 ... ok
-test unknown_retention_policy_is_e1004 ... ok
-test unknown_field_in_topology_selector_is_e1001 ... ok
 test unknown_field_in_safety_point_is_e1001 ... ok
-test unknown_stop_outcome_is_e1004 ... ok
 test unknown_lifecycle_is_e1004 ... ok
 test unknown_store_type_is_e1004 ... ok
+test unknown_retention_policy_is_e1004 ... ok
+test unknown_field_in_topology_selector_is_e1001 ... ok
+test unknown_field_in_uses_is_e1001 ... ok
+test unknown_field_in_store_is_e1001 ... ok
+test unknown_stop_outcome_is_e1004 ... ok
+test unknown_field_in_section_is_e1001 ... ok
 test escape_with_adjudicated_kind_parses ... ok
 test six_golden_samples_parse ... ok
 
@@ -518,45 +515,45 @@ test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 40 tests
 test budget_scope_dangling_is_e2207 ... ok
-test entry_ghost_is_e2001 ... ok
-test emits_unknown_type_is_e2205 ... ok
-test duplicate_store_names_is_e2003 ... ok
-test dual_same_type_emit_ports_ambiguate_output ... ok
-test edge_input_port_not_consumed_is_e2201 ... ok
-test duplicate_type_names_is_e2003 ... ok
 test edge_output_port_missing_is_e2201 ... ok
-test duplicate_node_ids_is_e2003 ... ok
+test duplicate_type_names_is_e2003 ... ok
 test edge_type_mismatch_is_e2201 ... ok
 test budget_loop_scope_requires_loop_construct ... ok
-test edge_endpoint_ghost_is_e2001 ... ok
+test entry_ghost_is_e2001 ... ok
+test edge_input_port_not_consumed_is_e2201 ... ok
+test duplicate_node_ids_is_e2003 ... ok
+test dual_same_type_emit_ports_ambiguate_output ... ok
 test budget_cap_zero_is_e2207 ... ok
+test edge_endpoint_ghost_is_e2001 ... ok
+test duplicate_store_names_is_e2003 ... ok
+test emits_unknown_type_is_e2205 ... ok
 test failure_route_dangling_is_e2204 ... ok
+test list_payload_unknown_type_is_e2205 ... ok
 test envelope_payload_unknown_type_is_e2205 ... ok
 test failure_fallback_route_dangling_is_e2204 ... ok
-test list_payload_unknown_type_is_e2205 ... ok
 test failure_route_keywords_and_nodes_are_ok ... ok
-test map_over_input_field_not_array_is_e2104 ... ok
-test map_over_input_field_dangling_is_e2105 ... ok
 test map_over_node_dangling_is_e2105 ... ok
+test map_over_input_field_dangling_is_e2105 ... ok
 test map_over_port_not_list_is_e2104 ... ok
+test map_over_input_field_not_array_is_e2104 ... ok
 test meta_input_unknown_type_is_e2205 ... ok
-test output_from_ghost_is_e2001 ... ok
 test minimal_base_doc_validates_clean ... ok
+test output_from_ghost_is_e2001 ... ok
 test output_type_not_emitted_is_e2202 ... ok
-test store_retention_unbounded_is_e2208 ... ok
-test reads_unknown_store_is_e2001 ... ok
 test store_item_unknown_type_is_e2205 ... ok
+test reads_unknown_store_is_e2001 ... ok
+test store_retention_unbounded_is_e2208 ... ok
 test writer_path_ghost_is_only_e2001 ... ok
 test writes_unknown_store_is_e2001 ... ok
+test from_body_node_dangling_is_e2106 ... ok
+test loop_args_ref_dangling_is_e2105 ... ok
+test carried_unknown_store_is_e2001 ... ok
 test builtin_passed_port_satisfies_output_ref ... ok
 test builtin_done_port_satisfies_output_ref ... ok
 test same_id_in_different_scopes_is_ok ... ok
-test carried_unknown_store_is_e2001 ... ok
-test from_body_port_dangling_is_e2106 ... ok
-test from_body_node_dangling_is_e2106 ... ok
-test safety_point_dangling_is_e2107 ... ok
 test loop_node_builtin_done_port_feeds_edge ... ok
-test loop_args_ref_dangling_is_e2105 ... ok
+test from_body_port_dangling_is_e2106 ... ok
+test safety_point_dangling_is_e2107 ... ok
 
 test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
@@ -570,18 +567,18 @@ test parse_rejects_empty_graph_fields ... ok
 test scan_root_not_dir_is_error ... ok
 test scan_skips_non_package_files ... ok
 test parse_rejects_at_sign_in_name_or_version ... ok
-test scan_package_dir_without_manifest_is_error ... ok
-test parse_rejects_unknown_field ... ok
-test parse_rejects_empty_package_name ... ok
+test registry_options_only_touches_declared_graphs ... ok
+test parse_valid_manifest_composes_versioned_refs ... ok
 test parse_rejects_empty_graphs_list ... ok
 test parse_rejects_missing_source_field ... ok
+test parse_rejects_unknown_field ... ok
+test parse_rejects_empty_package_name ... ok
 test parse_rejects_duplicate_ref_within_manifest ... ok
+test scan_package_dir_without_manifest_is_error ... ok
 test scan_cross_package_duplicate_ref_is_error ... ok
-test registry_options_only_touches_declared_graphs ... ok
 test scan_builds_sorted_ref_set_from_fixture_packages ... ok
-test parse_valid_manifest_composes_versioned_refs ... ok
-test repo_packages_registry_covers_all_four_draft_refs ... ok
 test repo_packages_registry_strictly_matches_draft_refs ... ok
+test repo_packages_registry_covers_all_four_draft_refs ... ok
 test injection_closes_e2001_but_default_still_rejects ... ok
 
 test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -589,14 +586,14 @@ test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/route_test.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/route_test-75375f7481e175cf)
 
 running 21 tests
-test default_exit_without_rules_is_true_guard ... ok
-test default_exit_produces_negated_disjunction_exit_guard ... ok
-test multiple_exit_rules_are_benign_and_union ... ok
 test no_rules_default_guard_is_literal_true ... ok
-test default_exit_with_exit_rules_joins_disjunction ... ok
 test duplicate_target_is_e2103_for_rule_rule_and_rule_default ... ok
 test single_rule_guards_are_when_and_negated_when ... ok
+test multiple_exit_rules_are_benign_and_union ... ok
+test default_exit_without_rules_is_true_guard ... ok
+test default_exit_produces_negated_disjunction_exit_guard ... ok
 test exit_branches_produce_no_edge_and_union_guard ... ok
+test default_exit_with_exit_rules_joins_disjunction ... ok
 test uncovered_out_edge_is_e2101 ... ok
 test unknown_goto_is_e2102_for_rule_and_default ... ok
 test two_rules_priority_prefixes_later_guard ... ok
@@ -604,9 +601,9 @@ test route_without_default_is_rejected_as_e1002 ... ok
 test bare_passed_is_legal_on_verification_node_route ... ok
 test route_when_non_boolean_is_e1053 ... ok
 test route_when_unknown_root_is_e2203 ... ok
-test route_when_non_subset_function_is_e1052 ... ok
 test route_goto_unknown_target_is_exactly_e2102 ... ok
 test route_uncovered_out_edge_is_exactly_e2101 ... ok
+test route_when_non_subset_function_is_e1052 ... ok
 test route_duplicate_target_is_exactly_e2103 ... ok
 test branch_guards_are_mutually_exclusive_and_collectively_exhaustive ... ok
 test six_golden_samples_pass_full_m4_validation ... ok
@@ -617,14 +614,14 @@ test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 10 tests
 test selector_without_fallback_is_rejected_as_e1002 ... ok
-test selector_when_unknown_root_is_e2203 ... ok
 test selector_when_node_id_root_is_not_in_global_vocabulary ... ok
+test selector_when_unknown_root_is_e2203 ... ok
 test selector_when_non_subset_function_is_e1052 ... ok
-test undeclared_fallback_is_e2001_even_when_rules_declared ... ok
 test declared_set_is_a_set ... ok
+test undeclared_rule_candidate_is_e2001_with_default_empty_registry ... ok
 test declared_set_membership_does_not_excuse_unversioned_form ... ok
 test unversioned_candidate_form_is_e2001 ... ok
-test undeclared_rule_candidate_is_e2001_with_default_empty_registry ... ok
+test undeclared_fallback_is_e2001_even_when_rules_declared ... ok
 test declared_versioned_candidates_pass_clean ... ok
 
 test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -652,9 +649,9 @@ test mixed_batch_keeps_admit_order_and_ledger_joins_one_to_one ... ok
 test blank_batch_blank_id_and_duplicates_are_rejected ... ok
 test repair_allows_only_unscored_infra_and_subject ... ok
 test restored_ledger_does_not_mint_admissions ... ok
-test non_crash_and_scored_crash_are_denied ... ok
-test admitted_program_is_a_snapshot ... ok
 test valid_program_and_json_are_admitted_with_injected_time ... ok
+test admitted_program_is_a_snapshot ... ok
+test non_crash_and_scored_crash_are_denied ... ok
 test schema_failures_never_enter_evaluation ... ok
 
 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -666,17 +663,17 @@ test error_codes_are_contiguous_from_di1001 ... ok
 test missing_or_unknown_version_is_rejected ... ok
 test constructed_program_with_unknown_version_cannot_be_written ... ok
 test canonical_document_matches_every_v1_field ... ok
-test demo_bound_to_another_signature_is_rejected ... ok
-test archive_without_field_names_fills_them_and_ignores_dspy_extras ... ok
 test dspy_archive_roundtrip_restores_field_names_from_the_signature_table ... ok
+test demo_bound_to_another_signature_is_rejected ... ok
+test blank_field_name_is_di1001 ... ok
 test ir_json_roundtrip_keeps_every_field ... ok
 test shared_signature_and_demo_conflicts_in_the_archive_are_rejected ... ok
-test archive_rejects_bad_field_names_counts_and_references ... ok
-test blank_field_name_is_di1001 ... ok
 test bad_signature_and_demo_references_are_rejected ... ok
+test archive_rejects_bad_field_names_counts_and_references ... ok
 test delete_missing_field_is_explicit_and_does_not_change_the_program ... ok
-test optional_nulls_and_each_optimization_status_parse ... ok
+test archive_without_field_names_fills_them_and_ignores_dspy_extras ... ok
 test non_object_and_unknown_key_are_schema_errors ... ok
+test optional_nulls_and_each_optimization_status_parse ... ok
 test duplicate_unknown_and_incomplete_fields_are_rejected ... ok
 test each_v1_field_has_a_rejecting_counterexample ... ok
 
@@ -695,11 +692,11 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 11 tests
 test t5_execute_before_window_close_is_refused_then_allowed ... ok
-test t3_withdraw_within_window_means_never_sent ... ok
 test t6_external_failure_keeps_declared_and_retry_succeeds ... ok
-test t4_stale_epoch_requests_rejected ... ok
+test t3_withdraw_within_window_means_never_sent ... ok
 test t2_same_key_different_payload_rejected_requires_escalation ... ok
 test t11_epoch_bumped_during_call_does_not_store_or_resend ... ok
+test t4_stale_epoch_requests_rejected ... ok
 test t1_crash_recovery_same_key_same_payload_replays_stored_result ... ok
 test t7_wall_clock_rollback_does_not_affect_idempotency_window ... ok
 test t8_order_state_transitions_drive_intent_lifecycle ... ok
@@ -711,8 +708,8 @@ test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_engine-40ffe50d7d35e596)
 
 running 4 tests
-test version::tests::build_metadata_does_not_change_precedence ... ok
 test version::tests::equal_version_satisfies_min ... ok
+test version::tests::build_metadata_does_not_change_precedence ... ok
 test version::tests::semver_precedence_is_strict_along_the_spec_chain ... ok
 test version::tests::unparseable_versions_fail_closed ... ok
 
@@ -729,24 +726,24 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 27 tests
 test engine_version_ignores_runtime_env ... ok
 test close_from_in_progress_is_illegal_even_with_final_artifact ... ok
+test approve_decision_rejects_hash_mismatch ... ok
 test approve_decision_rejects_reader ... ok
 test approve_decision_accepts_approver_and_returns_same_order ... ok
-test approve_decision_rejects_hash_mismatch ... ok
 test attach_artifact_accepts_in_progress_and_rejects_created ... ok
-test complete_accepts_in_progress_and_rejects_released ... ok
-test attach_voucher_accepts_created_and_rejects_after_release ... ok
-test cancel_accepts_created_and_rejects_completed ... ok
 test bind_line_accepts_created_and_rejects_after_release ... ok
+test cancel_accepts_created_and_rejects_completed ... ok
+test complete_accepts_in_progress_and_rejects_released ... ok
+test one_line_only_and_eof_without_newline ... ok
+test close_accepts_qualified_final_and_rejects_without_it ... ok
+test attach_voucher_accepts_created_and_rejects_after_release ... ok
 test release_accepts_prepared_order_and_lists_both_gaps ... ok
 test unknown_op_and_wrong_case_are_bad_request ... ok
-test close_accepts_qualified_final_and_rejects_without_it ... ok
-test approve_decision_rejects_matching_artifact_on_the_wrong_order ... ok
-test one_line_only_and_eof_without_newline ... ok
 test start_accepts_released_and_rejects_created ... ok
+test unsigned_voucher_attaches_and_release_names_it ... ok
+test field_type_and_snapshot_errors_are_bad_request ... ok
+test approve_decision_rejects_matching_artifact_on_the_wrong_order ... ok
 test engine_version_min_accepts_current_lower_and_prerelease ... ok
 test rejection_envelope_keeps_field_and_detail ... ok
-test field_type_and_snapshot_errors_are_bad_request ... ok
-test unsigned_voucher_attaches_and_release_names_it ... ok
 test bad_json_empty_and_non_object_are_bad_request ... ok
 test engine_version_field_is_always_present ... ok
 test missing_op_order_and_params_are_bad_request ... ok
@@ -755,7 +752,7 @@ test engine_version_min_rejects_when_engine_is_older_or_min_is_unusable ... ok
 test versioning_steps_dry_run_checks_commands_exist ... ok
 test contract_samples_match_engine ... ok
 
-test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_eval-477865df59a3df19)
 
@@ -779,14 +776,14 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 7 tests
 test append_only_ledger_rejects_update_and_delete ... ok
-test blind_run_reads_frozen_snapshot_not_current_recipe ... ok
 test contamination_hit_halts_and_miss_can_finish ... ok
+test blind_run_reads_frozen_snapshot_not_current_recipe ... ok
 test draft_freezes_then_retires ... ok
 test reopen_replays_hash_subject_version_and_halt ... ok
 test failure_codes_stay_distinct_and_persist ... ok
 test frozen_content_rejects_edits_and_forks_a_new_version ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_execline-d98bae82512a9bd1)
 
@@ -795,29 +792,29 @@ test clock::tests::system_clock_is_plausible_unix_ms ... ok
 test clock::tests::fixed_clock_returns_injected_value ... ok
 test error::tests::codes_are_stable_and_contiguous ... ok
 test driver::tests::state_name_matches_serde_names ... ok
-test graph_unit::tests::quota_truncation_marks_and_preserves ... ok
 test error::tests::io_error_maps_to_ledger_io ... ok
+test graph_unit::tests::quota_truncation_marks_and_preserves ... ok
 test graph_unit::tests::validate_schema_subset_semantics ... ok
 test graph_unit::tests::bare_derivable_schema_prefers_port_type_with_final_fallback ... ok
 test graph_unit::tests::schema_validator_depth_caps_named_reference_chains ... ok
-test graph_unit::tests::example_from_schema_builds_minimal_conforming_example ... ok
 test graph_unit::tests::materialize_schema_inlines_named_refs_and_lists ... ok
-test mes::tests::append_then_load_roundtrips_mes_events ... ok
-test ledger::tests::seq_gap_is_ledger_corrupt_not_silent_repair ... ok
-test graph_unit::tests::check_typed_unpacks_list_element_type ... ok
-test graph_unit::tests::schema_validator_resolves_named_types_recursively ... ok
+test graph_unit::tests::example_from_schema_builds_minimal_conforming_example ... ok
 test profile::tests::profile_names_closed_over_table ... ok
-test profile::tests::resolve_key_cmd_matches_registry_key_refs ... ok
-test ledger::tests::append_then_load_roundtrips_with_contiguous_seq ... ok
-test driver::tests::rejection_labels_match_kinds ... ok
-test engine::tests::rejection_wire_kinds_parse_with_typed_missing ... ok
+test graph_unit::tests::schema_validator_resolves_named_types_recursively ... ok
+test graph_unit::tests::check_typed_unpacks_list_element_type ... ok
 test suite::swev_unit::tests::attempt_from_dir_follows_next_attempt_naming ... ok
+test mes::tests::append_then_load_roundtrips_mes_events ... ok
+test profile::tests::resolve_key_cmd_matches_registry_key_refs ... ok
+test ledger::tests::seq_gap_is_ledger_corrupt_not_silent_repair ... ok
+test driver::tests::rejection_labels_match_kinds ... ok
 test suite::swev_unit::tests::bash_guard_window_slides_after_six ... ok
-test suite::swev_unit::tests::bash_guard_wrap_semantics ... ok
-test driver::tests::engine_request_without_params_is_minimal ... ok
-test suite::swev_unit::tests::gate_of_three_branches ... ok
-test engine::tests::unknown_gate_variant_is_rejected_not_ignored ... ok
 test exec::tests::stub_writes_artifact_file_and_registers_it ... ok
+test suite::swev_unit::tests::bash_guard_wrap_semantics ... ok
+test ledger::tests::append_then_load_roundtrips_with_contiguous_seq ... ok
+test engine::tests::unknown_gate_variant_is_rejected_not_ignored ... ok
+test suite::swev_unit::tests::gate_of_three_branches ... ok
+test driver::tests::engine_request_without_params_is_minimal ... ok
+test engine::tests::rejection_wire_kinds_parse_with_typed_missing ... ok
 test driver::tests::engine_request_merges_op_order_and_params ... ok
 
 test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -835,55 +832,55 @@ test bench_paper_order_matches_old_bench_order_four_steps ... ok
 test created_order_first_side_effect_is_rejected_by_real_gateway ... ok
 test harness_runner_paper_order_passes_real_gateway_declare ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
      Running tests/graph_corpus_adv.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/graph_corpus_adv-a9c559e8305cf772)
 
 running 1 test
 test adversarial_plan_corpus_all_rejected_or_wellformed ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
 
      Running tests/graph_unit.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/graph_unit-f2a92e4065a9696d)
 
 running 23 tests
-test f4b_resurrection_bare_declare_then_corrected_call_completes ... ok
 test graph_unit_runs_planbind_checks_before_any_node ... ok
 test duplicate_to_input_edges_rejected_at_bind ... ok
-test plan_cost_cap_circuit_breaks_with_ex4007 ... ok
 test check_dispatch_runs_aci_schema_and_human_gate_units ... ok
+test f4b_resurrection_bare_declare_then_corrected_call_completes ... ok
 test linearize_rejects_loop_map_and_cycle_with_ex4008 ... ok
-test harness_budget_exhausted_maps_to_ex4007 ... ok
 test permissive_declare_face_unchanged_for_patch_shaped_ports ... ok
+test harness_budget_exhausted_maps_to_ex4007 ... ok
+test plan_token_cap_fuses_before_downstream_nodes ... ok
+test plan_cost_cap_circuit_breaks_with_ex4007 ... ok
 test downstream_consumes_face_revalidates_incoming_edges ... ok
 test envelope_violation_reports_ex4006_and_stops_downstream ... ok
-test plan_token_cap_fuses_before_downstream_nodes ... ok
 test output_contract_carries_all_port_schemas ... ok
-test sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit ... ok
-test nonderivable_ports_inject_schema_into_declare_tool_face ... ok
 test graph_version_expectation_mismatch_rejects_binding ... ok
-test sop_minimal_bare_declare_derives_patch_from_workspace_ground_truth ... ok
-test strict_declare_gate_rejects_malformed_and_accepts_conforming ... ok
-test typed_emission_face_validates_nonfinal_ports_with_ex4006 ... ok
-test task_digest_mismatch_rejects_execution ... ok
+test nonderivable_ports_inject_schema_into_declare_tool_face ... ok
+test sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit ... ok
 test swebench_eval_without_judge_fails_loud ... ok
+test typed_emission_face_validates_nonfinal_ports_with_ex4006 ... ok
+test strict_declare_gate_rejects_malformed_and_accepts_conforming ... ok
+test sop_minimal_bare_declare_derives_patch_from_workspace_ground_truth ... ok
+test task_digest_mismatch_rejects_execution ... ok
 test strict_declare_covers_untyped_nonfinal_ports_end_to_end ... ok
 test path_unsafe_node_ids_and_ports_rejected_at_bind ... ok
 test unsupported_budget_dimension_scope_combos_rejected ... ok
 
-test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
 
      Running tests/lifecycle.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/lifecycle-1dbb50b737b9a4ef)
 
 running 8 tests
 test driver_open_rejects_ledger_of_another_order ... ok
 test ledger_seq_gap_is_rejected_as_corrupt ... ok
-test release_without_voucher_is_typed_gate_rejection_not_panic ... ok
 test release_with_unsigned_voucher_names_the_voucher ... ok
-test happy_path_full_lifecycle_ledger_and_mes ... ok
+test release_without_voucher_is_typed_gate_rejection_not_panic ... ok
 test failed_unit_keeps_order_in_progress_and_retry_completes ... ok
-test second_drive_replays_without_duplicate_terminal ... ok
+test happy_path_full_lifecycle_ledger_and_mes ... ok
 test close_without_qualified_final_artifact_is_rejected ... ok
+test second_drive_replays_without_duplicate_terminal ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
@@ -892,15 +889,15 @@ test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 12 tests
 test ch_target_parse_and_endpoint_resolution ... ok
 test file_sink_append_sync_noop_and_path ... ok
-test ch_sink_same_event_id_different_line_fails_loud ... ok
-test ch_sink_parked_batch_fails_loud_ex2003 ... ok
 test drive_unit_failed_still_runs_mes_sync_once ... ok
+test ch_sink_parked_batch_fails_loud_ex2003 ... ok
 test ch_sink_ships_delta_and_report_has_no_credentials ... ok
+test ch_sink_same_event_id_different_line_fails_loud ... ok
 test ch_sink_reconciles_by_event_id_and_ships_only_missing ... ok
-test ch_sink_full_overlap_ships_nothing ... ok
 test ch_sink_retry_after_park_converges_without_duplicate ... ok
 test drive_close_rejected_still_runs_mes_sync_once ... ok
 test replay_backfills_mes_event_lost_by_first_write_failure ... ok
+test ch_sink_full_overlap_ships_nothing ... ok
 test driver_consumes_ch_sink_end_to_end_and_replay_ships_nothing ... ok
 
 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
@@ -910,12 +907,12 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 9 tests
 test cmp_guardrail_constants ... ok
 test tb::tests::container_guardrail_constants_match_calibration ... ok
-test cmp_tb_load_tasks ... ok
 test cmp_prompts_and_patterns_against_bench_source ... ok
+test cmp_tb_load_tasks ... ok
 test cmp_status_labels_against_bench_source ... ok
 test cmp_diff_touches_tests_battery ... ok
-test cmp_swev_task_load_and_prompt ... ok
 test cmp_bash_tool_decl ... ok
+test cmp_swev_task_load_and_prompt ... ok
 test cmp_profile_table_against_bench_source ... ok
 
 test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -924,19 +921,19 @@ test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 15 tests
 test container_guardrail_constants_match_calibration ... ok
-test diff_touches_tests_flags_test_paths_and_strips_b_prefix ... ok
-test bash_tool_decl_shape_and_workdir_injection ... ok
 test profile_table_all_entries_parse_with_nonempty_key_cmd ... ok
-test profile_unknown_name_error_lists_options ... ok
-test load_swev_tasks_reads_and_reports_errors ... ok
-test prompts_and_archaeology_constants ... ok
-test shell_quote_wraps_and_escapes_single_quotes ... ok
-test load_tb_tasks_reads_prompt_and_checks_layout ... ok
-test next_attempt_index_counts_existing_dirs_only ... ok
-test split_rc_marker_missing_and_present ... ok
 test status_label_six_state_mapping ... ok
-test swev_task_prompt_format ... ok
 test tail_caps_to_last_bytes ... ok
+test diff_touches_tests_flags_test_paths_and_strips_b_prefix ... ok
+test swev_task_prompt_format ... ok
+test profile_unknown_name_error_lists_options ... ok
+test shell_quote_wraps_and_escapes_single_quotes ... ok
+test split_rc_marker_missing_and_present ... ok
+test prompts_and_archaeology_constants ... ok
+test bash_tool_decl_shape_and_workdir_injection ... ok
+test load_swev_tasks_reads_and_reports_errors ... ok
+test next_attempt_index_counts_existing_dirs_only ... ok
+test load_tb_tasks_reads_prompt_and_checks_layout ... ok
 test resolve_key_rejects_short_output ... ok
 
 test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -946,16 +943,16 @@ test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 13 tests
 test smoke_real_local_docker_via_bridge ... ignored, 真 local docker 冒烟：需本机 docker 守护进程（cargo test -- --ignored 运行）
 test hostbridge_trait_is_object_safe ... ok
+test tb_setup_failure_error_messages ... ok
+test tb_exec_timeout_without_marker_teaches_and_exits_124 ... ok
 test swev_setup_anolis_builds_guardrail_proxy_hygiene_command ... ok
-test swev_setup_run_failure_error_messages ... ok
+test tb_exec_normal_splits_marker_and_appends_exit_line ... ok
 test tb_exec_bridge_failure_reports_transient_infrastructure ... ok
 test swev_setup_local_omits_proxy_env ... ok
-test tb_exec_timeout_without_marker_teaches_and_exits_124 ... ok
-test tb_exec_normal_splits_marker_and_appends_exit_line ... ok
-test cmp_p2_templates_against_bench_source ... ok
+test swev_setup_run_failure_error_messages ... ok
 test tb_setup_and_cleanup_command_sequence ... ok
 test tb_exec_truncates_at_cap_12000 ... ok
-test tb_setup_failure_error_messages ... ok
+test cmp_p2_templates_against_bench_source ... ok
 test ssh_bridge_local_branch_runs_bash_merges_stderr_and_status ... ok
 
 test result: ok. 12 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -965,8 +962,8 @@ test result: ok. 12 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; fin
 running 5 tests
 test real_judge_fixture_trio_resolved ... ignored, 真判分 fixture：需本机 swev-venv 与现产 swev-judge.py（-- --ignored 运行）
 test judge_production_locator_is_current_machine_values ... ok
-test judge_fingerprint_gate_fail_loud_ex3002 ... ok
 test cmp_p3_judge_templates_against_bench_source ... ok
+test judge_fingerprint_gate_fail_loud_ex3002 ... ok
 test judge_invoke_argv_contract_no_env_injection_no_wrapper_shell ... ok
 
 test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -975,42 +972,42 @@ test result: ok. 4 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; fini
 
 running 7 tests
 test capture_diff_command_artifact_and_error_contract ... ok
-test verify_fingerprint_gate_blocks_before_any_work ... ok
 test verify_eval_sh_write_failure_short_circuits ... ok
 test verify_capture_diff_failure_short_circuits ... ok
+test verify_fingerprint_gate_blocks_before_any_work ... ok
 test verify_judge_failure_paths_match_bench_messages ... ok
 test verify_timeout_marker_before_hash_and_note_stack ... ok
 test verify_normal_flow_and_log_parsed_prefix_matrix ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 
      Running tests/p4_unit.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/p4_unit-6f952f2ca50edb08)
 
 running 10 tests
 test pending_driver_sink_fails_loud ... ok
+test unit_load_fingerprint_gate_fail_loud ... ok
 test failure_rows_key_sets_and_note_truncation ... ok
 test bash_tool_guards_archaeology_and_repeats ... ok
-test unit_load_fingerprint_gate_fail_loud ... ok
 test setup_failure_row_with_nulls ... ok
 test runner_failure_row_and_container_cleanup ... ok
+test sink_write_failure_fails_loud ... ok
+test full_flow_trio_rows_and_launch_shape ... ok
 test gate_test_edit_on_test_file_diff ... ok
 test gate_no_patch_on_empty_diff ... ok
-test full_flow_trio_rows_and_launch_shape ... ok
-test sink_write_failure_fails_loud ... ok
 
 test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
      Running tests/p5_tb.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/p5_tb-144ed41aeb05bac4)
 
 running 8 tests
-test tb_row_key_sets_and_note_truncation ... ok
 test tb_task_load_failure_is_setup_failed_row ... ok
-test tb_bash_tool_has_no_guards ... ok
+test tb_row_key_sets_and_note_truncation ... ok
 test tb_setup_failure_row ... ok
+test tb_bash_tool_has_no_guards ... ok
 test tb_run_failure_row_and_container_cleanup ... ok
-test tb_full_flow_row_launch_shape_and_verify_chain ... ok
-test tb_verify_missing_reward_is_infra_row ... ok
 test tb_verify_reward_zero_is_failure_not_infra ... ok
+test tb_verify_missing_reward_is_infra_row ... ok
+test tb_full_flow_row_launch_shape_and_verify_chain ... ok
 
 test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -1019,8 +1016,8 @@ test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 4 tests
 test file_record_sink_append_flush_and_reopen_append ... ok
 test attempt_layout_asymmetry_regression_r8 ... ok
-test full_lifecycle_with_swev_unit_ledger_mes_rows_and_trio ... ok
 test second_drive_replays_real_unit_without_rerun_or_duplicate_rows ... ok
+test full_lifecycle_with_swev_unit_ledger_mes_rows_and_trio ... ok
 
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
@@ -1039,7 +1036,7 @@ test cmp_p6_frozen_fixture_provenance ... ok
 test l1_mes_mapping_dimension_via_driver ... ok
 test l1_fake_runner_chain_vs_frozen_bench_six_dimensions ... ok
 
-test result: ok. 8 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 8 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 0.10s
 
      Running tests/pkg_reportkit.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/pkg_reportkit-a3ff443d53c68695)
 
@@ -1052,11 +1049,11 @@ test local_fetcher_maps_paths_and_refuses_web ... ok
 test planbind_e9004_rejects_tampered_registry_with_both_digests ... ok
 test planbind_happy_path_binds_digest_and_templates ... ok
 test report_unit_setup_rejects_plan_registry_drift_with_e9004 ... ok
-test planbind_template_gate_is_the_unified_mechanism ... ok
 test planbind_rejects_version_line_and_node_alignment_mismatch ... ok
+test planbind_template_gate_is_the_unified_mechanism ... ok
 test citation_happy_path_all_checks_true ... ok
-test report_unit_tampered_draft_yields_false_verdict_not_null ... ok
 test report_unit_end_to_end_with_seamed_draft_passes_both_judges ... ok
+test report_unit_tampered_draft_yields_false_verdict_not_null ... ok
 test citation_discriminating_cases_hit_exactly_their_assertion ... ok
 test rubric_discriminating_cases_r1_r3_r4_r5 ... ok
 
@@ -1071,64 +1068,64 @@ test registry_reaches_g4_terminal_sixty_three ... ok
 test citations_type_carries_five_required_fields ... ok
 test paper_report_graph_compiles_with_sources_artifact_port ... ok
 
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
      Running tests/pkg_reportkit_ring.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/pkg_reportkit_ring-e09c07af7895277a)
 
 running 11 tests
 test real_model_ring_smoke_minimal_plan ... ignored, 真模型冒烟：glm-cp 现取（网络+密钥）；cargo test --ignored --test pkg_reportkit_ring real_model_ring_smoke_minimal_plan
-test arxiv_web_fetcher_whitelist_refuses_non_arxiv_offline ... ok
-test html_to_text_strips_scripts_tags_and_entities ... ok
 test ring_types_reject_plan_without_report_types ... ok
-test envelope_validator_follows_real_plan_types ... ok
-test ring_envelope_rejects_notes_missing_anchor ... ok
-test ring_budget_is_shared_across_members_and_circuit_breaks ... ok
-test ring_envelope_rejects_report_missing_snapshot_ref ... ok
+test html_to_text_strips_scripts_tags_and_entities ... ok
+test arxiv_web_fetcher_whitelist_refuses_non_arxiv_offline ... ok
 test pdf_extract_via_pdftotext_lands_snapshot ... ok
+test envelope_validator_follows_real_plan_types ... ok
+test ring_budget_is_shared_across_members_and_circuit_breaks ... ok
+test ring_envelope_rejects_notes_missing_anchor ... ok
+test ring_envelope_rejects_report_missing_snapshot_ref ... ok
 test ring_fake_reader_writer_drive_passes_envelope_and_judges ... ok
 test ring_cite_feedback_drives_second_writer_round ... ok
 
-test result: ok. 10 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.10s
+test result: ok. 10 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.11s
 
      Running tests/pkg_sweng.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/pkg_sweng-3701d435535e1992)
 
 running 37 tests
 test real_container_sampling_tools_and_units ... ignored, 真容器：anolis + sweb.eval django-11099 镜像；显式 -- --ignored 运行
 test real_swebench_eval_full_chain ... ignored, 真容器+真判分：django-11099 官方 eval（分钟级）；显式 -- --ignored 运行
-test builtin_impl_ref_dual_form ... ok
 test swev_unit_spec_prompts_are_owned_strings_equal_to_frozen_constants ... ok
+test t3_aci_open_rejects_invalid_range_without_bridge_call ... ok
 test sweng_v1_component_table_lists_exactly_fifteen ... ok
-test t1_env_bash_honors_custom_timeout ... ok
-test t1_env_bash_executes_via_bridge_with_default_60s_timeout ... ok
-test t10_sweng_edit_same_contract_as_t4 ... ok
-test t1_env_bash_guard_semantics_archaeology_and_repeat ... ok
-test t2_aci_search_builds_readonly_grep_with_defaults ... ok
+test builtin_impl_ref_dual_form ... ok
 test t2_aci_search_custom_path_and_max_hits ... ok
+test t2_aci_search_builds_readonly_grep_with_defaults ... ok
 test t3_aci_open_builds_numbered_range_read ... ok
 test t3_aci_open_out_of_range_is_error_observation ... ok
-test t3_aci_open_rejects_invalid_range_without_bridge_call ... ok
-test t11_publish_writes_node_event_and_is_idempotent ... ok
+test t7_aci_submit_survives_diff_failure_with_sentinel_intact ... ok
+test t6_aci_run_test_override_cmd_and_timeout ... ok
+test t7_aci_submit_returns_sentinel_and_captures_diff ... ok
+test t10_sweng_edit_same_contract_as_t4 ... ok
 test t4_aci_edit_carries_json_payload_via_python ... ok
 test t4_aci_edit_conflict_observations_pass_through ... ok
-test t6_aci_run_test_defaults_to_env_handle_command ... ok
-test t6_aci_run_test_override_cmd_and_timeout ... ok
 test t5_aci_create_payload_and_error_paths ... ok
 test t8_sweng_locate_is_search_with_query_param ... ok
-test t7_aci_submit_survives_diff_failure_with_sentinel_intact ... ok
-test template_ref_parse_accepts_optional_version ... ok
+test t6_aci_run_test_defaults_to_env_handle_command ... ok
+test t1_env_bash_honors_custom_timeout ... ok
+test t1_env_bash_executes_via_bridge_with_default_60s_timeout ... ok
 test t9_sweng_view_defaults_and_range ... ok
-test t7_aci_submit_returns_sentinel_and_captures_diff ... ok
+test t1_env_bash_guard_semantics_archaeology_and_repeat ... ok
+test template_ref_parse_accepts_optional_version ... ok
 test template_ref_parse_rejects_malformed_refs ... ok
 test template_manifest_malformed_line_rejected ... ok
+test t11_publish_writes_node_event_and_is_idempotent ... ok
 test u1_swebench_eval_assembles_verdict_from_judge_json_passthrough ... ok
 test u2_aci_schema_accepts_wellformed_action ... ok
 test u2_aci_schema_rejects_missing_and_mistyped_fields ... ok
-test u3_test_unit_caps_failure_lines_at_ten_and_handles_no_command ... ok
 test u1_swebench_eval_fingerprint_gate_fails_loud_before_any_container_work ... ok
+test u3_test_unit_caps_failure_lines_at_ten_and_handles_no_command ... ok
 test u4_human_gate_fail_closed_both_configs ... ok
-test template_resolve_happy_path_and_version_check ... ok
-test template_resolve_rejects_unregistered_tampered_and_missing ... ok
 test u3_test_unit_verdict_from_exit_code_and_tail_lines ... ok
+test template_resolve_rejects_unregistered_tampered_and_missing ... ok
+test template_resolve_happy_path_and_version_check ... ok
 test tool_decl_table_covers_eleven_tools_with_registry_effects ... ok
 
 test result: ok. 35 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -1148,25 +1145,25 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/trace_tree_verify.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/trace_tree_verify-4c86e6fa1740a4fc)
 
 running 19 tests
-test l1_start_op_not_ok ... ok
 test missing_records_breaks_l1_l2_edge ... ok
-test l1_close_ok_but_mes_close_missing ... ok
-test l1_mes_work_order_id_mismatch ... ok
-test happy_path_full_tree_ok ... ok
+test l1_start_op_not_ok ... ok
 test l2_terminal_stop_mismatch ... ok
+test l3_event_run_id_mismatch ... ok
+test l1_mes_work_order_id_mismatch ... ok
 test l2_terminal_missing ... ok
 test l4_tool_turn_without_chat ... ok
-test failed_order_shape_still_full_tree ... ok
+test l3_token_sum_mismatch ... ok
+test l1_close_ok_but_mes_close_missing ... ok
 test render_contains_span_tree ... ok
 test l4_effect_count_mismatch ... ok
-test l3_token_sum_mismatch ... ok
-test l3_event_run_id_mismatch ... ok
-test report_ring_layout_full_tree_ok ... ok
+test happy_path_full_tree_ok ... ok
+test failed_order_shape_still_full_tree ... ok
 test report_ring_impure_tool_needs_intent_row ... ok
 test report_ring_foreign_plan_id_still_flagged ... ok
 test side_run_ignored_without_findings ... ok
-test report_ring_token_sum_must_close_across_members ... ok
+test report_ring_layout_full_tree_ok ... ok
 test report_ring_member_without_chat_flagged ... ok
+test report_ring_token_sum_must_close_across_members ... ok
 
 test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
@@ -1185,8 +1182,8 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/predicate.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/predicate-6dc96ea406c48596)
 
 running 8 tests
-test eval_error_undeclared_variable_is_passed_through ... ok
 test non_boolean_result_is_rejected ... ok
+test eval_error_undeclared_variable_is_passed_through ... ok
 test compile_error_native_is_passed_through ... ok
 test compile_panic_is_caught_and_passed_through ... ok
 test compiles_and_evaluates_true ... ok
@@ -1200,25 +1197,25 @@ test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 21 tests
 test missing_required_field_rejected_by_serde_layer ... ok
-test dangling_edge_ref_is_e2001 ... ok
 test duplicate_node_id_is_e2003_not_e2001 ... ok
-test illegal_3_trips_only_undeclared_reference ... ok
 test illegal_2_trips_only_reachability ... ok
+test dangling_edge_ref_is_e2001 ... ok
 test illegal_1_trips_only_cycle ... ok
 test loop_unbounded_carried_state_rejected ... ok
 test loop_zero_iterations_rejected ... ok
-test map_over_dangling_node_is_e2001 ... ok
-test map_over_malformed_is_e2001 ... ok
-test illegal_5_trips_only_map_unversioned ... ok
 test loop_body_must_be_declared_subgraph ... ok
-test safety_point_kind_mismatch_rejected ... ok
-test loop_body_cycle_exempt_but_map_body_cycle_rejected ... ok
-test safety_point_outside_body_is_undeclared_reference ... ok
-test legal_templates_pass ... ok
-test unknown_node_kind_is_open_extension ... ok
+test map_over_malformed_is_e2001 ... ok
+test map_over_dangling_node_is_e2001 ... ok
+test illegal_5_trips_only_map_unversioned ... ok
 test illegal_4_trips_only_loop_not_controlled ... ok
-test undeclared_entry_is_reference_error ... ok
+test illegal_3_trips_only_undeclared_reference ... ok
+test unknown_node_kind_is_open_extension ... ok
+test safety_point_kind_mismatch_rejected ... ok
+test safety_point_outside_body_is_undeclared_reference ... ok
 test legal_templates_have_no_e2001 ... ok
+test legal_templates_pass ... ok
+test loop_body_cycle_exempt_but_map_body_cycle_rejected ... ok
+test undeclared_entry_is_reference_error ... ok
 test serde_roundtrip_preserves_validity ... ok
 
 test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -1242,54 +1239,54 @@ test budget::tests::count_probe_stops_when_stock_is_short_and_declared_budget_mu
 test endpoint::tests::anthropic_json_and_sse_parse_tool_use ... ok
 test endpoint::tests::openai_json_and_sse_parse_tool_calls ... ok
 test http::tests::does_not_retry_non_timeout_transport_errors ... ok
-test endpoint::tests::endpoint_error_redacts_the_secret_if_the_body_echoes_it ... ok
-test endpoint::tests::stub_anthropic_request_carries_version_and_thinking ... ok
-test endpoint::tests::anthropic_json_captures_usage ... ok
-test http::tests::does_not_retry_client_errors ... ok
-test render::tests::missing_slot_value_is_rejected ... ok
 test endpoint::tests::stub_sees_openai_and_anthropic_shapes_without_logging_the_key ... ok
-test endpoint::tests::stub_anthropic_bearer_override_skips_x_api_key ... ok
+test http::tests::does_not_retry_client_errors ... ok
+test endpoint::tests::anthropic_json_captures_usage ... ok
 test endpoint::tests::openai_json_captures_usage ... ok
-test http::tests::respects_retry_after_header ... ok
+test endpoint::tests::stub_anthropic_bearer_override_skips_x_api_key ... ok
+test endpoint::tests::stub_anthropic_request_carries_version_and_thinking ... ok
+test endpoint::tests::endpoint_error_redacts_the_secret_if_the_body_echoes_it ... ok
 test http::tests::transport_timeout_is_detected_by_io_source_kind ... ok
+test http::tests::respects_retry_after_header ... ok
+test render::tests::missing_slot_value_is_rejected ... ok
+test spec::tests::rejects_version_field_and_unknown_keys_before_body ... ok
 test render::tests::replaces_slots_literally_and_does_not_reexpand ... ok
 test render::tests::unknown_placeholder_is_rejected_at_spec_validation ... ok
-test spec::tests::rejects_version_field_and_unknown_keys_before_body ... ok
-test stub::tests::parses_content_length_and_lowercases_headers ... ok
 test spec::tests::key_ref_length_boundary_is_128 ... ok
+test stub::tests::parses_content_length_and_lowercases_headers ... ok
 test spec::tests::rejects_secret_shaped_key_ref_and_url_userinfo ... ok
 test spec::tests::example_envelope_roundtrip ... ok
 test http::tests::retries_429_then_succeeds_and_counts ... ok
 test http::tests::retries_503_then_succeeds ... ok
 test endpoint::tests::complete_once_weathers_a_429_storm_via_backoff ... ok
 test store::tests::file_open_is_created_then_already_declared_with_wal_recipe ... ok
-test http::tests::gives_up_after_max_retries_and_surfaces_status ... ok
 test store::tests::tampered_fingerprint_and_extra_table_fail_closed ... ok
+test http::tests::gives_up_after_max_retries_and_surfaces_status ... ok
 test endpoint::tests::exhausted_retries_are_named_in_the_endpoint_error ... ok
 test authz::tests::empty_intersection_does_not_fall_back_to_parent_facts ... ok
-test tests::endpoint_401_with_unchanged_key_fails_without_retry ... ok
 test tests::endpoint_401_without_refresher_fails_unchanged ... ok
-test authz::tests::spend_over_cap_is_credential_denied_while_the_fact_remains ... ok
+test tests::endpoint_401_with_unchanged_key_fails_without_retry ... ok
 test authz::tests::intersection_drops_tools_the_parent_does_not_carry ... ok
+test authz::tests::spend_over_cap_is_credential_denied_while_the_fact_remains ... ok
 test tests::max_turns_stops_before_another_model_call ... ok
 test tests::completion_signal_ends_the_run ... ok
 test tests::endpoint_401_refreshes_key_and_retries_the_same_request_once ... ok
-test tests::length_truncated_turn_gets_length_feedback ... ok
-test tests::budget_exhaustion_stops_before_the_next_model_call ... ok
-test tests::tool_free_turn_limit_ends_the_run ... ok
 test tests::missing_required_argument_does_not_call_the_handler ... ok
+test tests::length_truncated_turn_gets_length_feedback ... ok
+test tests::tool_free_turn_limit_ends_the_run ... ok
+test tests::budget_exhaustion_stops_before_the_next_model_call ... ok
 test tests::signal_mentioned_in_assistant_text_no_longer_completes ... ok
 test tests::spend_over_credential_cap_is_refused ... ok
+test tests::pure_tool_stays_local_and_external_once_goes_through_gateway ... ok
 test tests::truncated_empty_turns_do_not_count_toward_tool_free_limit ... ok
+test tests::fingerprint_streak_stops_the_run ... ok
 test tests::tool_event_is_in_the_normal_trace ... ok
 test tests::turn_budget_reminder_fires_once_per_threshold ... ok
-test tests::fingerprint_streak_stops_the_run ... ok
-test tests::pure_tool_stays_local_and_external_once_goes_through_gateway ... ok
 test tests::tool_outside_intersection_is_refused ... ok
 test tests::interrupted_side_effect_replays_on_resume ... ok
 test http::tests::retries_read_timeout_then_succeeds ... ok
 
-test result: ok. 52 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+test result: ok. 52 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
 
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_mes-973364a4d973c035)
 
@@ -1297,8 +1294,8 @@ running 12 tests
 test clock::tests::system_clock_reads_unix_millis ... ok
 test schema::tests::default_batch_row_threshold_is_fifty_thousand ... ok
 test schema::tests::event_table_is_merge_tree_partitioned_by_month ... ok
-test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
 test schema::tests::materialized_view_aggregates_by_line_and_hour ... ok
+test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
 test schema::tests::schema_does_not_use_rand64_or_optimize_final ... ok
 test outbox::tests::partial_file_is_dropped_on_open ... ok
 test rowbin::tests::literal_only_frame_round_trips ... ok
@@ -1313,28 +1310,28 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 14 tests
 test writer_config_debug_redacts_password ... ok
-test writer_with_auth_sends_x_clickhouse_user_and_key_headers ... ok
+test delay_flushes_before_row_threshold_on_injected_clock ... ok
 test outbox_write_failure_keeps_the_batch_in_memory ... ok
 test due_batch_is_sent_before_the_new_row_is_appended ... ok
-test row_threshold_sends_one_rowbinary_batch ... ok
-test delay_flushes_before_row_threshold_on_injected_clock ... ok
-test outbox_saturation_returns_backpressure_and_keeps_the_row ... ok
+test writer_with_auth_sends_x_clickhouse_user_and_key_headers ... ok
 test reader_with_auth_sends_credentials_on_select ... ok
-test apply_schema_sends_ddl_constants ... ok
+test outbox_saturation_returns_backpressure_and_keeps_the_row ... ok
+test row_threshold_sends_one_rowbinary_batch ... ok
 test reader_sends_select_and_decodes_rowbinary ... ok
 test anonymous_writer_wire_is_unchanged_no_credentials ... ok
+test apply_schema_sends_ddl_constants ... ok
 test failed_insert_is_parked_and_retried_without_loss ... ok
 test newer_batch_waits_behind_an_unsent_outbox_file ... ok
 test fifty_thousand_rows_flush_as_one_batch ... ok
 
-test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
 
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_meter-d45c218f6ee671e4)
 
 running 31 tests
 test bifrost::tests::quantize_percent_rounds_half_up ... ok
-test budget::tests::over_budget_does_not_mutate ... ok
 test budget::tests::negative_spend_does_not_mutate ... ok
+test budget::tests::over_budget_does_not_mutate ... ok
 test budget::tests::over_cap_does_not_mutate ... ok
 test budget::tests::spends_exact_cap_and_exact_remaining ... ok
 test tests::concurrency_acquire_and_release ... ok
@@ -1344,60 +1341,60 @@ test tests::min_blocked_by_dead_stock_never_recovers ... ok
 test tests::min_deducts_all_children ... ok
 test tests::nested_weekly_window_binds_and_recovers_at_weekly_reset ... ok
 test tests::rate_full_time_ceils_to_the_whole_second_it_actually_fills ... ok
-test bifrost::tests::negative_remaining_is_refused_before_any_fragment ... ok
-test bifrost::tests::spent_above_budget_is_negative_remaining_and_refused ... ok
-test bifrost::tests::role_is_not_list_position ... ok
-test bifrost::tests::primary_zero_with_positive_backup_is_kept ... ok
-test bifrost::tests::half_up_is_not_renormalized_to_one_hundred ... ok
-test bifrost::tests::budget_ratio_uses_remaining_cents ... ok
 test tests::rate_token_bucket_refills_continuously ... ok
-test bifrost::tests::one_positive_backup_keeps_a_zero_primary ... ok
-test bifrost::tests::exact_exhaustion_is_zero_weight_not_a_negative ... ok
-test bifrost::tests::all_zero_weights_are_refused ... ok
-test bifrost::tests::budget_records_the_injected_instant_without_changing_the_ratio ... ok
-test bifrost::tests::shape_errors_precede_balance_checks ... ok
 test tests::stock_exhaust_reports_no_recovery ... ok
 test tests::ticks_and_unix_millis_are_different_types ... ok
 test tests::window_resets_and_does_not_accumulate ... ok
-test bifrost::tests::rounding_collapse_to_all_zero_is_refused ... ok
-test tests::serde_roundtrip_nested_meter ... ok
+test bifrost::tests::negative_remaining_is_refused_before_any_fragment ... ok
+test bifrost::tests::shape_errors_precede_balance_checks ... ok
+test bifrost::tests::one_positive_backup_keeps_a_zero_primary ... ok
+test bifrost::tests::exact_exhaustion_is_zero_weight_not_a_negative ... ok
+test bifrost::tests::role_is_not_list_position ... ok
+test bifrost::tests::budget_records_the_injected_instant_without_changing_the_ratio ... ok
+test bifrost::tests::spent_above_budget_is_negative_remaining_and_refused ... ok
+test bifrost::tests::primary_zero_with_positive_backup_is_kept ... ok
+test bifrost::tests::budget_ratio_uses_remaining_cents ... ok
+test bifrost::tests::all_zero_weights_are_refused ... ok
+test bifrost::tests::half_up_is_not_renormalized_to_one_hundred ... ok
 test bifrost::tests::injected_now_refreshes_a_clone_and_leaves_the_supply ... ok
+test tests::serde_roundtrip_nested_meter ... ok
 test bifrost::tests::header_pin_weight_is_not_the_key_percent ... ok
+test bifrost::tests::rounding_collapse_to_all_zero_is_refused ... ok
 
 test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests/bifrost.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/bifrost-557a42b27aa97838)
 
 running 3 tests
-test supply_exhausted_primary_weight_zero ... ok
 test supply_recovers_on_injected_day_boundary ... ok
 test budget_balances_80_20 ... ok
+test supply_exhausted_primary_weight_zero ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
      Running tests/ledger.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/ledger-6ee49a06cd026ebc)
 
 running 18 tests
-test ordinary_day_boundary_is_the_next_civil_midnight ... ok
 test bad_declaration_is_rejected_before_create ... ok
-test same_instant_falls_on_different_civil_days ... ok
-test spring_forward_day_ends_at_next_civil_midnight ... ok
+test ordinary_day_boundary_is_the_next_civil_midnight ... ok
 test fall_back_day_ends_at_next_civil_midnight ... ok
+test spring_forward_day_ends_at_next_civil_midnight ... ok
+test same_instant_falls_on_different_civil_days ... ok
 test week_crossing_spring_forward_uses_civil_mondays ... ok
-test consume_is_idempotent_and_conflict_does_not_charge ... ok
 test lazy_reset_opens_the_next_civil_window ... ok
-test recover_redelivers_the_same_idempotency_key ... ok
-test insufficient_rolls_back_and_restart_keeps_the_committed_charge ... ok
+test consume_is_idempotent_and_conflict_does_not_charge ... ok
 test open_created_then_reopen_checks_recipe_and_declaration ... ok
 test extra_table_fails_closed ... ok
+test recover_redelivers_the_same_idempotency_key ... ok
+test insufficient_rolls_back_and_restart_keeps_the_committed_charge ... ok
 test user_version_mismatch_and_torn_init_fail_closed ... ok
-test recover_persists_the_sent_mark_across_reopen ... ok
 test declaration_mismatch_fails_closed_and_keeps_committed_rows ... ok
+test recover_persists_the_sent_mark_across_reopen ... ok
 test concurrent_consumers_conserve_the_window ... ok
-test concurrent_first_open_one_creator ... ok
 test concurrent_same_key_is_charged_once ... ok
+test concurrent_first_open_one_creator ... ok
 
-test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
 
      Running tests/properties.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/properties-6aa4cf49d4d0241c)
 
@@ -1412,11 +1409,11 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/routing.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/routing-c6077143790300d6)
 
 running 5 tests
+test defer_when_nothing_covers ... ok
 test estimate_above_daily_capacity_routes_to_api ... ok
 test golden_timeline_over_schedule ... ok
-test weekly_binding_recovers_at_weekly_reset ... ok
-test defer_when_nothing_covers ... ok
 test daily_exhausted_but_weekly_surplus_switches_to_api_until_daily_resets ... ok
+test weekly_binding_recovers_at_weekly_reset ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -1431,20 +1428,20 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 16 tests
 test cli::tests::resolve_build_dirs_prefers_explicit_args_then_env_then_defaults ... ok
-test cli::tests::parse_args_shapes_and_usage_errors ... ok
-test cli::w1_tests::read_plan_graph_version_reads_compiled_from ... ok
-test error::tests::codes_and_exit_codes_are_stable ... ok
-test cli::w1_tests::pin_task_digest_reads_criteria_source_per_unit ... ok
-test spec::tests::bad_budget_is_rejected_with_field_named ... ok
-test spec::tests::malformed_json_reports_reason ... ok
-test spec::tests::missing_required_field_is_named ... ok
-test spec::tests::line_shape_is_strictly_checked ... ok
-test spec::tests::unknown_fields_are_all_listed_sorted ... ok
 test state::tests::state_names_match_serde_wire_format ... ok
-test spec::tests::path_unsafe_order_id_is_rejected ... ok
-test spec::tests::valid_spec_parses_with_optional_note ... ok
 test state::tests::list_on_fresh_state_dir_is_empty_not_error ... ok
+test spec::tests::malformed_json_reports_reason ... ok
+test error::tests::codes_and_exit_codes_are_stable ... ok
+test cli::tests::parse_args_shapes_and_usage_errors ... ok
+test spec::tests::missing_required_field_is_named ... ok
+test spec::tests::unknown_fields_are_all_listed_sorted ... ok
+test spec::tests::valid_spec_parses_with_optional_note ... ok
+test spec::tests::line_shape_is_strictly_checked ... ok
+test cli::w1_tests::read_plan_graph_version_reads_compiled_from ... ok
+test spec::tests::bad_budget_is_rejected_with_field_named ... ok
 test voucher::tests::voucher_payload_is_domain_separated_and_length_prefixed ... ok
+test spec::tests::path_unsafe_order_id_is_rejected ... ok
+test cli::w1_tests::pin_task_digest_reads_criteria_source_per_unit ... ok
 test voucher::tests::issue_persists_and_second_load_returns_same_record ... ok
 
 test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
@@ -1470,24 +1467,24 @@ test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/exec_contract.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/exec_contract-d261f68238cba81b)
 
 running 10 tests
-test exec_defaults_are_fix2_generation ... ok
+test swev_spec_mapping_overrides_budget_hats ... ok
+test parse_exec_flags_matches_cli_path ... ok
 test exec_numeric_flags_reject_garbage ... ok
+test exec_defaults_are_fix2_generation ... ok
 test exec_trio_is_all_or_nothing ... ok
 test f1_archived_command_parses_verbatim ... ok
-test mes_ch_is_orthogonal_to_exec_face ... ok
-test parse_exec_flags_matches_cli_path ... ok
 test f2_archived_command_parses_verbatim ... ok
-test swev_spec_mapping_overrides_budget_hats ... ok
+test mes_ch_is_orthogonal_to_exec_face ... ok
 test submit_mes_ch_bad_target_fails_loud_ex2003 ... ok
 test submit_mes_ch_declaration_flows_to_driver_seam ... ok
 
-test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
      Running tests/graph_route.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/graph_route-3755279d11566568)
 
 running 3 tests
-test cli_accepts_unit_graph_flag ... ok
 test unit_choice_parses_graph_and_keeps_matrix_strict ... ok
+test cli_accepts_unit_graph_flag ... ok
 test graph_unit_materials_require_plan_json_in_task_package ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -1495,9 +1492,9 @@ test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/unit_route.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/unit_route-2d17cf86701ecf8b)
 
 running 5 tests
-test resolve_unit_default_behavior_is_unchanged ... ok
 test cli_accepts_unit_flag_and_keeps_default_absent ... ok
 test unit_choice_parses_three_values_and_rejects_garbage ... ok
+test resolve_unit_default_behavior_is_unchanged ... ok
 test resolve_unit_matrix_strict_sides ... ok
 test report_unit_materials_come_from_task_package ... ok
 
@@ -1519,18 +1516,18 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/gate_unit.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/gate_unit-e8889ad78a85a540)
 
 running 14 tests
-test canary_caps_probes_until_predicate_passes ... ok
+test night_ratio_is_deterministic_credit_scheme ... ok
 test canary_defect_keeps_gate_gated ... ok
-test night_window_contains_handles_wrap ... ok
-test night_window_exit_resets_credit ... ok
-test wip_cap_blocks_admit_and_complete_releases_capacity ... ok
-test wip_never_exceeds_cap_even_on_exact_fit ... ok
+test canary_caps_probes_until_predicate_passes ... ok
 test config_validation_rejects_lower_ge_upper ... ok
 test item_heavier_than_cap_never_admits ... ok
-test night_ratio_one_admits_everything ... ok
-test night_ratio_is_deterministic_credit_scheme ... ok
-test gate_config_roundtrips_through_json ... ok
+test night_window_contains_handles_wrap ... ok
+test night_window_exit_resets_credit ... ok
 test refill_signal_fires_below_lower_and_clears_above ... ok
+test night_ratio_one_admits_everything ... ok
+test gate_config_roundtrips_through_json ... ok
+test wip_cap_blocks_admit_and_complete_releases_capacity ... ok
+test wip_never_exceeds_cap_even_on_exact_fit ... ok
 test blocking_admit_times_out_when_no_capacity_freed ... ok
 test blocking_admit_wakes_on_completion ... ok
 
@@ -1541,11 +1538,11 @@ test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 7 tests
 test missing_preconditions_win_over_closed_ramp ... ok
 test missing_preconditions_do_not_spend_night_credit ... ok
-test admit_rejects_when_release_edge_is_absent ... ok
-test ramp_phase_blocks_until_promotion_then_admits ... ok
 test non_positive_weight_does_not_enter_the_gate ... ok
+test admit_rejects_when_release_edge_is_absent ... ok
 test full_gate_rejects_release_until_capacity_returns ... ok
 test missing_preconditions_win_over_full_gate ... ok
+test ramp_phase_blocks_until_promotion_then_admits ... ok
 
 test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -1558,15 +1555,15 @@ test open_forks_on_created_then_already_declared ... ok
 test storage_profile_matches_wal_recipe ... ok
 test night_window_edge_survives_restart ... ok
 test night_wip_cap_persists_spent_credit_without_the_item ... ok
-test night_throttle_survives_restart ... ok
-test refill_latch_survives_restart ... ok
 test fractional_wip_survives_reopen_after_partial_complete ... ok
-test unrelated_database_is_rejected ... ok
+test night_throttle_survives_restart ... ok
 test promoted_canary_stays_open_across_restart ... ok
+test refill_latch_survives_restart ... ok
 test restart_restores_wip_and_never_over_releases ... ok
-test concurrent_first_open_one_creator ... ok
+test unrelated_database_is_rejected ... ok
 test schema_mismatch_fails_closed ... ok
 test canary_cursor_restores_and_stays_capped ... ok
+test concurrent_first_open_one_creator ... ok
 test predicate_presence_must_match_persisted_canary ... ok
 test wall_stamp_follows_injected_clock_and_reopen_does_not_rewrite ... ok
 test corrupt_rows_fail_closed ... ok
@@ -1577,30 +1574,30 @@ test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/properties.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/properties-36f8c6d19ed04955)
 
 running 5 tests
-test canary_batch_is_monotonic_and_never_reverts ... ok
-test rejection_does_not_partially_commit ... ok
 test conwip_capacity_never_over_releases ... ok
-test conwip_does_not_over_release_after_restart ... ok
+test rejection_does_not_partially_commit ... ok
+test canary_batch_is_monotonic_and_never_reverts ... ok
 test fractional_milli_weights_survive_restart ... ok
+test conwip_does_not_over_release_after_restart ... ok
 
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.45s
 
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_sampling-69c8216bb0508580)
 
 running 40 tests
 test csp1::tests::defect_caught_in_sampling_returns_to_screening ... ok
+test csp1::tests::set_rate_is_clamped_to_f_min ... ok
 test clock::tests::system_clock_reads_unix_millis ... ok
+test csp1::tests::streak_resets_on_defect_during_screening ... ok
 test csp1::tests::disabled_bypasses_everything ... ok
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
-test csp1::tests::set_rate_is_clamped_to_f_min ... ok
-test csp1::tests::streak_resets_on_defect_during_screening ... ok
 test csp1::tests::rejects_f_below_f_min_at_construction ... ok
-test csp1::tests::switches_to_sampling_after_i_consecutive_conforming ... ok
 test csp1::tests::sim_1000_items_planted_defects ... ok
-test golden::tests::rejects_bad_injector_config ... ok
+test golden::tests::zero_p_injects_nothing ... ok
+test csp1::tests::switches_to_sampling_after_i_consecutive_conforming ... ok
 test golden::tests::no_alarm_under_full_screening ... ok
 test golden::tests::alarm_fires_when_golden_defect_released ... ok
-test golden::tests::zero_p_injects_nothing ... ok
+test golden::tests::rejects_bad_injector_config ... ok
 test csp1::tests::long_run_sampling_rate_hovers_at_f_min_when_clamped ... ok
 test persist::tests::invalid_declaration_does_not_create_a_file ... ok
 test golden::tests::injects_at_rate_p_with_70_30_mix ... ok
@@ -1618,18 +1615,18 @@ test persist::tests::foreign_table_is_not_this_ledger ... ok
 test persist::tests::seq_above_i64_is_rejected ... ok
 test persist::tests::memory_open_uses_foreign_keys_and_normal_sync ... ok
 test persist::tests::file_pragmas_and_foreign_key_are_enforced ... ok
-test persist::tests::schema_version_mismatch_fails_closed ... ok
-test persist::tests::outcome_bits_roundtrip_across_restart ... ok
 test persist::tests::first_open_is_created_and_reentry_is_already_declared ... ok
+test persist::tests::schema_version_mismatch_fails_closed ... ok
 test persist::tests::tampered_trajectory_action_refuses_startup ... ok
-test persist::tests::restart_restores_golden_records_and_rejects_duplicates ... ok
+test persist::tests::outcome_bits_roundtrip_across_restart ... ok
 test persist::tests::restart_keeps_full_window_left_by_recover ... ok
+test persist::tests::restart_restores_golden_records_and_rejects_duplicates ... ok
 test persist::tests::declaration_mismatch_fails_closed_and_keeps_prior_state ... ok
 test persist::tests::restart_restores_promotion_and_continues_like_the_live_engine ... ok
 test persist::tests::tampered_watermark_or_window_refuses_startup ... ok
 test persist::tests::concurrent_first_open_one_creator ... ok
 
-test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
 
      Running tests/end_to_end.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/end_to_end-7aa78896c2cd5e52)
 
@@ -1646,16 +1643,16 @@ test dual_watermark_moves_only_on_threshold_crossing ... ok
 test golden_injection_does_not_change_lineage_counts ... ok
 test restart_does_not_drop_watermark ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.84s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
 
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_sandbox-d82bd661b9242565)
 
 running 5 tests
 test budget::tests::accepts_sandbox_concurrency_slot ... ok
 test budget::tests::refusal_is_returned_unchanged ... ok
+test session::tests::deadline_is_inclusive_and_overflow_fails_closed ... ok
 test budget::tests::wrong_dimension_and_zero_slots_are_not_rewritten ... ok
 test types::tests::rejects_blank_injection ... ok
-test session::tests::deadline_is_inclusive_and_overflow_fails_closed ... ok
 
 test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -1666,20 +1663,20 @@ test collect_on_a_restarted_backend_is_stale ... ok
 test open_forwards_injected_limits_and_clock ... ok
 test collect_returns_requested_bytes_and_fails_closed_on_a_miss ... ok
 test resume_while_down_still_kills_handles ... ok
+test down_backend_wins_over_the_deadline ... ok
 test deadline_wins_over_a_bad_credential_when_the_backend_is_up ... ok
 test close_is_idempotent_and_blocks_later_use ... ok
 test sandbox_down_on_open_and_exec ... ok
-test down_backend_wins_over_the_deadline ... ok
 test stale_epoch_wins_over_a_bad_credential_and_a_down_backend ... ok
-test nonzero_exit_is_a_finished_exec ... ok
-test clock_timeout_does_not_call_backend ... ok
 test missing_tool_does_not_reach_backend ... ok
-test reported_elapsed_at_the_cap_discards_output ... ok
-test budget_refusal_is_echoed_and_not_charged_here ... ok
-test backend_restart_invalidates_handles_without_resume ... ok
-test exec_runs_when_whitelist_and_charge_agree ... ok
 test reattach_does_not_adopt_a_session_the_host_did_not_open ... ok
+test nonzero_exit_is_a_finished_exec ... ok
+test reported_elapsed_at_the_cap_discards_output ... ok
+test backend_restart_invalidates_handles_without_resume ... ok
+test clock_timeout_does_not_call_backend ... ok
 test resume_fences_old_handles_and_allows_a_new_session ... ok
+test exec_runs_when_whitelist_and_charge_agree ... ok
+test budget_refusal_is_echoed_and_not_charged_here ... ok
 test wrong_dimension_and_zero_slots_do_not_run ... ok
 test namespace_mismatch_and_spend_cap_are_denials ... ok
 test attenuated_token_keeps_fact_but_exec_is_denied ... ok
@@ -1689,28 +1686,28 @@ test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_station-87b99413bdfd0f32)
 
 running 20 tests
-test clock::tests::system_clock_reads_unix_millis ... ok
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
+test clock::tests::system_clock_reads_unix_millis ... ok
 test tests::preexisting_task_table_is_not_adopted ... ok
-test tests::enqueue_and_get_roundtrip ... ok
 test tests::open_in_memory_is_created ... ok
-test tests::idempotency_key_prevents_duplicate_enqueue ... ok
+test tests::enqueue_and_get_roundtrip ... ok
 test tests::overlapping_calendar_is_rejected_and_not_stored ... ok
-test tests::corrupt_or_invalid_stored_calendar_fails_closed ... ok
-test tests::primary_key_conflict_is_not_reported_as_duplicate ... ok
-test tests::heartbeat_renews_lease_and_only_claimant_can_use_it ... ok
 test tests::end_to_end_lifecycle ... ok
-test tests::expired_lease_is_reclaimed_and_takeover_works ... ok
+test tests::idempotency_key_prevents_duplicate_enqueue ... ok
+test tests::primary_key_conflict_is_not_reported_as_duplicate ... ok
 test tests::role_routes_claim_to_matching_worker_only ... ok
+test tests::corrupt_or_invalid_stored_calendar_fails_closed ... ok
 test tests::open_file_is_created_then_already_declared ... ok
+test tests::expired_lease_is_reclaimed_and_takeover_works ... ok
+test tests::heartbeat_renews_lease_and_only_claimant_can_use_it ... ok
 test tests::pragmas_follow_the_ledger_recipe_and_foreign_keys_reject ... ok
-test tests::schema_version_mismatch_fails_closed ... ok
 test tests::fingerprint_mismatch_fails_closed ... ok
+test tests::schema_version_mismatch_fails_closed ... ok
 test tests::two_threads_race_on_same_task_exactly_one_wins ... ok
 test tests::live_schema_drift_fails_closed ... ok
 test tests::stress_four_threads_drain_forty_tasks_without_double_claim ... ok
 
-test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
      Running tests/concurrency.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/concurrency-f4fabab1dda5d2bb)
 
@@ -1721,10 +1718,10 @@ test expired_complete_before_reclaim_and_reclaim_before_complete ... ok
 test expired_owner_complete_races_takeover_keeps_one_row ... ok
 test eight_threads_claim_and_complete_one_task_exactly_once ... ok
 test foreign_complete_storm_leaves_every_claimed_row ... ok
-test concurrent_complete_does_not_drop_ledger_rows ... ok
 test interleaved_claim_and_complete_partition_without_losing_rows ... ok
+test concurrent_complete_does_not_drop_ledger_rows ... ok
 
-test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
 
      Running tests/properties.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/properties-b2f3af0e47b0224d)
 
@@ -1733,35 +1730,35 @@ test concurrent_claim_complete_is_a_partition ... ok
 test concurrent_complete_keeps_every_row ... ok
 test op_sequence_matches_model_across_reopen ... ok
 
-test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.39s
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
 
      Running tests/shift_window.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/shift_window-db13272314aec981)
 
 running 25 tests
 test empty_calendar_never_dispatches ... ok
 test off_shift_stays_queued_until_window_opens ... ok
-test overdue_deadline_does_not_gate_dispatch ... ok
-test claimed_on_shift_survives_off_shift_until_lease_ends ... ok
-test off_shift_claim_reclaims_expired_lease_without_dispatching ... ok
-test restart_rebind_replaces_shift ... ok
-test dst_spring_gap_window_does_not_dispatch ... ok
 test restart_new_task_roundtrip ... ok
-test dst_fall_back_dispatches_both_clock_faces ... ok
-test restart_heartbeat ... ok
+test claimed_on_shift_survives_off_shift_until_lease_ends ... ok
+test overdue_deadline_does_not_gate_dispatch ... ok
+test off_shift_claim_reclaims_expired_lease_without_dispatching ... ok
+test dst_spring_gap_window_does_not_dispatch ... ok
 test restart_idempotency_key ... ok
-test dst_spring_wide_window_covers_both_sides_of_gap ... ok
 test restart_claim ... ok
+test dst_fall_back_dispatches_both_clock_faces ... ok
 test holiday_blocks_and_makeup_saturday_opens ... ok
+test restart_rebind_replaces_shift ... ok
+test dst_spring_wide_window_covers_both_sides_of_gap ... ok
+test restart_heartbeat ... ok
 test restart_complete ... ok
 test cross_midnight_two_windows_dispatch ... ok
-test unbound_shift_keeps_role_only_routing ... ok
 test submillisecond_deadline_is_rejected ... ok
 test role_exact_match_still_required_on_shift ... ok
-test restart_reclaim ... ok
 test sla_deadline_is_utc_and_duplicate_key_keeps_it ... ok
+test unbound_shift_keeps_role_only_routing ... ok
 test shift_window_is_half_open ... ok
-test restart_role_shift_binding ... ok
+test restart_reclaim ... ok
 test worker_shift_intersects_role_shift ... ok
+test restart_role_shift_binding ... ok
 test restart_worker_shift_binding ... ok
 
 test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
@@ -1771,13 +1768,13 @@ test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 29 tests
 test clock::tests::system_clock_monotonic_does_not_go_backwards ... ok
 test clock::tests::manual_clock_advance_is_shared_and_wall_rewind_stays_off_the_monotonic_clock ... ok
+test tests::rule2_check_first_failure_stops_immediately ... ok
+test tests::rule1_different_error_code_is_different_fingerprint ... ok
 test tests::fingerprint_stop_wins_over_threshold_escalate ... ok
+test tests::rule1_fingerprint_streak_stops_at_nth ... ok
 test tests::mixed_stream_end_to_end ... ok
 test tests::rule1_success_breaks_the_streak ... ok
-test tests::rule2_check_first_failure_stops_immediately ... ok
 test tests::rule1_alternating_tools_never_triggers ... ok
-test tests::rule1_fingerprint_streak_stops_at_nth ... ok
-test tests::rule1_different_error_code_is_different_fingerprint ... ok
 test tests::rule3_generic_errors_escalate_at_threshold ... ok
 test tests::rule3_tool_errors_also_count_toward_threshold ... ok
 test tests::store_override_lower_limit_and_escalate_action ... ok
@@ -1812,14 +1809,14 @@ test check_priority_invariant_under_event_injection_order ... ok
 test stop_counter_never_regresses ... ok
 test fingerprint_count_does_not_regress_across_restart ... ok
 
-test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
 
      Running tests/restart.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/restart-5cd504739862c662)
 
 running 13 tests
 test unknown_declaration_version_does_not_initialize ... ok
-test store_registration_order_matches_on_reentry ... ok
 test reopen_reports_already_declared_and_keeps_the_declaration ... ok
+test store_registration_order_matches_on_reentry ... ok
 test advance_while_closed_does_not_expire_the_window_or_drop_the_count ... ok
 test fingerprint_row_roundtrips_across_restart ... ok
 test wall_clock_does_not_drive_expiry_or_drop_the_count ... ok
@@ -1831,21 +1828,21 @@ test engine_counters_roundtrip_across_restart ... ok
 test declaration_mismatch_is_fail_closed_and_preserves_rows ... ok
 test concurrent_first_open_one_creator ... ok
 
-test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_trace-0e5b56f46cf78023)
 
 running 39 tests
 test otel::tests::zero_batch_size_uses_the_bsp_default ... ok
 test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
-test merkle::tests::single_leaf_root_is_prefixed_hash_and_proof_is_empty ... ok
-test merkle::tests::flipped_sibling_does_not_rebuild_the_root ... ok
-test merkle::tests::two_leaves_are_one_internal_node ... ok
 test http_util::tests::parse_url_appends_the_entries_path ... ok
-test sha256::tests::nist_sha256_vectors ... ok
-test rekor::tests::second_leaf_proof_covers_both_entries ... ok
+test merkle::tests::single_leaf_root_is_prefixed_hash_and_proof_is_empty ... ok
+test merkle::tests::two_leaves_are_one_internal_node ... ok
+test merkle::tests::flipped_sibling_does_not_rebuild_the_root ... ok
 test http_util::tests::parse_response_reads_content_length ... ok
 test sha256::tests::hex_and_base64_roundtrip ... ok
+test sha256::tests::nist_sha256_vectors ... ok
+test rekor::tests::second_leaf_proof_covers_both_entries ... ok
 test sha256::tests::rfc4231_hmac_sha256 ... ok
 test rekor::tests::refused_port_is_unreachable ... ok
 test trace::tests::append_line_on_dev_full_returns_error ... ok
@@ -1853,24 +1850,24 @@ test rekor::tests::memory_log_receipt_verifies_and_rejects_tampering ... ok
 test rekor::tests::http_stub_submits_and_connection_drop_is_unreachable ... ok
 test merkle::tests::inclusion_matches_root_for_uneven_trees ... ok
 test store::tests::finding_c_foreign_sqlite_is_not_adopted ... ok
+test anchor::tests::disabled_anchor_does_not_write_sidecar_or_gap ... ok
 test trace::tests::critical_persist_failure_is_fail_closed ... ok
+test anchor::tests::refused_endpoint_does_not_fail_open_and_still_persists_critical ... ok
 test store::tests::pragmas_created_then_already_declared_keeps_gap ... ok
+test trace::tests::orphan_jsonl_and_bad_dir_fail_closed ... ok
 test trace::tests::configured_endpoint_without_feature_stays_offline ... ok
 test store::tests::finding_c_torn_tables_without_declaration_row_are_not_filled ... ok
-test anchor::tests::refused_endpoint_does_not_fail_open_and_still_persists_critical ... ok
-test anchor::tests::wedged_rekor_does_not_block_the_next_critical_write ... ok
 test anchor::tests::default_batch_seals_each_event ... ok
+test anchor::tests::wedged_rekor_does_not_block_the_next_critical_write ... ok
 test anchor::tests::batch_window_uses_the_injected_clock ... ok
 test anchor::tests::batch_n_submits_and_shutdown_flushes_the_remainder ... ok
 test anchor::tests::unreachable_queues_for_retry_without_blocking_critical ... ok
-test anchor::tests::restart_retries_the_persisted_queue ... ok
-test anchor::tests::disabled_anchor_does_not_write_sidecar_or_gap ... ok
-test trace::tests::declaration_gap_and_corrupt_log_fail_closed ... ok
-test trace::tests::orphan_jsonl_and_bad_dir_fail_closed ... ok
-test trace::tests::restart_restores_critical_log_gap_counter_seq_and_clock ... ok
-test store::tests::declaration_mismatch_fails_closed_without_rewriting ... ok
-test trace::tests::offline_lane_counts_persisted_normals_and_skips_critical ... ok
 test trace::tests::normal_persist_failure_counts_gap ... ok
+test trace::tests::offline_lane_counts_persisted_normals_and_skips_critical ... ok
+test anchor::tests::restart_retries_the_persisted_queue ... ok
+test trace::tests::declaration_gap_and_corrupt_log_fail_closed ... ok
+test store::tests::declaration_mismatch_fails_closed_without_rewriting ... ok
+test trace::tests::restart_restores_critical_log_gap_counter_seq_and_clock ... ok
 test trace::tests::zero_loss_when_under_capacity_and_closed_channel_errors ... ok
 test trace::tests::normal_overflow_drops_and_counts_gap ... ok
 test trace::tests::gap_spans_coalesce_when_critical_is_also_full ... ok
@@ -1888,54 +1885,54 @@ test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running unittests src/lib.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/af_workorder-c9919808aa3cf789)
 
 running 49 tests
-test change::tests::empty_diff_summary_is_rejected ... ok
 test change::tests::from_equals_to_is_rejected ... ok
 test change::tests::drain_all_plus_hot_takeover_conflicts ... ok
+test change::tests::empty_diff_summary_is_rejected ... ok
 test change::tests::invalid_change_cannot_spawn_successor ... ok
+test change::tests::signing_domain_bytes_stay_on_v1 ... ok
+test change::tests::serde_roundtrip_keeps_all_fields ... ok
+test decision::tests::hash_mismatch_is_caught ... ok
+test change::tests::spawn_successor_binds_new_version_and_supersedes ... ok
 test decision::tests::approver_can_reject_too ... ok
 test decision::tests::empty_signature_is_rejected ... ok
-test decision::tests::reader_issuing_approve_is_rejected ... ok
-test decision::tests::approver_can_approve_when_hash_and_signature_ok ... ok
-test decision::tests::hash_mismatch_is_caught ... ok
-test decision::tests::reviser_cannot_approve_but_can_revise ... ok
-test change::tests::spawn_successor_binds_new_version_and_supersedes ... ok
 test decision::tests::reader_with_forged_approve_permission_is_still_rejected_by_role_cap ... ok
+test decision::tests::approver_can_approve_when_hash_and_signature_ok ... ok
+test decision::tests::reviser_cannot_approve_but_can_revise ... ok
+test decision::tests::reader_issuing_approve_is_rejected ... ok
 test decision::tests::arbiter_has_full_power ... ok
 test hash::tests::nist_sha256_known_vectors ... ok
-test identity::tests::parse_rejects_empty_and_whitespace ... ok
-test change::tests::signing_domain_bytes_stay_on_v1 ... ok
 test identity::tests::generate_is_deterministic_and_ignores_nothing_but_order_id ... ok
-test order::tests::cancel_works_from_active_states_and_freezes_order ... ok
+test identity::tests::parse_rejects_empty_and_whitespace ... ok
 test hash::tests::distinct_inputs_have_distinct_hashes ... ok
+test decision::tests::decision_artifact_serde_roundtrip ... ok
+test order::tests::cancel_works_from_active_states_and_freezes_order ... ok
 test order::tests::close_requires_final_and_qualified_artifact ... ok
 test identity::tests::shard_key_matches_sha256_mod_and_rejects_zero ... ok
 test order::tests::full_happy_path_reaches_closed ... ok
-test change::tests::serde_roundtrip_keeps_all_fields ... ok
-test order::tests::graph_version_never_changes_through_any_operation ... ok
 test order::tests::illegal_transitions_are_rejected_as_illegal_not_missing ... ok
-test decision::tests::decision_artifact_serde_roundtrip ... ok
+test order::tests::graph_version_never_changes_through_any_operation ... ok
 test order::tests::order_overdue_uses_stored_absolute_deadline ... ok
 test order::tests::precondition_materials_can_only_be_registered_in_created ... ok
 test order::tests::release_with_line_but_no_voucher_reports_only_voucher ... ok
 test order::tests::release_with_unsigned_voucher_names_the_voucher ... ok
 test order::tests::release_with_voucher_only_reports_only_line ... ok
 test order::tests::release_without_anything_lists_both_missing_in_fixed_order ... ok
-test change::tests::invalid_change_order_is_not_signed ... ok
-test order::tests::stable_id_survives_run_change_and_the_lifecycle ... ok
 test order::tests::legacy_payload_without_stable_id_is_a_rejection_envelope ... ok
+test order::tests::stable_id_survives_run_change_and_the_lifecycle ... ok
 test sla::tests::from_calendar_rejects_negative_duration ... ok
 test sla::tests::no_deadline_never_overdue ... ok
+test change::tests::invalid_change_order_is_not_signed ... ok
 test sla::tests::overdue_compares_absolute_instants ... ok
 test sla::tests::priority_orders_low_to_critical ... ok
 test state::tests::cancel_allowed_only_before_completion ... ok
-test state::tests::terminal_states ... ok
 test sla::tests::sla_serde_roundtrip_accepts_legacy_rfc3339 ... ok
+test state::tests::terminal_states ... ok
 test state::tests::transition_table_is_exactly_the_asked_lifecycle ... ok
 test order::tests::unknown_fields_are_rejected_and_every_name_is_listed ... ok
 test change::tests::verified_signature_spawns_successor ... ok
+test change::tests::signed_change_order_roundtrip_verifies ... ok
 test sign::tests::sign_verify_roundtrip_is_deterministic_and_debug_hides_seed ... ok
 test change::tests::tampered_order_or_signature_fails_verify_and_spawn ... ok
-test change::tests::signed_change_order_roundtrip_verifies ... ok
 test sign::tests::rejects_tamper_wrong_key_bad_algorithm_and_invalid_public_key ... ok
 
 test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
@@ -1944,8 +1941,8 @@ test result: ok. 49 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 3 tests
 test spring_forward_order_deadline_is_post_gap_utc_instant ... ok
-test fall_back_order_deadline_is_post_fold_utc_instant ... ok
 test calendar_deadline_enters_lifecycle_and_judges_by_absolute_instant ... ok
+test fall_back_order_deadline_is_post_fold_utc_instant ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
@@ -1962,9 +1959,9 @@ test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/json_snapshots.rs (/home/pan-ding/afbuild-phase2rt/debug/deps/json_snapshots-36e582f79cd9bece)
 
 running 3 tests
+test reject_decision_names_missing_qualified_final_artifact ... ok
 test qualified_final_artifact_release_decision ... ok
 test signed_change_order_roundtrip ... ok
-test reject_decision_names_missing_qualified_final_artifact ... ok
 
 test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
@@ -2006,7 +2003,7 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 running 1 test
 test crates/af-dspy-ir/src/guardrail.rs - guardrail::Guardrails<C>::judge_repair (line 162) ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
 
    Doc-tests af_effect_gateway
 
@@ -2077,26 +2074,32 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
    Doc-tests af_sandbox
 
 running 1 test
-test crates/af-sandbox/src/budget.rs - budget::decide_concurrency (line 74) ... FAILED
+test crates/af-sandbox/src/budget.rs - budget::decide_concurrency (line 74) ... ok
 
-failures:
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
 
----- crates/af-sandbox/src/budget.rs - budget::decide_concurrency (line 74) stdout ----
-error: linking with `cc` failed: exit status: 1
-  |
-  = note:  "cc" "-m64" "/tmp/rustdoctestAPwGFn/rustcSQceZB/symbols.o" "<2 object files omitted>" "-Wl,--as-needed" "-Wl,-Bstatic" "/home/pan-ding/afbuild-phase2rt/debug/deps/{libaf_sandbox-6211746fde14a117,libaf_credential-5fc28e49f61e825c,librusqlite-8d7f3cb008b1466a,libbitflags-b21dfb7ab2d804c4,libsmallvec-cf5ef4c6d79e96ac,libfallible_streaming_iterator-a3367245a853dc07,libfallible_iterator-33151433789f8192,libhashlink-ceccc6063dd24a2e,libhashbrown-aa2fbc29ceed339f,libahash-9a179f285ac4a7e7,libonce_cell-58dd468cb35436f8,liblibsqlite3_sys-fe406576f881802a,libcedar_policy-d22395b029a4ff9c,libcedar_policy_formatter-be63f5305024321f,liblogos-54283416651cbe6e,libpretty-e3b2dbc14da2ad29,libunicode_width-120549e73566edd1,libarrayvec-14685b79c4a01a7f,libtyped_arena-293cd735e4e9e8eb,libsemver-ff9efc3068104d51,libcedar_policy_core-13fd649642f28262,libstacker-3ae1753fd5cb7c1b,libpsm-a7e4085a406f1c28,libunicode_security-bfb6dbcadbf8e3db,libunicode_script-9bcf8d57ee3c0037,libunicode_normalization-dd35245e6efbc83a,libtinyvec-5afed8586f117ec7,librustc_literal_escaper-304c5c526fd29542,libchrono-af3de451154069f0,libiana_time_zone-263634509012496c,libnum_traits-986d23b2a8089b43,libserde_with-156d4335492a5ee1,liblinked_hash_set-4502bc0c13100711,liblinked_hash_map-b8fd94b6e2cc93fb,libref_cast-5e6372bc2162f0c4,libitertools-8b63d97736e41389,libeither-1959fadc9adbbdb0,libthiserror-735120ffb70e8426,libsmol_str-7c8e6838b7221a08,libnonempty-406b58e47041e59b,libmiette-79d55fffa91a3c09,libunicode_width-b8ea6acc12d29fdd,liblalrpop_util-ce9f1f02261e03f0,libbiscuit_auth-2e99019dfdf65ad6,libserde_json-24891ac46a7b319d,libitoa-b101c554dc96d6c2,libzmij-017fa04e9bfbd0ce,libindexmap-03dd1482afbad918,libhashbrown-810bc8f265a10bfc,libequivalent-636655ea09f8262a,libfoldhash-eff0395d86cf3aad,liballocator_api2-c5f47beab62f0ed2,libbase64-db01d379a8d9a95a,librand-c75a87d962a123cd,librand_chacha-5169d52aab6b6ad5,libppv_lite86-158ddd6158cbfbb5,libzerocopy-9faa5e7b9cd6c7a2,libbiscuit_parser-bf374959c61f94be,libhex-b0757a7bc7b6b2d3,libprost-bc11bee63b28ba70,libbytes-8dc1cd89342b36ec,libthiserror-61ced617c5851b92,libtime-36a62bba01262b1b,libpowerfmt-9e95d649c0f44b72,libnum_conv-a7ae790f6fe45ec7,libderanged-28f11c841f1f7d7d,libtime_core-47043683638c1019,libregex-db5da3c97cf28e77,libregex_automata-f21894bc84a1ff60,libaho_corasick-e5d4f8e9a077edee,libregex_syntax-7e91cce4fa6dea50,libnom-03691116259e0eea,libmemchr-d889e926a647c184,libp256-ca9fc01ff5cdebbd,libecdsa-63a75180734f08dc,librfc6979-3beb726fe5e42a46,libhmac-981cd1266fd21fac,libprimeorder-3ac461ceb400d8fb,libelliptic_curve-def153fa05dd7566,libsec1-98f7ecc2e292b504,libcrypto_bigint-7bf7107d69879a5e,libserdect-a8ebcd2c03379cc7,libbase16ct-36af6887fc138153,libserde-bf8df40c7ca962ec,libserde_core-ed1ad932e2194d5c,libgroup-2c91ddda8573614c,libff-930e529b41d57219,libed25519_dalek-e322e447cd3ce9c4,libsha2-58b7e86b19c3017d,libcurve25519_dalek-6925a1e8d8998153,libcpufeatures-d03b0f93a485ccc1,libed25519-7f57cf85fa5a2a92,libsignature-d1b024ee05e251ce,librand_core-0a4935038c60209c,libgetrandom-0f9ff6b45a2b1a3e,liblibc-ca95d298963f410e,libcfg_if-0fbeb365b695d2ff,libdigest-a90cf2e4d4fe9c64,libsubtle-206df647f54408de,libblock_buffer-229dcbcbab746867,libcrypto_common-edaa542539b1cb81,libgeneric_array-10a1c74507687c72,libtypenum-93390c974fd6012d,libpkcs8-7b19ec41b385d88f,libspki-f5fe528418c61ff3,libder-1504ecc48efea78c,libzeroize-cd5dea5b4f2ac696,libpem_rfc7468-335c1a1ea672f5e3,libbase64ct-7d0f7e7ba36b7e7a,libconst_oid-b99a06a3f0f999ce,libanyhow-2af0cc7ddb15f3f7}.rlib" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib/{libstd-*,libpanic_unwind-*,libobject-*,libmemchr-*,libaddr2line-*,libgimli-*,libcfg_if-*,librustc_demangle-*,libstd_detect-*,libhashbrown-*,librustc_std_workspace_alloc-*,libminiz_oxide-*,libadler2-*,libunwind-*,liblibc-*,librustc_std_workspace_core-*,liballoc-*,libcore-*,libcompiler_builtins-*}.rlib" "-Wl,-Bdynamic" "-lgcc_s" "-lutil" "-lrt" "-lpthread" "-lm" "-ldl" "-lc" "-L" "/tmp/rustdoctestAPwGFn/rustcSQceZB/raw-dylibs" "-B<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/bin/gcc-ld" "-fuse-ld=lld" "-Wl,--eh-frame-hdr" "-Wl,-z,noexecstack" "-L" "/home/pan-ding/afbuild-phase2rt/debug/build/alloca-468e068654129fee/out" "-L" "/home/pan-ding/afbuild-phase2rt/debug/build/libsqlite3-sys-ed2bd82d5ead8c0f/out" "-L" "/home/pan-ding/afbuild-phase2rt/debug/build/psm-7e7b7937976e8b43/out" "-L" "/home/pan-ding/afbuild-phase2rt/debug/build/ring-ded9c8e9636548af/out" "-L" "<sysroot>/lib/rustlib/x86_64-unknown-linux-gnu/lib" "-o" "/tmp/rustdoctestAPwGFn/rust_out" "-Wl,--gc-sections" "-pie" "-Wl,-z,relro,-z,now" "-nodefaultlibs"
-  = note: some arguments are omitted. use `--verbose` to show all linker arguments
-  = note: collect2: fatal error: ld terminated with signal 7 [Bus error], core dumped
-          compilation terminated.
-          
+   Doc-tests af_station
 
-error: aborting due to 1 previous error
+running 0 tests
 
-Couldn't compile the test.
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
-failures:
-    crates/af-sandbox/src/budget.rs - budget::decide_concurrency (line 74)
+   Doc-tests af_stop
 
-test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.23s
+running 1 test
+test crates/af-stop/src/lib.rs - (line 19) ... ok
 
-error: doctest failed, to rerun pass `-p af-sandbox --doc`
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+   Doc-tests af_trace
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_workorder
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
