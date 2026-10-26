@@ -65,10 +65,8 @@ pub fn verify_plan_digest(path: &Path, expected: Option<&str>) -> Result<(), Exe
     let Some(expected) = expected else {
         return Ok(());
     };
-    let actual = crate::suite::swev::sha256_hex(path).ok_or_else(|| {
-        ExeclineError::UnitFailed {
-            detail: format!("任务包计划面文件不可读（无法验真）: {}", path.display()),
-        }
+    let actual = crate::suite::swev::sha256_hex(path).ok_or_else(|| ExeclineError::UnitFailed {
+        detail: format!("任务包计划面文件不可读（无法验真）: {}", path.display()),
     })?;
     if actual != expected {
         return Err(ExeclineError::UnitFailed {

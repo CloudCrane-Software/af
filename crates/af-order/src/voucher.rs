@@ -241,43 +241,43 @@ mod tests {
         }
     }
 
-#[test]
-fn plan_digest_is_pinned_and_replay_checked() {
-    // 红队 W2-C55：plan.json 摘要入凭证身份面——首绑建档，重放时与当前计划
-    // 面对账，不符即拒（与换预算/换线同纪律）。graph/report 预算帽全在
-    // plan.json，不钉计划面即可「同版本同注册表换计划」放宽预算。
-    let dir = std::env::temp_dir().join(format!("af-voucher-w2c55-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    let stable = af_workorder::StableId::generate("wo-plan-digest");
-    let digest_a = "a".repeat(64);
-    let digest_b = "b".repeat(64);
+    #[test]
+    fn plan_digest_is_pinned_and_replay_checked() {
+        // 红队 W2-C55：plan.json 摘要入凭证身份面——首绑建档，重放时与当前计划
+        // 面对账，不符即拒（与换预算/换线同纪律）。graph/report 预算帽全在
+        // plan.json，不钉计划面即可「同版本同注册表换计划」放宽预算。
+        let dir = std::env::temp_dir().join(format!("af-voucher-w2c55-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let stable = af_workorder::StableId::generate("wo-plan-digest");
+        let digest_a = "a".repeat(64);
+        let digest_b = "b".repeat(64);
 
-    let (_, record) =
-        issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a)).unwrap();
-    assert_eq!(
-        record.plan_sha256.as_deref(),
-        Some(digest_a.as_str()),
-        "首绑摘要应入凭证材料"
-    );
-    // 同摘要重放：照过（幂等）。
-    issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a))
-        .expect("同计划面重放应放行");
-    // 换计划面重放：拒（OR2003 同码）。
-    let err = issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_b))
-        .expect_err("换 plan.json 重放应拒");
-    assert!(
-        err.to_string().contains("plan_sha256"),
-        "拒因须点名计划面摘要：{err}"
-    );
-    // 旧凭证无此键（历史盘兼容）：None 不核对。
-    let legacy = dir.join("legacy");
-    std::fs::create_dir_all(&legacy).unwrap();
-    let (_, rec) = issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).unwrap();
-    assert_eq!(rec.plan_sha256, None, "未提供摘要 = 不建档不核对");
-    issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).expect("无摘要面不核对");
-    let _ = std::fs::remove_dir_all(&dir);
-}
+        let (_, record) =
+            issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a)).unwrap();
+        assert_eq!(
+            record.plan_sha256.as_deref(),
+            Some(digest_a.as_str()),
+            "首绑摘要应入凭证材料"
+        );
+        // 同摘要重放：照过（幂等）。
+        issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a))
+            .expect("同计划面重放应放行");
+        // 换计划面重放：拒（OR2003 同码）。
+        let err = issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_b))
+            .expect_err("换 plan.json 重放应拒");
+        assert!(
+            err.to_string().contains("plan_sha256"),
+            "拒因须点名计划面摘要：{err}"
+        );
+        // 旧凭证无此键（历史盘兼容）：None 不核对。
+        let legacy = dir.join("legacy");
+        std::fs::create_dir_all(&legacy).unwrap();
+        let (_, rec) = issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).unwrap();
+        assert_eq!(rec.plan_sha256, None, "未提供摘要 = 不建档不核对");
+        issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).expect("无摘要面不核对");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn scratch(tag: &str) -> std::path::PathBuf {
         let dir =

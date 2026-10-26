@@ -1,1 +1,4 @@
-CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）
+CLIPPY GATE: FAIL —— 3 个签名出现新增警告（新增 6 条）:
+  +1 clippy::bool_assert_comparison crates/af-execline/src/engine.rs（现 1 / 基线 0）
+  +4 clippy::doc_lazy_continuation crates/af-execline/src/engine.rs（现 4 / 基线 0）
+  +1 clippy::unnecessary_to_owned crates/af-execline/tests/graph_unit.rs（现 1 / 基线 0）

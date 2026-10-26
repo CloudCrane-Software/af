@@ -126,8 +126,9 @@ impl ReportJudgeLocator {
                 if name == "__pycache__" || name.ends_with(".pyc") {
                     return Err(ExeclineError::JudgeFingerprintMismatch {
                         script: entry.path().display().to_string(),
-                        expected: "判分目录不得存在字节码（__pycache__/*.pyc——影子执行面，禁写+禁读）"
-                            .into(),
+                        expected:
+                            "判分目录不得存在字节码（__pycache__/*.pyc——影子执行面，禁写+禁读）"
+                                .into(),
                         actual: "在场".into(),
                     });
                 }

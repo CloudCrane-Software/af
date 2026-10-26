@@ -704,7 +704,7 @@ impl GraphExecuteUnit {
                 return Err(self.fail(format!(
                     "节点 {} 模型环失败（http_retries={}）: {message}",
                     node.node_id, http_retries
-                )))
+                )));
             }
         };
         stage.account_node(&report);
@@ -1122,11 +1122,7 @@ impl PlanBudgets {
                 // 悬空 node: 路径（投影缺席 = 无人强制）同样拒收。
                 (scope, BudgetDimension::Turns) if scope.starts_with("node:") => {
                     let path = &scope["node:".len()..];
-                    let Some(projection) = plan
-                        .body
-                        .node_exec
-                        .iter()
-                        .find(|n| n.node_id == path)
+                    let Some(projection) = plan.body.node_exec.iter().find(|n| n.node_id == path)
                     else {
                         return Err(ExeclineError::PlanBindMismatch {
                             detail: format!(

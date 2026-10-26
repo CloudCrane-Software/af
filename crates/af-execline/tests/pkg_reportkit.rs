@@ -889,14 +889,21 @@ fn judge_fingerprint_gate_rejects_planted_pyc_shadow() {
     let prod = ReportJudgeLocator::production();
     let dir = kit_dir("pyc-shadow");
     std::fs::create_dir_all(dir.join("__pycache__")).unwrap();
-    std::fs::write(dir.join("__pycache__").join("render.cpython-314.pyc"), b"\x00\x00").unwrap();
+    std::fs::write(
+        dir.join("__pycache__").join("render.cpython-314.pyc"),
+        b"\x00\x00",
+    )
+    .unwrap();
     let locator = ReportJudgeLocator {
         render_script: dir.join("render.py"),
         ..prod
     };
     // 真脚本逐位复刻（过 sha256 锚）——使失败点唯一地落在 pyc 在场性门。
-    std::fs::write(&locator.render_script, std::fs::read_to_string(&prod.render_script).unwrap())
-        .unwrap();
+    std::fs::write(
+        &locator.render_script,
+        std::fs::read_to_string(&prod.render_script).unwrap(),
+    )
+    .unwrap();
     let err = locator.check_fingerprints().unwrap_err();
     assert_eq!(err.code(), ErrorCode::JudgeFingerprintMismatch, "{err}");
     assert!(

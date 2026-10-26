@@ -27,6 +27,14 @@
  *     该写者 ≠ 声明 writer。
  *   · 「每个 store」的取域按 A-07 字面口径（基数恰 1）；若有「无写者
  *     store 豁免」等细则，证明时须对照实装判定函数核实（登记于 README）。
+ *   · **零写者前提（红队 W2-C44 补入）**：conflict-demo 机器反例
+ *     （Kani镜像员-INV组/CONFLICTS.md #2/#2b）实证——零写者 store ∧ 声明
+ *     writer 已解析时实装**不报** E2311（inv2.rs 判定式 = len>1 ∨
+ *     (len==1 ∧ ≠声明)，无 len==0 支），但字面违例谓词在 card=0 时成真
+ *     （0 ≠ 1）⇒ soundness 字面陈述被证伪。故本定理取域加「写者集合
+ *     非空」前提（与 Kani 侧 a07_soundness 的 cnt≥1 前提同口径，RUNLOG
+ *     §3 在案）；v0.2 议程 A-07 修订（判定域=基数≥1）落地后本前提即
+ *     可撤，届时按议程对账登记同步修订。
  *
  * 地位：只译不证。Proof. Admitted. = 待证义务登记。
  * ===================================================================== *)
@@ -75,9 +83,11 @@ Definition inv2_writer_set_violation (d : Document) (s : StoreName) : Prop :=
 
 Theorem A07_inv2_writer_set_exactly_one_soundness :
   forall (d : Document) (s : StoreName),
+    0 < set_card (writer_set d s) ->          (* W2-C44：零写者前提 *)
     inv2_writer_set_violation d s ->
     rejected (compile d) /\ report_contains (compile d) E2311.
-Proof. Admitted. (* 待证：写者集合违例 ⇒ 编译拒绝且 Report 含 E2311
-                    （soundness：违例必拒）。 *)
+Proof. Admitted. (* 待证：写者集合非空且违例 ⇒ 编译拒绝且 Report 含 E2311
+                    （soundness：违例必拒）。零写者角落不在取域——
+                    CONFLICTS #2/#2b 机器反例，见建模说明与 README §四。 *)
 
 End T05_A07.

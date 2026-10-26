@@ -2081,7 +2081,6 @@ fn task_digest_mismatch_rejects_execution() {
     output.expect("摘要匹配应走通");
 }
 
-
 /// 探针任务包（W2：单节点图 input=in_t，required q——task.json 须满足）。
 fn probe_task_package(root: &Path, plan_src: &str) -> PathBuf {
     let data_root = root.join("data");
@@ -2150,8 +2149,14 @@ fn terminal_verdict_reads_declared_resolved_field_not_pass_default() {
     // resolved——此前硬编码 get("pass").or(Some(true))，无 pass 的失败判分
     // （resolved=false）被缺字段推定成功、合格工件 close。
     for (payload, expect) in [
-        (payload_resolved_false as fn(&str) -> Option<String>, Some(false)),
-        (payload_resolved_true as fn(&str) -> Option<String>, Some(true)),
+        (
+            payload_resolved_false as fn(&str) -> Option<String>,
+            Some(false),
+        ),
+        (
+            payload_resolved_true as fn(&str) -> Option<String>,
+            Some(true),
+        ),
     ] {
         let root = temp_root("w2-verdict");
         let src = single_node_graph_src("  budgets: []\n  stop: []\n  failures: []\n");
@@ -2208,12 +2213,11 @@ fn http_retries_are_recorded_in_graph_v1_row() {
     let output = drive(&unit, &data_root, &attempt, &out).expect("sop_full 应走通");
     assert_eq!(output.verdict, Some(true));
     let row: Value = serde_json::from_str(
-        &std::fs::read_to_string(out.join("records.jsonl"))
+        std::fs::read_to_string(out.join("records.jsonl"))
             .unwrap()
             .lines()
             .last()
-            .unwrap()
-            .to_string(),
+            .unwrap(),
     )
     .expect("v1 行应合法 JSON");
     assert_eq!(
@@ -2230,9 +2234,12 @@ fn plan_digest_mismatch_rejects_before_binding() {
     // 钉死不覆盖它；同 graph_version/registry_digest 换一份 plan.json 即可
     // 放宽预算且装订四核对全放行——故计划面须独立钉死。
     let root = temp_root("w2-planhash");
-    let data_root = probe_task_package(&root, &compile_plan(&single_node_graph_src(
-        "  budgets: []\n  stop: []\n  failures: []\n",
-    )));
+    let data_root = probe_task_package(
+        &root,
+        &compile_plan(&single_node_graph_src(
+            "  budgets: []\n  stop: []\n  failures: []\n",
+        )),
+    );
     let runner = Arc::new(GraphFakeRunner::new(payload_resolved_true));
     let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
     std::fs::create_dir_all(&attempt).unwrap();
@@ -2259,9 +2266,6 @@ fn plan_digest_mismatch_rejects_before_binding() {
         err.to_string().contains("计划面摘要不符"),
         "拒因须点名计划面摘要：{err}"
     );
-    assert!(
-        runner.launches().is_empty(),
-        "拒在执行前，零 launch"
-    );
+    assert!(runner.launches().is_empty(), "拒在执行前，零 launch");
     let _ = std::fs::remove_dir_all(&root);
 }

@@ -1,1 +1,374 @@
-K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-compiler/src/lower.rs:303:
+                         let is_final = path == self.output_from
+                             && match (&ty, &fb) {
+                                 (Some(t), _) => t == &self.output_type,
+-                                (None, Some(_)) => af_dsl::derived_emit_type(
+-                                    self.doc,
+-                                    path,
+-                                    port,
+-                                )
+-                                .is_some_and(|derived| derived.display() == self.output_type),
++                                (None, Some(_)) => af_dsl::derived_emit_type(self.doc, path, port)
++                                    .is_some_and(|derived| derived.display() == self.output_type),
+                                 (None, None) => false,
+                             };
+                         (
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-dsl/src/validate/mod.rs:18:
+ mod refs;
+ 
+ use crate::error::{ErrorCode, Report};
+-use crate::validate::refs::TYPE_DEPTH;
+ use crate::model::{Document, EdgeDecl, LoopDecl, NodeDecl, PortType, StoreDecl};
++use crate::validate::refs::TYPE_DEPTH;
+ use std::collections::{BTreeMap, BTreeSet};
+ 
+ /// 节点在作用域索引中的条目。
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-dsl/tests/envelope_test.rs:85:
+     // 红队 W2-C25：u64 > i64::MAX 是「整数≠1」（E0003），不是「非整数」
+     // （E0002）——as_integer 的 i64 窄化失败曾被误归 E0002，与 RESULT-M1
+     // 码表语义（E0002=串/浮/布尔，E0003=整数≠1 含越界大整数）相悖。
+-    assert_eq!(
+-        envelope_codes("version: 9223372036854775808\n"),
+-        ["E0003"]
+-    );
+-    assert_eq!(
+-        envelope_codes("version: 18446744073709551615\n"),
+-        ["E0003"]
+-    );
++    assert_eq!(envelope_codes("version: 9223372036854775808\n"), ["E0003"]);
++    assert_eq!(envelope_codes("version: 18446744073709551615\n"), ["E0003"]);
+ }
+ 
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/src/engine.rs:181:
+     hash: &str,
+     workspace_root: &Path,
+ ) -> Result<(), ExeclineError> {
+-    std::fs::write(
+-        anchor,
+-        format!("{hash}  {}\n", workspace_root.display()),
+-    )
+-    .map_err(|err| ExeclineError::EngineBinaryUntrusted {
+-        detail: format!("信任锚 {} 写入失败: {err}", anchor.display()),
++    std::fs::write(anchor, format!("{hash}  {}\n", workspace_root.display())).map_err(|err| {
++        ExeclineError::EngineBinaryUntrusted {
++            detail: format!("信任锚 {} 写入失败: {err}", anchor.display()),
++        }
+     })
+ }
+ 
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/src/engine.rs:197:
+ 
+ /// 锚文件内容（trim 后比较；不存在/不可读 = None）。
+ fn anchor_read(anchor: &Path) -> Option<String> {
+-    std::fs::read_to_string(anchor).ok().map(|s| s.trim().to_string())
++    std::fs::read_to_string(anchor)
++        .ok()
++        .map(|s| s.trim().to_string())
+ }
+ 
+ /// 文件 sha256 十六进制（不可读 = None）。
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/src/engine.rs:254:
+                     let _ = std::fs::remove_file(&anchor);
+                     clean_engine_pkg(workspace_root, target_dir)?;
+                     build_engine(workspace_root, target_dir)?;
+-                    let hash = sha256_of(&bin).ok_or_else(|| {
+-                        ExeclineError::EngineBinaryUntrusted {
++                    let hash =
++                        sha256_of(&bin).ok_or_else(|| ExeclineError::EngineBinaryUntrusted {
+                             detail: format!("重建后 {} 不可读（无法验真）", bin.display()),
+-                        }
+-                    })?;
++                        })?;
+                     write_trust_anchor(&anchor, &hash, workspace_root)?;
+                 }
+                 // ④ 在场不可读：拒启动。
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/src/engine.rs:284:
+         let hash = sha256_of(&bin).ok_or_else(|| ExeclineError::EngineBinaryUntrusted {
+             detail: format!("{} 不可读（无法验真）", bin.display()),
+         })?;
+-        if anchor_read(&anchor).as_deref().map(|a| a.starts_with(&hash)) != Some(true) {
++        if anchor_read(&anchor)
++            .as_deref()
++            .map(|a| a.starts_with(&hash))
++            != Some(true)
++        {
+             return Err(ExeclineError::EngineBinaryUntrusted {
+                 detail: format!(
+                     "信任锚终核不过：{} 与 {} 不一致（拒启动）",
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/src/exec.rs:65:
+     let Some(expected) = expected else {
+         return Ok(());
+     };
+-    let actual = crate::suite::swev::sha256_hex(path).ok_or_else(|| {
+-        ExeclineError::UnitFailed {
+-            detail: format!("任务包计划面文件不可读（无法验真）: {}", path.display()),
+-        }
++    let actual = crate::suite::swev::sha256_hex(path).ok_or_else(|| ExeclineError::UnitFailed {
++        detail: format!("任务包计划面文件不可读（无法验真）: {}", path.display()),
+     })?;
+     if actual != expected {
+         return Err(ExeclineError::UnitFailed {
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/src/graph_unit.rs:704:
+                 return Err(self.fail(format!(
+                     "节点 {} 模型环失败（http_retries={}）: {message}",
+                     node.node_id, http_retries
+-                )))
++                )));
+             }
+         };
+         stage.account_node(&report);
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/src/graph_unit.rs:1122:
+                 // 悬空 node: 路径（投影缺席 = 无人强制）同样拒收。
+                 (scope, BudgetDimension::Turns) if scope.starts_with("node:") => {
+                     let path = &scope["node:".len()..];
+-                    let Some(projection) = plan
+-                        .body
+-                        .node_exec
+-                        .iter()
+-                        .find(|n| n.node_id == path)
++                    let Some(projection) = plan.body.node_exec.iter().find(|n| n.node_id == path)
+                     else {
+                         return Err(ExeclineError::PlanBindMismatch {
+                             detail: format!(
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/src/suite/report_unit.rs:126:
+                 if name == "__pycache__" || name.ends_with(".pyc") {
+                     return Err(ExeclineError::JudgeFingerprintMismatch {
+                         script: entry.path().display().to_string(),
+-                        expected: "判分目录不得存在字节码（__pycache__/*.pyc——影子执行面，禁写+禁读）"
+-                            .into(),
++                        expected:
++                            "判分目录不得存在字节码（__pycache__/*.pyc——影子执行面，禁写+禁读）"
++                                .into(),
+                         actual: "在场".into(),
+                     });
+                 }
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/tests/graph_unit.rs:2081:
+     output.expect("摘要匹配应走通");
+ }
+ 
+-
+ /// 探针任务包（W2：单节点图 input=in_t，required q——task.json 须满足）。
+ fn probe_task_package(root: &Path, plan_src: &str) -> PathBuf {
+     let data_root = root.join("data");
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/tests/graph_unit.rs:2150:
+     // resolved——此前硬编码 get("pass").or(Some(true))，无 pass 的失败判分
+     // （resolved=false）被缺字段推定成功、合格工件 close。
+     for (payload, expect) in [
+-        (payload_resolved_false as fn(&str) -> Option<String>, Some(false)),
+-        (payload_resolved_true as fn(&str) -> Option<String>, Some(true)),
++        (
++            payload_resolved_false as fn(&str) -> Option<String>,
++            Some(false),
++        ),
++        (
++            payload_resolved_true as fn(&str) -> Option<String>,
++            Some(true),
++        ),
+     ] {
+         let root = temp_root("w2-verdict");
+         let src = single_node_graph_src("  budgets: []\n  stop: []\n  failures: []\n");
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/tests/graph_unit.rs:2230:
+     // 钉死不覆盖它；同 graph_version/registry_digest 换一份 plan.json 即可
+     // 放宽预算且装订四核对全放行——故计划面须独立钉死。
+     let root = temp_root("w2-planhash");
+-    let data_root = probe_task_package(&root, &compile_plan(&single_node_graph_src(
+-        "  budgets: []\n  stop: []\n  failures: []\n",
+-    )));
++    let data_root = probe_task_package(
++        &root,
++        &compile_plan(&single_node_graph_src(
++            "  budgets: []\n  stop: []\n  failures: []\n",
++        )),
++    );
+     let runner = Arc::new(GraphFakeRunner::new(payload_resolved_true));
+     let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+     std::fs::create_dir_all(&attempt).unwrap();
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/tests/graph_unit.rs:2259:
+         err.to_string().contains("计划面摘要不符"),
+         "拒因须点名计划面摘要：{err}"
+     );
+-    assert!(
+-        runner.launches().is_empty(),
+-        "拒在执行前，零 launch"
+-    );
++    assert!(runner.launches().is_empty(), "拒在执行前，零 launch");
+     let _ = std::fs::remove_dir_all(&root);
+ }
+ 
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/tests/pkg_reportkit.rs:889:
+     let prod = ReportJudgeLocator::production();
+     let dir = kit_dir("pyc-shadow");
+     std::fs::create_dir_all(dir.join("__pycache__")).unwrap();
+-    std::fs::write(dir.join("__pycache__").join("render.cpython-314.pyc"), b"\x00\x00").unwrap();
++    std::fs::write(
++        dir.join("__pycache__").join("render.cpython-314.pyc"),
++        b"\x00\x00",
++    )
++    .unwrap();
+     let locator = ReportJudgeLocator {
+         render_script: dir.join("render.py"),
+         ..prod
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-execline/tests/pkg_reportkit.rs:896:
+     };
+     // 真脚本逐位复刻（过 sha256 锚）——使失败点唯一地落在 pyc 在场性门。
+-    std::fs::write(&locator.render_script, std::fs::read_to_string(&prod.render_script).unwrap())
+-        .unwrap();
++    std::fs::write(
++        &locator.render_script,
++        std::fs::read_to_string(&prod.render_script).unwrap(),
++    )
++    .unwrap();
+     let err = locator.check_fingerprints().unwrap_err();
+     assert_eq!(err.code(), ErrorCode::JudgeFingerprintMismatch, "{err}");
+     assert!(
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-order/src/voucher.rs:241:
+         }
+     }
+ 
+-#[test]
+-fn plan_digest_is_pinned_and_replay_checked() {
+-    // 红队 W2-C55：plan.json 摘要入凭证身份面——首绑建档，重放时与当前计划
+-    // 面对账，不符即拒（与换预算/换线同纪律）。graph/report 预算帽全在
+-    // plan.json，不钉计划面即可「同版本同注册表换计划」放宽预算。
+-    let dir = std::env::temp_dir().join(format!("af-voucher-w2c55-{}", std::process::id()));
+-    let _ = std::fs::remove_dir_all(&dir);
+-    std::fs::create_dir_all(&dir).unwrap();
+-    let stable = af_workorder::StableId::generate("wo-plan-digest");
+-    let digest_a = "a".repeat(64);
+-    let digest_b = "b".repeat(64);
++    #[test]
++    fn plan_digest_is_pinned_and_replay_checked() {
++        // 红队 W2-C55：plan.json 摘要入凭证身份面——首绑建档，重放时与当前计划
++        // 面对账，不符即拒（与换预算/换线同纪律）。graph/report 预算帽全在
++        // plan.json，不钉计划面即可「同版本同注册表换计划」放宽预算。
++        let dir = std::env::temp_dir().join(format!("af-voucher-w2c55-{}", std::process::id()));
++        let _ = std::fs::remove_dir_all(&dir);
++        std::fs::create_dir_all(&dir).unwrap();
++        let stable = af_workorder::StableId::generate("wo-plan-digest");
++        let digest_a = "a".repeat(64);
++        let digest_b = "b".repeat(64);
+ 
+-    let (_, record) =
+-        issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a)).unwrap();
+-    assert_eq!(
+-        record.plan_sha256.as_deref(),
+-        Some(digest_a.as_str()),
+-        "首绑摘要应入凭证材料"
+-    );
+-    // 同摘要重放：照过（幂等）。
+-    issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a))
+-        .expect("同计划面重放应放行");
+-    // 换计划面重放：拒（OR2003 同码）。
+-    let err = issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_b))
+-        .expect_err("换 plan.json 重放应拒");
+-    assert!(
+-        err.to_string().contains("plan_sha256"),
+-        "拒因须点名计划面摘要：{err}"
+-    );
+-    // 旧凭证无此键（历史盘兼容）：None 不核对。
+-    let legacy = dir.join("legacy");
+-    std::fs::create_dir_all(&legacy).unwrap();
+-    let (_, rec) = issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).unwrap();
+-    assert_eq!(rec.plan_sha256, None, "未提供摘要 = 不建档不核对");
+-    issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).expect("无摘要面不核对");
+-    let _ = std::fs::remove_dir_all(&dir);
+-}
++        let (_, record) =
++            issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a)).unwrap();
++        assert_eq!(
++            record.plan_sha256.as_deref(),
++            Some(digest_a.as_str()),
++            "首绑摘要应入凭证材料"
++        );
++        // 同摘要重放：照过（幂等）。
++        issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a))
++            .expect("同计划面重放应放行");
++        // 换计划面重放：拒（OR2003 同码）。
++        let err = issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_b))
++            .expect_err("换 plan.json 重放应拒");
++        assert!(
++            err.to_string().contains("plan_sha256"),
++            "拒因须点名计划面摘要：{err}"
++        );
++        // 旧凭证无此键（历史盘兼容）：None 不核对。
++        let legacy = dir.join("legacy");
++        std::fs::create_dir_all(&legacy).unwrap();
++        let (_, rec) = issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).unwrap();
++        assert_eq!(rec.plan_sha256, None, "未提供摘要 = 不建档不核对");
++        issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).expect("无摘要面不核对");
++        let _ = std::fs::remove_dir_all(&dir);
++    }
+ 
+     fn scratch(tag: &str) -> std::path::PathBuf {
+         let dir =
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-order/tests/exec_contract.rs:16:
+ 
+ use af_order::cli::{parse_args, Command};
+ use af_order::exec::{
+-    graph_unit_for, parse_exec_flags, report_unit_for, swev_unit_spec_for, RealExec,
+-    DEFAULT_HOST,
++    graph_unit_for, parse_exec_flags, report_unit_for, swev_unit_spec_for, RealExec, DEFAULT_HOST,
+ };
+ use af_workorder::StableId;
+ 
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-order/tests/exec_contract.rs:436:
+             &[
+                 vec!["submit", "--spec", "o.json", "--state", "st"],
+                 vec![
+-                    "--task", "t", "--profile", "p", "--data-root", "/d",
+-                    "--spend-cap-cents", cap,
++                    "--task",
++                    "t",
++                    "--profile",
++                    "p",
++                    "--data-root",
++                    "/d",
++                    "--spend-cap-cents",
++                    cap,
+                 ],
+             ]
+             .concat(),
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-order/tests/exec_contract.rs:454:
+         &[
+             vec!["submit", "--spec", "o.json", "--state", "st"],
+             vec![
+-                "--task", "t", "--profile", "p", "--data-root", "/d",
+-                "--max-turns", "0", "--spend-cap-cents", "5",
++                "--task",
++                "t",
++                "--profile",
++                "p",
++                "--data-root",
++                "/d",
++                "--max-turns",
++                "0",
++                "--spend-cap-cents",
++                "5",
+             ],
+         ]
+         .concat(),
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-order/tests/exec_contract.rs:502:
+     // plan.json 用仓库正本 reportkit 图编译产物（graph/report 两臂只验在场+digest）。
+     std::fs::write(
+         task_dir.join("plan.json"),
+-        std::fs::read_to_string(
+-            repo.join("ci/out/g4/paper_report.plan.json"),
+-        )
+-        .expect("仓库正本 paper_report 计划应在 ci/out/g4"),
++        std::fs::read_to_string(repo.join("ci/out/g4/paper_report.plan.json"))
++            .expect("仓库正本 paper_report 计划应在 ci/out/g4"),
+     )
+     .unwrap();
+     let exec = RealExec {
+Diff in /home/pan-ding/workspace/af-wt-redteam/crates/af-order/tests/exec_contract.rs:520:
+     assert_eq!(report.max_turns, 42, "report 臂 turns 旗标覆写");
+     assert_eq!(report.spend_cap_cents, 123, "report 环级总帽 = 旗标值");
+     let graph = graph_unit_for(&exec).expect("graph 材料面应可构造");
+-    assert_eq!(graph.default_node_turns, 42, "graph 节点 turns 缺省 = 旗标值");
++    assert_eq!(
++        graph.default_node_turns, 42,
++        "graph 节点 turns 缺省 = 旗标值"
++    );
+     assert_eq!(
+         graph.order_spend_cap_cents,
+         Some(123),

@@ -18,8 +18,8 @@ mod m4;
 mod refs;
 
 use crate::error::{ErrorCode, Report};
-use crate::validate::refs::TYPE_DEPTH;
 use crate::model::{Document, EdgeDecl, LoopDecl, NodeDecl, PortType, StoreDecl};
+use crate::validate::refs::TYPE_DEPTH;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// 节点在作用域索引中的条目。

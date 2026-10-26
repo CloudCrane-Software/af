@@ -303,12 +303,8 @@ impl<'a> Lowering<'a> {
                         let is_final = path == self.output_from
                             && match (&ty, &fb) {
                                 (Some(t), _) => t == &self.output_type,
-                                (None, Some(_)) => af_dsl::derived_emit_type(
-                                    self.doc,
-                                    path,
-                                    port,
-                                )
-                                .is_some_and(|derived| derived.display() == self.output_type),
+                                (None, Some(_)) => af_dsl::derived_emit_type(self.doc, path, port)
+                                    .is_some_and(|derived| derived.display() == self.output_type),
                                 (None, None) => false,
                             };
                         (

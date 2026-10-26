@@ -117,12 +117,6 @@ warning[duplicate]: found 2 duplicate entries for crate 'block-buffer'
              └── ed25519 v2.2.3
                  └── ed25519-dalek v2.2.0 (*)
 
-warning[license-not-encountered]: license was not encountered
-   ┌─ /home/pan-ding/workspace/af-wt-redteam/deny.toml:28:4
-   │
-28 │   "CC0-1.0",
-   │    ━━━━━━━ unmatched license allowance
-
 warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
    ┌─ /home/pan-ding/workspace/af-wt-redteam/Cargo.lock:82:1
    │  
@@ -213,6 +207,12 @@ warning[duplicate]: found 2 duplicate entries for crate 'cpufeatures'
                      └── af-mes v0.1.0
                          ├── (dev) af-execline v0.1.0 (*)
                          └── (dev) af-order v0.1.0 (*)
+
+warning[license-not-encountered]: license was not encountered
+   ┌─ /home/pan-ding/workspace/af-wt-redteam/deny.toml:28:4
+   │
+28 │   "CC0-1.0",
+   │    ━━━━━━━ unmatched license allowance
 
 warning[duplicate]: found 2 duplicate entries for crate 'der'
    ┌─ /home/pan-ding/workspace/af-wt-redteam/Cargo.lock:97:1

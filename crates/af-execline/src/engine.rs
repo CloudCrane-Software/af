@@ -181,12 +181,10 @@ fn write_trust_anchor(
     hash: &str,
     workspace_root: &Path,
 ) -> Result<(), ExeclineError> {
-    std::fs::write(
-        anchor,
-        format!("{hash}  {}\n", workspace_root.display()),
-    )
-    .map_err(|err| ExeclineError::EngineBinaryUntrusted {
-        detail: format!("信任锚 {} 写入失败: {err}", anchor.display()),
+    std::fs::write(anchor, format!("{hash}  {}\n", workspace_root.display())).map_err(|err| {
+        ExeclineError::EngineBinaryUntrusted {
+            detail: format!("信任锚 {} 写入失败: {err}", anchor.display()),
+        }
     })
 }
 
@@ -197,7 +195,9 @@ fn trust_anchor_path(bin: &Path) -> PathBuf {
 
 /// 锚文件内容（trim 后比较；不存在/不可读 = None）。
 fn anchor_read(anchor: &Path) -> Option<String> {
-    std::fs::read_to_string(anchor).ok().map(|s| s.trim().to_string())
+    std::fs::read_to_string(anchor)
+        .ok()
+        .map(|s| s.trim().to_string())
 }
 
 /// 文件 sha256 十六进制（不可读 = None）。
@@ -226,16 +226,17 @@ impl EngineClient {
     ///
     /// **存在且验过即用**（红队 W2-C56）：引擎二进制是全链唯一无 sha256 锚
     /// 的组件，而它正是产出 ledger/MES 里 accept/reject 决策的那一方——此前
-    /// `<target_dir>/debug/af-engine` 已存在即用（`--target-dir` 还是自由
+    /// 目标目录下的 debug/af-engine 已存在即用（`--target-dir` 还是自由
     /// 路径旗标），被替换的二进制可悄悄改写门控决策。现机制（与判分三件/
-    /// render/task.json 的指纹锚同款纪律）：旁车信任锚 `<bin>.sha256`
-    /// （`<sha256>  <workspace 根>`）——
+    /// render/task.json 的指纹锚同款纪律）：旁车信任锚 `af-engine.sha256`
+    /// 记录二进制 sha256 与来源 workspace 根——
     /// - 在场且锚一致 ⇒ 放行；
     /// - 在场无锚 ⇒ 采纳建档（首用登记；此后任何替换即被下一支捕）；
     /// - 在场但锚不符 ⇒ 删旧件从源码重建（构建产物可由源码复现，删之非毁
     ///   数据；重建结果即真身）后重新落锚；
     /// - 不在场 ⇒ 构建并落锚；
     /// - 在场不可读 ⇒ EX1007 拒启动（不静默换路径、不降级）。
+    ///
     /// 落锚后终核：锚与二进制必须自洽，否则 EX1007。信任边界与仓内其他指纹
     /// 锚相同：防篡改替换，不防同权限攻击者连锚一起换（需签名根的场景另立）。
     ///
@@ -254,11 +255,10 @@ impl EngineClient {
                     let _ = std::fs::remove_file(&anchor);
                     clean_engine_pkg(workspace_root, target_dir)?;
                     build_engine(workspace_root, target_dir)?;
-                    let hash = sha256_of(&bin).ok_or_else(|| {
-                        ExeclineError::EngineBinaryUntrusted {
+                    let hash =
+                        sha256_of(&bin).ok_or_else(|| ExeclineError::EngineBinaryUntrusted {
                             detail: format!("重建后 {} 不可读（无法验真）", bin.display()),
-                        }
-                    })?;
+                        })?;
                     write_trust_anchor(&anchor, &hash, workspace_root)?;
                 }
                 // ④ 在场不可读：拒启动。
@@ -284,7 +284,10 @@ impl EngineClient {
         let hash = sha256_of(&bin).ok_or_else(|| ExeclineError::EngineBinaryUntrusted {
             detail: format!("{} 不可读（无法验真）", bin.display()),
         })?;
-        if anchor_read(&anchor).as_deref().map(|a| a.starts_with(&hash)) != Some(true) {
+        if !anchor_read(&anchor)
+            .as_deref()
+            .is_some_and(|a| a.starts_with(&hash))
+        {
             return Err(ExeclineError::EngineBinaryUntrusted {
                 detail: format!(
                     "信任锚终核不过：{} 与 {} 不一致（拒启动）",
@@ -482,9 +485,8 @@ fn engine_binary_tamper_is_detected_and_rebuilt() {
     tampered.push(b'x');
     std::fs::write(&bin, &tampered).expect("写入篡改件");
     let tampered_hash = sha256_of(&bin).unwrap();
-    assert_ne!(
-        anchored.starts_with(&tampered_hash),
-        true,
+    assert!(
+        !anchored.starts_with(&tampered_hash),
         "篡改后哈希应与锚不同（测试前提）"
     );
 

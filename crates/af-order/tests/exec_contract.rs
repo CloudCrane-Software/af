@@ -16,8 +16,7 @@ use std::process::{Command as StdCommand, Output};
 
 use af_order::cli::{parse_args, Command};
 use af_order::exec::{
-    graph_unit_for, parse_exec_flags, report_unit_for, swev_unit_spec_for, RealExec,
-    DEFAULT_HOST,
+    graph_unit_for, parse_exec_flags, report_unit_for, swev_unit_spec_for, RealExec, DEFAULT_HOST,
 };
 use af_workorder::StableId;
 
@@ -436,8 +435,14 @@ fn spend_cap_nonpositive_rejected_at_parse() {
             &[
                 vec!["submit", "--spec", "o.json", "--state", "st"],
                 vec![
-                    "--task", "t", "--profile", "p", "--data-root", "/d",
-                    "--spend-cap-cents", cap,
+                    "--task",
+                    "t",
+                    "--profile",
+                    "p",
+                    "--data-root",
+                    "/d",
+                    "--spend-cap-cents",
+                    cap,
                 ],
             ]
             .concat(),
@@ -454,8 +459,16 @@ fn spend_cap_nonpositive_rejected_at_parse() {
         &[
             vec!["submit", "--spec", "o.json", "--state", "st"],
             vec![
-                "--task", "t", "--profile", "p", "--data-root", "/d",
-                "--max-turns", "0", "--spend-cap-cents", "5",
+                "--task",
+                "t",
+                "--profile",
+                "p",
+                "--data-root",
+                "/d",
+                "--max-turns",
+                "0",
+                "--spend-cap-cents",
+                "5",
             ],
         ]
         .concat(),
@@ -502,10 +515,8 @@ fn graph_and_report_specs_map_budget_flags() {
     // plan.json 用仓库正本 reportkit 图编译产物（graph/report 两臂只验在场+digest）。
     std::fs::write(
         task_dir.join("plan.json"),
-        std::fs::read_to_string(
-            repo.join("ci/out/g4/paper_report.plan.json"),
-        )
-        .expect("仓库正本 paper_report 计划应在 ci/out/g4"),
+        std::fs::read_to_string(repo.join("ci/out/g4/paper_report.plan.json"))
+            .expect("仓库正本 paper_report 计划应在 ci/out/g4"),
     )
     .unwrap();
     let exec = RealExec {
@@ -520,7 +531,10 @@ fn graph_and_report_specs_map_budget_flags() {
     assert_eq!(report.max_turns, 42, "report 臂 turns 旗标覆写");
     assert_eq!(report.spend_cap_cents, 123, "report 环级总帽 = 旗标值");
     let graph = graph_unit_for(&exec).expect("graph 材料面应可构造");
-    assert_eq!(graph.default_node_turns, 42, "graph 节点 turns 缺省 = 旗标值");
+    assert_eq!(
+        graph.default_node_turns, 42,
+        "graph 节点 turns 缺省 = 旗标值"
+    );
     assert_eq!(
         graph.order_spend_cap_cents,
         Some(123),
