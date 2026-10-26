@@ -2667,11 +2667,11 @@ fn test_unit_pass_revoked_when_model_touched_tests() {
     );
     // 行面：gate=test_edit、verdict 如实 false（非合格）。
     let row: Value = serde_json::from_str(
-        &std::fs::read_to_string(out.join("records.jsonl"))
+        std::fs::read_to_string(out.join("records.jsonl"))
             .unwrap()
             .lines()
-        .last()
-        .expect("v1 行应在盘"),
+            .last()
+            .expect("v1 行应在盘"),
     )
     .unwrap();
     assert_eq!(row["gate"], json!("test_edit"), "gate 记账: {row}");

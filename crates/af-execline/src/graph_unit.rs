@@ -1046,8 +1046,9 @@ impl GraphExecuteUnit {
 }
 
 
-/// check 节点测试命令缺省（task.json test_command 未声明时；fail-closed 面在
-/// test_unit 自身——命令为空即 pass=false 观察）。
+// 红队 W2-C48：原 DEFAULT_TEST_COMMAND（"python -m pytest -q"）缺省判据面
+// 已废除——check 节点 test_unit 缺非空 task.json test_command 即 fail-loud
+// 拒载（判据命令必须随任务包冻结声明）。
 
 // ============================================================
 // 图输入任务包
