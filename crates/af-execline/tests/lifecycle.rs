@@ -616,3 +616,102 @@ fn mes_events_and_exec_context_carry_order_bound_line() {
         events.iter().map(|e| e.line_id.clone()).collect::<Vec<_>>()
     );
 }
+
+// ---------- 红队 W2-C-52：实例身份去路径化 ----------
+
+#[test]
+fn moved_order_dir_keeps_instance_and_does_not_duplicate_mes() {
+    // 实例判别量此前 = 订单目录规范路径哈希（W2-C53）：搬移状态根（mv）或经
+    // bind-mount/别名路径重放同一订单 → instance 变 → emit_mes_if_missing 按
+    // 新 id 判「缺失」补发 → 正本多出同 (kind,seq) 事件且 CH 差量双送、零告警。
+    // 现实例档案（instance.id）持久在订单目录内、随目录搬移，路径不进身份。
+    let out = scratch("c52-mv");
+    let mut driver = OrderLifecycleDriver::open(
+        config("wo-c52", out.clone()),
+        engine_client(),
+        Box::new(FixedClock::new(FIXED_MS)),
+    )
+    .expect("打开驱动");
+    let first = driver.drive(&stub_unit("wo-c52")).expect("首驱走通");
+    assert!(!first.replayed);
+    let ids_before: Vec<String> = first.mes_events.iter().map(|e| e.event_id.clone()).collect();
+    assert_eq!(ids_before.len(), 4);
+    drop(driver);
+
+    // 搬移状态根（同文件系统 rename = mv 语义）：目录内容逐字节原样。
+    let moved = scratch("c52-moved");
+    fs::rename(&out, &moved).expect("mv 订单目录");
+
+    let mut driver2 = OrderLifecycleDriver::open(
+        config("wo-c52", moved.clone()),
+        engine_client(),
+        Box::new(FixedClock::new(FIXED_MS)),
+    )
+    .expect("搬移后重开驱动（实例档案随目录在位）");
+    let second = driver2.drive(&stub_unit("wo-c52")).expect("搬移后重放幂等");
+    assert!(second.replayed, "搬移后同单驱动 = 重放");
+
+    // 正本零补发：事件集逐字节同（此前按新路径哈希派生新 id → 补发 4 条）。
+    let events_after = mes_events(&moved);
+    assert_eq!(
+        events_after.len(),
+        4,
+        "搬移后正本不得多出补发事件：{:?}",
+        events_after.iter().map(|e| e.event_id.clone()).collect::<Vec<_>>()
+    );
+    let ids_after: Vec<String> = events_after.iter().map(|e| e.event_id.clone()).collect();
+    assert_eq!(
+        std::collections::BTreeSet::from_iter(ids_after.iter()),
+        std::collections::BTreeSet::from_iter(ids_before.iter()),
+        "搬移前后 event_id 必须逐字节一致（实例身份不随路径变）"
+    );
+}
+
+#[test]
+fn ledger_without_instance_file_is_rejected_not_reemitted() {
+    // 实例档案缺席而账本非空 = 目录被部分复制/档案被删——实例身份不可知，
+    // 须 fail-loud 拒绝打开（补发即同 (kind,seq) 双记，fixHint「拒绝而不是
+    // 补发」）；空账本（新单）照常铸造实例档案。
+    let out = scratch("c52-noarchive");
+    let order_id = "wo-c52-noarc";
+    let order = WorkOrder::new(
+        order_id,
+        GraphVersion::new("g-poc-1"),
+        Sla::new(None, Priority::Normal),
+    );
+    let record = af_execline::LedgerRecord {
+        seq: 1,
+        ts_ms: FIXED_MS,
+        order_id: order_id.into(),
+        stable_id: StableId::generate(order_id).as_str().to_string(),
+        op: "create_order".into(),
+        idem_key: format!("{}/create_order", StableId::generate(order_id).as_str()),
+        ok: true,
+        state_after: Some("Created".into()),
+        error_kind: None,
+        error_detail: None,
+        order_after: Some(order),
+    };
+    fs::write(
+        out.join("ledger.jsonl"),
+        format!("{}\n", serde_json::to_string(&record).unwrap()),
+    )
+    .unwrap();
+
+    let err = OrderLifecycleDriver::open(
+        config(order_id, out.clone()),
+        engine_client(),
+        Box::new(FixedClock::new(FIXED_MS)),
+    )
+    .unwrap_err();
+    assert_eq!(err.code().as_str(), "EX2002", "{err}");
+    assert!(
+        err.to_string().contains("instance.id"),
+        "诊断点名缺失档案：{err}"
+    );
+    // 拒绝不落新档案（防止二次 open 变「有档案」洗白）。
+    assert!(
+        !out.join("instance.id").exists(),
+        "拒绝路径不得铸造实例档案"
+    );
+}

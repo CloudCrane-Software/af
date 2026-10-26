@@ -160,31 +160,85 @@ pub struct OrderLifecycleDriver {
     drive_mes: Vec<af_mes::MesEvent>,
     /// 本次驱动跳过的重放次数（`drive` 重置；用于报告 replayed）。
     replay_hits: usize,
-    /// 运行实例判别量（红队 W2-C53）：订单目录规范路径的 sha256 前 16 hex。
-    /// event_id 原口径 = stable_id（order_id 纯函数）+ kind + ledger seq——
-    /// 同 order_id 跨 --state 根/跨产线复用即逐字节同 id，CH 侧按 event_id
-    /// 去重的差量送批会互相吞掉对方记账事件（第二单 shipped=0/
-    /// already_in_ch=N 且零告警）。并入本判别量后同根重放路径串不变
-    /// （幂等不破），跨根同 id 不再相撞。
+    /// 运行实例判别量（红队 W2-C53 引入；W2-C-52 改源）：订单目录内持久
+    /// 实例档案（`instance.id`，/dev/urandom 8 字节 16 hex，开单时铸造一次
+    /// 随目录搬移）。event_id 原口径 = stable_id（order_id 纯函数）+ kind +
+    /// ledger seq——同 order_id 跨 --state 根/跨产线复用即逐字节同 id，CH
+    /// 侧按 event_id 去重的差量送批会互相吞掉对方记账事件（第二单
+    /// shipped=0/already_in_ch=N 且零告警）。并入本判别量后跨根同 id 不再
+    /// 相撞；W2-C-52 起判别量不再取路径哈希——canonicalize 只解 symlink
+    /// 不解 bind-mount，mv/别名路径重放曾派生新实例、按新 id 补发正本已有
+    /// 事件（同 (kind,seq) 双记进 CH 零告警）。
     instance: String,
 }
 
-/// 运行实例判别量（红队 W2-C53）：订单目录**规范路径**的 sha256 前 16 hex。
-/// 规范化为的是同--state 根的不同书写形态（相对/绝对/./ 前缀）不产生不同
-/// 标签（否则同根重放会被判为两个实例、幂等补发与 CH 去重双双失效）；
-/// 目录尚不可规范化的极端情形回落「cwd 拼接」（仍确定性）。
-fn instance_tag(out_dir: &Path) -> String {
-    use sha2::{Digest, Sha256};
-    let canonical = std::fs::canonicalize(out_dir).unwrap_or_else(|_| {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(out_dir))
-            .unwrap_or_else(|_| out_dir.to_path_buf())
-    });
-    Sha256::digest(canonical.to_string_lossy().as_bytes())
-        .iter()
-        .take(8)
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
+/// 运行实例档案文件名（订单目录内，随目录搬移——实例身份不依赖可搬移路径，
+/// 红队 W2-C-52）。
+const INSTANCE_FILE: &str = "instance.id";
+
+/// 载入或铸造运行实例判别量（红队 W2-C52）。
+/// - 档案在位：读回并校验（16 位小写 hex，损坏 = EX2002）。
+/// - 档案缺席且账本非空：实例身份不可知（目录被部分复制/档案被删）——
+///   **拒绝打开**而非铸造新实例补发（补发 = 同 (kind,seq) 事件双记）。
+/// - 档案缺席且账本为空（新单）：/dev/urandom 取 8 字节铸造，持久落盘
+///   （随目录搬移，同根重放恒同 id）。
+fn load_or_create_instance(out_dir: &Path, ledger_non_empty: bool) -> Result<String, ExeclineError> {
+    use std::io::{Read, Write};
+    use std::os::unix::fs::OpenOptionsExt;
+    let path = out_dir.join(INSTANCE_FILE);
+    if path.is_file() {
+        let mut text = String::new();
+        std::fs::File::open(&path)
+            .and_then(|mut f| f.read_to_string(&mut text))
+            .map_err(|err| ExeclineError::LedgerIo {
+                detail: format!("实例档案读取失败 {}: {err}", path.display()),
+            })?;
+        let tag = text.trim();
+        let well_formed = tag.len() == 16
+            && tag
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+        if well_formed {
+            return Ok(tag.to_string());
+        }
+        return Err(ExeclineError::LedgerCorrupt {
+            detail: format!(
+                "实例档案损坏: {} = {tag:?}（须 16 位小写 hex），拒绝打开",
+                path.display()
+            ),
+        });
+    }
+    if ledger_non_empty {
+        return Err(ExeclineError::LedgerCorrupt {
+            detail: format!(
+                "订单目录缺实例档案 {path} 且账本非空——运行实例身份不可知，拒绝打开\
+                 （按路径派生新实例会把正本已有事件判「缺失」而补发，同 (kind,seq) 双记——\
+                 红队 W2-C-52；恢复属运维面：确认目录来源后手工补写档案或弃用该副本）",
+                path = path.display()
+            ),
+        });
+    }
+    let mut bytes = [0u8; 8];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .map_err(|err| ExeclineError::LedgerIo {
+            detail: format!("实例档案熵源不可用: {err}"),
+        })?;
+    let tag: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|err| ExeclineError::LedgerIo {
+            detail: format!("实例档案落盘失败 {}: {err}", path.display()),
+        })?;
+    file.write_all(format!("{tag}\n").as_bytes())
+        .and_then(|()| file.sync_all())
+        .map_err(|err| ExeclineError::LedgerIo {
+            detail: format!("实例档案写入失败 {}: {err}", path.display()),
+        })?;
+    Ok(tag)
 }
 
 impl OrderLifecycleDriver {
@@ -253,8 +307,11 @@ impl OrderLifecycleDriver {
             .into_iter()
             .map(str::to_string)
             .collect();
+        // 运行实例判别量（红队 W2-C52）：持久实例档案，随目录搬移；档案缺席
+        // 且账本非空 = fail-loud 拒绝（不铸造新实例补发）。
+        let instance = load_or_create_instance(&cfg.out_dir, !ledger.records().is_empty())?;
         Ok(Self {
-            instance: instance_tag(&cfg.out_dir),
+            instance,
             cfg,
             client,
             clock,
