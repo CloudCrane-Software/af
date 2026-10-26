@@ -513,7 +513,11 @@ impl ArxivWebFetcher {
         }
         let title = extract_html_title(&body).unwrap_or_else(|| final_url.clone());
         // 快照 url=最终实际取数 URL（红队 W2-C31：溯源不再记请求原 URL）。
-        Ok(FetchedDoc::from_text(final_url, title, &html_to_text(&body)))
+        Ok(FetchedDoc::from_text(
+            final_url,
+            title,
+            &html_to_text(&body),
+        ))
     }
 }
 
@@ -1467,8 +1471,6 @@ impl ExecuteUnit for ReportExecuteUnit {
             Err(err) => Err(self.emit_failure_row(ctx, err, phase.get())),
         }
     }
-
-
 }
 
 impl ReportExecuteUnit {

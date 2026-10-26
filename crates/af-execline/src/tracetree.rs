@@ -347,8 +347,7 @@ pub fn verify_order_dir(dir: &Path) -> TraceTreeReport {
         // 与既有行为一致。
         let members = ring_members(&run_dir);
         let node_members = graph_node_members(&run_dir);
-        if run_dir.join("harness.db").is_file() || (members.is_empty() && node_members.is_empty())
-        {
+        if run_dir.join("harness.db").is_file() || (members.is_empty() && node_members.is_empty()) {
             let a = verify_agent_unit(
                 &run_dir,
                 run_name.clone(),

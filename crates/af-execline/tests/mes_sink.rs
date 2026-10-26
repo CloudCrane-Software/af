@@ -650,11 +650,13 @@ struct LegacyIdSink {
 
 impl MesSink for LegacyIdSink {
     fn append(&mut self, event: &MesEvent) -> Result<(), ExeclineError> {
-        let (legacy_id, tail) = event.event_id.rsplit_once(':').ok_or_else(|| {
-            ExeclineError::MesCh {
-                detail: format!("W2-C11 用例：event_id 无尾段可剥: {}", event.event_id),
-            }
-        })?;
+        let (legacy_id, tail) =
+            event
+                .event_id
+                .rsplit_once(':')
+                .ok_or_else(|| ExeclineError::MesCh {
+                    detail: format!("W2-C11 用例：event_id 无尾段可剥: {}", event.event_id),
+                })?;
         assert_eq!(tail.len(), 16, "四段式 instance 判别量应为 16 hex");
         let legacy = MesEvent::new(
             event.work_order_id.clone(),
@@ -710,7 +712,10 @@ fn replay_of_legacy_three_segment_event_ids_neither_doubles_local_nor_ch() {
             .iter()
             .all(|e| e.event_id.matches(':').count() == 2),
         "正本 event_id 应全为三段式（无 instance 尾段）: {:?}",
-        legacy_events.iter().map(|e| &e.event_id).collect::<Vec<_>>()
+        legacy_events
+            .iter()
+            .map(|e| &e.event_id)
+            .collect::<Vec<_>>()
     );
 
     // CH 预置同 4 行（存量对账依据），SELECT 回放作读侧对账输入。
@@ -743,9 +748,7 @@ fn replay_of_legacy_three_segment_event_ids_neither_doubles_local_nor_ch() {
     let after = MesFileWriter::load(&dir.0.join("mes-events.jsonl")).unwrap();
     assert_eq!(after.len(), 4, "重放不得向正本再落 4 条新格式事件");
     assert!(
-        after
-            .iter()
-            .all(|e| e.event_id.matches(':').count() == 2),
+        after.iter().all(|e| e.event_id.matches(':').count() == 2),
         "正本 id 形态不得被重放改写"
     );
     // CH 终态：恰 4 行（只有预置插入），零双写。

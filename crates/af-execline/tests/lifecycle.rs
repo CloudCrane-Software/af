@@ -553,13 +553,13 @@ fn replay_with_line_conflicting_with_order_binding_is_rejected() {
         line_id: "line-other".into(),
         line_version: "lv-1".into(),
     };
-    let err = OrderLifecycleDriver::open(
-        cfg,
-        engine_client(),
-        Box::new(FixedClock::new(FIXED_MS)),
-    )
-    .unwrap_err();
-    assert_eq!(err.code().as_str(), "EX2002", "换线重放 = 账本身份不符：{err}");
+    let err = OrderLifecycleDriver::open(cfg, engine_client(), Box::new(FixedClock::new(FIXED_MS)))
+        .unwrap_err();
+    assert_eq!(
+        err.code().as_str(),
+        "EX2002",
+        "换线重放 = 账本身份不符：{err}"
+    );
     let text = err.to_string();
     assert!(
         text.contains("line-poc") && text.contains("line-other"),
@@ -572,12 +572,8 @@ fn replay_with_line_conflicting_with_order_binding_is_rejected() {
         line_id: "line-poc".into(),
         line_version: "lv-9".into(),
     };
-    let err = OrderLifecycleDriver::open(
-        cfg,
-        engine_client(),
-        Box::new(FixedClock::new(FIXED_MS)),
-    )
-    .unwrap_err();
+    let err = OrderLifecycleDriver::open(cfg, engine_client(), Box::new(FixedClock::new(FIXED_MS)))
+        .unwrap_err();
     assert_eq!(
         err.code().as_str(),
         "EX2002",
@@ -634,7 +630,11 @@ fn moved_order_dir_keeps_instance_and_does_not_duplicate_mes() {
     .expect("打开驱动");
     let first = driver.drive(&stub_unit("wo-c52")).expect("首驱走通");
     assert!(!first.replayed);
-    let ids_before: Vec<String> = first.mes_events.iter().map(|e| e.event_id.clone()).collect();
+    let ids_before: Vec<String> = first
+        .mes_events
+        .iter()
+        .map(|e| e.event_id.clone())
+        .collect();
     assert_eq!(ids_before.len(), 4);
     drop(driver);
 
@@ -657,7 +657,10 @@ fn moved_order_dir_keeps_instance_and_does_not_duplicate_mes() {
         events_after.len(),
         4,
         "搬移后正本不得多出补发事件：{:?}",
-        events_after.iter().map(|e| e.event_id.clone()).collect::<Vec<_>>()
+        events_after
+            .iter()
+            .map(|e| e.event_id.clone())
+            .collect::<Vec<_>>()
     );
     let ids_after: Vec<String> = events_after.iter().map(|e| e.event_id.clone()).collect();
     assert_eq!(

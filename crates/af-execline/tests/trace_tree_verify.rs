@@ -824,7 +824,12 @@ impl Default for GraphFixture {
         GraphFixture {
             order_id: "TR-graph".to_string(),
             nodes: vec![
-                ("planner", "graph-planner", (0, 100, 20, 40), "external_once"),
+                (
+                    "planner",
+                    "graph-planner",
+                    (0, 100, 20, 40),
+                    "external_once",
+                ),
                 ("coder", "graph-coder", (1, 200, 40, 80), "external_once"),
             ],
             quota: None,
@@ -912,8 +917,11 @@ fn write_graph_order(f: &GraphFixture) -> PathBuf {
             t = t,
             effect = effect,
         );
-        std::fs::write(ndir.join("normal.jsonl"), format!("{model_line}\n{tool_line}\n"))
-            .unwrap();
+        std::fs::write(
+            ndir.join("normal.jsonl"),
+            format!("{model_line}\n{tool_line}\n"),
+        )
+        .unwrap();
         std::fs::write(
             ndir.join("critical.jsonl"),
             format!(
@@ -1000,7 +1008,10 @@ fn graph_layout_full_tree_ok() {
     assert_eq!(r.graph[0].terminal_kind, "completed");
     assert_eq!(r.graph[0].chat_events, 1);
     assert_eq!(r.graph[0].tool_events, 1);
-    assert_eq!(r.graph[0].effect_intents, 1, "非纯工具恰一条 executed intent");
+    assert_eq!(
+        r.graph[0].effect_intents, 1,
+        "非纯工具恰一条 executed intent"
+    );
     assert_eq!(r.graph[0].tokens, (200, 40, 80));
     assert_eq!(r.graph[1].run_dir_name, "nodes/planner");
     assert_eq!(r.graph[1].node_id, "planner");

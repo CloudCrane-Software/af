@@ -419,7 +419,12 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
         .iter()
         .filter(|s| s.contains("git -c core.fileMode=false diff"))
         .count();
-    assert_eq!(diff_calls, 4, "取证面：3 task 节点 + 1 判据面: {}", bridge.calls().len());
+    assert_eq!(
+        diff_calls,
+        4,
+        "取证面：3 task 节点 + 1 判据面: {}",
+        bridge.calls().len()
+    );
 
     // typed envelope 落 attempt 工件面（artifact_contract 端口名）。
     for (node, port) in [
@@ -459,14 +464,21 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     assert_eq!(evidence_json["pass"], json!(true));
     assert_eq!(evidence_json["exit_code"], json!(0));
     assert!(
-        evidence_json["command"].as_str().unwrap_or("").contains("python -m pytest"),
+        evidence_json["command"]
+            .as_str()
+            .unwrap_or("")
+            .contains("python -m pytest"),
         "evidence 记命令: {evidence_json}"
     );
     let diff_text = std::fs::read_to_string(tester_dir.join("agent.diff"))
         .expect("W2-C49：tester 节点目录须留 agent.diff");
-    assert!(diff_text.contains("diff --git"), "agent.diff 内容: {diff_text:?}");
+    assert!(
+        diff_text.contains("diff --git"),
+        "agent.diff 内容: {diff_text:?}"
+    );
     assert_eq!(
-        report["payload"]["evidence"]["log"], json!("test.log"),
+        report["payload"]["evidence"]["log"],
+        json!("test.log"),
         "envelope 带 evidence 指针"
     );
     assert!(
@@ -537,6 +549,99 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
             .filter(|s| s.starts_with("docker rm -f"))
             .count()
             >= 1
+    );
+}
+
+// ============================================================
+// ①b 红队 W2-C10：tester 的 review 入边显式接线（评审对判定有因果）
+// ============================================================
+
+/// 红队 W2-C10：sop_full 声明 reviewer→tester review 边、tester consumes
+/// review_report——此前分发表 `pkg.sweng.test_unit` 臂完全不传 inputs：类型化
+/// 数据边制造「评审已接入」的假象，approved=false 对订单判定零因果（F4D 实盘：
+/// reviewer approved=false 附两条问题，tester 退出码 0 → pass=true 照常
+/// qualified）。修复后按 consumes 契约取 review 端口：approved=false 一票否决
+/// （退出码 0 亦翻假，failures 点名评审问题），approved=true 维持退出码判定、
+/// 证据面（test-evidence.json）留评审摘要。
+#[test]
+fn tester_verdict_is_gated_by_review_edge_payload() {
+    // ① approved=false：假桥容器执行恒退出码 0，评审否决必须翻假。
+    let root = temp_root("w2c10-reject");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let scripted = |node: &str| -> Option<String> {
+        let text = match node {
+            "planner" => json!({"plan": {"instance_id": TASK, "steps": [
+                {"id": "s1", "action": "locate", "target": "django/db/models"}
+            ]}}),
+            "coder" => json!({"files": [
+                {"path": "django/db/models/foo.py", "content_ref": "workspace#1"}
+            ]}),
+            "reviewer" => json!({"review": {
+                "approved": false,
+                "issues": [
+                    "no changed file content or diff was supplied with the change",
+                    "no evidence that plan steps 3 and 4 were executed",
+                ],
+            }}),
+            _ => return None,
+        };
+        Some(text.to_string())
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ =
+        drive(&unit, &data_root, &attempt, &out).expect("评审否决链应走通（判定翻假而非 panic）");
+
+    let report: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("tester.report.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        report["payload"]["pass"],
+        json!(false),
+        "approved=false 一票否决：容器退出码 0 亦不得 pass（W2-C10）"
+    );
+    let failures = report["payload"]["failures"]
+        .as_array()
+        .expect("failures 应为数组");
+    assert!(
+        failures.iter().any(|f| f
+            .as_str()
+            .is_some_and(|s| s.contains("no changed file content"))),
+        "评审问题须点名进 failures: {failures:?}"
+    );
+
+    // ② approved=true：不误伤退出码判定；证据面留评审摘要。
+    let root = temp_root("w2c10-approve");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let output = drive(&unit, &data_root, &attempt, &out).expect("approve 链应走通");
+    assert_eq!(output.verdict, Some(true), "approved=true 合格终态不误伤");
+
+    let report: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("tester.report.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        report["payload"]["pass"],
+        json!(true),
+        "approved=true 维持退出码判定"
+    );
+    let summary: Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            attempt
+                .join("nodes")
+                .join("tester")
+                .join("test-evidence.json"),
+        )
+        .expect("W2-C49 留档在场"),
+    )
+    .unwrap();
+    assert_eq!(
+        summary["review"]["approved"],
+        json!(true),
+        "证据面须留评审摘要（W2-C10 接线可见性）: {summary}"
     );
 }
 
@@ -2767,11 +2872,7 @@ fn test_unit_without_declared_command_fails_loud() {
     let data_root = root.join("data");
     let task_dir = data_root.join(TASK);
     std::fs::create_dir_all(&task_dir).unwrap();
-    std::fs::write(
-        task_dir.join("plan.json"),
-        compile_plan(&sop_full_src()),
-    )
-    .unwrap();
+    std::fs::write(task_dir.join("plan.json"), compile_plan(&sop_full_src())).unwrap();
     std::fs::write(
         task_dir.join("task.json"),
         json!({
@@ -2830,9 +2931,9 @@ fn test_unit_pass_revoked_when_model_touched_tests() {
     let payload = &verdict["payload"];
     assert_eq!(payload["pass"], json!(false), "退出码 0 亦作废: {verdict}");
     assert!(
-        payload["failures"]
-            .as_array()
-            .is_some_and(|f| f.iter().any(|x| x.as_str().unwrap_or("").contains("test_edit"))),
+        payload["failures"].as_array().is_some_and(|f| f
+            .iter()
+            .any(|x| x.as_str().unwrap_or("").contains("test_edit"))),
         "退化门点名 test_edit: {verdict}"
     );
     // 行面：gate=test_edit、verdict 如实 false（非合格）。

@@ -454,13 +454,10 @@ impl GraphExecuteUnit {
         // 路径的 envelope 推导复用本次取证（一次捕获两用）。碰测试面 =
         // 判据被换（S0 D2 越权），记账进 stage 供终态判定收口。
         let workspace_diff =
-            swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &node_dir).map_err(
-                |err| self.fail(format!("节点 {} 工作区取证失败: {err}", node.node_id)),
-            )?;
+            swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &node_dir)
+                .map_err(|err| self.fail(format!("节点 {} 工作区取证失败: {err}", node.node_id)))?;
         for touched in swev::diff_touches_tests(&workspace_diff) {
-            stage
-                .test_edit
-                .push(format!("{}:{touched}", node.node_id));
+            stage.test_edit.push(format!("{}:{touched}", node.node_id));
         }
         // harness 侧预算耗尽归并（B 席嫁接）：RunStatus::BudgetExhausted 不当
         // 成功静默——EX4007 结构化熔断（launch 硬顶 = plan cost_cap 收敛面）。
@@ -626,19 +623,53 @@ impl GraphExecuteUnit {
                 //    的依据面。diff 取证失败 fail-loud：证据完整性不静默降级。
                 let work_dir = ctx.attempt_dir.join("nodes").join(&node.node_id);
                 std::fs::create_dir_all(&work_dir).map_err(|err| {
-                    self.fail(format!("节点 {} 建 tester 证据目录失败: {err}", node.node_id))
+                    self.fail(format!(
+                        "节点 {} 建 tester 证据目录失败: {err}",
+                        node.node_id
+                    ))
                 })?;
                 let diff =
                     swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &work_dir)
                         .map_err(|err| {
                             self.fail(format!("节点 {} 判据面取证失败: {err}", node.node_id))
                         })?;
+                // 红队 W2-C10：review 入边显式接线——sop_full 声明 tester
+                // consumes review_report 与 reviewer→tester review 边，此前本
+                // 臂完全不传 inputs：类型化数据边制造「评审已接入」的假象，
+                // approved=false 对判定零因果（F4D 实盘 reviewer 两问题而
+                // tester pass=true 照常 qualified）。按 consumes 契约取
+                // review_report 类型恰一端口（与 aci_schema 臂同款合同面，禁
+                // 字典序首）：声明缺失/端口无载荷 fail-loud 不猜；图未声明该
+                // 边（手写计划面）= 纯退出码判据。
+                let review = {
+                    let mut declared = node
+                        .consumes
+                        .iter()
+                        .filter(|(_, ty)| ty.as_str() == "review_report")
+                        .map(|(port, _)| port);
+                    match (declared.next(), declared.next()) {
+                        (Some(port), None) => Some(inputs.get(port).cloned().ok_or_else(|| {
+                            self.fail(format!(
+                                "节点 {} test_unit 需要入边工件（review_report 端口 {port}）",
+                                node.node_id
+                            ))
+                        })?),
+                        (None, None) => None,
+                        _ => {
+                            return Err(self.fail(format!(
+                                "节点 {} test_unit 的 review_report 入边端口须恰一个（合同面）",
+                                node.node_id
+                            )));
+                        }
+                    }
+                };
                 let touched = swev::diff_touches_tests(&diff);
                 let mut verdict = sweng::test_unit(
                     self.bridge.as_ref(),
                     &env,
                     "",
                     Some(test_cmd),
+                    review.as_ref(),
                     Some(&work_dir),
                 );
                 if let Some(ev) = verdict.get_mut("evidence") {
@@ -1087,7 +1118,6 @@ impl GraphExecuteUnit {
         })
     }
 }
-
 
 // 红队 W2-C48：原 DEFAULT_TEST_COMMAND（"python -m pytest -q"）缺省判据面
 // 已废除——check 节点 test_unit 缺非空 task.json test_command 即 fail-loud
@@ -2731,7 +2761,8 @@ mod tests {
         for cap in [u64::MAX, 1u64 << 63] {
             let got = budget(Some(cap)).node_spend_cap(300, 0);
             assert_eq!(
-                got, i64::MAX,
+                got,
+                i64::MAX,
                 "cost_cap={cap} 巨帽不得回绕成 1¢ 立即熔断（饱和≈无帽）"
             );
             // 有消耗时仍饱和：u64::MAX − 42 仍装不下 i64（2^63 − 42 可精确

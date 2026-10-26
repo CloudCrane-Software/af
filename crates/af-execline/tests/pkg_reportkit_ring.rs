@@ -726,8 +726,8 @@ fn arxiv_web_fetcher_resolves_relative_redirect_locations() {
         "https://export.arxiv.org/abs/2401.00002",
         "根相对 Location 并入现 host"
     );
-    let err = ArxivWebFetcher::resolve_redirect(base, "http://arxiv.org/abs/2401.00001")
-        .unwrap_err();
+    let err =
+        ArxivWebFetcher::resolve_redirect(base, "http://arxiv.org/abs/2401.00001").unwrap_err();
     assert!(err.contains("https"), "非 https 绝对 Location 拒绝：{err}");
 }
 

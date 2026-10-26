@@ -182,7 +182,10 @@ const INSTANCE_FILE: &str = "instance.id";
 ///   **拒绝打开**而非铸造新实例补发（补发 = 同 (kind,seq) 事件双记）。
 /// - 档案缺席且账本为空（新单）：/dev/urandom 取 8 字节铸造，持久落盘
 ///   （随目录搬移，同根重放恒同 id）。
-fn load_or_create_instance(out_dir: &Path, ledger_non_empty: bool) -> Result<String, ExeclineError> {
+fn load_or_create_instance(
+    out_dir: &Path,
+    ledger_non_empty: bool,
+) -> Result<String, ExeclineError> {
     use std::io::{Read, Write};
     use std::os::unix::fs::OpenOptionsExt;
     let path = out_dir.join(INSTANCE_FILE);
