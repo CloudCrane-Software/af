@@ -25,7 +25,7 @@ git**）的版本与获取方式见 `BOOTSTRAP.md`。
 | crate | 职责 |
 |---|---|
 | `crates/af-dsl` | AFB 前端：信封 + 七段解析 + 静态校验（L0 不变量/CEL 保守子集/route 归一化/topology_selector）+ 包图清单装载 `registry`。语法定版见 `crates/af-dsl/SYNTAX.md` |
-| `crates/af-compiler` | 四阶段编译管线：校验→IR→组件绑定→计划生成（`af-compiler-plan` / `af-compiler-snapshot` CLI；golden 21 份逐字节回归）。ADR-002 规划的 `af-plan` 折入本 crate（`ExecutablePlan`），独立建位仍列开放问题 |
+| `crates/af-compiler` | 四阶段编译管线：校验→IR→组件绑定→计划生成（`af-compiler-plan` / `af-compiler-snapshot` CLI；golden 21 份逐字节回归）。ADR-002 规划的 `af-plan` 折入本 crate（`ExecutablePlan`；折入经 [ADR-013](docs/adr/013-af-plan-fold-in.md) 追认裁决），独立建位列 v0.2 开放议程（ADR-013 裁决 2，在档非承诺） |
 | `crates/af-execline` | 统一执行面：swev（af-bench 迁移）/ graph（图执行器，节点级驱动 planner→coder→reviewer→tester）/ report（报告环 reader→writer）三单元 + planbind 装订 + `af-trace-tree-verify`（订单 trace 四层语义树核对，支持 swev 扁平与 report 环两种 runs 布局） |
 | `crates/af-order` | 下单门面 CLI：`submit --unit swev\|report\|graph\|stub` 单一入口（缺省 Auto：执行三件套在→Swev，缺→Stub 冒烟档；红队 W2-C50 勘误：原枚举漏 stub 与 Auto 缺省档，与 ADR-011 裁决2 及 exec.rs UnitChoice 实况对齐），直驱 af-engine 9-op 生命周期 + MES 记账 |
 | `crates/af-engine` | 订单持久化与驱动（ledger 9-op + MES 四类跃迁 + voucher），既有底座资产 |
