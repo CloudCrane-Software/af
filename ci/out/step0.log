@@ -206,3 +206,5 @@ info: component clippy is up to date
 info: component rustfmt is up to date
 info: component clippy is up to date
 [tmp-guard] 2026-10-27 09:12:48 TMPDIR 原指向 /tmp（/tmp 树，可用 1628984KB < 2097152KB 阈值）——已自动改挂磁盘 TMPDIR=/home/pan-ding/af-ci-tmp（可用 19781264KB；史实：/tmp usrquota 默认 TMPDIR 曾致 os error 122 连锁门红，改磁盘 TMPDIR 后九门全绿）
+info: component rustfmt is up to date
+info: component clippy is up to date

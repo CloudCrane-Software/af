@@ -1,4 +1,4 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
      Running unittests src/lib.rs (/home/pan-ding/afbuild-neutrality/debug/deps/af_compiler-28a3f560aa703cae)
 
 running 0 tests
@@ -20,28 +20,28 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
      Running tests/bind_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/bind_test-8f2d2d6386f91937)
 
 running 20 tests
-test registry_rejects_name_containing_at_sign ... ok
-test registry_rejects_endpoint_discipline_violations ... ok
-test registry_rejects_tool_without_effect_class ... ok
-test registry_rejects_model_route_without_endpoint ... ok
-test registry_rejects_duplicate_refs_across_files ... ok
-test registry_rejects_key_ref_over_128_boundary_same_as_harness ... ok
 test components_files_do_not_touch_graph_manifest_surface ... ok
-test repo_components_registry_loads_deterministically ... ok
+test registry_rejects_name_containing_at_sign ... ok
+test registry_rejects_key_ref_over_128_boundary_same_as_harness ... ok
 test empty_registry_binds_doc_without_uses_refs ... ok
-test e9001_malformed_reference_string_is_rejected ... ok
 test e9001_unregistered_reference_is_rejected ... ok
-test violations_are_collected_not_first_stopped ... ok
 test escape_injection_point_passes_escape_spec_through ... ok
-test duplicate_memory_refs_dedup_after_resolution ... ok
 test duplicate_component_refs_dedup_after_resolution ... ok
-test e9002_version_mismatch_is_rejected ... ok
+test e9001_malformed_reference_string_is_rejected ... ok
+test duplicate_memory_refs_dedup_after_resolution ... ok
 test e9003_class_mismatch_is_rejected ... ok
 test e9002_unversioned_ref_on_multi_version_name_is_rejected ... ok
+test e9002_version_mismatch_is_rejected ... ok
+test registry_rejects_model_route_without_endpoint ... ok
+test registry_rejects_tool_without_effect_class ... ok
+test registry_rejects_duplicate_refs_across_files ... ok
+test violations_are_collected_not_first_stopped ... ok
+test registry_rejects_endpoint_discipline_violations ... ok
+test repo_components_registry_loads_deterministically ... ok
 test sample2_binds_all_uses_refs_with_first_class_fills ... ok
 test sample3_binds_nested_body_node_to_shared_route ... ok
 
-test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
      Running tests/golden_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/golden_test-19f36c39b938186a)
 
@@ -59,7 +59,7 @@ test six_golden_deterministic_bitwise ... ok
 test g3_golden_corpus_byte_exact ... ok
 test plan_types_cover_every_port_type_base_name ... ok
 
-test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
 
      Running tests/inline_body_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/inline_body_test-3b8c6b021bfbc684)
 
@@ -69,21 +69,21 @@ test sample6_nested_loops_and_cross_layer_safety_points ... ok
 test sample4_sample2_subgraph_shapes ... ok
 test inline_body_dimensional_reduction_conserves_nodes_and_edges ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
 
      Running tests/ir_schema_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/ir_schema_test-79f89524aceecd2e)
 
 running 8 tests
 test envelope_version_is_one ... ok
-test envelope_rejects_non_integer_version ... ok
 test envelope_rejects_unknown_top_key ... ok
 test envelope_rejects_version_not_one ... ok
+test envelope_rejects_non_integer_version ... ok
+test envelope_rejects_missing_version ... ok
 test first_class_placeholder_values_are_empty_defaults ... ok
 test envelope_rejects_unknown_body_field_and_nested_field ... ok
-test envelope_rejects_missing_version ... ok
 test first_class_fields_present_in_all_samples ... ok
 
-test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
 
      Running tests/lower_error_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/lower_error_test-571e73e85ab538cd)
 
@@ -91,37 +91,37 @@ running 2 tests
 test empty_construct_body_is_reported_not_panicked ... ok
 test unvalidated_route_violation_is_reported_not_panicked ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests/plan_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/plan_test-efc67a4351e9262c)
 
 running 13 tests
-test inline_primitive_output_ref_from_body_is_final_matches_normalized ... ok
-test from_body_port_is_final_requires_derived_type_match ... ok
 test builtin_passed_frombody_final_registers_boolean_type_entry ... ok
+test from_body_port_is_final_requires_derived_type_match ... ok
+test inline_primitive_output_ref_from_body_is_final_matches_normalized ... ok
 test unbound_report_refuses_plan_generation ... ok
 test sop_full_v1_1_token_cap_calibrated_to_f4c_measurement ... ok
-test sample2_plan_shape_matches_contract_skeleton ... ok
-test plan_node_exec_projects_context_sections ... ok
-test decode_plan_roundtrip_equals_generated ... ok
 test plan_projects_emits_types_and_consumes_contracts ... ok
+test sample2_plan_shape_matches_contract_skeleton ... ok
+test decode_plan_roundtrip_equals_generated ... ok
+test plan_node_exec_projects_context_sections ... ok
 test plan_envelope_is_rejecting ... ok
 test gptswarm_plan_carries_escape_specs ... ok
 test plan_json_pretty_entry_matches_stepwise ... ok
 test gate_samples_ir_and_plan_deterministic_bitwise ... ok
 
-test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
 
      Running tests/registry_decl_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/registry_decl_test-d25c44f9620a8b9d)
 
 running 5 tests
 test decls_table_matches_gate_coverage_counts ... ok
-test unversioned_referenced_names_declare_exactly_one_version ... ok
 test repo_registry_total_is_57_after_p2l12_expansion ... ok
+test unversioned_referenced_names_declare_exactly_one_version ... ok
 test all_50_p2l12_declarations_resolve_with_expected_version_and_class ... ok
 test class_mismatch_against_repo_registry_is_rejected ... ok
 
-test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests/route_guard_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/route_guard_test-32704efbccf3402c)
 
@@ -131,7 +131,7 @@ test sample5_route_guards ... ok
 test sample2_sample6_route_guards ... ok
 test cel_digest_stable_across_compiles ... ok
 
-test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
 
      Running tests/stack_safety_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/stack_safety_test-0631282da4a36264)
 
@@ -139,7 +139,7 @@ running 2 tests
 test deep1001_is_rejected_by_e1054_threshold_regardless_of_build_tier ... ok
 test deep60_dsl_legal_doc_must_not_abort_compiler_in_debug_tier ... ok
 
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
 
    Doc-tests af_compiler
 
