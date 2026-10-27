@@ -97,6 +97,17 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
         node_exec: BTreeMap::new(),
         escapes: BTreeMap::new(),
     };
+    // meta.output.ref 内联原始型登记（红队 W3-C19）：interface.output_type
+    // 经 norm_type_expr 规范化为裸名（string/integer/…），但 inline_prims
+    // 原只从 emits/consumes 收集、ensure_used_builtin_type_entries 只补
+    // signal——「output.ref 内联原始型 + 终态 from_body 派生自内建
+    // passed:boolean」路径产出 output_type="boolean" 而 plan.types 无该基名
+    // 条目的计划（编译 rc=0、执行面 check_typed 按基名查 types 必 EX4006，
+    // 「编译过、执行拒」）。终态发射者的 ref 必为内联原始型（derived
+    // passed:boolean 与之同型），故在 source 处登记一次即闭合该路径。
+    if let m::PortType::Inline(p) = &doc.meta.output.r#ref {
+        lw.inline_prims.insert(p.r#type.display().to_string());
+    }
     let (nodes, edges) = lw.scope(&doc.nodes, &doc.edges, "")?;
     let mut body = IrBody {
         graph: GraphTemplate {

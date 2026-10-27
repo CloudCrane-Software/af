@@ -44,8 +44,11 @@ W1-C14 的遗留表总数 3,043,489→3,042,489 手工加总勘误与决策定�
    CEL 词法面跳过 `//` 行注释（与 cel-parser 文法同口径，块注释不跳——文法
    不收且跳过即给深括号绕 E1054 前置闸开门）；route `default:exit` 产出
    ¬(when₁∨…) 并入 exit_guard（非 loop 文档不再静默丢失默认分支守卫）；
-   新增 E2209 construct_conflict（loop+map 构造并存，解析面/类型面自相矛盾
-   故 fail-closed 拒绝）；E2311 文案按违例实况分叉。golden 7 份随批再生
+   新增 construct_conflict（loop+map 构造并存，解析面/类型面自相矛盾
+   故 fail-closed 拒绝）——**码位勘误（红队 W3-C16，2026-10-27）**：本条
+   原记「E2209」与提案-B §6 既有分派「E2209 ops 参数不闭合」撞码（裁决时
+   未核对 §6 码表），已迁移至未分配新码 **E2212**（error.rs 码位史注与
+   SYNTAX.md 契约面同步；E2209 归还 ops 参数闭合）；E2311 文案按违例实况分叉。golden 7 份随批再生
    （CrewAI/GPTSwarm/LangGraph/MetaGPT/Reflexion/sample2/sample5，diff 均
    route_exit_guard 增位）。
 7. **执行面/门面修复清单**（详 commit ecb5d99）：strict declare 键集=全部

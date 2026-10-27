@@ -1,12 +1,16 @@
 //! 红队修复批（W1）：构造×构造并存拒绝——同一节点同时携带 loop 与 map
 //! 双构造此前不被任何判定拒绝，且 emit_type 对其 emits.from_body 的类型
 //! 推导自相矛盾（解析域取 loop 体、类型域因 map 在场一律包 list<>）。
-//! 收紧为 E2209（fail-closed：组合非法，二构造必须分节点）。
+//! 收紧为 fail-closed（组合非法，二构造必须分节点）。
+//!
+//! 红队 W3-C16 码位迁移：E2209 归还提案-B §6 既有分派（ops 参数不闭合），
+//! construct_conflict 改登未分配新码 E2212（语义段预算余量内登记）——
+//! 判据本体不变，仅稳定码字符串迁移。
 //!
 //! 红队 W3-C19 迁移：终态发射者必须自带 emits（内建端口不构成终态工件）——
 //! 两条样本的 n1 原为「无 emits + output.from=n1」形态，现补
 //! `emits: { done: signal }`（inv4_test loader 同款形态：显式声明内建 done
-//! 端口为终态发射）。判据本体（E2209 / 零违例）不变。
+//! 端口为终态发射）。判据本体（构造冲突 / 零违例）不变。
 
 use af_dsl::{load_str, validate, Document};
 
@@ -16,7 +20,7 @@ fn check(src: &str) -> Vec<&'static str> {
 }
 
 #[test]
-fn loop_plus_map_on_same_node_is_e2209() {
+fn loop_plus_map_on_same_node_is_e2212() {
     let src = "version: 1
 meta:
   name: t
@@ -50,7 +54,7 @@ policies:
   stop: []
   failures: []
 ";
-    assert_eq!(check(src), ["E2209"]);
+    assert_eq!(check(src), ["E2212"]);
 }
 
 #[test]

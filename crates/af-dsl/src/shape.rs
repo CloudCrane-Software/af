@@ -145,7 +145,8 @@ fn schema_node_violation(
 
 /// schema 形状检查（E1003 值域/形状面；随 validate 一次收齐）。两个裸
 /// `serde_json::Value` schema 位同门：types[].schema（W3-C18）与
-/// human.resume.schema（红队 W2-C-24）——后者同为裸 Value 且同走
+/// human.resume.schema（红队 W2-C-24，W3-C15 起经 walk_nodes 覆盖根层与
+/// loop/map 体内嵌 human）——后者同为裸 Value 且同走
 /// cel::synth_from_schema（validate/m4.rs add_resume），漏门则标量/数组/null
 /// resume schema 零违例过审、human 节点 route 的 CEL 布尔判定静默无证据。
 pub fn check_schema_shape(doc: &Document) -> Vec<crate::error::Violation> {
@@ -162,8 +163,15 @@ pub fn check_schema_shape(doc: &Document) -> Vec<crate::error::Violation> {
             ));
         }
     }
-    for n in &doc.nodes {
-        let Some(h) = &n.human else { continue };
+    // human.resume.schema 同门覆盖全部作用域（红队 W3-C15）：原只遍历根层
+    // doc.nodes，loop/map 体内的 human 逃逸门禁——而嵌套 human 恰是真实语料
+    // 的常态（human_stop/approve/human_help 等验证 human 全在构造体内，
+    // 中立性词表纪律：语料专名不直书，见 af/packages 注册面），add_resume
+    // 对其 schema 走同一 synth_from_schema，标量 schema ⇒ resume 绑定 Null、
+    // CEL 布尔判定静默无证据。与 check_vocab 同用 walk_nodes 深度遍历
+    //（同模块同一遍历口径）。
+    walk_nodes(doc, &mut |n, _scope| {
+        let Some(h) = &n.human else { return };
         if let Some(detail) = schema_node_violation(
             &format!("节点 {} human.resume", n.id),
             "schema",
@@ -176,7 +184,7 @@ pub fn check_schema_shape(doc: &Document) -> Vec<crate::error::Violation> {
                 detail,
             ));
         }
-    }
+    });
     out
 }
 

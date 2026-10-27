@@ -25,9 +25,15 @@ theorems-v1 定稿 **57 条**（A16 + B23 + C9 + D9）。逐条对照四流载�
   harness）；B-01/B-03/B-04/B-06/B-09/B-11/B-13 + C-01/C-02/C-03/C-07 共
   11（Kani 17 harness）；B-14/B-15/C-04 共 3（FV-0.1 route Verus 12
   verified）；D-01..D-09 全 9（Verus 29 verified）；**B-16**（FV-0.2
-  27-goto 分配全枚举 Kani harness 3 verified——theorems-v1.md:366 工具栏
-  登记「已机器穷尽 E2102/E2103 计数语义 + E2101 抑制规则；残余 = 镜像↔实现
-  对账单测」，与 B-14/B-15 的残余状态同构，红队 W2-C43 勘误补入）。
+  镜像 Kani harness：合法域 27-goto 分配全枚举 + **非法编码域
+  `mirror_normalize_illegal_goto_e2102_exact_count`（红队 W3-C28 补）
+  ——合法域内 valid 恒真、E2102 分支不可达，原「已机器穷尽 E2102」对该
+  半边不成立、仅 af-dsl 单测依据（W3-C28 勘误）；补探针后 cargo kani 亲跑
+  **4 verified/0 failures**（proofs/kani/kani-run.log 顶部 W3-C28 复跑段，
+  2026-10-27），E2102 计数语义（soundness+completeness 双向精确）与 E2101
+  抑制、不产边集均在内核断言——theorems-v1.md:366 工具栏登记与实况自此
+  一致；残余 = 镜像↔实现对账单测，与 B-14/B-15 的残余状态同构，红队
+  W2-C43 勘误补入）。
 - **部分证据/不可立**：C-05（部分证据，§二）；**A-16 运行时半边**（57 条中
   唯一「运行时半边 v0 不可立」——theorems-v1.md:216：评估 ground truth 对候选
   不可读的拦截层为执行面读权限白名单占位，落地后方可 Kani 建 harness）。

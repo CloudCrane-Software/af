@@ -516,3 +516,39 @@ fn human_resume_schema_shapes_are_gated_e1003() {
         "合法 human.resume.schema 零违例"
     );
 }
+
+// ---------- 红队 W3-C15：human.resume.schema 门覆盖 loop/map 体内嵌 human ----------
+
+#[test]
+fn nested_human_resume_schema_shapes_are_gated_e1003() {
+    // check_schema_shape 原只遍历根层 doc.nodes——loop/map 体内的 human 节点
+    // 逃逸门禁。而嵌套 human 恰是全部真实语料的形态（ADAS human_stop /
+    // sample5 approve / SWE-agent human_help 均在构造体内），add_resume 对
+    // 其 resume.schema 走同一 synth_from_schema——标量 schema ⇒ resume 绑定
+    // 退化为 Null、该 human 的 route CEL 布尔判定静默无证据。同门必须同
+    // 覆盖：体内 human 标量/无 type schema → E1003。
+    for (label, schema) in [("字符串标量", "x"), ("空对象（无 type）", "{}")] {
+        let src = format!(
+            "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: {{ ref: a, from: n1 }}\ntypes:\n  - {{ name: in_t, schema: {{ type: object }} }}\n  - {{ name: a, schema: {{ type: object }} }}\nnodes:\n  - id: n1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - id: approve\n            kind: task\n            human: {{ station: s1, role: approver, resume: {{ schema: {schema} }} }}\n            route:\n              default: exit\n              rules:\n                - {{ when: \"resume.approved == false\", goto: exit }}\n          - {{ id: g, kind: gate, assert: \"true\" }}\n        edges: []\n      max_iterations: 2\n      safety_points: [ {{ node: g, kind: gate }} ]\n    emits: {{ answer: a }}\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n"
+        );
+        assert_eq!(
+            codes(&src),
+            ["E1003"],
+            "loop 体内 human.resume.schema {label} 应被同门拒（E1003；W3-C15）"
+        );
+    }
+    // map 体同门。
+    let map_src = "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\ntypes:\n  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: array, items: { type: string } } } } }\n  - { name: a, schema: { type: object } }\nnodes:\n  - id: n1\n    kind: task\n    map:\n      over: input.q\n      body:\n        nodes:\n          - { id: approve, kind: task, human: { station: s1, role: approver, resume: { schema: 42 } } }\n        edges: []\n    emits: { answer: a }\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n";
+    assert_eq!(
+        codes(map_src),
+        ["E1003"],
+        "map 体内 human.resume.schema 标量应被同门拒（E1003；W3-C15）"
+    );
+    // 正例：体内 human 合法对象 schema 零违例（真实语料形态）。
+    let ok = "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\ntypes:\n  - { name: in_t, schema: { type: object } }\n  - { name: a, schema: { type: object } }\nnodes:\n  - id: n1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - id: approve\n            kind: task\n            human:\n              station: s1\n              role: approver\n              resume:\n                schema: { type: object, required: [approved], properties: { approved: { type: boolean } } }\n            route:\n              default: exit\n              rules:\n                - { when: \"resume.approved == false\", goto: exit }\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: a }\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n";
+    assert_eq!(
+        codes(ok),
+        Vec::<&str>::new(),
+        "loop 体内 human 合法 resume.schema 零违例（W3-C15 不误伤）"
+    );
+}

@@ -76,7 +76,14 @@ def self_test() -> int:
     for ident in ["ErrorCode", "BindReport", "digit", "repository", "commitment"]:
         found = pattern.findall(ident)
         assert not found, f"ASCII 复合标识符不误伤：{ident!r} 命中 {found}"
-    print("self-test PASS：中文语境 4 词全命中 / ASCII 复合标识符 5 例零误伤")
+    # 包段词形一致性回归（红队 W3-C35）：黑名单词必须能命中其理由列自认
+    # 覆盖的包段——G4 收尾批曾把 pkg.reflexkit.* 段词误书 reflectkit（多一
+    # t），pattern.findall('pkg.reflexkit.*') 恒空、六个注册组件扫描覆盖率
+    # 为 0 而门照绿。钉死：reflexkit 在表且对实际注册段名可命中。
+    assert "reflexkit" in blacklist, "黑名单须含 reflexkit（pkg.reflexkit.* 实际段名；reflectkit 为 W3-C35 勘误的词形错位）"
+    seg_hits = pattern.findall("pkg.reflexkit.search")
+    assert seg_hits == ["reflexkit"], f"包段词必须命中实际注册段：pkg.reflexkit.search → {seg_hits}"
+    print("self-test PASS：中文语境 4 词全命中 / ASCII 复合标识符 5 例零误伤 / 包段词形 reflexkit 命中 pkg.reflexkit.search")
     return 0
 
 

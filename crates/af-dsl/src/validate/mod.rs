@@ -138,8 +138,9 @@ impl<'a> Index<'a> {
         // 收齐」契约——空文档应报 E2001 而非崩溃）。
         self.scopes.entry(label.to_string()).or_default();
         for n in nodes {
-            // E2209 构造×构造并存（红队 W1-C25）：loop+map 同节点此前不被
-            // 任何判定拒绝，而 emit_type 对其 emits.from_body 因 map 在场
+            // E2212 构造×构造并存（红队 W1-C25；原登 E2209，W3-C16 码位迁移
+            // 归还 ops 参数不闭合——见 error.rs 码位史）：loop+map 同节点此前
+            // 不被任何判定拒绝，而 emit_type 对其 emits.from_body 因 map 在场
             // 一律包 list<>（loop 单独在场不包）——类型推导取决于无关字段
             // 在场与否；fail-closed 拒绝组合本身。
             if n.loop_spec.is_some() && n.map.is_some() {

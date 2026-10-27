@@ -9,6 +9,9 @@
 #   I2  名单 ⊆ 隔离臂失败集（缺项 = fail-open，最严重）
 #   I3  I1∧I2（集合精确相等；R3 漂移）
 #   I4  g3_golden_corpus_byte_exact（17 语料，含 sample1-6）在隔离臂通过
+#   R8  解析对账（红队 W3-C38）：原始 FAILED 行数 = 解析失败键数 = cargo 汇总
+#       失败数，且未归类测试输出行=0——doc-test 与未知格式行此前结构性漏判
+#       （不进任何集合、I1/I2/I3 照绿），现 fail-loud
 #   P-A 无 --registry 时 sample1 快照链 exit=0 且与 golden 逐字节一致
 #   P-B 空包根下 selector 稿（MetaGPT）exit≠0 且 stderr 含 E2001
 #   P-C 空包根下非 selector 稿（ReAct）exit≠0 且 stderr 含 E9001
@@ -103,21 +106,74 @@ stale_guard() {
 stale_guard
 verdict Z0-pre PASS "沙箱 $SBX（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，$(du -sh "$SBX" | cut -f1)）；target=${CARGO_TARGET_DIR}"
 
-# cargo test 日志解析：→ 键集 <crate>::<测试文件>::<测试名>（FAILED 或 ok）
-parse_keys() { # parse_keys <crate> <log路径> <FAILED|ok> —— 日志路径经 argv 传入
-  python3 - "$1" "$3" "$2" <<'PYEOF'
+# cargo test 日志解析：→ 键集 <crate>::<测试文件>::<测试名>（FAILED 或 ok）。
+# 红队 W3-C38 扩面：①段头补 `Doc-tests <crate>`（原只认 Running 段——doc-test
+# 段头不匹配时 section 残留上一值）；②键推导补 doc-test 行形
+# `test <文件> - <名> (line N) ... ok|FAILED`（原 `test (\S+) \.\.\.` 对带空格
+# 的 doc-test 键恒不匹配）——隔离臂 doc-test 失败此前既不进 ONLY_IN_REAL 也
+# 不进名单，I1/I2/I3 照样全绿（结构性盲区）。③输出统计行
+# parsed_failed/summary_failed/unclassified 供 R8 三方对账（fail-loud：任何
+# 无法归类为已知测试键的 `test …` 结果行，或解析键数 ≠ cargo 汇总失败数，
+# 即判门红——防未知输出格式再次绕过集合判据）。
+parse_log() { # parse_log <crate> <log路径> <FAILED集合输出> <ok集合输出>
+  python3 - "$1" "$2" "$3" "$4" <<'PYEOF'
 import re, sys
-crate, want, log = sys.argv[1], sys.argv[2], sys.argv[3]
+crate, log, fail_out, pass_out = sys.argv[1:5]
 section = ""
+fails, passes = [], []
+parsed_failed = summary_failed = unclassified = 0
+running_re = re.compile(r"\s*Running (?:unittests )?(?:src|tests)/(\S+)\.rs")
+doctest_re = re.compile(r"^\s*Doc-tests (\S+)")
+outcome_re = re.compile(r"^test (.+) \.\.\. (\w+)$")
+summary_re = re.compile(r"^test result: \w+\. \d+ passed; (\d+) failed; \d+ ignored")
+doctest_key_re = re.compile(r"^(\S+) - (.+?)(?: \(line \d+\))?$")
+
+def key_of(name):
+    m = doctest_key_re.match(name)
+    if m and " - " in name:
+        return f"{crate}::doctest::{m.group(1)}::{m.group(2)}"
+    if section:
+        return f"{crate}::{section}::{name}"
+    return None
+
 with open(log, encoding="utf-8", errors="replace") as f:
     for line in f:
-        m = re.match(r"\s*Running (?:unittests )?(?:src|tests)/(\S+)\.rs", line)
+        line = line.rstrip("\n")
+        m = running_re.match(line)
         if m:
             p = m.group(1)
             section = "lib" if p == "src/lib" else p.split("/")[-1]
-        m = re.match(r"test (\S+) \.\.\. (ok|FAILED)$", line)
-        if m and section and m.group(2) == want:
-            print(f"{crate}::{section}::{m.group(1)}")
+            continue
+        m = doctest_re.match(line)
+        if m:
+            section = "doctest"
+            continue
+        m = outcome_re.match(line)
+        if m:
+            name, outcome = m.group(1), m.group(2)
+            if outcome in ("ok", "FAILED"):
+                key = key_of(name)
+                if key is None:
+                    unclassified += 1
+                elif outcome == "FAILED":
+                    fails.append(key)
+                else:
+                    passes.append(key)
+            else:
+                # ignored 等已知非失败结局：不进集合，但必须可归类为「非
+                # ok/FAILED 的已知结局」——否则按未归类计（R8 门红）。
+                if outcome != "ignored":
+                    unclassified += 1
+            continue
+        m = summary_re.match(line)
+        if m:
+            summary_failed += int(m.group(1))
+parsed_failed = len(fails)
+with open(fail_out, "w", encoding="utf-8") as f:
+    f.write("\n".join(sorted(set(fails))) + ("\n" if fails else ""))
+with open(pass_out, "w", encoding="utf-8") as f:
+    f.write("\n".join(sorted(set(passes))) + ("\n" if passes else ""))
+print(f"parsed_failed={parsed_failed} summary_failed={summary_failed} unclassified={unclassified}")
 PYEOF
 }
 
@@ -147,15 +203,31 @@ find "$SBX/af/packages" -mindepth 1 -delete
 echo "  af/packages 已清空（保留空目录）：$(ls -A "$SBX/af/packages" | wc -l) 项残留" | tee -a "$LOG"
 ISO_FAIL_SET="$SBX/iso-fail-set.txt"; ISO_PASS_SET="$SBX/iso-pass-set.txt"
 : > "$ISO_FAIL_SET"; : > "$ISO_PASS_SET"
+RAW_TOTAL=0; PARSED_TOTAL=0; SUMMARY_TOTAL=0; UNCLASSIFIED_TOTAL=0
 for c in $CRATES; do
   L="$(arm_log iso "$c")"
   (cd "$SBX" && cargo test --offline -p "$c" --no-fail-fast) > "$L" 2>&1
-  parse_keys "$c" "$L" FAILED >> "$ISO_FAIL_SET"
-  parse_keys "$c" "$L" ok >> "$ISO_PASS_SET"
+  STATS="$(parse_log "$c" "$L" "$SBX/$c-fail.txt" "$SBX/$c-pass.txt")"
+  cat "$SBX/$c-fail.txt" >> "$ISO_FAIL_SET"
+  cat "$SBX/$c-pass.txt" >> "$ISO_PASS_SET"
   n=$(grep -c "^test .* \.\.\. FAILED$" "$L" || true)
-  echo "  隔离臂 $c 失败 $n 项（exit 码不作判据，失败集才是）" | tee -a "$LOG"
+  raw=${n:-0}
+  parsed=$(echo "$STATS" | sed -n 's/.*parsed_failed=\([0-9]*\).*/\1/p')
+  summ=$(echo "$STATS" | sed -n 's/.*summary_failed=\([0-9]*\).*/\1/p')
+  uncls=$(echo "$STATS" | sed -n 's/.*unclassified=\([0-9]*\).*/\1/p')
+  RAW_TOTAL=$((RAW_TOTAL + raw)); PARSED_TOTAL=$((PARSED_TOTAL + ${parsed:-0}))
+  SUMMARY_TOTAL=$((SUMMARY_TOTAL + ${summ:-0})); UNCLASSIFIED_TOTAL=$((UNCLASSIFIED_TOTAL + ${uncls:-0}))
+  echo "  隔离臂 $c 失败 $raw 项（exit 码不作判据，失败集才是；解析=$parsed 汇总=$summ 未归类=$uncls）" | tee -a "$LOG"
 done
 sort -u -o "$ISO_FAIL_SET" "$ISO_FAIL_SET"; sort -u -o "$ISO_PASS_SET" "$ISO_PASS_SET"
+# R8 解析对账（红队 W3-C38，fail-loud）：原始 FAILED 行数、解析失败键数、
+# cargo 汇总失败数三方相等且无未归类测试输出行——防 doc-test 等未知格式
+# 再出现「隔离臂失败却不进任何集合」的结构性盲区。
+if [ "$PARSED_TOTAL" -eq "$RAW_TOTAL" ] && [ "$PARSED_TOTAL" -eq "$SUMMARY_TOTAL" ] && [ "$UNCLASSIFIED_TOTAL" -eq 0 ]; then
+  verdict R8 PASS "解析对账：原始 FAILED 行=$RAW_TOTAL = 解析键=$PARSED_TOTAL = cargo 汇总=$SUMMARY_TOTAL，未归类行=0（W3-C38）"
+else
+  verdict R8 FAIL "解析对账破裂：原始 FAILED 行=$RAW_TOTAL / 解析键=$PARSED_TOTAL / cargo 汇总=$SUMMARY_TOTAL / 未归类行=$UNCLASSIFIED_TOTAL——存在不进失败集的测试失败或未知输出格式（日志 $(arm_log iso af-dsl) $(arm_log iso af-compiler)）"
+fi
 EXPECTED_KEYS="$SBX/expected-keys.txt"
 grep -v '^\#' "$EXPECTED" | grep -v '^\s*$' | sort -u > "$EXPECTED_KEYS"
 
@@ -239,7 +311,7 @@ else
 fi
 
 # ---- 汇总 -----------------------------------------------------------------------
-echo "== step8 汇总：PASS=$PASS_COUNT FAIL=$FAIL_COUNT（判据 C1/I1/I2/I3/I4/P-A/P-B/P-C/S1/R7/Z0）" | tee -a "$LOG"
+echo "== step8 汇总：PASS=$PASS_COUNT FAIL=$FAIL_COUNT（判据 C1/I1/I2/I3/I4/R8/P-A/P-B/P-C/S1/R7/Z0）" | tee -a "$LOG"
 if [ "$FAIL_COUNT" -eq 0 ]; then
   echo "== step8 neutrality 门全绿" | tee -a "$LOG"
   exit 0
