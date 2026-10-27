@@ -728,7 +728,13 @@ impl RingBudgets {
                             ),
                         });
                     }
-                    b.cents = Some(entry.cap as i64);
+                    // 红队 W3-C-23：u64 帽**饱和**换算——先 `as i64` 曾把
+                    // ≥2^63 的帽回绕成负数，环级帽 min(spec, 负值)=负、
+                    // reader 门 0≥负帽起动前即误熔断。与图执行器同族预算
+                    // （graph_unit node_spend_cap，红队 W2-C-28）同款饱和语
+                    // 义：i64 装不下即饱和到 i64::MAX，巨帽≈无帽；换算结果
+                    // 恒非负，负帽不可能再入场。
+                    b.cents = Some(i64::try_from(entry.cap).unwrap_or(i64::MAX));
                 }
                 ("plan", BudgetDimension::TokensTotal) => {
                     if entry.id != "token_cap" {

@@ -975,3 +975,56 @@ fn ring_plan_budget_unsupported_entry_is_rejected() {
     );
     std::fs::remove_dir_all(&base).ok();
 }
+
+// ---- 红队 W3-C-23：plan cost_cap 巨帽不得回绕成负帽（图执行器 W2-C-28 同族）----
+
+/// plan 级 cost_cap ≥ 2^63 时 u64→i64 须**饱和**换算（巨帽≈无帽，与图执行器
+/// W2-C-28 同款语义）：此前 `entry.cap as i64` 把 ≥2^63 的帽回绕成负数，环
+/// 级帽 min(spec, 负值)=负、reader 门 `0 ≥ 负帽` 即起动前误熔断并打印负帽
+/// nonsense 诊断。2^63 与 u64::MAX 两档：reader 不提前熔断、满环照常走通，
+/// 环级帽 = min(spec 帽, 饱和后 plan 帽) = spec 帽。
+#[test]
+fn ring_plan_giant_cost_cap_saturates_and_reader_does_not_melt_early() {
+    for (giant, tag) in [(9_223_372_036_854_775_808u64, "2p63"), (u64::MAX, "umax")] {
+        let runner = FakeRingRunner::happy();
+        let base = std::env::temp_dir().join(format!("g5-ring-w3c23-{tag}-{}", std::process::id()));
+        std::fs::remove_dir_all(&base).ok();
+        std::fs::create_dir_all(&base).unwrap();
+        let task_dir = ring_task_package_mutated(&base, |plan| {
+            for e in plan["body"]["budget"]["budgets"].as_array_mut().unwrap() {
+                if e["id"] == "cost_cap" {
+                    e["cap"] = json!(giant);
+                }
+            }
+        });
+        let spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+        let unit = ReportExecuteUnit::new(
+            spec.clone(),
+            draft_fn_real_ring(runner.clone(), spec),
+            Arc::new(LocalFileFetcher),
+        )
+        .expect("真环单元装载应过三重门");
+        let out = drive(&unit, &base, &task_dir);
+        assert_eq!(
+            out.verdict,
+            Some(true),
+            "巨帽档 {tag}（{giant}）满环应照常走通（reader 不得起动前误熔断）：{}",
+            out.note
+        );
+        let launches = runner.captured();
+        assert_eq!(
+            launches.len(),
+            2,
+            "巨帽档 {tag} reader+writer 两 launch：{launches:?}"
+        );
+        assert_eq!(
+            launches[0].spend_cap_cents, 300,
+            "巨帽档 {tag} reader 帽 = min(spec 300, 饱和后 plan 帽) = 300（非负、非 1）"
+        );
+        assert_eq!(
+            launches[1].spend_cap_cents, 298,
+            "巨帽档 {tag} writer 帽 = 环级帽 300 − reader 已用 2¢"
+        );
+        std::fs::remove_dir_all(&base).ok();
+    }
+}
