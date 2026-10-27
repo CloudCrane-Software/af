@@ -19,6 +19,10 @@
 #           AF/bin/cosign、AF/poc/poc-cue/bin/cue、AF/poc/poc-cas 真实测试资产；
 #           step9 可选依赖 coqc（PATH）、Kani 0.68.0（tmpfs /dev/shm/fv0，缺席 WARN）。
 # 可重复性: 全部路径相对本脚本所在仓库根；产物写 ci/out/（可整目录删除重跑）。
+# step0 预检: 工具/组件/workspace manifest 之外含 /tmp 配额护栏——TMPDIR 落在
+#             /tmp 树且可用 <2GB 时自动 export 磁盘 TMPDIR=$HOME/af-ci-tmp 并
+#             登记 ci/out/step0.log（史实：/tmp usrquota 默认 TMPDIR 曾致
+#             os error 122 连锁门红，改磁盘 TMPDIR 后九门全绿）。
 # 退出码: 0=全绿；1=有硬门失败（所有步骤仍会跑完，一次拿全量诊断）；
 #         step9 advisory 失败不影响退出码（SUMMARY 标 ADVISORY-WARN）。
 # =============================================================================
@@ -62,6 +66,39 @@ if [ -f "$HOME/.cargo/env" ]; then
   source "$HOME/.cargo/env"
 fi
 rustup component add rustfmt clippy >>"$OUT/step0.log" 2>&1
+# ---- 0.x /tmp 配额护栏（2026-10-27 合流发布批固化） ---------------------------
+# 史实：CI 曾因 /tmp usrquota（tmpfs 每用户配额）下默认 TMPDIR 建到一半报
+# os error 122（Disk quota exceeded）连锁多门红；把 TMPDIR 改到磁盘后九门全绿。
+# 护栏（step0 预检，最小实现——机器强制优于 runbook 文档化）：
+#   条件一 TMPDIR 指向 /tmp 树（未设时默认即 /tmp）；
+#   条件二 该文件系统可用空间 <2GB（配额紧张）；
+#   两条件同时命中 ⇒ 自动 export 磁盘 TMPDIR=$HOME/af-ci-tmp 并登记 step0.log；
+#   候选盘并不更空裕（同文件系统）时保持原样并 WARN——改挂同紧盘无意义。
+# 不紧张则零扰动放行（不写日志、不改环境）。
+tmp_quota_guard() {
+  local d="${TMPDIR:-/tmp}"
+  [ -d "$d" ] || d=/tmp
+  local real; real="$(cd "$d" 2>/dev/null && pwd -P)" || return 0
+  case "$real" in /tmp|/tmp/*) ;; *) return 0 ;; esac   # 条件一：/tmp 树
+  local avail_kb; avail_kb="$(df -P "$real" 2>/dev/null | awk 'NR==2{print $4}')"
+  local min_kb=$((2*1024*1024))                          # 2GB 紧张阈值
+  [ "${avail_kb:-0}" -lt "$min_kb" ] || return 0         # 条件二：不紧张即放行
+  local disk="$HOME/af-ci-tmp"
+  mkdir -p "$disk" || return 0
+  local disk_avail; disk_avail="$(df -P "$disk" 2>/dev/null | awk 'NR==2{print $4}')"
+  if [ "${disk_avail:-0}" -gt "${avail_kb:-0}" ]; then
+    export TMPDIR="$disk"
+    printf '[tmp-guard] %s TMPDIR 原指向 %s（/tmp 树，可用 %sKB < %sKB 阈值）——已自动改挂磁盘 TMPDIR=%s（可用 %sKB；史实：/tmp usrquota 默认 TMPDIR 曾致 os error 122 连锁门红，改磁盘 TMPDIR 后九门全绿）\n' \
+      "$(date '+%F %T')" "$real" "$avail_kb" "$min_kb" "$disk" "$disk_avail" >> "$OUT/step0.log"
+    printf '  [0] /tmp 配额护栏命中：TMPDIR 改挂 %s（/tmp 可用 %sKB < 2GB；磁盘可用 %sKB）\n' \
+      "$disk" "$avail_kb" "$disk_avail"
+  else
+    printf '[tmp-guard] %s WARN：TMPDIR=%s 可用 %sKB < %sKB 阈值，但候选磁盘 %s 可用 %sKB 并不更空裕——保持原 TMPDIR（改挂同紧盘无意义；如门红请手工指定更空裕的 TMPDIR）\n' \
+      "$(date '+%F %T')" "$real" "$avail_kb" "$min_kb" "$disk" "$disk_avail" >> "$OUT/step0.log"
+    printf '  [0] /tmp 配额护栏 WARN：无更空裕磁盘候选，保持 TMPDIR=%s\n' "$real"
+  fi
+}
+tmp_quota_guard
 PREFLIGHT=()
 for tool in cargo python3 sudo unshare "$AF_ROOT/bin/cosign" "$AF_ROOT/poc/poc-cue/bin/cue"; do
   if ! command -v "$tool" >/dev/null 2>&1 && [ ! -x "$tool" ]; then
