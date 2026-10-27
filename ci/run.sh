@@ -234,6 +234,40 @@ fv_advisory() {
     echo "9a Rocq 陈述库 coqc 类型检查: ${rp}/10 通过${rf:+，$rf 失败}"
     rm -rf "$RP"
     [ "$rp" -eq 10 ] || rc=1
+    # —— 9a-2 定理清单/陈述对账（红队 W3-C29）：coqc 只查陈述良构，删除定理
+    # 或改前提/结论（弱化）可能照过（全库 Admitted 形态 21 条）——按文件计
+    # 数拦不住证明载体缩水。对账 theorems-manifest.txt：①定理名集合逐位；
+    # ②陈述块（^Theorem 起、^Proof. 前止）规范串 SHA-256。有意变更定理面须
+    # 同步更新清单（承 9b harness 计数断言 32/0/32 同一登记纪律）；仅改证明
+    # 体（Admitted→Qed）不触发。未纳入 step9 的证明集（确定性组 17 harness、
+    # Verus 29、proofs/kani 镜像）继续明确标为覆盖外（见本文件头注）。
+    local MAN="$AF_ROOT/proofs/rocq-规范库-v0/theorems-manifest.txt"
+    local RPDIR="$AF_ROOT/proofs/rocq-规范库-v0"
+    if [ ! -f "$MAN" ]; then
+      echo "9a FAIL: 定理清单对账正本缺席（$MAN）——陈述库漂移防护失效"
+      rc=1
+    else
+      local man_names now_names man_hash now_hash
+      man_names=$(grep -v '^#' "$MAN" | awk -F'\t' '$1 != "statements-sha256" && NF >= 2 {print $2}' | sort)
+      now_names=$(grep -h "^Theorem " "$RPDIR"/T*.v | sed 's/^Theorem \([^ :]*\).*/\1/' | sort)
+      man_hash=$(grep '^statements-sha256' "$MAN" | awk '{print $2}')
+      now_hash=$(
+        (cd "$RPDIR" && for f in T*.v; do
+          sed -n '/^Theorem /,/^Proof\./p' "$f" | sed '/^Proof\./d'
+        done) | sha256sum | cut -d' ' -f1
+      )
+      if [ "$man_names" != "$now_names" ]; then
+        echo "9a FAIL: 定理名集合漂移（期望 $(echo "$man_names" | wc -l) 条 ↔ 实得 $(echo "$now_names" | wc -l) 条；差异：$(comm -3 <(echo "$man_names") <(echo "$now_names") | tr '\n' ' '))——定理被删/改名或有增，须更新 theorems-manifest.txt"
+        rc=1
+      fi
+      if [ "$man_hash" != "$now_hash" ]; then
+        echo "9a FAIL: 定理陈述漂移（SHA-256 期望 ${man_hash:0:12}… ↔ 实得 ${now_hash:0:12}…）——陈述/前提被弱化或改写，须更新 theorems-manifest.txt 并附裁决依据"
+        rc=1
+      fi
+      if [ "$man_names" = "$now_names" ] && [ "$man_hash" = "$now_hash" ]; then
+        echo "9a-2 定理清单对账: $(echo "$man_names" | wc -l) 条定理名逐位一致 + 陈述块 SHA-256 一致（${man_hash:0:12}…）"
+      fi
+    fi
   else
     echo "9a WARN: coqc 不在 PATH——Rocq 面 advisory 未跑（工具缺席，非内容失败）"
     rc=1

@@ -1,0 +1,37 @@
+# =============================================================================
+# Rocq 陈述库定理清单对账正本（step9 9a-2 对账依据；红队 W3-C29）
+#
+# 背景：coqc 只查陈述良构（全库 Proof. Admitted. 形态 21 条）——删除定理、
+#   改动前提/结论（弱化）均可能照过 coqc，step9 9a 原按「文件数 10/10」计数
+#   拦不住证明载体缩水/弱化（裁判亲验：整条删除 B20_envelope_type_checked_E2201
+#   后 coqc 仍 10/10 PASS）。
+# 对账两半（ci/run.sh 9a-2 逐项执行，任一漂移即 9a FAIL）：
+#   ①定理名集合：本清单数据行（<文件>\t<定理名>，21 行）↔ `grep -h "^Theorem "
+#     T*.v` 提取名集合（sort 后逐位比对）；
+#   ②陈述哈希：各文件 `^Theorem ` 行起至 `^Proof\.` 行前（不含）的陈述块按
+#     T01..T10 文件名序拼接，SHA-256 ↔ 本清单 statements-sha256 行。
+# 纪律：有意增删定理或修改陈述（含前提）须同步更新本清单（承 9b harness
+#   计数断言 32/0/32 同一登记纪律）；仅改证明体（Admitted→Qed 等）不触发。
+# =============================================================================
+T01_双跑逐位一致.v	C01_double_run_bit_identical
+T02_Vec稳定排序.v	C03_output_canonical_function_of_multiset
+T03_route归一化互定.v	C04_normalize_mutually_determined
+T03_route归一化互定.v	C04_normalize_pure_rewrite
+T04_route守卫恰一命中.v	B14_normalized_guards_pairwise_disjoint
+T04_route守卫恰一命中.v	B15_route_exactly_one_hit
+T05_INV2写者集合恰一.v	A07_inv2_writer_set_exactly_one_soundness
+T06_单写者无并发写冲突.v	A10_no_concurrent_write_conflict
+T06_单写者无并发写冲突.v	A10_writer_closure_completeness
+T07_carried覆盖E2211.v	A09_carried_coverage_completeness
+T07_carried覆盖E2211.v	A09_carried_coverage_soundness
+T08_loop迭代边界E2002.v	B01_iter_counter_invariant
+T08_loop迭代边界E2002.v	B01_loop_guard_missing_rejected
+T08_loop迭代边界E2002.v	B01_loop_guard_zero_rejected_E2002
+T08_loop迭代边界E2002.v	B01_no_new_round_on_exhaustion
+T09_安全点必经E2004.v	B06_round_without_safety_not_counted
+T09_安全点必经E2004.v	B06_safety_guard_empty_rejected_E2004
+T09_安全点必经E2004.v	B06_safety_guard_missing_rejected
+T09_安全点必经E2004.v	B06_safety_point_mandatory
+T10_envelope血缘包装.v	B20_envelope_handoff_lineage_complete
+T10_envelope血缘包装.v	B20_envelope_type_checked_E2201
+statements-sha256	57f6393869e97ccf06b56ae1945fe6caa5ff1e2fa1452be7ca26053feebb55d4
