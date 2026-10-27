@@ -14,7 +14,7 @@
 
 **17/17 harness 内核 VERIFIED-SUCCESSFUL（Kani 0.68.0 / CBMC 6.11.0 终跑单次全绿），覆盖 11 条陈述**（C-01/C-02/C-03/C-07 + B-01/B-03/B-04/B-06 + B-09/B-11/B-13）；**3 条标记已完成**（B-14/B-15/C-04——FV-0.1 route::normalize 三性质 12 verified/0 errors，按指令不重证）；**C-05 部分证据**（镜像签名纯度+源码锚，全程序性质不可单 harness 全判——陈述工具注记原文即「混合证据形态」）；**C-06/C-08/C-09 受阻归因**（工具不可达/病态面，与 theorems-v1 审计修订注记一致）。
 
-> **全库覆盖率（红队 W1-C42 补登，2026-10-26；W2-C42/C43 机算勘误后 2026-10-27 回填；计数经下方 §三.6 `coverage-check` 块机算）**：theorems-v1 共 **57 条义务**（A16/B23/C9/D9，`grep -c '^## [A-D]-'` 机算），四流合计 **40 条有内核裁决载体**（Kani INV 32 harness→A 全 16；本表 Kani 17 harness→11 条；FV-0.1→B-14/B-15/C-04；状态机组 Verus 29 verified→D 全 9；**B-16→FV-0.2 `mirror_normalize_all_gotos_exhaustive` 27-goto 分配全枚举 Kani harness 3 verified**，FV0-工具链PoC-20261024.md:79-80 + theorems-v1.md:362-368 工具栏在案——原口径误列无载体，红队 W2-C43 勘误补入；**证据工件 `proofs/kani/`（含 kani-run.log 3 verified）已于 2026-10-27 红队 W2-C-37 入仓，在仓可复核**）= **40/57（70.2%）**；其余 17 条按「部分证据（C-05）/仅陈述（B-20，Rocq T10 Admitted）/受阻（C-06/08/09）/无载体（12 条，B-12 有覆盖注记仍计无载体）」如实分类，**不以覆盖率数字冒充全量已证**——分类与清单见 §三.6。
+> **全库覆盖率（红队 W1-C42 补登，2026-10-26；W2-C42/C43 机算勘误后 2026-10-27 回填；计数经下方 §三.6 `coverage-check` 块机算）**：theorems-v1 共 **57 条义务**（A16/B23/C9/D9，`grep -c '^## [A-D]-'` 机算），四流合计 **40 条有内核裁决载体**（Kani INV 32 harness→A 全 16；本表 Kani 17 harness→11 条；FV-0.1→B-14/B-15/C-04；状态机组 Verus 29 verified→D 全 9；**B-16→FV-0.2 镜像 Kani harness：合法域 `mirror_normalize_all_gotos_exhaustive` 27-goto 分配全枚举 3 verified + 非法编码域 `mirror_normalize_illegal_goto_e2102_exact_count`（W3-C28 补，E2102 半边——合法域内该分支不可达、原仅单测依据）4 verified/0 failures 复跑**，FV0-工具链PoC-20261024.md:79-80 + theorems-v1.md:362-368 工具栏在案——原口径误列无载体，红队 W2-C43 勘误补入；**证据工件 `proofs/kani/`（含 kani-run.log：2026-10-27 W3-C28 复跑段 4 verified 在顶、首跑 3 verified 历史段保留）已于 2026-10-27 红队 W2-C-37 入仓，在仓可复核**）= **40/57（70.2%）**；其余 17 条按「部分证据（C-05）/仅陈述（B-20，Rocq T10 Admitted）/受阻（C-06/08/09）/无载体（12 条，B-12 有覆盖注记仍计无载体）」如实分类，**不以覆盖率数字冒充全量已证**——分类与清单见 §三.6。
 
 ## 一、内核裁决汇总（实跑输出，摘自 logs/kani-suite-final.log）
 
@@ -78,6 +78,13 @@ covered-kani-17: B-01 B-03 B-04 B-06 B-09 B-11 B-13 C-01 C-02 C-03 C-07
 covered-fv01: B-14 B-15 C-04
 covered-verus-d: D-01..D-09
 covered-fv02-goto-enum: B-16
+  # 红队 W3-C28 勘误+补证（2026-10-27）：B-16 的 E2102 半边原仅有 af-dsl 单测
+  # 依据（合法域 27 分配全枚举内 valid 恒真、E2102 分支不可达，`已机器穷尽
+  # E2102` 对该半边不成立）——proofs/kani 新增 mirror_normalize_illegal_goto_
+  # e2102_exact_count（含非法编码 3 的符号域 4×4×4，断言 E2102 计数=非法
+  # 恰现次数双向精确 + E2101 抑制 + 不产边集），cargo kani 亲跑 4 verified/
+  # 0 failures（proofs/kani/kani-run.log 顶部 W3-C28 复跑段），E2102 半边
+  # 内核证据补齐，covered 维持且口径自此成立。
 partial: C-05
 statement-admitted: B-20
 blocked: C-06 C-08 C-09

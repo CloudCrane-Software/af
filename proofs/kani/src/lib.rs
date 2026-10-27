@@ -87,7 +87,10 @@ fn mirror_normalize(gotos: [u8; 3]) -> MirrorOut {
 }
 
 /// **穷尽空间**：goto 分配 3×3×3 = 27（两规则 + default，各 ∈ {t0,t1,exit}，
-/// 域内即全枚举——「非法 goto」在编码域外，由 pending 模块与单测覆盖）。
+/// 域内即全枚举——「非法 goto」在编码域外，由下方
+/// mirror_normalize_illegal_goto_e2102_exact_count（红队 W3-C28 补，含编码 3
+/// 的符号域精确断言 E2102 计数）与 af-dsl route 单测覆盖；pending 模块无
+/// route 探针，原文「由 pending 模块…覆盖」系误记，W3-C28 勘误）。
 /// 验证：
 /// - 违例⇒Err 映射精确（E2102=同目标重复分支；E2101=覆盖缺失且仅在其他两零时判）；
 /// - 合法⇒边集恰 2 条、目标严格升序 0<1、守卫=first-hit 规则或 default；
@@ -124,6 +127,39 @@ fn mirror_normalize_all_gotos_exhaustive() {
             assert_eq!(out.e2101, 0);
         }
     }
+}
+
+/// **穷尽空间（非法编码域，红队 W3-C28）**：goto 分配含非法编码 3 的符号域
+/// （3 既非出边目标也非 exit——即 E2102 域）。合法域 27 分配（上
+/// harness）内 `valid` 恒真、:55-57 的 E2102 分支不可达——B-16 的 E2102
+/// soundness/completeness 半边此前零内核证据（上游正本「已机器穷尽
+/// E2102/E2103 计数语义」对 E2102 半边不成立，红队 W3-C28）。本 harness
+/// 在含非法编码的域上精确断言 E2102 计数语义：
+/// - **双向精确**：E2102 计数 = 非法 goto（非出边目标且非 exit）恰现次数
+///   （soundness：非法必计数；completeness：计数恰等于非法次数，无多判）；
+/// - **抑制规则**：E2102 > 0 ⇒ E2101 恒 0（覆盖判定仅在 E2102=E2103=0 时
+///   进行——route.rs:137-139 实装的抑制语义镜像面）；
+/// - **fail-closed**：任一违例 ⇒ 不产边集。
+#[kani::proof]
+fn mirror_normalize_illegal_goto_e2102_exact_count() {
+    let g0: u8 = kani::any();
+    let g1: u8 = kani::any();
+    let gd: u8 = kani::any();
+    kani::assume(g0 <= 3 && g1 <= 3 && gd <= 3);
+    kani::assume(g0 == 3 || g1 == 3 || gd == 3);
+    let out = mirror_normalize([g0, g1, gd]);
+    let illegal = |g: u8| u8::from(g != EXIT && g >= N_TARGETS);
+    assert_eq!(
+        out.e2102,
+        illegal(g0) + illegal(g1) + illegal(gd),
+        "E2102 计数 = 非法 goto 恰现次数（soundness + completeness 双向）"
+    );
+    assert!(out.e2102 >= 1, "域过滤保证至少一个非法编码在场");
+    assert_eq!(
+        out.e2101, 0,
+        "E2102 在场 ⇒ E2101 抑制（覆盖判定被短路）"
+    );
+    assert!(out.edges.is_none(), "任一违例 → Err（不产边集，fail-closed）");
 }
 
 /// **穷尽空间**：赋值 2×2 = 4（两规则 when 的全部真值组合）。

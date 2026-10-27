@@ -1,3 +1,21 @@
+# 红队 W3-C28 复跑（2026-10-27，af 仓 phase2-rt-af-dsl @ 本批）：新增非法编码域 harness
+# mirror_normalize_illegal_goto_e2102_exact_count（B-16 E2102 半边内核证据补齐）；
+# 命令：RUSTUP_HOME=/dev/shm/fv0/rustup RUSTUP_TOOLCHAIN=nightly-2026-08-21-x86_64-unknown-linux-gnu
+#       PATH=/dev/shm/fv0/kani-0.68.0/bin:$PATH cargo kani（CARGO_TARGET_DIR 外置）
+# 历史正本（3 verified）见本文件后续保留段——W3-C28 后为 4 verified/0 failures。
+
+Check 118: std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq.pointer_dereference.12
+	 - Status: SUCCESS
+	 - Description: "dereference failure: invalid integer address"
+	 - Location: ../../../../../runner/.rustup/toolchains/nightly-2026-08-21-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library/core/src/cmp.rs:2153:63 in function std::cmp::impls::<impl std::cmp::PartialEq for usize>::eq
+SUMMARY:
+ ** 0 of 118 failed (4 unreachable)
+VERIFICATION:- SUCCESSFUL
+Verification Time: 0.24829921s
+Manual Harness Summary:
+Complete - 4 successfully verified harnesses, 0 failures, 4 total.
+
+# ===== 历史正本（2026-10-24 首跑 3 verified，原 kani-run.log 全文）=====
 Kani Rust Verifier 0.68.0 (cargo plugin)
 CBMC 6.11.0
 warning: use of an unstable feature
