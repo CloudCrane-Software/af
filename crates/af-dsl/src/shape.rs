@@ -165,10 +165,11 @@ pub fn check_schema_shape(doc: &Document) -> Vec<crate::error::Violation> {
     }
     // human.resume.schema 同门覆盖全部作用域（红队 W3-C15）：原只遍历根层
     // doc.nodes，loop/map 体内的 human 逃逸门禁——而嵌套 human 恰是真实语料
-    // 的常态（ADAS human_stop / sample5 approve / SWE-agent human_help 均在
-    // 构造体内），add_resume 对其 schema 走同一 synth_from_schema，标量
-    // schema ⇒ resume 绑定 Null、CEL 布尔判定静默无证据。与 check_vocab 同
-    // 用 walk_nodes 深度遍历（同模块同一遍历口径）。
+    // 的常态（human_stop/approve/human_help 等验证 human 全在构造体内，
+    // 中立性词表纪律：语料专名不直书，见 af/packages 注册面），add_resume
+    // 对其 schema 走同一 synth_from_schema，标量 schema ⇒ resume 绑定 Null、
+    // CEL 布尔判定静默无证据。与 check_vocab 同用 walk_nodes 深度遍历
+    //（同模块同一遍历口径）。
     walk_nodes(doc, &mut |n, _scope| {
         let Some(h) = &n.human else { return };
         if let Some(detail) = schema_node_violation(

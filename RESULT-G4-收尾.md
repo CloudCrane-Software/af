@@ -99,8 +99,12 @@ Voyager      plan.voyager_curriculum@1.0+c3aa4b53250d
   再核行（digest 逐位不变复测 + 15/15 cmp 全等）；登记值维持
   d5f3bd3a… → **63c3478e…**（63 条终态，Phase 2 已登记，本批复核维持）。
 - **词表再生成**（机械源②=components.json+manifest 图名再拆段；G4 新组件/
-  新模板纳入考量）：黑名单 **41→46 词**——补登 `reflectkit`（pkg.reflexkit.*
-  既有段，历史收敛正本漏登）+ 新增 `reportkit`（包段）/`paper`
+  新模板纳入考量）：黑名单 **41→46 词**——补登 `reflexkit`（pkg.reflexkit.*
+  既有段，历史收敛正本漏登。**红队 W3-C35 勘误 2026-10-27：本批登记时词形
+  误书 `reflectkit`（多一 t），对自认覆盖的 pkg.reflexkit.* 六个注册组件
+  pattern.findall 恒空、扫描覆盖率 0——已按实际段名更正，neutrality_scan.py
+  --self-test 增词形一致性回归（reflexkit 命中 pkg.reflexkit.search）**）+
+  新增 `reportkit`（包段）/`paper`
   （pkg.reportkit.paper_report 图段）/`web_fetch`（pkg.report.web_fetch，同
   web_search ③④ 先例）/`pdf`（pkg.report.pdf_extract 截段）。不入表（收敛
   判定登记于词表头注）：`report`（rule-1 核心机制词）、`render/doc/notes/
