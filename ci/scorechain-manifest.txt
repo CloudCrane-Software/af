@@ -17,7 +17,7 @@
 # 行格式：<TAB> 分隔：路径 <TAB> sha256 <TAB> 用途
 # =============================================================================
 # 路径	sha256	用途
-crates/af-execline/src/judge.rs	1e43d6580a49e389e7042c873cd3cabcfdfe4898adf0d6602a73be47fc3ecd09	swev 判分门本体（装载期指纹门；swev-judge.py 冻结锚所在）——锚换版登记 2026-10-27 红队 W2-C-51 裁决（JudgeLocator 派生 PartialEq/Eq 供 graph 臂 wiring 逐字段钉死；域分支 1abbbc4 有意变更，合龙批补登）
+crates/af-execline/src/judge.rs	da945f506b7bfcfe670b9b8bb874a24fd4e437828666516e7db98b3e8a9bf250	swev 判分门本体（装载期指纹门+导入链信任锚；swev-judge.py 冻结锚所在）——锚换版登记 2026-10-27 红队 W3-C-34 裁决（判分面真值入锚：导入链六件 .py 源逐件 sha256 门 + 子进程 -B/PYTHONDONTWRITEBYTECODE/受控空 PYTHONPYCACHEPREFIX 三道执行面防线；上版 1e43d658… 登记 2026-10-27 红队 W2-C-51）；域分支 phase2-rt-af-execline 有意变更，判据真值面防护本批补齐
 af/packages/reportkit/units/citation_unit.py	0c34b5956bf4a09aef24368f5f4ab6cf7a1cd97132ce8643c909dacbeb9905dc	report 判分核（citation；ReportJudgeLocator 同锚）
 af/packages/reportkit/units/rubric_unit.py	e8b67eb676f684756de6b36d44cb9f7c964267acafa074dc6d4df33d7c1f2067	report 判分核（rubric；ReportJudgeLocator 同锚）——锚换版登记 2026-10-27 红队 W2-C-50 裁决（判分链加载侧自证补齐：import render 后校验实际执行模块防 pyc 影子；域分支 e78847f 有意变更，与 report_unit.rs:71 production 锚同步换版，合龙批补登）；再登记 2026-10-27 红队 W3-C-06 裁决（防再生：import render 前置 sys.dont_write_bytecode=True，裸跑无 -B 亦零字节码落盘，修复「已清是一次性动作」失实前提；有意变更，与 report_unit.rs production 锚同步换版）
 af/packages/reportkit/tools/render.py	255f68f7795706637749a9559fbb85444afcd92687b2398012dd94b077b4db76	report 判分基准（R5 渲染器；W1-C61 入指纹门）

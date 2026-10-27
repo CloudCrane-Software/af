@@ -621,6 +621,7 @@ fn u1_swebench_eval_fingerprint_gate_fails_loud_before_any_container_work() {
         python: PathBuf::from("/nonexistent/python"),
         script: PathBuf::from("/nonexistent/swev-judge.py"),
         script_sha256: "0".repeat(64),
+        import_chain: Vec::new(),
     };
     let work = std::env::temp_dir().join(format!("pkg-sweng-u1-{}", std::process::id()));
     std::fs::create_dir_all(&work).unwrap();

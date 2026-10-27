@@ -55,13 +55,14 @@ fn bench_swev_src() -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("读 {} 失败: {err}", path.display()))
 }
 
-// ---- 方案 §3.2-1：argv 契约（恰好三个位置参数、无 env 注入、不经 wrapper shell）----
+// ---- 方案 §3.2-1：argv 契约（判分脚本恰三个位置参数、判分防线 env、不经 wrapper shell）----
 
-/// argv 契约行为证据：对抗路径（空格/引号/$/;/反斜杠）逐字节穿透、恰五元素
-/// [python, script, task_json, log, diff]（判分脚本恰收到三个位置参数）、
-/// 子进程原始环境与父进程全等（无注入/清洗，python3 假解释器不改动继承
-/// environ）、父进程不是 bash/ssh 包装层。若实现改成 bash -c 字符串拼接或
-/// 加了 env 注入，四断言至少一个失配。
+/// argv/env 契约行为证据（红队 W3-C34 演进版）：对抗路径（空格/引号/$/;/反斜杠）
+/// 逐字节穿透、恰六元素 [python, -B, script, task_json, log, diff]（-B 为解释器
+/// 旗标，判分脚本仍恰收到三个位置参数）、子进程环境 = 父环境 + 恰两道判分
+/// 防线变量（PYTHONDONTWRITEBYTECODE=1 + 全新空 PYTHONPYCACHEPREFIX——
+/// venv 在场影子 pyc 读取侧整体不可达）、父进程不是 bash/ssh 包装层。
+/// 若实现改成 bash -c 字符串拼接、丢 -B、或增删其他 env，断言至少一个失配。
 #[test]
 fn judge_invoke_argv_contract_no_env_injection_no_wrapper_shell() {
     let root = temp_root("argv");
@@ -111,6 +112,7 @@ fn judge_invoke_argv_contract_no_env_injection_no_wrapper_shell() {
         script_sha256: sha256_of(&script),
         python: python.clone(),
         script: script.clone(),
+        import_chain: Vec::new(),
     };
 
     let output = invoke(&locator, &task_json, &log, &diff).unwrap();
@@ -120,7 +122,8 @@ fn judge_invoke_argv_contract_no_env_injection_no_wrapper_shell() {
         r#"{"resolved": true}"#
     );
 
-    // ① 恰五元素、对抗路径逐字节穿透（wrapper shell 的字符串拼接必失真）。
+    // ① 恰六元素、对抗路径逐字节穿透（wrapper shell 的字符串拼接必失真）；
+    //    -B 紧跟解释器、在脚本之前（解释器旗标不占判分脚本参数位）。
     let argv: Vec<String> = std::fs::read_to_string(&argv_dump)
         .unwrap()
         .lines()
@@ -130,15 +133,20 @@ fn judge_invoke_argv_contract_no_env_injection_no_wrapper_shell() {
         argv,
         vec![
             python.display().to_string(),
+            "-B".to_string(),
             script.display().to_string(),
             task_json.display().to_string(),
             log.display().to_string(),
             diff.display().to_string(),
         ],
-        "argv 契约失守：恰 [python, script, task_json, log, diff] 五元素，一个不多"
+        "argv 契约失守：恰 [python, -B, script, task_json, log, diff] 六元素\
+         （判分脚本仍恰三个位置参数）"
     );
 
-    // ② 无 env 注入：子进程环境与测试进程环境全等（无增无删无改）。
+    // ② env 契约（W3-C34）：子进程环境 = 父环境 + 恰两道判分防线变量，
+    //    其余键无增无删无改。PYTHONPYCACHEPREFIX 指向受控全新空目录——
+    //    判分运行后零 .pyc（tripwire 不变量：有字节码出现即有子进程绕过
+    //    禁写防线，审计线索）。
     let dumped: HashMap<String, String> = std::fs::read_to_string(&env_dump)
         .unwrap()
         .lines()
@@ -146,7 +154,36 @@ fn judge_invoke_argv_contract_no_env_injection_no_wrapper_shell() {
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect();
     let mine: HashMap<String, String> = std::env::vars().collect();
-    assert_eq!(dumped, mine, "子进程环境 ≠ 父进程环境 = 有 env 注入或清洗");
+    let mut expected = mine.clone();
+    let prefix = dumped
+        .get("PYTHONPYCACHEPREFIX")
+        .cloned()
+        .unwrap_or_default();
+    expected.insert("PYTHONDONTWRITEBYTECODE".into(), "1".into());
+    expected.insert("PYTHONPYCACHEPREFIX".into(), prefix.clone());
+    assert_eq!(
+        dumped, expected,
+        "子进程环境 ≠ 父环境+两道判分防线变量 = 有额外 env 注入/清洗/缺失"
+    );
+    let prefix_path = PathBuf::from(&prefix);
+    assert!(
+        prefix_path.starts_with(std::env::temp_dir()),
+        "PYTHONPYCACHEPREFIX 必须是受控 temp 目录，实得 {prefix}"
+    );
+    assert!(
+        prefix_path
+            .file_name()
+            .is_some_and(|n| n.to_string_lossy().starts_with("af-judge-pycache-")),
+        "PYTHONPYCACHEPREFIX 目录名须可辨识（af-judge-pycache-*），实得 {prefix}"
+    );
+    assert!(prefix_path.is_dir(), "受控空缓存目录应已建：{prefix}");
+    let stray_pyc: Vec<PathBuf> = walk_files(&prefix_path)
+        .filter(|p| p.extension().is_some_and(|ext| ext == "pyc"))
+        .collect();
+    assert!(
+        stray_pyc.is_empty(),
+        "判分运行后受控缓存目录必须零 .pyc（tripwire）：{stray_pyc:?}"
+    );
 
     // ③ 不经 wrapper shell：假 python 的父进程不得是 bash/ssh/timeout 等包装层
     //    （`bash -c`/`ssh host` 包一层，ppid 就换成它们）。argv 逐字节断言
@@ -166,6 +203,26 @@ fn judge_invoke_argv_contract_no_env_injection_no_wrapper_shell() {
     }
 }
 
+/// 递归列文件（tripwire 检查用）。
+fn walk_files(dir: &Path) -> impl Iterator<Item = PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(current) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&current) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                out.push(path);
+            }
+        }
+    }
+    out.into_iter()
+}
+
 // ---- 方案 §3.2-2：指纹门 fail-loud（EX3xxx）----
 
 /// 指纹门：锚匹配放行；改字节副本（任务书草案原话）在原锚下必拒，EX3002、
@@ -181,6 +238,7 @@ fn judge_fingerprint_gate_fail_loud_ex3002() {
         python: root.join("no-python-needed"),
         script: original.clone(),
         script_sha256: sha256_of(&original),
+        import_chain: Vec::new(),
     };
     good.check_fingerprint().unwrap();
 
@@ -222,6 +280,61 @@ fn judge_fingerprint_gate_fail_loud_ex3002() {
     assert!(err.to_string().starts_with("EX3002:"), "{}", err);
 }
 
+/// 导入链信任锚门（红队 W3-C34）：真判分逻辑住在判分脚本 from-import 解析
+/// 到的 venv 模块里——只锚 5KB 包装脚本等于真值面裸奔。链成员（.py 源）
+/// 改一字节 / 缺席 = EX3002 fail-loud，与脚本指纹门同code同款不降级；
+/// 空链 = 自定义 locator 语义「只核对已声明成员」（测试/历史回放）。
+#[test]
+fn judge_import_chain_gate_fail_loud_ex3002() {
+    let root = temp_root("chain");
+    let script = root.join("judge.py");
+    std::fs::write(&script, b"print('judge')\n").unwrap();
+    let chain_dir = root.join("site-packages/swebench/harness");
+    std::fs::create_dir_all(&chain_dir).unwrap();
+    let grading = chain_dir.join("grading.py");
+    std::fs::write(&grading, b"def get_eval_report(): ...\n").unwrap();
+    let anchor_sha = sha256_of(&grading);
+
+    // ① 链成员全对 → 放行。
+    let good = JudgeLocator {
+        python: root.join("no-python-needed"),
+        script: script.clone(),
+        script_sha256: sha256_of(&script),
+        import_chain: vec![af_execline::ImportAnchor {
+            path: grading.clone(),
+            sha256: anchor_sha.clone(),
+        }],
+    };
+    good.check_fingerprint().unwrap();
+
+    // ② 链成员被改一字节（判据翻转的投毒形态）→ EX3002，实测指纹进文案。
+    std::fs::write(&grading, b"def get_eval_report(): return RESOLVED_TRUE\n").unwrap();
+    let err = good.check_fingerprint().unwrap_err();
+    assert_eq!(err.code(), ErrorCode::JudgeFingerprintMismatch);
+    let msg = err.to_string();
+    assert!(msg.starts_with("EX3002:"), "{msg}");
+    assert!(msg.contains("不降级"), "{msg}");
+    assert!(
+        msg.contains(&sha256_of(&grading)),
+        "导入链成员实测指纹必须进文案: {msg}"
+    );
+    assert!(msg.contains(&anchor_sha), "声明锚必须进文案: {msg}");
+
+    // ③ 链成员缺席（venv 重装/模块被移）= 无法验真 → 拒跑。
+    std::fs::remove_file(&grading).unwrap();
+    let err = good.check_fingerprint().unwrap_err();
+    assert_eq!(err.code(), ErrorCode::JudgeFingerprintMismatch);
+    assert!(err.to_string().starts_with("EX3002:"), "{}", err);
+
+    // ④ 空链自定义 locator：只锚脚本，链零核对（回放/测试语义）。
+    let chain_free = JudgeLocator {
+        import_chain: Vec::new(),
+        ..good
+    };
+    std::fs::write(&grading, b"def get_eval_report(): ...\n").unwrap();
+    chain_free.check_fingerprint().unwrap();
+}
+
 // ---- 默认定位 = 本机现产值（af-bench swev.rs:205-209 硬编码的迁移）----
 
 #[test]
@@ -240,6 +353,52 @@ fn judge_production_locator_is_current_machine_values() {
         loc.script_sha256,
         "a292547f3bfce825b0b44997fd5cc145a5aa7ee89d8533729716c0275950617c"
     );
+    // 导入链锚（红队 W3-C34，2026-10-27 sha256sum 实测六件）：swev-judge.py
+    // 两个顶部 from-import 的包链（swebench、swebench.harness）+ 判定真值两
+    // 模块（grading.get_eval_report / test_spec.test_spec.make_test_spec）+
+    // 脚本条件导入的 constants 包（env yml 合成）。真判分逻辑住在这里——
+    // 路径与锚逐条钉死，venv 侧改动即门红。
+    let sp = PathBuf::from("/home/pan-ding/swev-venv/lib/python3.14/site-packages");
+    let expected: Vec<(&str, &str)> = vec![
+        (
+            "swebench/__init__.py",
+            "00776d61343153484ad2d5a43c2ce13202d7e4603de069ee2b112dc39390b862",
+        ),
+        (
+            "swebench/harness/__init__.py",
+            "6da23bf2681c43d063950f670923484df1c13631e444d9e3e7e8d20445165545",
+        ),
+        (
+            "swebench/harness/grading.py",
+            "88fc500ebaf692a53457149cec24dcf82dfa2d48f98021a894a087d275f61df4",
+        ),
+        (
+            "swebench/harness/constants/__init__.py",
+            "c12fe2671fd8b7d8af8f5c711fceb2ca684254e2c1b4cde448422a44b8d04e35",
+        ),
+        (
+            "swebench/harness/test_spec/__init__.py",
+            "19fe677f658b84984b086a11d037e54932865e72cb579b3196f74ca21218337e",
+        ),
+        (
+            "swebench/harness/test_spec/test_spec.py",
+            "f9ab368091b5770d2ab6e842e7d56161f87e70a20519576731c122e310820f4a",
+        ),
+    ];
+    assert_eq!(
+        loc.import_chain.len(),
+        expected.len(),
+        "导入链锚件数漂移（判分脚本 from-import 面变更须同步登记）"
+    );
+    for (anchor, (rel, sha)) in loc.import_chain.iter().zip(&expected) {
+        assert_eq!(anchor.path, sp.join(rel), "导入链成员路径漂移: {rel}");
+        assert_eq!(anchor.sha256, *sha, "导入链成员锚漂移: {rel}");
+        assert_eq!(anchor.sha256.len(), 64, "锚须为 64 位十六进制: {rel}");
+        assert!(
+            anchor.sha256.chars().all(|c| c.is_ascii_hexdigit()),
+            "锚须为小写十六进制: {rel}"
+        );
+    }
     // 历史锚口径（0338566c…，rsi-drill 冻结件）随方案 §3.1 双锚并记：回放对账
     // 构造 Locator 指向冻结件 + 该锚即可，无内置构造器（P6 对拍如需再加）。
 }
