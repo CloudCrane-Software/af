@@ -51,8 +51,9 @@ fn sample5_route_guards() {
     );
 
     // approve：rules=[goto agent]，default=exit → 出边带首规则守卫；
-    // default:exit 无规则型 exit 分支 → 无节点 exit 守卫（结构性收束，
-    // 由 loop exit_when "resume.approved == true" 承担早退语义）
+    // default:exit 本就是 exit 分支 → 节点带全否守卫（红队 W1-C24：
+    // 此前 default:exit 的守卫被整体丢弃，靠 loop exit_when 兜底的
+    // 「结构性收束」仅 loop 内成立——非 loop 文档静默丢失默认分支守卫）
     let e = find_edge(&sg.edges, "approve", "agent");
     assert_cel(
         e.guard.as_ref().expect("route 节点出边必带守卫"),
@@ -60,7 +61,14 @@ fn sample5_route_guards() {
         &["resume"],
     );
     let approve = &sg.nodes.iter().find(|n| n.id == "approve").unwrap();
-    assert_eq!(approve.route_exit_guard, None);
+    assert_cel(
+        approve
+            .route_exit_guard
+            .as_ref()
+            .expect("default:exit 守卫记在节点"),
+        "!((resume.approved == false))",
+        &["resume"],
+    );
 
     // 非路由边无守卫
     assert_eq!(find_edge(&sg.edges, "agent", "tools").guard, None);
@@ -126,7 +134,13 @@ fn sample2_sample6_route_guards() {
     let e = find_edge(&sg2.edges, "qa", "engineer");
     assert_cel(e.guard.as_ref().unwrap(), "(qa.passed == false)", &["qa"]);
     let qa = &sg2.nodes.iter().find(|n| n.id == "qa").unwrap();
-    assert_eq!(qa.route_exit_guard, None);
+    assert_cel(
+        qa.route_exit_guard
+            .as_ref()
+            .expect("default:exit 守卫记在节点"),
+        "!((qa.passed == false))",
+        &["qa"],
+    );
 
     let (doc6, _) = common::sample("sample6.yaml");
     let p6 = af_compiler::lower(&doc6).expect("lowering 失败");

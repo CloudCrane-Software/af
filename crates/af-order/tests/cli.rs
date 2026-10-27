@@ -412,3 +412,228 @@ fn bad_spec_is_rejected_with_reason() {
     let out = run(&["submit", "--spec", "x.json"]);
     assert_eq!(out.status.code(), Some(2), "缺 --state 是用法错误");
 }
+
+// ---------- 红队修复批（W1）：C-41 / C-64 ----------
+
+/// C-41：换 line 重放被拒——身份面字段与预算同纪律（OR2003）。
+#[test]
+fn resubmit_with_different_line_is_rejected() {
+    let state = scratch("w1c41");
+    let spec = write_spec(&state, "order.json", &spec_text("wo-cli-w1c41", 7));
+    let first = submit(&spec, &state);
+    expect_ok(&first);
+
+    // 同 order_id、换 line（预算不变）：凭证面 line 钉死 → OR2003 拒绝。
+    let swapped = write_spec(
+        &state,
+        "order2.json",
+        r#"{"order_id":"wo-cli-w1c41","line":{"line_id":"line-other","line_version":"lv-1"},"budget":7}"#,
+    );
+    let second = submit(&swapped, &state);
+    assert!(
+        !second.status.success(),
+        "换 line 重放应拒绝：{}",
+        String::from_utf8_lossy(&second.stdout)
+    );
+    let err_text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&second.stderr),
+        String::from_utf8_lossy(&second.stdout)
+    );
+    assert!(err_text.contains("OR2003"), "稳定码 OR2003：{err_text}");
+    assert!(err_text.contains("line_id"), "点名字段：{err_text}");
+}
+
+/// C-64：stub 冒烟档 MES line_id 加 stub: 前缀——冒烟单与真单在 MES 账面
+/// 可判别（此前逐字段同形，mes_line_hour_mv 会把冒烟产量计入产线）。
+#[test]
+fn stub_submit_marks_mes_line_with_stub_prefix() {
+    let state = scratch("w1c64");
+    let spec = write_spec(&state, "order.json", &spec_text("wo-cli-w1c64", 7));
+    let out = submit(&spec, &state);
+    expect_ok(&out);
+    let events = MesFileWriter::load(&order_dir(&state, "wo-cli-w1c64").join("mes-events.jsonl"))
+        .expect("MES 可重载");
+    assert_eq!(events.len(), 4);
+    assert!(
+        events.iter().all(|e| e.line_id == "stub:line-poc"),
+        "冒烟档 MES line_id 应带 stub: 前缀：{:?}",
+        events.iter().map(|e| e.line_id.clone()).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn same_order_id_across_state_roots_gets_distinct_event_ids() {
+    // 红队 W2-C53：同 order_id + 同 line 落在两个 --state 根时，event_id 必须
+    // 带上运行实例判别量（订单目录规范路径哈希）——此前 event_id = stable_id
+    // （order_id 纯函数）+ kind + seq，两单逐字节同 id，CH 侧按 event_id 去重
+    // 的差量送批把第二单 4 条记账事件全部吞掉（shipped=0/already_in_ch=4）
+    // 且零告警（C-63 的 line 冲突判据只覆盖异 line，不覆盖跨 state 根）。
+    let root_a = scratch("xroot-a");
+    let root_b = scratch("xroot-b");
+    let spec = write_spec(&root_a, "order.json", &spec_text("wo-xroot", 5));
+
+    let first = submit(&spec, &root_a);
+    expect_ok(&first);
+    let second = submit(&spec, &root_b);
+    expect_ok(&second);
+
+    let events = |root: &Path| -> Vec<String> {
+        MesFileWriter::load(&order_dir(root, "wo-xroot").join("mes-events.jsonl"))
+            .expect("MES 可重载")
+            .into_iter()
+            .map(|event| event.event_id)
+            .collect()
+    };
+    let (a, b) = (events(&root_a), events(&root_b));
+    assert_eq!(a.len(), 4, "A 根四类跃迁齐全");
+    assert_eq!(b.len(), 4, "B 根四类跃迁齐全");
+    assert!(
+        a.iter().all(|id| !b.contains(id)),
+        "跨 state 根同 order_id 的 event_id 不得相撞（相撞即差量互吞）：A={a:?} B={b:?}"
+    );
+    // 同根内四事件仍互异（kind/seq 判别不破）。
+    assert_eq!(a.iter().collect::<std::collections::BTreeSet<_>>().len(), 4);
+}
+
+#[test]
+fn resubmit_with_different_line_version_is_rejected() {
+    // 红队 W2-C-35：W1-C41 的凭证 line 重放核对只钉 line_id 不钉 line_version
+    // ——LineBinding 两字段同属身份面（spec check_line 两键都强制非空），
+    // 重放时 bind_line 幂等跳过、订单保持首驱 line_version，本次只换
+    // line_version 的声明被静默吞掉且零诊断。与换 line_id 同性质 fail-loud
+    // （OR2003 点名 line_version）。旧行无此键不核对（历史盘兼容面不动）。
+    let state = scratch("w2c35");
+    let spec = write_spec(&state, "order.json", &spec_text("wo-cli-w2c35", 7));
+    expect_ok(&submit(&spec, &state));
+
+    // 同 order_id、同 line_id、只换 line_version：凭证面两键同纪律 → OR2003。
+    let swapped = write_spec(
+        &state,
+        "order2.json",
+        r#"{"order_id":"wo-cli-w2c35","line":{"line_id":"line-poc","line_version":"lv-2"},"budget":7}"#,
+    );
+    let second = submit(&swapped, &state);
+    assert!(
+        !second.status.success(),
+        "只换 line_version 的重放应拒绝：{}",
+        String::from_utf8_lossy(&second.stdout)
+    );
+    let err_text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&second.stderr),
+        String::from_utf8_lossy(&second.stdout)
+    );
+    assert!(err_text.contains("OR2003"), "稳定码 OR2003：{err_text}");
+    assert!(err_text.contains("line_version"), "点名字段：{err_text}");
+
+    // 订单绑定保持首驱版本不被漂移（账面 line_version 仍 lv-1）。
+    let voucher: serde_json::Value = serde_json::from_str(
+        &fs::read_to_string(order_dir(&state, "wo-cli-w2c35").join("voucher.json"))
+            .expect("凭证可读"),
+    )
+    .expect("凭证是 JSON");
+    assert_eq!(voucher["line_version"], "lv-1", "凭证钉首驱 line_version");
+}
+
+#[test]
+fn show_rejects_path_unsafe_order_ids() {
+    // 红队 W2-C39：show 的位置参数与 submit 共用 order_id 路径安全门——绝对
+    // 路径（Path::join 替换 state 根）、`..` 穿越、分隔符在此拒尽，不得读出
+    // state/orders/ 之外的账本（只读影响，但跨目录可读任意 ledger.jsonl）。
+    let state = scratch("show-unsafe");
+    for bad in ["../rogue", "/etc", "a/b", ".."] {
+        let out = run(&["show", bad, "--state", state.to_str().unwrap()]);
+        assert!(!out.status.success(), "show {bad:?} 应被拒");
+        // 错误面走 stderr（main.rs 薄壳接线）。
+        let text = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            text.contains("OR1001") && text.contains("目录名"),
+            "show {bad:?} 应拒为用法错误（点名目录名约束）：{text}"
+        );
+        assert_eq!(out.status.code(), Some(2), "用法错误退出码 2");
+    }
+    // 对照：安全 id 照旧走 OrderNotFound（不误伤正常查询路径）。
+    let ok = run(&["show", "rogue", "--state", state.to_str().unwrap()]);
+    assert!(!ok.status.success(), "不存在的订单仍失败");
+    let text = String::from_utf8_lossy(&ok.stderr);
+    assert!(text.contains("OR2004"), "安全 id 走订单不存在：{text}");
+}
+
+/// 红队 W2-C36：重复旗标必须在参数解析期 OR1001 拒绝（退出码 2、stderr
+/// 点名重复旗标），不得再静默取首个值——此前 `--state A --state B` exit 0
+/// 且账本落 A、B 无声丢弃（--state 决定账本落点，静默选错目录尤其危险）。
+#[test]
+fn submit_rejects_duplicate_flags_as_usage_errors() {
+    let state_a = scratch("dup-a");
+    let state_b = scratch("dup-b");
+    let spec = write_spec(&state_a, "dup.json", &spec_text("dup-flag-it", 1));
+    let out = run(&[
+        "submit",
+        "--spec",
+        spec.to_str().unwrap(),
+        "--state",
+        state_a.to_str().unwrap(),
+        "--state",
+        state_b.to_str().unwrap(),
+        "--workspace",
+        workspace_root().to_str().unwrap(),
+    ]);
+    assert!(!out.status.success(), "重复 --state 应被拒");
+    assert_eq!(out.status.code(), Some(2), "用法错误退出码 2");
+    let text = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        text.contains("OR1001") && text.contains("--state"),
+        "应 OR1001 点名重复旗标 --state：{text}"
+    );
+    // 拒绝发生在参数解析期（凭证签发/目录创建之前）：两侧状态目录都不得
+    // 留下订单目录。
+    assert!(
+        !order_dir(&state_a, "dup-flag-it").exists(),
+        "拒绝不得留下订单目录（state A）"
+    );
+    assert!(
+        !order_dir(&state_b, "dup-flag-it").exists(),
+        "拒绝不得留下订单目录（state B）"
+    );
+}
+
+// ---------- 红队修复批（W3）：W3-C-26 ----------
+
+/// W3-C-26：`voucher.json` 损坏 = OR2003（凭证面），不是 OR2005（状态/账本面）。
+/// RESULT.md 曾把该情形误写为 OR2005——实证：load_record 的读回/解析失败映射
+/// `OrderError::Voucher`（voucher.rs），error.rs 格式化为 OR2003；OR2005 只属于
+/// state::load_ledger 的账本路径。本例锁死码位，防止文书与代码再漂移。
+#[test]
+fn corrupted_voucher_reports_or2003_not_or2005() {
+    let state = scratch("w3c26");
+    let spec = write_spec(&state, "order.json", &spec_text("wo-cli-w3c26", 9));
+    let first = submit(&spec, &state);
+    expect_ok(&first);
+
+    // 篡改盘上凭证为非法 JSON 后重放 submit。
+    let voucher_path = order_dir(&state, "wo-cli-w3c26").join("voucher.json");
+    fs::write(&voucher_path, "{ broken json").expect("篡改 voucher.json");
+
+    let second = submit(&spec, &state);
+    assert!(
+        !second.status.success(),
+        "凭证损坏必须拒绝，不得静默重建：{}",
+        String::from_utf8_lossy(&second.stdout)
+    );
+    let err_text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&second.stderr),
+        String::from_utf8_lossy(&second.stdout)
+    );
+    assert!(err_text.contains("OR2003"), "稳定码 OR2003：{err_text}");
+    assert!(err_text.contains("凭证损坏"), "点名凭证损坏：{err_text}");
+    assert!(
+        err_text.contains("voucher.json"),
+        "点名损坏文件路径：{err_text}"
+    );
+    assert!(
+        !err_text.contains("OR2005"),
+        "凭证损坏不得误报 OR2005（那是账本面码位）：{err_text}"
+    );
+}

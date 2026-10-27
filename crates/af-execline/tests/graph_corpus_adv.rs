@@ -702,7 +702,16 @@ fn corpus() -> Vec<Case> {
         }));
             None
         }),
-        Expect::ExAny(&[ErrorCode::GraphShapeUnsupported], "环"),
+        // 红队 W1-C37 后装订器先拒：新边与 planner→coder 边命中同一
+        // (to=coder, input=plan) 端口 = 边级重影（EX4005），先于 linearize
+        // 的环拒绝——两面都是正规拒绝，语料期望同步放宽。
+        Expect::ExAny(
+            &[
+                ErrorCode::GraphShapeUnsupported,
+                ErrorCode::PlanBindMismatch,
+            ],
+            "边级重影",
+        ),
     );
     c(
         "cycle",
@@ -977,6 +986,44 @@ fn corpus() -> Vec<Case> {
         }),
         Expect::Ex(ErrorCode::EnvelopeMismatch),
     );
+    // 红队 W2-C34：深层 list<list<...>> 嵌套（手写计划面）——物化须干净拒收
+    // （EX4006），不在契约构造位无界递归/栈溢出（此前裸递归即 abort）。
+    c(
+        "type",
+        "deep-list-nesting-32",
+        Box::new(|p, _, _| {
+            let deep = format!("{}code_file{}", "list<".repeat(32), ">".repeat(32));
+            node_exec_mut(p, "coder")["artifact_contract"][0]["type"] = json!(deep);
+            None
+        }),
+        Expect::Ex(ErrorCode::EnvelopeMismatch),
+    );
+    // 红队 W2-C35：plan 预算 node: 条目与 node_exec 投影 cap 互核——手改计划
+    // 把声明改小、投影留大 = 静默免帽（执行面消费投影值），装订期拒收。
+    c(
+        "budget",
+        "node-turns-projection-mismatch",
+        Box::new(|p, _, _| {
+            for b in p["body"]["budget"]["budgets"].as_array_mut().unwrap() {
+                if b["scope"] == json!("node:coder") {
+                    b["cap"] = json!(30); // 投影留 60
+                }
+            }
+            None
+        }),
+        Expect::Ex(ErrorCode::PlanBindMismatch),
+    );
+    // 红队 W2-C36：计划携带 line_id 与订单已绑定 line 冲突——携带其他产线
+    // 的手写计划可跨线运行无感（planbind ③ line 复验此前恒 None = 死代码）。
+    c(
+        "line",
+        "carried-line-conflicts-with-order",
+        Box::new(|p, _, _| {
+            p["body"]["line"]["line_id"] = json!("line-B");
+            None
+        }),
+        Expect::Ex(ErrorCode::PlanBindMismatch),
+    );
 
     // ---- 族 10：kind / unit 分派面 ----------------------------------------
     c(
@@ -1209,6 +1256,44 @@ fn corpus() -> Vec<Case> {
         Expect::Ex(ErrorCode::EnvelopeMismatch),
     );
 
+    // 红队 W1-C28 第二半（fixHint：final_artifact_port 不得靠 find 吞掉歧义）：
+    // 手写计划给终态发射者塞**两个** is_final=true 端口——终态工件不可单义
+    // 识别，执行面须 fail-loud（此前 final_artifact_port 以
+    // `.find(|a| a.is_final)` 静默取首个，条目序决定选哪个工件）。编译面
+    // 计划到不了这里（af-dsl E2202 恰一端口匹配 + lower 推导同源），本例
+    // 钉的是 decode+planbind 可放行的手写计划面。终态发射者改指 planner
+    //（agent 面，declare 双键过 envelope 交接门）+ 原口位置 is_final +
+    // 追加同型 shadow 口——declare 交接面全过，直抵收尾相 final_artifact_port。
+    // （置于闭包借用区外：本例同时要 mutate + declare 两面。）
+    let dual_payload = json!({
+        "plan": {"instance_id": TASK, "steps": [
+            {"id": "s1", "action": "locate", "target": "django/db/models"}
+        ]},
+        "plan_shadow": {"instance_id": TASK, "steps": [
+            {"id": "s1", "action": "locate", "target": "django/db/models"}
+        ]}
+    });
+    cases.push(Case {
+        family: "type",
+        name: "dual-final-artifact-ports",
+        mutate: Box::new(|p, _, _| {
+            p["body"]["interface"]["output_from"] = json!("planner");
+            p["body"]["interface"]["output_type"] = json!("task_plan");
+            node_exec_mut(p, "planner")["artifact_contract"][0]["is_final"] = json!(true);
+            node_exec_mut(p, "planner")["artifact_contract"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!({"name": "plan_shadow", "is_final": true, "type": "task_plan"}));
+            None
+        }),
+        expect: Expect::Ex(ErrorCode::EnvelopeMismatch),
+        declare: Some(DeclareScript {
+            target: "planner",
+            args: dual_payload.clone(),
+            final_text: Some(dual_payload.to_string()),
+        }),
+    });
+
     cases
 }
 
@@ -1280,6 +1365,9 @@ fn run_case(base_plan: &Value, base_task: &Value, case: &Case) -> (Verdict, Vec<
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
 

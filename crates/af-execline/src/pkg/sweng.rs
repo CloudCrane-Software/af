@@ -711,14 +711,35 @@ pub fn aci_schema(action: &Value) -> Value {
 // U3 · pkg.sweng.test_unit（判定只取退出码与输出文本，零模型）
 // ============================================================
 
-/// U3：容器内跑测试命令并解析——`{pass, failures}`；pass 只取进程退出码，
-/// failures=输出末 10 非空行（截断）。命令源 = 入参指定或环境声明
-/// test_command（`default_test_command`）；双缺 → fail-closed 观察。
+/// U3：容器内跑测试命令并解析——`{pass, failures[, evidence]}`；pass 只取
+/// 进程退出码，failures=输出末 10 非空行（截断）。命令源 = 入参指定或环境
+/// 声明 test_command（`default_test_command`）；双缺 → fail-closed 观察。
+///
+/// 红队 W2-C10：`review` 给定时（图契约声明 tester consumes `review_report`，
+/// sop_full reviewer→tester 边）评审结论对判定有因果——此前分发表完全不传
+/// 入边工件：类型化数据边制造「评审已接入」的假象，approved=false 对订单判定
+/// 零因果（F4D 实盘：reviewer approved=false 附两条问题、tester 退出码 0 →
+/// pass=true 照常 qualified，多 agent 评审环结构上装饰性）。现语义：
+/// - `approved=false` → 一票否决：容器退出码 0 亦翻假，failures 点名评审
+///   问题（「review issue: …」前置，退出码失败行照录）；
+/// - `approved=true` → 维持退出码判定，证据摘要留评审面（approved+issues）；
+/// - 载荷缺 `approved` 布尔 = 类型化数据边失信，fail-closed 按否决处置并点名。
+///
+/// 图未声明 review 边（手写计划面）= 纯退出码判据，`review=None` 行为不变。
+///
+/// 红队 W2-C49：`evidence_dir` 给定时**无论成败**一律留档——`test.log`（完整
+/// 观察文本，含 `__AF_RC` 标记与 `exit=` 尾行；保真上限=容器执行载体的 12k
+/// 双端截断契约，截断与否如实记入摘要）+ `test-evidence.json`（命令/退出码/
+/// 判定/体量口径）。旧行为 pass=true 时把观察整体丢弃、drive 相又不建节点
+/// 目录——终态 pass 与外部评审结论相悖时订单内无任何日志可判。留档失败不翻
+/// 判定，但在 envelope `evidence.error` 显形（不静默）。
 pub fn test_unit(
     bridge: &dyn HostBridge,
     env: &TbEnv,
     default_test_command: &str,
     test_cmd: Option<&str>,
+    review: Option<&Value>,
+    evidence_dir: Option<&std::path::Path>,
 ) -> Value {
     let cmd = test_cmd
         .map(str::trim)
@@ -729,7 +750,7 @@ pub fn test_unit(
     }
     let text = container_exec(bridge, env, cmd, 300);
     let (body, rc) = split_observation(&text);
-    let pass = rc == Some(0);
+    let mut pass = rc == Some(0);
     // pass → failures 收空（无失败可报）；不 pass → 输出末 10 非空行。
     let mut failures: Vec<String> = if pass {
         Vec::new()
@@ -743,7 +764,74 @@ pub fn test_unit(
     if failures.len() > 10 {
         failures = failures.split_off(failures.len() - 10);
     }
-    json!({ "pass": pass, "failures": failures })
+    // 红队 W2-C10：评审门——approved=false（或契约失信）一票否决，问题点名
+    // 前置（截断后的退出码失败行照录，不吞任一界面）。
+    let review_summary = review.map(|r| {
+        let approved = r.get("approved").and_then(Value::as_bool);
+        let issues: Vec<String> = r
+            .get("issues")
+            .and_then(Value::as_array)
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|i| i.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if approved == Some(true) {
+            json!({ "approved": true, "issues": issues })
+        } else {
+            pass = false;
+            let mut named = vec![match approved {
+                Some(false) => {
+                    "review 否决：评审员未放行（approved=false），测试退出码判定作废".to_string()
+                }
+                _ => "review 契约失信：缺 approved 布尔字段，fail-closed 否决".to_string(),
+            }];
+            named.extend(issues.iter().map(|i| format!("review issue: {i}")));
+            let mut merged = named;
+            merged.append(&mut failures);
+            failures = merged;
+            json!({ "approved": approved.unwrap_or(false), "issues": issues })
+        }
+    });
+    let truncated = text.contains("...[output truncated:");
+    let evidence = evidence_dir.map(|dir| -> Value {
+        let summary = json!({
+            "command": cmd,
+            "exit_code": rc,
+            "pass": pass,
+            "observation_bytes": text.len(),
+            "observation_truncated": truncated,
+            "observation_cap_bytes": 12_000usize,
+            "review": review_summary.clone(),
+        });
+        let write = (|| -> std::io::Result<()> {
+            std::fs::create_dir_all(dir)?;
+            std::fs::write(dir.join("test.log"), &text)?;
+            std::fs::write(
+                dir.join("test-evidence.json"),
+                serde_json::to_string_pretty(&summary).unwrap_or_default(),
+            )?;
+            Ok(())
+        })();
+        match write {
+            Ok(()) => json!({
+                "dir": dir.file_name().map(|n| n.to_string_lossy().into_owned()),
+                "log": "test.log",
+                "summary": "test-evidence.json",
+                "exit_code": rc,
+                "observation_truncated": truncated,
+                "observation_bytes": text.len(),
+            }),
+            Err(err) => json!({ "error": format!("判据留档失败: {err}") }),
+        }
+    });
+    let mut out = json!({ "pass": pass, "failures": failures });
+    if let Some(ev) = evidence {
+        out["evidence"] = ev;
+    }
+    out
 }
 
 // ============================================================

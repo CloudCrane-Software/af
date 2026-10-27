@@ -108,7 +108,9 @@ cli 参数 2 例（三子命令形状与 7 类用法错误 / 构建目录优先�
   ledger append（af-execline 同边界，P2-F01 遗留）。文件锁留后续。
 - **list 对 `orders/` 下无 ledger 的目录静默跳过**（如手工放置的杂目录）；
   有 ledger 但损坏则 OR2005 fail-loud——跳过的只是"不是订单的目录"。
-- **`voucher.json` 损坏 = OR2005 透传拒绝**，不重建（不猜）。
+- **`voucher.json` 损坏 = OR2003 透传拒绝**（读回/解析失败映射 `OrderError::Voucher`，
+  与上一行账本损坏的 OR2005 是两条稳定码：凭证面 OR2003、状态/账本面 OR2005；
+  红队 W3-C-26 勘误——此处原误写为 OR2005），不重建（不猜）。
 - **独立验证未做**（同 P2-F01）：测试由实现代理按任务书验收标准自写，
   尚待验证代理独立对拍。
 
@@ -132,6 +134,74 @@ CARGO_TARGET_DIR=~/afbuild-phase2 ~/afbuild-phase2/debug/af-order submit --spec 
 engine_bin=`~/afbuild-phase2/debug/af-engine`；state 树 =
 `orders/wo-demo-1/{ledger.jsonl, mes-events.jsonl, artifacts/fa-wo-demo-1.json,
 voucher.json, voucher-key.seed}`，种子权限 600。
+
+## 7. 红队 W3 修复批（2026-10-27，工作树 af-wt-rt-af-order / 分支 phase2-rt-af-order）
+
+> 前置：本批基于 `git merge phase2-redteam-fixes`（快进至 4800a67）后开展；
+> 全套 af-order 测试经 `scripts/af-order-test.sh` 实跑 **51 例全绿**
+> （lib 18 + cli 11 + exec_contract 13 + graph_route 4 + unit_route 5），
+> `cargo fmt --check` 零 diff、`cargo clippy -p af-order --all-targets` 0 告警
+> （仅 proc-macro-error2 既有 future-incompat 提示）。九门全量由汇总员统一跑。
+
+### W3-C-26 文书码位勘误（提交 9a262fe）
+
+`RESULT.md:111` 原称「voucher.json 损坏 = OR2005」，实为 **OR2003**。亲跑探针
+（真二进制）：正常 submit 落账后把
+`state/orders/wo-probe-1/voucher.json` 改写为 `{ broken json` 再 submit，
+stderr 逐字
+`af-order: OR2003: 凭证/密钥失败: 凭证损坏 .../voucher.json: key must be a string at line 1 column 3`。
+码源：`voucher.rs:188-193` `load_record` 读回/解析失败映射 `OrderError::Voucher`
+→ `error.rs:24` 格式化为 OR2003；OR2005 只属 `state.rs:100-105`
+`load_ledger` 账本路径（原 :109-110 ledger 损坏 OR2005 口径本就正确，未动）。
+已加回归锁测试 `corrupted_voucher_reports_or2003_not_or2005`
+（tests/cli.rs：断言 OR2003 + 凭证损坏 + 点名路径 + **不得出现 OR2005**），
+防文书与代码再漂移。
+
+### W3-C-25 共享 target 跨工作树假绿机制治本（提交 907d470）
+
+**缺陷**：workspace 成员 fingerprint local 表为空，cargo freshness 退化为
+「输出 mtime vs 源 mtime」比较、不校验内容与路径——不同工作树共用
+`CARGO_TARGET_DIR` 时，从主线树跑 `cargo test` 会原样执行他树构建的测试
+二进制并报 exit 0（主线 exec_contract 真值 10 例，共享 target 实跑却是修复
+分支的 12 例，其中两例在主线源码 grep 不存在）。
+
+**修法**（fixHint 三句逐条落地，crates/af-order/scripts/）：
+
+| 件 | 职责 |
+|---|---|
+| `af-order-target-guard.sh` | `check`：扫 `deps/*.d` 的 `CARGO_MANIFEST_DIR` env-dep，非「当前树根 / CARGO_HOME(registry) / rustc sysroot」即外来逐件点名；另查守卫章判异树（覆盖无 env-dep 行的库产物）。`ensure`：判脏即清理重建（等价 cargo clean；`/`、`$HOME`、当前树、CARGO_HOME 拒绝清理）。`record`：产三要素验收 JSON 并刷新守卫章。退出码 0 干净 / 1 污染 / 2 用法。 |
+| `af-order-test.sh` | 测试包装：缺省**按工作树派生独立** `~/afbuild-<树名>-af-order`（不同工作树强制不同 target=治本）；显式 `CARGO_TARGET_DIR` 透传但仍 ensure 查污染（切换工作树=清理重建，禁止复用共享测试产物）；跑完 record 留档（验收记录含 CARGO_MANIFEST_DIR/commit/测试名单，防把跨树二进制当当前树证据）。`--dry-run` 只读展示判定。 |
+| `test-af-order-target-guard.sh` | 夹具测试 26 断言，先红后绿：两假树+假 target 复刻跨树污染、registry 豁免不冤枉、ensure 清三件套、危险 target 拒清、章异树抓出、JSON 三要素、包装 dry-run 派生。 |
+
+**实测**（本批亲跑）：
+
+1. 夹具测试 26/26 PASS（`bash crates/af-order/scripts/test-af-order-target-guard.sh`，exit 0）。
+2. 本树 check 共享 target：`PROVENANCE OK: 外来产物 0`。
+3. 主线树 `af-wt-phase2-execline` check 同一 target（只读）：**点名 6 处跨树
+   污染**，含裁判引用的 `debug/deps/exec_contract-54695d40cedb3d21.d →
+   /home/pan-ding/workspace/af-wt-rt-af-order/crates/af-order`，exit 1。
+4. 主线树 dry-run：派生独立 `~/afbuild-af-wt-phase2-execline-af-order`，
+   不碰共享目录。
+5. 包装实跑（`CARGO_TARGET_DIR=~/afbuild-phase2rt-af-order
+   ./crates/af-order/scripts/af-order-test.sh`）：51 例全绿 exit 0，验收记录
+   落 `~/afbuild-phase2rt-af-order/af-order-evidence/`。最终记录三要素摘录：
+
+```json
+{"generated_at": "2026-10-27T00:03:34Z",
+ "worktree_root": "/home/pan-ding/workspace/af-wt-rt-af-order",
+ "commit": "907d4700adf5e901c6706869b5a1636223eb4c63",
+ "cargo_target_dir": "/home/pan-ding/afbuild-phase2rt-af-order",
+ "manifest_dirs": [
+  "/home/pan-ding/workspace/af-wt-rt-af-order/crates/af-execline",
+  "/home/pan-ding/workspace/af-wt-rt-af-order/crates/af-order"],
+ "test_list": ["…51 条逐名列全（lib18+cli11+exec_contract13+graph_route4+unit_route5），全文见上方 evidence JSON…"]}
+```
+
+**边界**：守卫只保护 af-order 域验证路径（本批文件权限所限）；九门终跑
+（`ci/run.sh`）如需同款保护，汇总员可让各域套用同款包装或在 ci 层调
+guard check——集成点已就绪，未在本批擅动 ci/。`~/afbuild-phase2rt-af-order`
+现存产物 provenance 全部指向本工作树（check 外来 0），故本批未触发真实清理；
+ensure 的清理路径由夹具测试覆盖。
 
 ## 6. 资源纪律（ADR-009）
 

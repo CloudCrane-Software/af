@@ -11,16 +11,41 @@ pub fn deserialize_document(value: &serde_yaml::Value) -> Result<Document, LoadE
     Ok(doc)
 }
 
-/// serde_yaml 错误信息 → 稳定码。映射表（RESULT-M1 登记）：
+/// serde_yaml 错误信息 → 稳定码。映射表（RESULT-M1 登记；红队 W3-C17 勘误：
+/// `invalid value` 按 serde 实际语义二分——**数值越界**（如 `integer -1,
+/// expected u32`）归 **E2002 值域**（error.rs:62-63 域定义），**枚举未知
+/// 值**（`invalid value: string "x", expected ...`）仍归 E1004；原映射把
+/// 两者一并塞 E1004，负数入无符号字段被误报「枚举值非法」）：
 /// `unknown field` → E1001；`missing field` → E1002；
-/// `unknown variant` / `invalid value` → E1004；其余（`invalid type`、
-/// `data did not match any variant`、自定义类型表达式语法错等）→ E1003。
+/// `unknown variant` / 枚举形 `invalid value` → E1004；
+/// 数值越界形 `invalid value: integer <n>, expected <无符号/正数域>` → E2002；
+/// 其余（`invalid type`、`data did not match any variant`、自定义类型表达式
+/// 语法错等）→ E1003。
 pub fn classify_serde_error(err: &serde_yaml::Error) -> Report {
     let msg = err.to_string();
+    // 数值越界形：serde 对无符号/正数域字段报 `invalid value: integer -1,
+    // expected u32`——类型家族对（integer），值越界。枚举形报
+    // `invalid value: string "x", expected one of ...`。以 expected 侧的
+    // 数值域类型名（u8..u64/usize/i8../f32/f64 及布尔）判别。
+    let numeric_domain = msg.starts_with("invalid value")
+        && (msg.contains("expected u8")
+            || msg.contains("expected u16")
+            || msg.contains("expected u32")
+            || msg.contains("expected u64")
+            || msg.contains("expected usize")
+            || msg.contains("expected i8")
+            || msg.contains("expected i16")
+            || msg.contains("expected i32")
+            || msg.contains("expected i64")
+            || msg.contains("expected f32")
+            || msg.contains("expected f64")
+            || msg.contains("expected bool"));
     let code = if msg.starts_with("unknown field") {
         ErrorCode::UnknownField
     } else if msg.starts_with("missing field") {
         ErrorCode::MissingField
+    } else if numeric_domain {
+        ErrorCode::ValueOutOfRange
     } else if msg.starts_with("unknown variant") || msg.starts_with("invalid value") {
         ErrorCode::InvalidEnumValue
     } else {
@@ -31,6 +56,136 @@ pub fn classify_serde_error(err: &serde_yaml::Error) -> Report {
     let mut report = Report::default();
     report.push(code, "document", msg);
     report
+}
+
+/// types[].schema 内联 JSON Schema 形状检查（红队 W3-C18）：model.rs:71-74
+/// 自述 schema 为「内联 JSON Schema 对象（唯一 schema 家）」，实现却是裸
+/// `serde_json::Value` 零校验——字符串/数字/数组/布尔/null 均零违例过审，
+/// 而 cel.rs synth_from_schema 对非 object schema 一律退化为 Null 绑定、
+/// 求值错误按设计不判 ⇒ 整份文档的 CEL 布尔判定静默变成无证据。本检查
+/// fail-loud：schema 必须是对象、type 段必须是 JSON Schema 原始六型之一、
+/// properties/items 递归同规则（无 type 节点的 schema 拒）。原农田 B10
+/// （schema: "x" 标量 PASS）随之翻转为拒收（文档化边界勘误，见
+/// ANOMALIES.md 与 farm_anomalies_test 的钉子迁移）。
+const SCHEMA_PRIMITIVE_TYPES: [&str; 6] =
+    ["object", "string", "integer", "number", "boolean", "array"];
+
+fn json_kind_name(v: &serde_json::Value) -> &'static str {
+    match v {
+        serde_json::Value::Null => "null",
+        serde_json::Value::Bool(_) => "布尔",
+        serde_json::Value::Number(_) => "数字",
+        serde_json::Value::String(_) => "字符串",
+        serde_json::Value::Array(_) => "数组",
+        serde_json::Value::Object(_) => "对象",
+    }
+}
+
+/// 已声明类型名集（schema 内命名引用合法位：`items: {type: plan_step}`
+/// 指向同文档 types 表条目——sop_full task_plan.steps 即此形；红队
+/// W3-C18 首版漏放行命名引用误伤正本，本版补）。
+fn declared_type_names(doc: &Document) -> std::collections::BTreeSet<String> {
+    doc.types.iter().map(|t| t.name.clone()).collect()
+}
+
+fn schema_node_violation(
+    subject: &str,
+    path: &str,
+    schema: &serde_json::Value,
+    declared: &std::collections::BTreeSet<String>,
+) -> Option<String> {
+    let Some(obj) = schema.as_object() else {
+        return Some(format!(
+            "{subject} 的 schema（{path}）非 JSON 对象（实为 {}）——schema 必须是内联 \
+             JSON Schema 对象（唯一 schema 家），标量/数组/null 形状拒收",
+            json_kind_name(schema)
+        ));
+    };
+    let Some(ty) = obj.get("type").and_then(|t| t.as_str()) else {
+        return Some(format!(
+            "{subject} 的 schema（{path}）缺 type 段或 type 非字符串——JSON Schema \
+             节点必须声明原始六型之一（object/string/integer/number/boolean/array）"
+        ));
+    };
+    if !SCHEMA_PRIMITIVE_TYPES.contains(&ty) && !declared.contains(ty) {
+        return Some(format!(
+            "{subject} 的 schema（{path}）type={ty:?} 不在原始六型 \
+             （object/string/integer/number/boolean/array）也不是已声明类型名——\
+             对象 schema 必须住 types 表（命名引用指向同文档 types 条目）"
+        ));
+    }
+    let is_named_ref = !SCHEMA_PRIMITIVE_TYPES.contains(&ty);
+    if !is_named_ref {
+        if ty == "object" {
+            if let Some(props) = obj.get("properties") {
+                let Some(map) = props.as_object() else {
+                    return Some(format!("{subject} 的 schema（{path}）properties 非对象"));
+                };
+                for (k, v) in map {
+                    if let Some(detail) =
+                        schema_node_violation(subject, &format!("{path}.{k}"), v, declared)
+                    {
+                        return Some(detail);
+                    }
+                }
+            }
+        }
+        if ty == "array" {
+            if let Some(items) = obj.get("items") {
+                if let Some(detail) =
+                    schema_node_violation(subject, &format!("{path}[]"), items, declared)
+                {
+                    return Some(detail);
+                }
+            }
+        }
+    }
+    None
+}
+
+/// schema 形状检查（E1003 值域/形状面；随 validate 一次收齐）。两个裸
+/// `serde_json::Value` schema 位同门：types[].schema（W3-C18）与
+/// human.resume.schema（红队 W2-C-24，W3-C15 起经 walk_nodes 覆盖根层与
+/// loop/map 体内嵌 human）——后者同为裸 Value 且同走
+/// cel::synth_from_schema（validate/m4.rs add_resume），漏门则标量/数组/null
+/// resume schema 零违例过审、human 节点 route 的 CEL 布尔判定静默无证据。
+pub fn check_schema_shape(doc: &Document) -> Vec<crate::error::Violation> {
+    let mut out = Vec::new();
+    let declared = declared_type_names(doc);
+    for t in &doc.types {
+        if let Some(detail) =
+            schema_node_violation(&format!("类型 {}", t.name), "schema", &t.schema, &declared)
+        {
+            out.push(crate::error::Violation::new(
+                ErrorCode::TypeMismatch,
+                "types",
+                detail,
+            ));
+        }
+    }
+    // human.resume.schema 同门覆盖全部作用域（红队 W3-C15）：原只遍历根层
+    // doc.nodes，loop/map 体内的 human 逃逸门禁——而嵌套 human 恰是真实语料
+    // 的常态（human_stop/approve/human_help 等验证 human 全在构造体内，
+    // 中立性词表纪律：语料专名不直书，见 af/packages 注册面），add_resume
+    // 对其 schema 走同一 synth_from_schema，标量 schema ⇒ resume 绑定 Null、
+    // CEL 布尔判定静默无证据。与 check_vocab 同用 walk_nodes 深度遍历
+    //（同模块同一遍历口径）。
+    walk_nodes(doc, &mut |n, _scope| {
+        let Some(h) = &n.human else { return };
+        if let Some(detail) = schema_node_violation(
+            &format!("节点 {} human.resume", n.id),
+            "schema",
+            &h.resume.schema,
+            &declared,
+        ) {
+            out.push(crate::error::Violation::new(
+                ErrorCode::TypeMismatch,
+                "human",
+                detail,
+            ));
+        }
+    });
+    out
 }
 
 /// 手写闭环词表/词法检查（平铺联合体承载的枚举面 + id 字符集）：

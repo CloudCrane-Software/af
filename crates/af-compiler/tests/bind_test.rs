@@ -551,3 +551,155 @@ fn violations_are_collected_not_first_stopped() {
         "一次收齐：{refs:?}"
     );
 }
+
+// ============================================================
+// 红队修复批（W1）
+// ============================================================
+
+/// 红队 W1-C27：同一组件以两种写法引用（`pkg.kit.hammer@1` 带版本 +
+/// `pkg.kit.hammer` 不带版本混写）时，解析后按解析结果去重——此前
+/// lower 以引用串原样并集（两串是不同 BTreeMap 键）、bind 逐键解析后
+/// collect 不去重，可执行计划 tools 数组产出两条完全相同条目，破坏
+/// 「组件解析为版本化引用」的集合语义。
+#[test]
+fn duplicate_component_refs_dedup_after_resolution() {
+    let root = temp_root("w1-dedup");
+    write_components(
+        &root,
+        r#"{"components":[
+            {"class":"tool","name":"pkg.kit.hammer","version":"1","effect_class":"pure"},
+            {"class":"model_route","name":"route.main","version":"1","endpoint":{"protocol":"anthropic-messages","base_url":"https://x","model":"m","key_ref":"K","reasoning_tier":"off"}}
+        ]}"#,
+    );
+    let reg = ComponentRegistry::load(&root).unwrap();
+    let ir = probe_ir("\"pkg.kit.hammer@1\", \"pkg.kit.hammer\"");
+    let report = bind(&ir, &reg);
+    assert!(report.is_ok(), "双写法引用均合法：{:?}", report.violations);
+    let worker = report.bindings.get("worker").expect("worker 绑定在案");
+    assert_eq!(
+        worker.components.tools.len(),
+        1,
+        "解析后同名同版本条目须去重：{:?}",
+        worker.components.tools
+    );
+    assert_eq!(worker.components.tools[0].reference, "pkg.kit.hammer@1");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// 红队 W1-C27 memory 面（fixHint「tools 与 memory 均覆盖」）：`uses.memory`
+/// 同组件带/不带版本混写，解析后同去重——dedup_resolved 同函数应用于
+/// tools/memory 两面，此处钉 memory 面，防「只 dedup tools」的回退。
+#[test]
+fn duplicate_memory_refs_dedup_after_resolution() {
+    let root = temp_root("w1-dedup-mem");
+    write_components(
+        &root,
+        r#"{"components":[
+            {"class":"memory","name":"pkg.crewkit.mem.longterm","version":"1","impl_ref":"m://longterm"},
+            {"class":"model_route","name":"route.main","version":"1","endpoint":{"protocol":"anthropic-messages","base_url":"https://x","model":"m","key_ref":"K","reasoning_tier":"off"}}
+        ]}"#,
+    );
+    let reg = ComponentRegistry::load(&root).unwrap();
+    let doc = af_dsl::load_str(
+        r#"version: 1
+meta:
+  name: mem_dedup_probe
+  graph_version: "1.0"
+  entry: worker
+  input: probe_input
+  output: { ref: answer, from: hatch }
+  intent: "W1-C27 memory 面去重探针"
+types:
+  - name: probe_input
+    schema:
+      type: object
+      required: [x]
+      properties: { x: { type: string } }
+  - name: answer
+    schema:
+      type: object
+      required: [y]
+      properties: { y: { type: string } }
+nodes:
+  - id: worker
+    kind: task
+    uses: { model: route.main@1, memory: ["pkg.crewkit.mem.longterm@1", "pkg.crewkit.mem.longterm"] }
+    emits: { answer: answer }
+  - id: hatch
+    kind: task
+    escape:
+      kind: dynamic_tool_registry
+      impl_ref: packages/kit@1.0.0/hatches/registry.py
+      reason: "动作词表运行时解析（测试探针）"
+      owner: g2b-team
+      share_budget_pct: 10
+    consumes: { answer: answer }
+    emits: { action_space: answer }
+edges:
+  - { from: worker, output: answer, to: hatch, input: answer }
+policies:
+  budgets:
+    - { id: cap, dimension: cents, scope: plan, cap: 100 }
+    "#)
+    .unwrap_or_else(|e| panic!("探针装载失败：{e}"));
+    let report = af_dsl::validate(&doc);
+    assert!(report.is_ok(), "探针应过全量校验：{report}");
+    let ir = lower(&doc).unwrap();
+    let report = bind(&ir, &reg);
+    assert!(
+        report.is_ok(),
+        "memory 双写法引用均合法：{:?}",
+        report.violations
+    );
+    let worker = report.bindings.get("worker").expect("worker 绑定在案");
+    assert_eq!(
+        worker.components.memory.len(),
+        1,
+        "memory 解析后同名同版本条目须去重：{:?}",
+        worker.components.memory
+    );
+    assert_eq!(
+        worker.components.memory[0].reference,
+        "pkg.crewkit.mem.longterm@1"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// 红队 W1-C29：key_ref 长度上限 128 与 af-harness `is_ref_name` 同源
+///（`!name.is_empty() && name.len() <= 128 && …`）——此前镜像漏长度
+/// 上限，129+ 字符 key_ref 编译面过、harness 面拒，同声明双面判定分歧。
+#[test]
+fn registry_rejects_key_ref_over_128_boundary_same_as_harness() {
+    let ep = |k: String| {
+        format!(
+            r#"{{"protocol":"anthropic-messages","base_url":"https://x","model":"m","key_ref":"{k}","reasoning_tier":"off"}}"#
+        )
+    };
+    // 128 = 上限内（与 af-harness <=128 同界）。
+    let root = temp_root("w1-keyref-128");
+    write_components(
+        &root,
+        &format!(
+            r#"{{"components":[{{"class":"model_route","name":"route.main","version":"1","endpoint":{}}}]}}"#,
+            ep("k".repeat(128))
+        ),
+    );
+    ComponentRegistry::load(&root).expect("128 字符 key_ref 应过（同 af-harness 上限）");
+    let _ = std::fs::remove_dir_all(&root);
+    // 129 = 装载即拒。
+    let root = temp_root("w1-keyref-129");
+    write_components(
+        &root,
+        &format!(
+            r#"{{"components":[{{"class":"model_route","name":"route.main","version":"1","endpoint":{}}}]}}"#,
+            ep("k".repeat(129))
+        ),
+    );
+    let err = ComponentRegistry::load(&root).unwrap_err();
+    assert!(
+        matches!(err, ComponentRegistryError::Invalid { .. }),
+        "129 字符 key_ref 应装载即拒：{err}"
+    );
+    assert!(err.to_string().contains("key_ref"), "点名字段：{err}");
+    let _ = std::fs::remove_dir_all(&root);
+}

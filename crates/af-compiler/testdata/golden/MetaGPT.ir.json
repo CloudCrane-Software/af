@@ -273,6 +273,13 @@
             {
               "id": "qa",
               "kind": "check",
+              "route_exit_guard": {
+                "source": "!((qa.passed == false))",
+                "roots": [
+                  "qa"
+                ],
+                "digest": "942f764c1c753a7f56f0e5ec8fb46c9cee7e9a4105290c3a6c84db0c8ea45069"
+              },
               "capability_refs": []
             },
             {
@@ -547,6 +554,7 @@
         ],
         "type": "object"
       },
+      "signal": {},
       "sop_plan": {
         "properties": {
           "graph_ref": {

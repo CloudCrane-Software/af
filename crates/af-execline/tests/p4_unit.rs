@@ -116,6 +116,7 @@ fn fake_judge(tag: &str, json_line: &str) -> JudgeLocator {
         python,
         script,
         script_sha256,
+        import_chain: Vec::new(),
     }
 }
 
@@ -449,6 +450,9 @@ fn execute_scenario<R>(
         data_root: &parts.data_root,
         attempt_dir: &parts.attempt_dir,
         record_sink: &parts.sink,
+        graph_version: None,
+        task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     let outcome = parts.unit.execute(&ctx);
@@ -937,6 +941,9 @@ fn sink_write_failure_fails_loud() {
             data_root: &data_root,
             attempt_dir: &attempt_dir,
             record_sink: &sink,
+            graph_version: None,
+            task_sha256: None,
+            plan_sha256: None,
             trial: false,
         };
         let err = unit.execute(&ctx).expect_err("行写失败必须上抛");

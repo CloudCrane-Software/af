@@ -192,6 +192,18 @@ pub fn bind(ir: &IrProgram, registry: &ComponentRegistry) -> BindReport {
     }
 }
 
+/// 解析后按版本化引用去重（红队 W1-C27）：引用串原样并集会把同一组件
+/// 的双写法（`"x@1"` 带版本与 `"x"` 不带版本）保留为两条——IR 组件键集
+/// 按引用串建立，`"x"` 与 `"x@1"` 是不同键；集合语义按**解析结果**
+///（`name@version`）收口，计划面 tools/memory 数组不得出现重复条目。
+fn dedup_resolved(items: Vec<ResolvedComponent>) -> Vec<ResolvedComponent> {
+    let mut seen = std::collections::BTreeSet::new();
+    items
+        .into_iter()
+        .filter(|c| seen.insert(c.reference.clone()))
+        .collect()
+}
+
 /// 单节点投影：uses.* 四面解析 + effect_class/provenance 回填 + 其余透传。
 fn bound_node_exec(
     exec: &crate::ir::NodeExec,
@@ -208,20 +220,22 @@ fn bound_node_exec(
         // model_route 类装载即校验 endpoint 在场（components.rs 不变量）
         endpoint: m.endpoint.clone().expect("model_route 端点装载不变量"),
     });
-    let tools = c
-        .tools
-        .keys()
-        .filter_map(|r| resolve(r, ComponentClass::Tool, path, registry, violations))
-        .collect();
+    let tools = dedup_resolved(
+        c.tools
+            .keys()
+            .filter_map(|r| resolve(r, ComponentClass::Tool, path, registry, violations))
+            .collect(),
+    );
     let unit = c
         .unit
         .as_deref()
         .and_then(|r| resolve(r, ComponentClass::Unit, path, registry, violations));
-    let memory = c
-        .memory
-        .iter()
-        .filter_map(|r| resolve(r, ComponentClass::Memory, path, registry, violations))
-        .collect();
+    let memory = dedup_resolved(
+        c.memory
+            .iter()
+            .filter_map(|r| resolve(r, ComponentClass::Memory, path, registry, violations))
+            .collect(),
+    );
 
     // ADR-010 provenance 回填：类型声明 `envelope<T>` → envelope_of = T
     // （声明面的机械推导，无第二份类型推导器；eval_sha256 运行期落）。

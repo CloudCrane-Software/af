@@ -37,8 +37,71 @@ pub struct ExecContext<'a> {
     pub attempt_dir: &'a Path,
     /// 结果行写入器（append+flush 语义，main.rs:644-648）。
     pub record_sink: &'a dyn RecordSink,
+    /// 订单一次性绑定的 graph_version（WorkOrder 面；红队 W1-C32——
+    /// planbind ③ 的外部期待源，装订时与 plan.compiled_from.graph_version
+    /// 核对，换计划图版本即拒。None = 直调/测试缝不核对（生产 driver 恒
+    /// Some）。
+    pub graph_version: Option<&'a str>,
+    /// 任务包判据面 sha256 期待（红队 W1-C59①；None = 不核对）。
+    pub task_sha256: Option<&'a str>,
+    /// 任务包计划面 sha256 期待（红队 W2-C55：graph/report 两臂全部预算帽
+    /// 都在 plan.json——判据面（task.json）钉死不覆盖计划面，换一份同
+    /// graph_version/registry_digest 的 plan.json 即可放宽预算；None = 不核对）。
+    pub plan_sha256: Option<&'a str>,
     /// 试验标记（不进决策，main.rs:11）。
     pub trial: bool,
+}
+
+/// 文件 sha256 十六进制（公开面：门面 submit 钉死判据面摘要用；
+/// 实现复用 suite::swev::sha256_hex 同一副本）。读不到 = None。
+pub fn file_sha256_hex(path: &Path) -> Option<String> {
+    crate::suite::swev::sha256_hex(path)
+}
+
+/// 任务包计划面摘要核对（红队 W2-C55）：期待在场时，plan.json 的 sha256
+/// 必须与门面 submit 时钉死（凭证面留档）的期待逐位一致——漂移即拒。
+/// None = 无期待（直调缝，不核对）。
+pub fn verify_plan_digest(path: &Path, expected: Option<&str>) -> Result<(), ExeclineError> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    let actual = crate::suite::swev::sha256_hex(path).ok_or_else(|| ExeclineError::UnitFailed {
+        detail: format!("任务包计划面文件不可读（无法验真）: {}", path.display()),
+    })?;
+    if actual != expected {
+        return Err(ExeclineError::UnitFailed {
+            detail: format!(
+                "任务包计划面摘要不符：期待 {expected}，实得 {actual}（{}）——计划面被换\
+                 （预算帽全在 plan.json，红队 W2-C55），拒绝执行",
+                path.display()
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// 任务包判据面摘要核对（红队 W1-C59①）：期待在场时，判据真值源文件
+/// （swev = `<data_root>/<task_id>.json`；graph/report = 任务包 task.json）
+/// 的 sha256 必须与门面 submit 时钉死的期待逐位一致——漂移即拒（判分
+/// 真值源全部来自该文件，无钉死时清空判据即可让冻结判分链对零测试
+/// 任务包返回 resolved=true）。None = 无期待（直调缝，不核对）。
+pub fn verify_task_digest(path: &Path, expected: Option<&str>) -> Result<(), ExeclineError> {
+    let Some(expected) = expected else {
+        return Ok(());
+    };
+    let actual = crate::suite::swev::sha256_hex(path).ok_or_else(|| ExeclineError::UnitFailed {
+        detail: format!("任务包判据面文件不可读（无法验真）: {}", path.display()),
+    })?;
+    if actual != expected {
+        return Err(ExeclineError::UnitFailed {
+            detail: format!(
+                "任务包判据面摘要不符：期待 {expected}，实得 {actual}（{}）——判分真值源\
+                 被换，拒绝执行（红队 W1-C59：判据不可无钉死）",
+                path.display()
+            ),
+        });
+    }
+    Ok(())
 }
 
 /// 执行产出：工件（进订单）+ 产出文件（进证据目录）+ 备注。
@@ -153,6 +216,9 @@ mod tests {
             attempt_dir: &dir,
             record_sink: &sink,
             trial: false,
+            graph_version: None,
+            task_sha256: None,
+            plan_sha256: None,
         };
         let output = unit.execute(&ctx).unwrap();
         assert_eq!(output.artifacts.len(), 1);

@@ -442,3 +442,219 @@ fn store_retention_unbounded_is_e2208() {
     );
     assert_eq!(check(&src), ["E2208"]);
 }
+
+// ---------- 红队修复批（W1）：E2202 判定面与内建端口表同源 ----------
+
+#[test]
+fn builtin_only_terminal_is_rejected_e2202() {
+    // 红队 W3-C19（原 W1-C22 两例翻转）：无 emits 的构造/判定节点不得作
+    // meta.output.from——内建端口（loop/map done、check/gate passed）服务边
+    // 模型，但 lower 的 artifact_contract 仅由 n.emits 构造，计划面无其投影
+    // 位；W1-C22 放行后形成「af-dsl 过、编译 exit 0、执行面
+    // final_artifact_port 找不到 is_final 工件」的修复面新缺口。现 emits 缺席
+    // 即 E2202（闭环：编译产物不存在不可执行的终态计划）。
+    let meta_done = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: signal, from: l1 }\n";
+    let src = build(
+        meta_done,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), ["E2202"]);
+
+    let meta_passed = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: { type: boolean }, from: c1 }\n";
+    let src = build(
+        meta_passed,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), ["E2202"]);
+
+    // 对照：自带 emits 的 gate 节点作终态仍合法（sop_full tester 同款形态）。
+    let src = build(
+        meta_passed,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n    emits: { passed: { type: boolean } }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}
+
+#[test]
+fn builtin_done_port_still_feeds_edges() {
+    // 边模型不变：loop 的 done:signal 仍可合法接边（内建端口服务边核对面，
+    // W1-C22 该半不受终态收紧影响）。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n  - id: n2\n    kind: transform\n    ops: [ { op: project, port: p, into: q } ]\n",
+        "  - { from: l1, output: done, to: n2, input: done }\n",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}
+
+#[test]
+fn dual_same_type_emit_ports_ambiguate_output() {
+    // 同节点 emits 两个同类型端口（answer + shadow 同为 a）：output.ref 无法
+    // 单义指认终态端口 → E2202（恰一端口类型匹配收紧；多匹配即歧义）。
+    let src = base().replace("emits: { answer: a }", "emits: { answer: a, shadow: a }");
+    assert_eq!(check(&src), ["E2202"]);
+}
+
+// ---------- 红队修复批（W2）：内建端口显式声明不重复计数 ----------
+
+#[test]
+fn explicit_builtin_done_declaration_is_not_double_counted() {
+    // 红队 W2-C23：loop 节点显式 `emits: {done: signal}` 与内建 done 同
+    // 名同型——emits 循环与 builtin_ports 循环各 push 一次即假拒合法
+    // 文档（违例文案自证 ["done","done"]）。端口名去重后应零违例。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: signal, from: l1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { done: signal }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}
+
+#[test]
+fn explicit_builtin_passed_declaration_is_not_double_counted() {
+    // 同上去重：gate 节点显式 emits passed:boolean + 内建 passed。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: { type: boolean }, from: c1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n    emits: { passed: { type: boolean } }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}
+
+#[test]
+fn two_distinct_same_type_ports_still_reject_as_e2202() {
+    // 反向钉：去重不得放松「恰一端口」——两个不同名同型端口仍 E2202。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a, shadow: a }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), ["E2202"]);
+}
+
+// ---------- 红队 W3-C17：内建端口显式声明与内建固定类型冲突 fail-loud ----------
+
+#[test]
+fn builtin_passed_conflicting_declaration_is_rejected() {
+    // emit_type/port_exists 对内建端口（check/gate passed、loop/map done）
+    // 先于 emits 表判定——显式声明 passed: a（命名对象型）被静默遮蔽：
+    // E2202 按声明类型比对、边核对面按内建 boolean，同一次校验给出两个
+    // 互相矛盾的类型答案（af-compiler is_final 经 derived_emit_type 继承
+    // 内建优先，第三口径）。冲突声明必须 fail-loud 拒绝（E1003 类型域），
+    // 使存活文档的声明面/内建面恒一致。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n    emits: { passed: a }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert!(
+        check(&src).contains(&"E1003"),
+        "gate 显式声明 passed 与内建 boolean 冲突应 fail-loud（E1003；W3-C17）"
+    );
+}
+
+#[test]
+fn builtin_done_conflicting_declaration_is_rejected() {
+    // 同上：loop 节点显式声明 done 为非 signal 型。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { done: a }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert!(
+        check(&src).contains(&"E1003"),
+        "loop 显式声明 done 与内建 signal 冲突应 fail-loud（E1003；W3-C17）"
+    );
+}
+
+#[test]
+fn builtin_port_from_body_spec_is_rejected_as_shadowed() {
+    // 内建端口名的 from_body 声明同样被 emit_type 内建短路静默忽略（声明
+    // 的转发通道永不生效）——一并 fail-loud，不允许装饰性死声明。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\n  - id: c1\n    kind: gate\n    assert: \"true\"\n    emits: { passed: { from_body: inner.ok } }\n  - id: l1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: inner, kind: task, uses: { model: route.main@1 }, emits: { ok: a } }\n          - { id: c1, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: c1, kind: gate } ]\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert!(
+        check(&src).contains(&"E1003"),
+        "内建端口名的 from_body 声明应 fail-loud（声明被内建短路永不生效；W3-C17）"
+    );
+}
+
+// ---------- 红队 W3-C20：map.from_body 转发内联原始型不可表达 ----------
+
+#[test]
+fn map_frombody_inline_primitive_is_rejected() {
+    // emit_type 对 map 构造的 from_body 只对 Named 内层包 list<>，内联原始
+    // 型恒 None ⇒ E2202 判 undecidable 放行 + lower is_final=false ⇒ 计划
+    // 零终态工件 ⇒ 执行面 final_artifact_port 必拒（编译过执行拒）。类型
+    // 表达式文法无 list<原始型>（泛型载荷须已登记名或 signal），该形状不
+    // 可表达——af-dsl 阶段显式拒绝（E2213，红队 W3-C20），禁止编译出
+    // 无 is_final 工件的计划。
+    // over: input.items 需要 in_t 有 items 数组字段（DEF_TYPES 无），专用类型表。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: { type: boolean }, from: n1 }\n";
+    let types = "types:\n  - { name: in_t, schema: { type: object, required: [items], properties: { items: { type: array, items: { type: string } } } } }\n  - { name: a, schema: { type: object } }\n";
+    let src = build(meta, types, "", "  - id: n1\n    kind: task\n    map:\n      over: input.items\n      body:\n        nodes:\n          - { id: chk, kind: check, assert: \"true\" }\n        edges: []\n    emits: { final: { from_body: chk.passed } }\n", "", DEF_POLICIES);
+    let codes = check(&src);
+    assert!(
+        codes.contains(&"E2213"),
+        "map.from_body 转发内建 passed:boolean（内联原始型）应显式拒绝（E2213；W3-C20），实得 {codes:?}"
+    );
+}
+
+#[test]
+fn loop_frombody_builtin_passed_still_passes() {
+    // 反向钉（W3-C20 不误伤）：loop 构造不包 list<>，from_body 转发内建
+    // passed:boolean 是合法同型转发（W3-C19 的终态路径），零违例。
+    let meta = "meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: { type: boolean }, from: n1 }\n";
+    let src = build(
+        meta,
+        DEF_TYPES,
+        "",
+        "  - id: n1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: chk, kind: check, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: chk, kind: check } ]\n    emits: { final: { from_body: chk.passed } }\n",
+        "",
+        DEF_POLICIES,
+    );
+    assert_eq!(check(&src), Vec::<&str>::new());
+}

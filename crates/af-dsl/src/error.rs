@@ -16,7 +16,10 @@ pub enum ErrorCode {
     VersionNotInteger,
     /// E0003 version 整数但非 1。
     VersionNotOne,
-    /// E0004 信封未知键（顶层只认七段 + version）。
+    /// E0004 信封未知键（顶层只认七段：version/meta/types/stores/nodes/
+    /// edges/policies——红队 W3-C18 勘误：原注「七段 + version」把七段误作
+    /// version 之外的段数（=8），与 envelope.rs BODY_KEYS（6 集合段）+
+    /// version = 7 及 SYNTAX.md 口径矛盾）。
     EnvelopeUnknownKey,
 
     // ---- E1xxx 形状（serde deny_unknown_fields 派生 + 手写词汇表）----
@@ -25,7 +28,9 @@ pub enum ErrorCode {
     /// E1002 缺必填字段（serde `missing field`）。
     MissingField,
     /// E1003 类型不符（serde `invalid type` / 类型表达式语法错 / untagged 失配 /
-    /// 端口内联对象 schema——对象 schema 必须住 types 表）。
+    /// 端口内联对象 schema——对象 schema 必须住 types 表 / 内建端口显式声明与
+    /// 内建固定类型冲突——loop/map done:signal、check/gate passed:boolean，
+    /// 冲突声明会被 emit_type 内建短路静默遮蔽（红队 W3-C17））。
     TypeMismatch,
     /// E1004 枚举值非法（serde `unknown variant` + 手写闭环词表：ops 算子名、
     /// section 来源名等）。
@@ -99,6 +104,23 @@ pub enum ErrorCode {
     BudgetCapOrScopeInvalid,
     /// E2208 store retention 无上界（max_items / max_bytes 至少其一）。
     StoreRetentionUnbounded,
+    /// E2212 构造×构造并存（同一节点同时携带 loop 与 map）：解析面
+    /// （construct_body_scope）取 loop 体而类型面（emit_type）因 map 在场
+    /// 一律包 list<>——同一 from_body 的类型推导取决于无关字段在场与否，
+    /// 两判定面自相矛盾，故组合非法、fail-closed 拒绝（红队 W1-C25）。
+    /// 码位史（红队 W3-C16）：原登 E2209，与提案-B §6 既有分派「E2209 ops
+    /// 参数不闭合」撞码（E1008/E1054 空号新增先例不适用于已分配码位）——
+    /// 迁至语义段未分配的 E2212，E2209 归还 ops 参数闭合；§6 表已同步登记。
+    ConstructConflict,
+    /// E2213 map.from_body 转发的体内端口类型为内联原始型：类型表达式文法
+    /// 的泛型载荷只收已登记类型名或 signal（model.rs parse_type_payload），
+    /// `list<原始型>` 不可表达——map 构造的 from_body 自动包 list<>，转发
+    /// 内联原始型即产不可表达的端口类型，emit_type 只得返回 None（不可判
+    /// 定）⇒ E2202 判 undecidable 放行、lowering is_final=false ⇒ 计划零
+    /// 终态工件、执行面 final_artifact_port 必拒（「编译过、执行拒」）。在
+    /// af-dsl 阶段 fail-loud 显式拒绝该形状（红队 W3-C20；E2xxx 语义段预算
+    /// 余量内登记，承 E1008/E1054/E2212 先例，§6 表已同步登记）。
+    MapFrombodyInlineType,
     /// E2211 loop.carried 未覆盖「体内（含嵌套体）写入的、体外声明的 store」。
     CarriedNotCovering,
 
@@ -181,6 +203,8 @@ impl ErrorCode {
             Self::UnknownTypeName => "E2205",
             Self::BudgetCapOrScopeInvalid => "E2207",
             Self::StoreRetentionUnbounded => "E2208",
+            Self::ConstructConflict => "E2212",
+            Self::MapFrombodyInlineType => "E2213",
             Self::CarriedNotCovering => "E2211",
             Self::ContextSourceUnresolvable => "E2301",
             Self::QuotaNotPositive => "E2302",
@@ -231,6 +255,8 @@ impl ErrorCode {
             Self::UnknownTypeName => "unknown_type_name",
             Self::BudgetCapOrScopeInvalid => "budget_cap_or_scope_invalid",
             Self::StoreRetentionUnbounded => "store_retention_unbounded",
+            Self::ConstructConflict => "construct_conflict",
+            Self::MapFrombodyInlineType => "map_frombody_inline_type",
             Self::CarriedNotCovering => "carried_not_covering",
             Self::ContextSourceUnresolvable => "context_source_unresolvable",
             Self::QuotaNotPositive => "quota_not_positive",

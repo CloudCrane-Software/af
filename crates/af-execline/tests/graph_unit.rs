@@ -149,6 +149,8 @@ struct GraphFakeRunner {
     launches: Mutex<Vec<CapturedLaunch>>,
     /// 节点名 → 终态 assistant 文本（envelope 载荷）。未列节点 → 空轮失败。
     scripted: fn(&str) -> Option<String>,
+    /// HTTP 层退避重试回数（红队 W2-C33：供给面重试审计面）。
+    http_retries: u64,
 }
 
 /// 走 declare 工具面的节点集。
@@ -159,6 +161,16 @@ impl GraphFakeRunner {
         Self {
             launches: Mutex::new(Vec::new()),
             scripted,
+            http_retries: 0,
+        }
+    }
+
+    /// 非零 http_retries（W2-C33 测试缝）。
+    fn with_http_retries(scripted: fn(&str) -> Option<String>, retries: u64) -> Self {
+        Self {
+            launches: Mutex::new(Vec::new()),
+            scripted,
+            http_retries: retries,
         }
     }
 
@@ -274,7 +286,7 @@ impl af_execline::AgentRunner for GraphFakeRunner {
         };
         Ok(af_execline::AgentRunOutcome {
             report,
-            http_retries: 0,
+            http_retries: self.http_retries,
         })
     }
 }
@@ -310,6 +322,9 @@ fn drive(
         data_root,
         attempt_dir: attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx)
@@ -382,17 +397,33 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     );
 
     // tester（check 节点）：uses.unit 经注册表 impl 解析直调——容器内跑
-    // task.json 声明的 test_command，零模型调用。
+    // task.json 声明的 test_command，零模型调用；红队 W2-C48 起判据命令须
+    // 随任务包冻结（缺省 pytest 面废除），W2-C49 起判据留档在 tester 臂
+    // 另取一次工作区 diff（与公共段「3 task 节点 + 1 判据面」四次取证同源
+    // 计数）。
     let exec_calls: Vec<String> = bridge
         .calls()
         .into_iter()
-        .filter(|s| s.contains("docker exec"))
+        .filter(|s| s.contains("docker exec") && s.contains("pytest"))
         .collect();
-    assert_eq!(exec_calls.len(), 1, "tester 恰一次容器执行: {exec_calls:?}");
+    assert_eq!(exec_calls.len(), 1, "tester 恰一次判据执行: {exec_calls:?}");
     assert!(
         exec_calls[0].contains("python -m pytest"),
         "test_command 来自任务包: {}",
         exec_calls[0]
+    );
+    // 红队 W2-C48：三 task 节点收尾取证 + tester 判据面取证，各恰一次
+    // `git diff` 过桥（keyed-declare/终态消息两路同样取证）。
+    let diff_calls = bridge
+        .calls()
+        .iter()
+        .filter(|s| s.contains("git -c core.fileMode=false diff"))
+        .count();
+    assert_eq!(
+        diff_calls,
+        4,
+        "取证面：3 task 节点 + 1 判据面: {}",
+        bridge.calls().len()
     );
 
     // typed envelope 落 attempt 工件面（artifact_contract 端口名）。
@@ -414,12 +445,57 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
     assert_eq!(report["port"], json!("report"), "envelope 结构带端口名");
     assert_eq!(report["payload"]["pass"], json!(true), "tester 判定 pass");
 
+    // 红队 W2-C49：test_unit 判据留档——pass=true 也不许丢观察：tester 节点
+    // 目录必须齐 test.log（完整观察文本）+ test-evidence.json（命令/退出码/
+    // 判定/体量口径）+ agent.diff（工作区取证），envelope 带 evidence 指针，
+    // 订单证据树自此可复核 pass 与外部评审结论并存的依据面。
+    let tester_dir = attempt.join("nodes").join("tester");
+    let test_log = std::fs::read_to_string(tester_dir.join("test.log"))
+        .expect("W2-C49：pass=true 也须留 test.log");
+    assert!(
+        test_log.contains("Ran 12 tests") && test_log.contains("exit=0"),
+        "test.log 须为完整观察文本（含 exit= 尾行）: {test_log:?}"
+    );
+    let evidence_json: Value = serde_json::from_str(
+        &std::fs::read_to_string(tester_dir.join("test-evidence.json"))
+            .expect("W2-C49：pass=true 也须留 test-evidence.json"),
+    )
+    .unwrap();
+    assert_eq!(evidence_json["pass"], json!(true));
+    assert_eq!(evidence_json["exit_code"], json!(0));
+    assert!(
+        evidence_json["command"]
+            .as_str()
+            .unwrap_or("")
+            .contains("python -m pytest"),
+        "evidence 记命令: {evidence_json}"
+    );
+    let diff_text = std::fs::read_to_string(tester_dir.join("agent.diff"))
+        .expect("W2-C49：tester 节点目录须留 agent.diff");
+    assert!(
+        diff_text.contains("diff --git"),
+        "agent.diff 内容: {diff_text:?}"
+    );
+    assert_eq!(
+        report["payload"]["evidence"]["log"],
+        json!("test.log"),
+        "envelope 带 evidence 指针"
+    );
+    assert!(
+        report["payload"]["evidence"]["diff"]["sha256"].is_string(),
+        "envelope evidence 带 diff 指纹: {}",
+        report["payload"]["evidence"]
+    );
+
     // 终态：qa_report.pass=true → verdict + 合格终态工件（is_final=report）。
     assert_eq!(output.verdict, Some(true));
     assert_eq!(output.artifacts.len(), 1);
     assert!(output.artifacts[0].is_final && output.artifacts[0].qualified);
 
-    // v1 行：records.jsonl 恰一行，带 plan_id 与节点计数。
+    // v1 行：records.jsonl 恰一行，按 af.plan.record.v1 契约键投影（红队
+    // W1-C36：图行与 swev/report 同一契约面——node_id/item_id/attempt/
+    // host_alias/status/evidence.run_dir/gate/usage.quota/wall_ms/note 齐，
+    // 无 suite/order_id/nodes/cents_used 契约外键）。
     let rows: Vec<Value> = std::fs::read_to_string(out.join("records.jsonl"))
         .unwrap()
         .lines()
@@ -427,11 +503,43 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
         .map(|l| serde_json::from_str(l).unwrap())
         .collect();
     assert_eq!(rows.len(), 1);
-    assert!(rows[0]["plan_id"]
+    let row = &rows[0];
+    assert!(row["plan_id"]
         .as_str()
         .unwrap()
         .starts_with("plan.sweng_sop_full@1.1+"));
-    assert_eq!(rows[0]["nodes"], json!(4));
+    for key in [
+        "plan_id",
+        "node_id",
+        "item_id",
+        "attempt",
+        "host_alias",
+        "unit_id",
+        "unit_version",
+        "status",
+        "verdict",
+        "gate",
+        "wall_ms",
+        "note",
+    ] {
+        assert!(row.get(key).is_some(), "v1 契约键 {key} 缺席：{row}");
+    }
+    assert!(!row.is_null());
+    // 契约外键不得混入。
+    for key in ["suite", "order_id", "nodes", "cents_used", "tokens_used"] {
+        assert!(row.get(key).is_none(), "契约外键 {key} 不得混入：{row}");
+    }
+    // evidence.run_dir 指向实际 run 目录（trace 工具 L1→L2 父子边）。
+    let run_dir = row["evidence"]["run_dir"].as_str().unwrap();
+    assert!(
+        Path::new(run_dir).is_dir(),
+        "evidence.run_dir 须指向实际 run 目录：{run_dir}"
+    );
+    // usage.quota 三分账在案（FakeRunner 每节点 in=100/out=50/cache=10 ×3）。
+    assert_eq!(row["usage"]["quota"]["input"], json!(300));
+    assert_eq!(row["usage"]["quota"]["output"], json!(150));
+    assert_eq!(row["usage"]["quota"]["cache_read"], json!(30));
+    assert_eq!(row["item_id"], json!(TASK));
 
     // 容器清理必达（RAII）：rm -f 恰两次（setup 前清残件 + 收尾）。
     assert!(
@@ -441,6 +549,99 @@ fn sop_full_drives_three_llm_nodes_in_topo_order_then_tester_unit() {
             .filter(|s| s.starts_with("docker rm -f"))
             .count()
             >= 1
+    );
+}
+
+// ============================================================
+// ①b 红队 W2-C10：tester 的 review 入边显式接线（评审对判定有因果）
+// ============================================================
+
+/// 红队 W2-C10：sop_full 声明 reviewer→tester review 边、tester consumes
+/// review_report——此前分发表 `pkg.sweng.test_unit` 臂完全不传 inputs：类型化
+/// 数据边制造「评审已接入」的假象，approved=false 对订单判定零因果（F4D 实盘：
+/// reviewer approved=false 附两条问题，tester 退出码 0 → pass=true 照常
+/// qualified）。修复后按 consumes 契约取 review 端口：approved=false 一票否决
+/// （退出码 0 亦翻假，failures 点名评审问题），approved=true 维持退出码判定、
+/// 证据面（test-evidence.json）留评审摘要。
+#[test]
+fn tester_verdict_is_gated_by_review_edge_payload() {
+    // ① approved=false：假桥容器执行恒退出码 0，评审否决必须翻假。
+    let root = temp_root("w2c10-reject");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let scripted = |node: &str| -> Option<String> {
+        let text = match node {
+            "planner" => json!({"plan": {"instance_id": TASK, "steps": [
+                {"id": "s1", "action": "locate", "target": "django/db/models"}
+            ]}}),
+            "coder" => json!({"files": [
+                {"path": "django/db/models/foo.py", "content_ref": "workspace#1"}
+            ]}),
+            "reviewer" => json!({"review": {
+                "approved": false,
+                "issues": [
+                    "no changed file content or diff was supplied with the change",
+                    "no evidence that plan steps 3 and 4 were executed",
+                ],
+            }}),
+            _ => return None,
+        };
+        Some(text.to_string())
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ =
+        drive(&unit, &data_root, &attempt, &out).expect("评审否决链应走通（判定翻假而非 panic）");
+
+    let report: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("tester.report.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        report["payload"]["pass"],
+        json!(false),
+        "approved=false 一票否决：容器退出码 0 亦不得 pass（W2-C10）"
+    );
+    let failures = report["payload"]["failures"]
+        .as_array()
+        .expect("failures 应为数组");
+    assert!(
+        failures.iter().any(|f| f
+            .as_str()
+            .is_some_and(|s| s.contains("no changed file content"))),
+        "评审问题须点名进 failures: {failures:?}"
+    );
+
+    // ② approved=true：不误伤退出码判定；证据面留评审摘要。
+    let root = temp_root("w2c10-approve");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let output = drive(&unit, &data_root, &attempt, &out).expect("approve 链应走通");
+    assert_eq!(output.verdict, Some(true), "approved=true 合格终态不误伤");
+
+    let report: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("tester.report.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        report["payload"]["pass"],
+        json!(true),
+        "approved=true 维持退出码判定"
+    );
+    let summary: Value = serde_json::from_str(
+        &std::fs::read_to_string(
+            attempt
+                .join("nodes")
+                .join("tester")
+                .join("test-evidence.json"),
+        )
+        .expect("W2-C49 留档在场"),
+    )
+    .unwrap();
+    assert_eq!(
+        summary["review"]["approved"],
+        json!(true),
+        "证据面须留评审摘要（W2-C10 接线可见性）: {summary}"
     );
 }
 
@@ -1007,6 +1208,7 @@ policies:
     };
     let runner = Arc::new(GraphFakeRunner::new(scripted));
     let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ = _bridge;
 
     let output = drive(&unit, &data_root, &attempt, &out).expect("aci_schema+human_gate 链应走通");
 
@@ -1040,11 +1242,144 @@ policies:
     assert_eq!(output.verdict, Some(true));
 }
 
-/// swebench_eval 分派面 fail-loud：spec.judge 未配置（None）时拒载点名
-/// 「判分锚」——不静默跳判（B 席嫁接口径）。
+/// 红队 W2-C29：aci_schema 载荷必须按 consumes 契约取 agent_action 端口，
+/// 禁 `inputs.values().next()`——inputs 是 BTreeMap，values().next()=端口名
+/// 字典序最小者。本图给 verifier 两条入边：agent_action 端口声明在前、
+/// 字典序在后（target > probe），诱饵工件恰含 thought/command/submit 三字段
+/// （结构上过得了 aci_schema 校验）——旧码会把结构校验跑在字典序最小的诱饵
+/// 上并输出其 submit，真 action 漏校。
 #[test]
-fn swebench_eval_without_judge_fails_loud() {
+fn aci_schema_picks_contract_port_not_lexicographic_first() {
     let graph_src = r#"
+version: 1
+meta:
+  name: sweng_aci_port_contract
+  graph_version: "1.0"
+  entry: actor
+  input: swe_task_input
+  output: { ref: schema_verdict, from: verifier }
+  intent: "W2-C29：aci_schema 多入边按 consumes 契约取 agent_action，不取字典序首"
+
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: agent_action
+    schema:
+      type: object
+      required: [thought, command, submit]
+      properties:
+        thought: { type: string }
+        command: { type: string }
+        submit: { type: boolean }
+  - name: decoy_payload
+    schema:
+      type: object
+      required: [thought, command, submit]
+      properties:
+        thought: { type: string }
+        command: { type: string }
+        submit: { type: boolean }
+  - name: schema_verdict
+    schema:
+      type: object
+      required: [error, submit]
+      properties:
+        error: { type: string }
+        submit: { type: boolean }
+
+nodes:
+  - id: actor
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { target: agent_action }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 400 }
+
+  - id: observer
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { probe: decoy_payload }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 400 }
+
+  - id: verifier
+    kind: check
+    uses: { unit: pkg.sweagent.aci_schema@1 }
+    consumes: { target: agent_action, probe: decoy_payload }
+    emits: { verdict: schema_verdict }
+
+edges:
+  - { from: actor, output: target, to: verifier, input: target }
+  - { from: observer, output: probe, to: verifier, input: probe }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 100 }
+  stop:
+    - { when: "last_tool.first_line in ['TASK_COMPLETE']", outcome: completed }
+    - { when: "steps.tool_free >= 3", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed
+"#;
+    let root = temp_root("aci_port_contract");
+    let data_root = task_package(&root, &compile_plan(graph_src));
+    let scripted = |node: &str| -> Option<String> {
+        let text = match node {
+            // 真 action（submit=true）：合同端口 target 的载荷。
+            "actor" => json!({"target": {
+                "thought": "run the tests", "command": "python -m pytest -q", "submit": true
+            }}),
+            // 诱饵（submit=false，thought 打标）：恰含三字段、结构过得 aci_schema。
+            "observer" => json!({"probe": {
+                "thought": "DECOY not an action", "command": "echo decoy", "submit": false
+            }}),
+            _ => return None,
+        };
+        Some(text.to_string())
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ = _bridge;
+
+    let _ = drive(&unit, &data_root, &attempt, &out).expect("双入边 aci_schema 链应走通");
+
+    let verdict: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("verifier.verdict.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        verdict["payload"]["error"],
+        json!(""),
+        "真 agent_action 过结构校验"
+    );
+    assert_eq!(
+        verdict["payload"]["submit"],
+        json!(true),
+        "aci_schema 必须校验 consumes 契约声明的 agent_action 端口（target），\
+         不是字典序最小的诱饵端口（probe——旧 values().next() 会输出其 submit=false）"
+    );
+}
+
+/// sweng_g4_sweeval 图源（actor(task) → evaluator(check: swebench_eval)）：
+/// fail-loud 用例与 W2-C51 判分锚在场路由用例共用。
+fn sweeval_graph_src() -> String {
+    r#"
 version: 1
 meta:
   name: sweng_g4_sweeval
@@ -1112,9 +1447,17 @@ policies:
     - class: budget_exhausted
       terminal: true
       outcome: failed
-"#;
+"#
+    .to_string()
+}
+
+/// swebench_eval 分派面 fail-loud：spec.judge 未配置（None）时拒载点名
+/// 「判分锚」——不静默跳判（B 席嫁接口径）。
+#[test]
+fn swebench_eval_without_judge_fails_loud() {
+    let graph_src = sweeval_graph_src();
     let root = temp_root("g4sweeval");
-    let data_root = task_package(&root, &compile_plan(graph_src));
+    let data_root = task_package(&root, &compile_plan(&graph_src));
     let scripted = |node: &str| -> Option<String> {
         match node {
             "actor" => Some(
@@ -1485,6 +1828,7 @@ policies:
         fed: Mutex::new(false),
     });
     let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ = _bridge;
 
     let output = drive(&unit, &data_root, &attempt, &out)
         .expect("裸 declare 被拒后修正重调应完成（复活剧本）");
@@ -1621,4 +1965,1031 @@ fn permissive_declare_face_unchanged_for_patch_shaped_ports() {
     let envelope: Value = serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
     assert_eq!(envelope["derived"], json!(["diff", "files"]));
     assert_eq!(output.verdict, Some(true));
+}
+
+// ============================================================
+// 红队修复批（W1）：C-31/C-32/C-34/C-37/C-38
+// ============================================================
+
+/// 带 graph_version 期待的驱动（红队 W1-C32 测试缝）。
+fn drive_with_gv(
+    unit: &GraphExecuteUnit,
+    data_root: &Path,
+    attempt: &Path,
+    out: &Path,
+    graph_version: Option<&str>,
+) -> Result<af_execline::ExecOutput, af_execline::ExeclineError> {
+    std::fs::create_dir_all(attempt).unwrap();
+    std::fs::create_dir_all(out).unwrap();
+    let sink = FileRecordSink::open(out).unwrap();
+    let ctx = ExecContext {
+        order_id: "wo-graph-w1",
+        stable_id: "sid-graph-w1",
+        line_id: "line-A",
+        out_dir: out,
+        task_id: TASK,
+        task_sha256: None,
+        plan_sha256: None,
+        host_alias: "local",
+        data_root,
+        attempt_dir: attempt,
+        record_sink: &sink,
+        trial: false,
+        graph_version,
+    };
+    unit.execute(&ctx)
+}
+
+/// C-31 测试 Runner：planner/coder 走 declare 面（声明 = 端口键控全键，
+/// 含无类型 shadow 端口）；reviewer 走终态消息 JSON（回退源双源覆盖）。
+struct UntypedPortRunner {
+    planner_declare_params: Mutex<Value>,
+}
+
+impl af_execline::AgentRunner for UntypedPortRunner {
+    fn run(
+        &self,
+        launch: af_execline::AgentLaunch<'_>,
+    ) -> Result<af_execline::AgentRunOutcome, af_execline::AgentRunFailure> {
+        let node = launch
+            .run_id
+            .strip_prefix(&format!("{TASK}-"))
+            .unwrap_or_default()
+            .to_string();
+        let (final_text, via_declare) = match node.as_str() {
+            "planner" => (
+                json!({
+                    "plan": {"instance_id": TASK, "steps": [
+                        {"id": "s1", "action": "locate", "target": "django/db/models"}
+                    ]},
+                    "shadow": {"note": "untyped port payload"}
+                })
+                .to_string(),
+                true,
+            ),
+            "coder" => (
+                json!({"files": [
+                    {"path": "django/db/models/foo.py", "content_ref": "workspace#1"}
+                ]})
+                .to_string(),
+                true,
+            ),
+            "reviewer" => (
+                json!({"review": {"approved": true, "issues": []}}).to_string(),
+                false,
+            ),
+            other => {
+                return Err(af_execline::AgentRunFailure {
+                    message: format!("UntypedPortRunner 无节点 {other} 脚本"),
+                    http_retries: 0,
+                })
+            }
+        };
+        if via_declare {
+            if node == "planner" {
+                *self
+                    .planner_declare_params
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner()) = launch
+                    .spec
+                    .toolset
+                    .iter()
+                    .find(|t| t.name == "declare")
+                    .map(|t| t.parameters.clone())
+                    .unwrap_or(Value::Null);
+            }
+            let binding = launch
+                .extra_tools
+                .iter()
+                .find(|t| t.name == "declare")
+                .expect("declare 面必在");
+            let args: Value = serde_json::from_str(&final_text).unwrap();
+            (binding.handler)(&args).expect("全键声明应被 strict 闭包采纳");
+        }
+        Ok(af_execline::AgentRunOutcome {
+            report: af_harness::RunReport {
+                run_id: launch.run_id,
+                status: af_harness::RunStatus::Completed {
+                    signal: "TASK_COMPLETE".into(),
+                },
+                turns: 3,
+                model_calls: 5,
+                effect_replays: 0,
+                effect_fresh: 2,
+                transcript: vec![
+                    af_harness::TranscriptItem::User {
+                        text: launch.user_message.clone(),
+                    },
+                    af_harness::TranscriptItem::Assistant {
+                        text: final_text.clone(),
+                        tool_calls: Vec::new(),
+                        usage: None,
+                    },
+                ],
+                whitelist: Vec::new(),
+                tokens: af_harness::TokenTotals {
+                    input: 100,
+                    output: 50,
+                    cache_read: 10,
+                },
+            },
+            http_retries: 0,
+        })
+    }
+}
+
+/// C-31：多端口 task 节点带「无 r#type 且非 is_final」端口——strict declare
+/// 的 required/accepted 键集 = 全部 artifact_contract 端口（无类型端口仅进
+/// required 不给 schema）；declare 交全键 → commit 相 EX4006 不再致死。
+/// 此前两相键集互斥：只交类型端口 → commit EX4006 全灭；补交无类型端口 →
+/// 闭包「未知键」拒收——重试环无出口（系统性死锁，红队 W1-C31）。
+#[test]
+fn strict_declare_covers_untyped_nonfinal_ports_end_to_end() {
+    let root = temp_root("w1-c31");
+    let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+    let planner = plan["body"]["node_exec"]
+        .as_array_mut()
+        .unwrap()
+        .iter_mut()
+        .find(|n| n["node_id"] == json!("planner"))
+        .unwrap();
+    planner["artifact_contract"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({"name": "shadow", "is_final": false}));
+    let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+    let runner = Arc::new(UntypedPortRunner {
+        planner_declare_params: Mutex::new(Value::Null),
+    });
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let _ = _bridge;
+
+    let output = drive(&unit, &data_root, &attempt, &out)
+        .expect("无类型非终态端口不得致死（required=全部端口 + 无类型不核形）");
+    assert_eq!(output.verdict, Some(true), "终态 qa_report.pass=true");
+
+    // API 面：required 含全键；properties 只含有类型端口（无类型端口不给
+    // schema——形状留白，键到位即可）。
+    let params = runner
+        .planner_declare_params
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    let required = params["required"].as_array().unwrap().clone();
+    assert!(
+        required.contains(&json!("plan")),
+        "required 应含类型端口：{params}"
+    );
+    assert!(
+        required.contains(&json!("shadow")),
+        "required 应含无类型端口（W1-C31）：{params}"
+    );
+    assert!(
+        params["properties"].get("plan").is_some(),
+        "有类型端口应给 schema：{params}"
+    );
+    assert!(
+        params["properties"].get("shadow").is_none(),
+        "无类型端口不给 schema：{params}"
+    );
+}
+
+/// C-32：WorkOrder 一次性绑定的 graph_version 作装订外部期待——与计划
+/// compiled_from.graph_version 不符即拒（此前期待分支恒空 = 死代码，换
+/// graph_version 漂移的计划照样装订执行）。
+#[test]
+fn graph_version_expectation_mismatch_rejects_binding() {
+    let root = temp_root("w1-c32");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    // 期待漂移 → EX4004 口径装订拒绝，零节点驱动、零容器。
+    let err = drive_with_gv(&unit, &data_root, &attempt, &out, Some("9.9"))
+        .expect_err("graph_version 漂移应拒装订");
+    assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{err}");
+    assert!(err.to_string().contains("graph_version"), "{err}");
+    assert!(runner.launches().is_empty());
+    assert!(bridge.calls().is_empty(), "装订失败不起容器");
+
+    // 期待一致（sop_full 图版本 1.1）→ 正常走通。
+    drive_with_gv(&unit, &data_root, &attempt, &out, Some("1.1")).expect("期待一致应走通");
+}
+
+/// C-34：预算面收口——强制面外的 dimension/scope 组合 fail-loud 拒收
+/// （此前 plan 级五维与节点级非 turns 条目被静默忽略 = 声明帽得到无预算
+/// 运行，与本函数正典 id 门的 fail-loud 纪律自相矛盾）。
+#[test]
+fn unsupported_budget_dimension_scope_combos_rejected() {
+    for (tag, entry) in [
+        (
+            "plan-clock",
+            json!({"id": "wall", "dimension": "clock_ms", "scope": "plan", "cap": 1000}),
+        ),
+        (
+            "plan-modelcalls",
+            json!({"id": "calls", "dimension": "model_calls", "scope": "plan", "cap": 10}),
+        ),
+        (
+            "node-cents",
+            json!({"id": "nc", "dimension": "cents", "scope": "node:coder", "cap": 100}),
+        ),
+        (
+            "loop-turns",
+            json!({"id": "lt", "dimension": "turns", "scope": "loop:study", "cap": 10}),
+        ),
+        (
+            "dangling-node",
+            json!({"id": "dt", "dimension": "turns", "scope": "node:ghost", "cap": 10}),
+        ),
+    ] {
+        let root = temp_root(&format!("w1-c34-{tag}"));
+        let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+        plan["body"]["budget"]["budgets"]
+            .as_array_mut()
+            .unwrap()
+            .push(entry.clone());
+        let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+        let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+        let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+        let err = drive(&unit, &data_root, &attempt, &out)
+            .expect_err(&format!("{tag} 应 fail-loud 拒收"));
+        assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{tag}: {err}");
+        assert!(
+            err.to_string().contains("强制集") || err.to_string().contains("强制面"),
+            "{tag}: {err}"
+        );
+    }
+}
+
+/// C-37：同一 (to, input) 端口被多条边命中 = 编排真相二义——入边装配取
+/// 后边、提示词装配取前边，载荷静默分叉；装订器先拒。**顺序对抗**：重影边
+/// 排在原边之后（后边胜面）与之前（前边胜面）都必须拒——拒绝与边序无关，
+/// 不给任何一序留「恰好装配到真边」的侥幸面。
+#[test]
+fn duplicate_to_input_edges_rejected_at_bind() {
+    for (tag, dup_first) in [("dup-after", false), ("dup-before", true)] {
+        let root = temp_root(&format!("w1-c37-{tag}"));
+        let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+        let edges = plan["body"]["graph"]["edges"].as_array().unwrap().clone();
+        let first = edges
+            .iter()
+            .find(|e| e["to"] == json!("coder"))
+            .expect("coder 入边在案")
+            .clone();
+        // 重影边来自不同上游（reviewer.review ≠ 原边载荷）——不同载荷 + 两种
+        // 边序都只是排列差异，装订器一律先拒。
+        let dup = json!({
+            "from": "reviewer", "output": "review",
+            "to": first["to"], "input": first["input"], "checkpoint": false
+        });
+        {
+            let arr = plan["body"]["graph"]["edges"].as_array_mut().unwrap();
+            if dup_first {
+                arr.insert(0, dup);
+            } else {
+                arr.push(dup);
+            }
+        }
+        let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+        let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+        let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+        let err = drive(&unit, &data_root, &attempt, &out)
+            .expect_err(&format!("{tag}: 重复 (to,input) 边应拒装订"));
+        assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{tag}: {err}");
+        assert!(err.to_string().contains("边级重影"), "{tag}: {err}");
+    }
+}
+
+/// C-38：节点 id / 工件端口名过路径安全核——含分隔符或纯点号段即拒
+/// （手写 plan.json 不经 af-dsl 词法集，id 直接拼进节点目录与
+/// {node_id}.{port}.json 工件名，可写出 attempt_dir 之外）。
+#[test]
+fn path_unsafe_node_ids_and_ports_rejected_at_bind() {
+    for (tag, mutate) in [
+        (
+            "slash-id",
+            Box::new(|plan: &mut Value| {
+                for collection in ["nodes"] {
+                    for n in plan["body"]["graph"][collection].as_array_mut().unwrap() {
+                        if n["id"] == json!("planner") {
+                            n["id"] = json!("pl/../../escape");
+                        }
+                    }
+                }
+                for n in plan["body"]["node_exec"].as_array_mut().unwrap() {
+                    if n["node_id"] == json!("planner") {
+                        n["node_id"] = json!("pl/../../escape");
+                    }
+                }
+            }) as Box<dyn Fn(&mut Value)>,
+        ),
+        (
+            "dotdot-id",
+            Box::new(|plan: &mut Value| {
+                for n in plan["body"]["graph"]["nodes"].as_array_mut().unwrap() {
+                    if n["id"] == json!("planner") {
+                        n["id"] = json!("..");
+                    }
+                }
+                for n in plan["body"]["node_exec"].as_array_mut().unwrap() {
+                    if n["node_id"] == json!("planner") {
+                        n["node_id"] = json!("..");
+                    }
+                }
+            }) as Box<dyn Fn(&mut Value)>,
+        ),
+        (
+            "slash-port",
+            Box::new(|plan: &mut Value| {
+                for n in plan["body"]["node_exec"].as_array_mut().unwrap() {
+                    if n["node_id"] == json!("planner") {
+                        n["artifact_contract"][0]["name"] = json!("pl/an");
+                    }
+                }
+            }) as Box<dyn Fn(&mut Value)>,
+        ),
+    ] {
+        let root = temp_root(&format!("w1-c38-{tag}"));
+        let mut plan: Value = serde_json::from_str(&compile_plan(&sop_full_src())).unwrap();
+        mutate(&mut plan);
+        let data_root = task_package(&root, &serde_json::to_string(&plan).unwrap());
+        let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+        let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+        let err = drive(&unit, &data_root, &attempt, &out).expect_err(&format!("{tag} 应拒"));
+        assert_eq!(err.code(), ErrorCode::PlanBindMismatch, "{tag}: {err}");
+        assert!(
+            err.to_string().contains("路径分隔符") || err.to_string().contains("纯点号段"),
+            "{tag}: {err}"
+        );
+    }
+}
+
+/// C-59①：任务包判据面摘要钉死——门面 submit 期待的 sha256 与盘上
+/// task.json 不符即拒（判分真值源被换，清空判据即可绕判分的面收口）。
+#[test]
+fn task_digest_mismatch_rejects_execution() {
+    let root = temp_root("w1-c59");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+    std::fs::create_dir_all(&attempt).unwrap();
+    std::fs::create_dir_all(&out).unwrap();
+    let bad = "0".repeat(64);
+    let err = {
+        let sink_b = FileRecordSink::open(&out).unwrap();
+        let ctx_b = ExecContext {
+            order_id: "wo-graph-w1c59",
+            stable_id: "sid-graph-w1c59",
+            line_id: "line-A",
+            out_dir: &out,
+            task_id: TASK,
+            host_alias: "local",
+            data_root: &data_root,
+            attempt_dir: &attempt,
+            record_sink: &sink_b,
+            trial: false,
+            graph_version: None,
+            task_sha256: Some(bad.as_str()),
+            plan_sha256: None,
+        };
+        unit.execute(&ctx_b).expect_err("判据面摘要漂移应拒")
+    };
+    assert!(err.to_string().contains("判据面摘要不符"), "{err}");
+    assert!(runner.launches().is_empty(), "拒于执行前");
+    assert!(bridge.calls().is_empty(), "拒于起容器");
+
+    // 匹配摘要（盘上 task.json 实算）→ 正常走通。
+    let real = af_execline::file_sha256_hex(&data_root.join(TASK).join("task.json")).unwrap();
+    let output = {
+        std::fs::remove_dir_all(&out).ok();
+        std::fs::create_dir_all(&out).unwrap();
+        let sink2 = FileRecordSink::open(&out).unwrap();
+        let ctx2 = ExecContext {
+            order_id: "wo-graph-w1c59",
+            stable_id: "sid-graph-w1c59",
+            line_id: "line-A",
+            out_dir: &out,
+            task_id: TASK,
+            host_alias: "local",
+            data_root: &data_root,
+            attempt_dir: &attempt,
+            record_sink: &sink2,
+            trial: false,
+            graph_version: None,
+            task_sha256: Some(real.as_str()),
+            plan_sha256: None,
+        };
+        unit.execute(&ctx2)
+    };
+    output.expect("摘要匹配应走通");
+}
+
+/// 探针任务包（W2：单节点图 input=in_t，required q——task.json 须满足）。
+fn probe_task_package(root: &Path, plan_src: &str) -> PathBuf {
+    let data_root = root.join("data");
+    let task_dir = data_root.join(TASK);
+    std::fs::create_dir_all(&task_dir).unwrap();
+    std::fs::write(task_dir.join("plan.json"), plan_src).unwrap();
+    // in_t schema 要 q；执行器容器 setup 另要 instance_id/image（W2-C39 归属
+    // 文案：非 schema 必填项）——两者齐备才能过图输入双门。
+    std::fs::write(
+        task_dir.join("task.json"),
+        json!({"q": "x", "repo": "django/django", "instance_id": TASK,
+               "problem_statement": "probe", "image": "swebench/sweb.eval.x86_64.django-11099:latest"})
+            .to_string(),
+    )
+    .unwrap();
+    data_root
+}
+
+// ============================================================
+// 红队修复批（W2）：终态判定字段 / 双相熔断 / 供给面重试记账
+// ============================================================
+
+/// 单 task 节点终态图源（W2-C29/C-31 探针）：worker 发射 result: verdict_t
+/// （verdict_t 声明布尔 `resolved`——swebench 判分口径，非 pass）。
+fn single_node_graph_src(budgets: &str) -> String {
+    format!(
+        r#"version: 1
+meta:
+  name: w2probe
+  graph_version: "1.0"
+  entry: worker
+  input: in_t
+  output: {{ ref: verdict_t, from: worker }}
+types:
+  - {{ name: in_t, schema: {{ type: object, required: [q], properties: {{ q: {{ type: string }} }} }} }}
+  - {{ name: verdict_t, schema: {{ type: object, required: [resolved], properties: {{ resolved: {{ type: boolean }} }} }} }}
+nodes:
+  - id: worker
+    kind: task
+    uses: {{ model: route.main@1 }}
+    emits: {{ result: verdict_t }}
+edges: []
+policies:
+{budgets}"#
+    )
+}
+
+/// 终态消息按端口名包裹（envelope 契约 = 端口键）：{"result": {"resolved": …}}。
+fn payload_resolved_false(node: &str) -> Option<String> {
+    match node {
+        "worker" => Some(json!({"result": {"resolved": false}}).to_string()),
+        _ => None,
+    }
+}
+
+fn payload_resolved_true(node: &str) -> Option<String> {
+    match node {
+        "worker" => Some(json!({"result": {"resolved": true}}).to_string()),
+        _ => None,
+    }
+}
+
+#[test]
+fn terminal_verdict_reads_declared_resolved_field_not_pass_default() {
+    // 红队 W2-C29：终态类型声明 `resolved`（swebench 判分口径）时判据取
+    // resolved——此前硬编码 get("pass").or(Some(true))，无 pass 的失败判分
+    // （resolved=false）被缺字段推定成功、合格工件 close。
+    for (payload, expect) in [
+        (
+            payload_resolved_false as fn(&str) -> Option<String>,
+            Some(false),
+        ),
+        (
+            payload_resolved_true as fn(&str) -> Option<String>,
+            Some(true),
+        ),
+    ] {
+        let root = temp_root("w2-verdict");
+        let src = single_node_graph_src("  budgets: []\n  stop: []\n  failures: []\n");
+        let data_root = probe_task_package(&root, &compile_plan(&src));
+        let runner = Arc::new(GraphFakeRunner::new(payload));
+        let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+        let output = drive(&unit, &data_root, &attempt, &out).expect("单节点链应走通");
+        assert_eq!(
+            output.verdict, expect,
+            "终态判据须取声明的 resolved 字段（非 pass 缺省推定）"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+}
+
+#[test]
+fn image_missing_error_attributes_executor_setup_not_schema_gate() {
+    // 红队 W1-C39 归属钉：schema 门与解析门各归其位——input schema 不要求
+    // image（in_t required=[q]，validate_schema 放行），执行器容器 setup 仍
+    // 硬性必填。缺 image 的拒绝必须如实归属执行器自加要求（「执行器容器
+    // setup 硬性必填」「非 swe_task_input schema 必填项」），不得再说成
+    // schema 面要求（W1-C39 前的旧文案「（swe_task_input 面）」）；解析门
+    // 前零 launch、零容器调用。
+    let root = temp_root("w1-c39");
+    let src = single_node_graph_src("  budgets: []\n  stop: []\n  failures: []\n");
+    let data_root = probe_task_package(&root, &compile_plan(&src));
+    // 抹去 image：schema 门照放行，解析门按容器 setup 要求拒。
+    let task_path = data_root.join(TASK).join("task.json");
+    let mut task: Value =
+        serde_json::from_str(&std::fs::read_to_string(&task_path).unwrap()).unwrap();
+    task.as_object_mut().unwrap().remove("image");
+    std::fs::write(&task_path, task.to_string()).unwrap();
+
+    let runner = Arc::new(GraphFakeRunner::new(payload_resolved_true));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let err = drive(&unit, &data_root, &attempt, &out)
+        .expect_err("schema 门放行的缺 image 输入应由解析门如实拒收");
+    assert_eq!(err.code(), ErrorCode::UnitFailed, "{err}");
+    assert!(err.to_string().starts_with("EX3001:"), "{err}");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("执行器容器 setup 硬性必填"),
+        "归属须为执行器容器 setup：{msg}"
+    );
+    assert!(
+        msg.contains("非 swe_task_input schema 必填项"),
+        "须声明 schema 非穷尽边界（image 非 schema 必填项）：{msg}"
+    );
+    assert!(
+        !msg.contains("（swe_task_input 面）"),
+        "不得把缺 image 归为 schema 面要求（W1-C39 前的旧文案）：{msg}"
+    );
+    assert!(runner.launches().is_empty(), "解析门前零模型 launch");
+    assert!(bridge.calls().is_empty(), "解析门前零容器调用");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn terminal_token_overshoot_circuit_breaks_before_completion() {
+    // 红队 W2-C31：双相熔断第二相——终态节点跑完后对账，超 tokens_total 帽
+    // 不得完工（此前只在起动前 gate，终态超帽照常 check_typed/判定/落行）。
+    // FakeRunner 每节点 tokens=160（100+50+10）；帽 100 → 起动前 0<100 过、
+    // 完成后 160≥100 熔断。
+    let root = temp_root("w2-tokgate");
+    let src = single_node_graph_src(
+        "  budgets:\n    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 100 }\n  stop: []\n  failures: []\n",
+    );
+    let data_root = probe_task_package(&root, &compile_plan(&src));
+    let runner = Arc::new(GraphFakeRunner::new(payload_resolved_true));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let err = drive(&unit, &data_root, &attempt, &out)
+        .expect_err("终态超 token 帽应在完工前熔断（双相第二相）");
+    match err {
+        af_execline::ExeclineError::BudgetCapExceeded {
+            dimension,
+            spent,
+            cap,
+            ..
+        } => {
+            assert_eq!(dimension, "tokens_total", "熔断维度 = tokens_total");
+            assert!(spent >= cap, "累计 {spent} ≥ 帽 {cap}");
+        }
+        other => panic!("应 EX4007 预算熔断，实得 {other:?}"),
+    }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn http_retries_are_recorded_in_graph_v1_row() {
+    // 红队 W2-C33：graph v1 行须记 http_retries（此前 Ok 路径随 `..` 丢弃、
+    // facts 硬编码 0——401 重取等供给面重试不可审计；swev/report 环都记）。
+    let root = temp_root("w2-retries");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::with_http_retries(sop_full_payloads, 7));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    let output = drive(&unit, &data_root, &attempt, &out).expect("sop_full 应走通");
+    assert_eq!(output.verdict, Some(true));
+    let row: Value = serde_json::from_str(
+        std::fs::read_to_string(out.join("records.jsonl"))
+            .unwrap()
+            .lines()
+            .last()
+            .unwrap(),
+    )
+    .expect("v1 行应合法 JSON");
+    assert_eq!(
+        row["usage"]["http_retries"], 21,
+        "供给面重试须入 v1 行 usage.http_retries（3 个模型节点 × 7，stage 累账口径）"
+    );
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn plan_digest_mismatch_rejects_before_binding() {
+    // 红队 W2-C55：plan.json 摘要漂移即拒（先于装订）——graph 臂全部预算帽
+    // （cost_cap/token_cap/节点 turns）都写在 plan.json，判据面（task.json）
+    // 钉死不覆盖它；同 graph_version/registry_digest 换一份 plan.json 即可
+    // 放宽预算且装订四核对全放行——故计划面须独立钉死。
+    let root = temp_root("w2-planhash");
+    let data_root = probe_task_package(
+        &root,
+        &compile_plan(&single_node_graph_src(
+            "  budgets: []\n  stop: []\n  failures: []\n",
+        )),
+    );
+    let runner = Arc::new(GraphFakeRunner::new(payload_resolved_true));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+    std::fs::create_dir_all(&attempt).unwrap();
+    std::fs::create_dir_all(&out).unwrap();
+    let sink = FileRecordSink::open(&out).unwrap();
+    let bad_digest = "0".repeat(64);
+    let ctx = ExecContext {
+        order_id: "wo-graph-1",
+        stable_id: "sid-graph-1",
+        line_id: "line-A",
+        out_dir: &out,
+        task_id: TASK,
+        host_alias: "local",
+        data_root: &data_root,
+        attempt_dir: &attempt,
+        record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
+        plan_sha256: Some(bad_digest.as_str()),
+        trial: false,
+    };
+    let err = unit.execute(&ctx).expect_err("计划面摘要不符应拒");
+    assert!(
+        err.to_string().contains("计划面摘要不符"),
+        "拒因须点名计划面摘要：{err}"
+    );
+    assert!(runner.launches().is_empty(), "拒在执行前，零 launch");
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+// ============================================================
+// ⑩ 红队 W2-C51：判分锚在场 → swebench_eval 越过拒载门进入 verify 链
+// ============================================================
+
+/// diff 取证必败桥：`git diff` 取证脚本返回 Err——verify 链在取证步
+/// 短路返回未决 verdict（不触 docker/judge 真子进程），但足以证明
+/// 分派面已越过「spec.judge 未配置」拒载门、冻结判分链真实启动。
+struct FailDiffBridge {
+    calls: Mutex<Vec<String>>,
+}
+
+impl FailDiffBridge {
+    fn new() -> Self {
+        Self {
+            calls: Mutex::new(Vec::new()),
+        }
+    }
+
+    fn calls(&self) -> Vec<String> {
+        self.calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+}
+
+impl af_execline::HostBridge for FailDiffBridge {
+    fn run(&self, _host: &str, script: &str, _t: u32) -> Result<(bool, String), String> {
+        self.calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(script.to_string());
+        if script.contains("git -c core.fileMode=false diff") {
+            Err("注入失败：diff 取证不可达（W2-C51 用例）".into())
+        } else {
+            Ok((true, String::new()))
+        }
+    }
+}
+
+/// W2-C51：spec.judge 在场（订单层 graph_unit_for 同款注入；此处指向
+/// 测试自写假脚本 + 实算 sha256——指纹门可过、又不触真判分子进程）时，
+/// swebench_eval 检查节点不再 fail-loud 拒载，而是真实进入 swev::verify
+/// 链（指纹门 → capture_diff → …）。至此图臂冻结判分链从 spec 装配到
+/// 分派执行全链可达。
+#[test]
+fn swebench_eval_with_judge_passes_gate_into_verify_chain() {
+    let root = temp_root("g4sweeval-c51");
+    let graph_src = sweeval_graph_src();
+    let data_root = task_package(&root, &compile_plan(&graph_src));
+    let scripted = |node: &str| -> Option<String> {
+        match node {
+            "actor" => Some(
+                json!({"action": {"thought": "t", "command": "c", "submit": false}}).to_string(),
+            ),
+            _ => None,
+        }
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let bridge = Arc::new(FailDiffBridge::new());
+    let mut spec = GraphUnitSpec::v1(PROFILE, repo_packages());
+    let fake_script = root.join("fake-judge.py");
+    std::fs::write(&fake_script, "print('fake judge')\n").unwrap();
+    spec.judge = Some(af_execline::JudgeLocator {
+        python: fake_script.clone(),
+        script: fake_script.clone(),
+        script_sha256: af_execline::file_sha256_hex(&fake_script).expect("假判分脚本应可读"),
+        import_chain: Vec::new(),
+    });
+    let unit =
+        GraphExecuteUnit::new(spec, bridge.clone(), runner.clone()).expect("图单元装载应通过");
+    let attempt = root.join("attempt");
+    let out = root.join("out");
+
+    let err = drive(&unit, &data_root, &attempt, &out)
+        .expect_err("取证必败应使 evaluator 失败（非拒载）");
+    let text = err.to_string();
+    assert!(
+        !(text.contains("spec.judge") && text.contains("判分锚")),
+        "judge 在场不得再走拒载门：{err}"
+    );
+    assert_eq!(
+        runner.order(),
+        ["actor"],
+        "actor 已跑、evaluator 进 verify 链后失败"
+    );
+    assert!(
+        bridge
+            .calls()
+            .iter()
+            .any(|c| c.contains("git -c core.fileMode=false diff")),
+        "verify 链真实启动过（diff 取证确经桥）：{:?}",
+        bridge.calls()
+    );
+}
+
+// ============================================================
+// ⑫ 红队 W2-C34：失败路径落 legacy 失败行——失败单与「从未开跑」可区分
+// ============================================================
+
+/// 读回输出目录的 legacy 轨（results.jsonl）行集。
+fn read_legacy_rows(out: &Path) -> Vec<Value> {
+    let text = std::fs::read_to_string(out.join("results.jsonl")).unwrap_or_default();
+    text.lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| serde_json::from_str(line).expect("results.jsonl 行应为合法 JSON"))
+        .collect()
+}
+
+/// EX3001（check 节点 swebench_eval 拒载——驱动相失败）→ run_failed 行：
+/// suite=graph、error_code=EX3001、verdict(reward)=null、run_dir 在场；
+/// v1 轨零失败投影（RESULT-P4 §4）。此前失败路径双轨零行，失败单与
+/// 「从未开跑」不可区分。
+#[test]
+fn unit_failure_emits_run_failed_row_ex3001() {
+    let root = temp_root("w2c34-ex3001");
+    let graph_src = sweeval_graph_src();
+    let data_root = task_package(&root, &compile_plan(&graph_src));
+    let scripted = |node: &str| -> Option<String> {
+        match node {
+            "actor" => Some(
+                json!({"action": {"thought": "t", "command": "c", "submit": false}}).to_string(),
+            ),
+            _ => None,
+        }
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("拒载应失败");
+    assert_eq!(err.code(), ErrorCode::UnitFailed, "{err}");
+
+    let rows = read_legacy_rows(&out);
+    assert_eq!(rows.len(), 1, "失败路径恰落一行 legacy 失败行");
+    assert_eq!(rows[0]["status"], "run_failed");
+    assert_eq!(rows[0]["suite"], "graph");
+    assert_eq!(rows[0]["error_code"], "EX3001");
+    assert_eq!(rows[0]["task_id"], TASK);
+    assert!(rows[0]["reward"].is_null(), "失败行 verdict=null");
+    assert!(
+        rows[0]["run_dir"].as_str().is_some(),
+        "run_failed 行记实际目录: {}",
+        rows[0]
+    );
+    // v1 轨无失败投影（文件在（sink 双开）但零行）。
+    let v1 = std::fs::read_to_string(out.join("records.jsonl")).unwrap_or_default();
+    assert!(v1.trim().is_empty(), "失败行不落 v1 轨: {v1}");
+}
+
+/// EX4006（envelope 违例——驱动相，stage.commit 拒收上游产物）→ run_failed 行。
+#[test]
+fn unit_failure_emits_run_failed_row_ex4006() {
+    let root = temp_root("w2c34-ex4006");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let scripted = |node: &str| -> Option<String> {
+        match node {
+            "planner" => sop_full_payloads("planner"),
+            "coder" => sop_full_payloads("coder"),
+            "reviewer" => Some(json!({"verdict": "looks fine"}).to_string()),
+            _ => None,
+        }
+    };
+    let runner = Arc::new(GraphFakeRunner::new(scripted));
+    let (unit, _bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("envelope 违例应拒");
+    assert_eq!(err.code(), ErrorCode::EnvelopeMismatch, "{err}");
+
+    let rows = read_legacy_rows(&out);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["status"], "run_failed");
+    assert_eq!(rows[0]["error_code"], "EX4006");
+    assert!(rows[0]["reward"].is_null());
+}
+
+/// EX4008（loop 节点——linearize 在 setup 相拒绝）→ setup_failed 行：
+/// run_dir=null（执行未启动、run 目录未建——D-20 字段齐备含 null）。
+#[test]
+fn unit_failure_emits_setup_failed_row_ex4008() {
+    let root = temp_root("w2c34-ex4008");
+    let plan_src = compile_plan(&sop_full_src());
+    let mut looped: Value = serde_json::from_str(&plan_src).unwrap();
+    looped["body"]["graph"]["nodes"][0]["loop_spec"] = json!({
+        "body": "sweng_sop_full/coder",
+        "max_iterations": 2,
+        "carried": [],
+        "safety_points": []
+    });
+    let data_root = task_package(&root, &serde_json::to_string(&looped).unwrap());
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("loop 节点应拒");
+    assert_eq!(err.code(), ErrorCode::GraphShapeUnsupported, "{err}");
+    assert_eq!(runner.launches().len(), 0, "setup 相拒绝零节点驱动");
+    assert!(bridge.calls().is_empty(), "setup 相拒绝零容器调用");
+
+    let rows = read_legacy_rows(&out);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0]["status"], "setup_failed");
+    assert_eq!(rows[0]["error_code"], "EX4008");
+    assert!(rows[0]["reward"].is_null());
+    assert!(
+        rows[0]["run_dir"].is_null(),
+        "setup_failed 行 run 目录未建 → null: {}",
+        rows[0]
+    );
+}
+
+// ============================================================
+// ⑬ 红队 W2-C48：判据命令冻结契约 + test_edit 判据退化门
+// ============================================================
+
+/// 测试面被改的取证桥：git diff 返回碰测试文件的补丁（S0 D2 越权形态）。
+struct TestTamperBridge {
+    calls: Mutex<Vec<String>>,
+}
+
+impl TestTamperBridge {
+    fn new() -> Self {
+        Self {
+            calls: Mutex::new(Vec::new()),
+        }
+    }
+}
+
+impl af_execline::HostBridge for TestTamperBridge {
+    fn run(&self, _host: &str, script: &str, _t: u32) -> Result<(bool, String), String> {
+        self.calls
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(script.to_string());
+        if script.starts_with("docker rm -f") || script.starts_with("docker run") {
+            Ok((true, String::new()))
+        } else if script.contains("git -c core.fileMode=false diff") {
+            Ok((
+                true,
+                "diff --git a/tests/test_foo.py b/tests/test_foo.py\n--- a/tests/test_foo.py\n+++ \
+                 b/tests/test_foo.py\n"
+                    .into(),
+            ))
+        } else if script.contains("docker exec") {
+            Ok((true, "Ran 12 tests in 3s\n\nOK\n__AF_RC=0".into()))
+        } else {
+            Ok((true, String::new()))
+        }
+    }
+}
+
+/// ① 判据命令必须随任务包冻结声明：task.json 缺非空 test_command →
+/// test_unit 检查节点 fail-loud 拒载，缺省全仓 `python -m pytest -q`
+/// 判据面废除（先红：缺声明静默落缺省命令、对模型全权可控的 /testbed
+/// 跑全仓测试）。
+#[test]
+fn test_unit_without_declared_command_fails_loud() {
+    let root = temp_root("w2c48-nocmd");
+    // 任务包不带 test_command 字段（task_package 除外手写）。
+    let data_root = root.join("data");
+    let task_dir = data_root.join(TASK);
+    std::fs::create_dir_all(&task_dir).unwrap();
+    std::fs::write(task_dir.join("plan.json"), compile_plan(&sop_full_src())).unwrap();
+    std::fs::write(
+        task_dir.join("task.json"),
+        json!({
+            "repo": "django/django",
+            "instance_id": TASK,
+            "problem_statement": "Fix the thing",
+            "image": "swebench/sweb.eval.x86_64.django-11099:latest"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
+
+    let err = drive(&unit, &data_root, &attempt, &out).expect_err("缺判据声明应拒载");
+    assert_eq!(err.code(), ErrorCode::UnitFailed, "{err}");
+    assert!(
+        err.to_string().contains("判据命令未声明") && err.to_string().contains("test_command"),
+        "拒载点名判据命令缺声明：{err}"
+    );
+    assert!(
+        !bridge
+            .calls()
+            .iter()
+            .any(|s| s.contains("docker exec") && s.contains("pytest")),
+        "缺声明零判据执行（缺省 pytest 面不再兜底）：{:?}",
+        bridge.calls()
+    );
+}
+
+/// ② test_edit 判据退化门：模型碰测试面（git diff 含 tests/）→ 退出码 0
+/// 的 pass 亦作废（failures 点名 test_edit），合格终态不授予（qualified=false、
+/// 行 gate=test_edit、verdict 如实）——判据不再仅凭任意 shell 退出码。
+#[test]
+fn test_unit_pass_revoked_when_model_touched_tests() {
+    let root = temp_root("w2c48-tamper");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    let bridge = Arc::new(TestTamperBridge::new());
+    let spec = GraphUnitSpec::v1(PROFILE, repo_packages());
+    let unit = GraphExecuteUnit::new(spec, bridge.clone(), runner)
+        .expect("图单元装载（profile/注册表可解析）");
+    let attempt = root.join("attempt");
+    let out = root.join("out");
+
+    let output = drive(&unit, &data_root, &attempt, &out).expect("判据退化非执行错误（照走完）");
+    assert!(
+        !output.artifacts[0].qualified,
+        "碰测试面的通过不得授予合格终态"
+    );
+    // tester verdict envelope：pass 翻假 + failures 点名 test_edit。
+    let verdict: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("tester.report.json")).unwrap(),
+    )
+    .unwrap();
+    let payload = &verdict["payload"];
+    assert_eq!(payload["pass"], json!(false), "退出码 0 亦作废: {verdict}");
+    assert!(
+        payload["failures"].as_array().is_some_and(|f| f
+            .iter()
+            .any(|x| x.as_str().unwrap_or("").contains("test_edit"))),
+        "退化门点名 test_edit: {verdict}"
+    );
+    // 行面：gate=test_edit、verdict 如实 false（非合格）。
+    let row: Value = serde_json::from_str(
+        std::fs::read_to_string(out.join("records.jsonl"))
+            .unwrap()
+            .lines()
+            .last()
+            .expect("v1 行应在盘"),
+    )
+    .unwrap();
+    assert_eq!(row["gate"], json!("test_edit"), "gate 记账: {row}");
+}
+
+/// ③ 判据退化非门控面也记账：碰测试面且判据本就失败（rc!=0）时，verdict
+/// 上仍附 test_edit 清单（对账可查，不静默）。
+#[test]
+fn test_unit_failure_row_carries_test_edit_marker() {
+    let root = temp_root("w2c48-tamper-fail");
+    let data_root = task_package(&root, &compile_plan(&sop_full_src()));
+    let runner = Arc::new(GraphFakeRunner::new(sop_full_payloads));
+    // 桥：diff 碰测试面 + 判据命令失败（rc=1）。
+    struct TamperFailBridge;
+    impl af_execline::HostBridge for TamperFailBridge {
+        fn run(&self, _host: &str, script: &str, _t: u32) -> Result<(bool, String), String> {
+            if script.starts_with("docker rm -f") || script.starts_with("docker run") {
+                return Ok((true, String::new()));
+            }
+            if script.contains("git -c core.fileMode=false diff") {
+                return Ok((
+                    true,
+                    "diff --git a/conftest.py b/conftest.py\n--- a/conftest.py\n+++ b/conftest.py\n"
+                        .into(),
+                ));
+            }
+            Ok((true, "FAILED tests/test_x.py\n__AF_RC=1".into()))
+        }
+    }
+    let bridge = Arc::new(TamperFailBridge);
+    let spec = GraphUnitSpec::v1(PROFILE, repo_packages());
+    let unit = GraphExecuteUnit::new(spec, bridge, runner).expect("图单元装载应通过");
+    let attempt = root.join("attempt");
+    let out = root.join("out");
+
+    let output = drive(&unit, &data_root, &attempt, &out).expect("判据失败照走完（不 Err）");
+    assert!(!output.artifacts[0].qualified);
+    let verdict: Value = serde_json::from_str(
+        &std::fs::read_to_string(attempt.join("artifacts").join("tester.report.json")).unwrap(),
+    )
+    .unwrap();
+    let payload = &verdict["payload"];
+    assert_eq!(payload["pass"], json!(false));
+    assert_eq!(
+        payload["test_edit"],
+        json!(["conftest.py"]),
+        "失败判定也附 test_edit 清单: {verdict}"
+    );
 }

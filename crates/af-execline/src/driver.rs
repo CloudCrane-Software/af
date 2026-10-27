@@ -57,6 +57,15 @@ pub struct DriverConfig {
     pub data_root: PathBuf,
     /// 目标题（swe-v = instance_id；换题=换 ctx）。
     pub task_id: String,
+    /// 任务包计划面摘要钉死（红队 W2-C55：graph/report 预算帽全在
+    /// plan.json——判据面钉死不覆盖计划面；门面 submit 时计算，凭证面
+    /// 重放对账 + 单元执行前复核双门）。
+    pub plan_sha256: Option<String>,
+    /// 任务包判据面摘要钉死（红队 W1-C59①：判分真值源 fail_to_pass/
+    /// pass_to_pass 全部来自任务包 JSON，此前无 digest 钉死——清空判据
+    /// 即可让冻结判分链对零测试任务包返回 resolved=true）。门面 submit 时
+    /// 计算，执行单元消费前核对，漂移即拒。None = 无期待（缺省，直调缝）。
+    pub task_sha256: Option<String>,
     /// 试验标记（--trial 行口径，不进决策）。
     pub trial: bool,
     /// ---- P5（方案 §5-P5：attempt 目录由驱动层分配）----
@@ -151,6 +160,88 @@ pub struct OrderLifecycleDriver {
     drive_mes: Vec<af_mes::MesEvent>,
     /// 本次驱动跳过的重放次数（`drive` 重置；用于报告 replayed）。
     replay_hits: usize,
+    /// 运行实例判别量（红队 W2-C53 引入；W2-C-52 改源）：订单目录内持久
+    /// 实例档案（`instance.id`，/dev/urandom 8 字节 16 hex，开单时铸造一次
+    /// 随目录搬移）。event_id 原口径 = stable_id（order_id 纯函数）+ kind +
+    /// ledger seq——同 order_id 跨 --state 根/跨产线复用即逐字节同 id，CH
+    /// 侧按 event_id 去重的差量送批会互相吞掉对方记账事件（第二单
+    /// shipped=0/already_in_ch=N 且零告警）。并入本判别量后跨根同 id 不再
+    /// 相撞；W2-C-52 起判别量不再取路径哈希——canonicalize 只解 symlink
+    /// 不解 bind-mount，mv/别名路径重放曾派生新实例、按新 id 补发正本已有
+    /// 事件（同 (kind,seq) 双记进 CH 零告警）。
+    instance: String,
+}
+
+/// 运行实例档案文件名（订单目录内，随目录搬移——实例身份不依赖可搬移路径，
+/// 红队 W2-C-52）。
+const INSTANCE_FILE: &str = "instance.id";
+
+/// 载入或铸造运行实例判别量（红队 W2-C52）。
+/// - 档案在位：读回并校验（16 位小写 hex，损坏 = EX2002）。
+/// - 档案缺席且账本非空：实例身份不可知（目录被部分复制/档案被删）——
+///   **拒绝打开**而非铸造新实例补发（补发 = 同 (kind,seq) 事件双记）。
+/// - 档案缺席且账本为空（新单）：/dev/urandom 取 8 字节铸造，持久落盘
+///   （随目录搬移，同根重放恒同 id）。
+fn load_or_create_instance(
+    out_dir: &Path,
+    ledger_non_empty: bool,
+) -> Result<String, ExeclineError> {
+    use std::io::{Read, Write};
+    use std::os::unix::fs::OpenOptionsExt;
+    let path = out_dir.join(INSTANCE_FILE);
+    if path.is_file() {
+        let mut text = String::new();
+        std::fs::File::open(&path)
+            .and_then(|mut f| f.read_to_string(&mut text))
+            .map_err(|err| ExeclineError::LedgerIo {
+                detail: format!("实例档案读取失败 {}: {err}", path.display()),
+            })?;
+        let tag = text.trim();
+        let well_formed = tag.len() == 16
+            && tag
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte));
+        if well_formed {
+            return Ok(tag.to_string());
+        }
+        return Err(ExeclineError::LedgerCorrupt {
+            detail: format!(
+                "实例档案损坏: {} = {tag:?}（须 16 位小写 hex），拒绝打开",
+                path.display()
+            ),
+        });
+    }
+    if ledger_non_empty {
+        return Err(ExeclineError::LedgerCorrupt {
+            detail: format!(
+                "订单目录缺实例档案 {path} 且账本非空——运行实例身份不可知，拒绝打开\
+                 （按路径派生新实例会把正本已有事件判「缺失」而补发，同 (kind,seq) 双记——\
+                 红队 W2-C-52；恢复属运维面：确认目录来源后手工补写档案或弃用该副本）",
+                path = path.display()
+            ),
+        });
+    }
+    let mut bytes = [0u8; 8];
+    std::fs::File::open("/dev/urandom")
+        .and_then(|mut f| f.read_exact(&mut bytes))
+        .map_err(|err| ExeclineError::LedgerIo {
+            detail: format!("实例档案熵源不可用: {err}"),
+        })?;
+    let tag: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|err| ExeclineError::LedgerIo {
+            detail: format!("实例档案落盘失败 {}: {err}", path.display()),
+        })?;
+    file.write_all(format!("{tag}\n").as_bytes())
+        .and_then(|()| file.sync_all())
+        .map_err(|err| ExeclineError::LedgerIo {
+            detail: format!("实例档案写入失败 {}: {err}", path.display()),
+        })?;
+    Ok(tag)
 }
 
 impl OrderLifecycleDriver {
@@ -196,12 +287,34 @@ impl OrderLifecycleDriver {
                 cfg.sla.clone(),
             )
         });
+        // 红队 W2-C-30：CLI/spec 声明的 line 与订单快照的**不可变绑定**不符
+        // = 先拒绝打开（EX2002 账本身份不符族）——此前 bind_line 幂等跳过、
+        // 订单保持首绑旧线，而 ExecContext/MES 事件取 cfg 新线，不一致静默
+        // 入账（trace 工具只核 work_order_id 不核 line）。LineBinding 两字段
+        // （line_id/line_version）整绑同比对；未绑新单（line=None）不核，
+        // 由 bind_line 落 cfg 声明。
+        if let Some(bound) = order.line() {
+            if bound != &cfg.line {
+                return Err(ExeclineError::LedgerCorrupt {
+                    detail: format!(
+                        "产线绑定不符: 订单账本绑定 line_id={} line_version={}，本次 CLI/spec 声明 \
+                         line_id={} line_version={}（产线绑定随订单一次性入账、不可经重放换线——\
+                         红队 W2-C-30）",
+                        bound.line_id, bound.line_version, cfg.line.line_id, cfg.line.line_version
+                    ),
+                });
+            }
+        }
         let done = ledger
             .done_idem_keys()
             .into_iter()
             .map(str::to_string)
             .collect();
+        // 运行实例判别量（红队 W2-C52）：持久实例档案，随目录搬移；档案缺席
+        // 且账本非空 = fail-loud 拒绝（不铸造新实例补发）。
+        let instance = load_or_create_instance(&cfg.out_dir, !ledger.records().is_empty())?;
         Ok(Self {
+            instance,
             cfg,
             client,
             clock,
@@ -222,6 +335,18 @@ impl OrderLifecycleDriver {
     /// 当前状态。
     pub fn state(&self) -> OrderState {
         self.order.state()
+    }
+
+    /// 订单快照绑定的产线 id（红队 W2-C-30）：ExecContext 与 MES 事件一律取
+    /// **订单快照的不可变绑定**（与 graph_version 取 self.order 同源对称，
+    /// cfg 由门面每次 submit 重读、重放期可能与首绑漂移）；未绑新单
+    /// （bind_line 未落账）回落 cfg 声明。禁止 MES/记录行以 cfg 线冒充订单
+    /// 实际绑定线。
+    fn bound_line_id(&self) -> &str {
+        self.order
+            .line()
+            .map(|binding| binding.line_id.as_str())
+            .unwrap_or(&self.cfg.line.line_id)
     }
 
     /// 真引擎二进制路径（证明判定走子进程，不打桩）。
@@ -276,6 +401,8 @@ impl OrderLifecycleDriver {
     pub fn release(&mut self) -> Result<(), ExeclineError> {
         if self.engine_step("release", json!({}))? {
             self.emit_mes("release", 1)?;
+        } else {
+            self.emit_mes_if_missing("release", 1)?;
         }
         Ok(())
     }
@@ -284,6 +411,8 @@ impl OrderLifecycleDriver {
     pub fn start(&mut self) -> Result<(), ExeclineError> {
         if self.engine_step("start", json!({}))? {
             self.emit_mes("start", 1)?;
+        } else {
+            self.emit_mes_if_missing("start", 1)?;
         }
         Ok(())
     }
@@ -334,7 +463,9 @@ impl OrderLifecycleDriver {
         let ctx = ExecContext {
             order_id: &self.cfg.order_id,
             stable_id: self.order.stable_id().as_str(),
-            line_id: &self.cfg.line.line_id,
+            // 红队 W2-C-30：line_id 与下方 graph_version 同源——订单快照的
+            // 不可变绑定（此前取 cfg 旗标，重放换 --line 时与本单账面漂移）。
+            line_id: self.bound_line_id(),
             out_dir: &artifacts_dir,
             task_id: &self.cfg.task_id,
             host_alias: &self.cfg.host_alias,
@@ -342,6 +473,17 @@ impl OrderLifecycleDriver {
             attempt_dir: &attempt_dir,
             record_sink: &sink,
             trial: self.cfg.trial,
+            // 红队 W1-C32：WorkOrder 一次性绑定的 graph_version 进执行上下文
+            // ——graph/report 单元装订时与 plan.compiled_from.graph_version
+            // 核对（此前期待分支是死代码，「一次性绑定」有账无核）。
+            // 红队 W2-C37：期待源取**订单快照的不可变绑定**
+            // （self.order.graph_version()），不再取 cfg 值——cfg 由门面每次
+            // submit 从当前 plan.json 重读，与之比对等于自指（换计划图版本
+            // 重放时期待值随新计划同步变化、恒真）；订单快照值在账本恢复时
+            // 保持首绑，换版重放即期待(旧) vs 计划(新) 不符而被拒。
+            graph_version: Some(self.order.graph_version().as_str()),
+            task_sha256: self.cfg.task_sha256.as_deref(),
+            plan_sha256: self.cfg.plan_sha256.as_deref(),
         };
         let output = match unit.execute(&ctx) {
             Ok(output) => output,
@@ -374,6 +516,8 @@ impl OrderLifecycleDriver {
     pub fn complete(&mut self) -> Result<(), ExeclineError> {
         if self.engine_step("complete", json!({}))? {
             self.emit_mes("complete", 1)?;
+        } else {
+            self.emit_mes_if_missing("complete", 1)?;
         }
         Ok(())
     }
@@ -382,6 +526,8 @@ impl OrderLifecycleDriver {
     pub fn close(&mut self) -> Result<(), ExeclineError> {
         if self.engine_step("close", json!({}))? {
             self.emit_mes("close", 1)?;
+        } else {
+            self.emit_mes_if_missing("close", 1)?;
         }
         Ok(())
     }
@@ -553,15 +699,25 @@ impl OrderLifecycleDriver {
     }
 
     /// 发一条 MES 事件（经写缝：文件正本必写，CH 下游在对账面统一）。
-    /// event_id 用账本序号保唯一。写失败 = 记账事故，向上传播不静默。
+    /// event_id 用账本序号保唯一（首发 = 该 op 成功记录刚落账的序号）。
+    /// 写失败 = 记账事故，向上传播不静默。
     fn emit_mes(&mut self, kind: &str, quantity: u64) -> Result<(), ExeclineError> {
-        let stable_id = self.order.stable_id().as_str().to_string();
         let seq = self.ledger.seq();
+        self.emit_mes_seq(kind, quantity, seq)
+    }
+
+    fn emit_mes_seq(&mut self, kind: &str, quantity: u64, seq: u64) -> Result<(), ExeclineError> {
+        let stable_id = self.order.stable_id().as_str().to_string();
         let event = af_mes::MesEvent::new(
             stable_id.clone(),
             self.clock.now_ms(),
-            format!("{stable_id}:{kind}:{seq}"),
-            self.cfg.line.line_id.clone(),
+            // 红队 W2-C53：instance 判别量殿后——同 order_id 跨 state 根/跨
+            // 产线复用不再产生逐字节相同的 event_id（CH 差量按 id 去重，相撞
+            // 即互吞记账事件且无告警）。
+            format!("{stable_id}:{kind}:{seq}:{}", self.instance),
+            // 红队 W2-C-30：事件线 = 订单快照不可变绑定（此前取 cfg 旗标，
+            // 换线重放时 MES 印新线而账本订单绑旧线、静默入账）。
+            self.bound_line_id().to_string(),
             self.cfg.station_id.clone(),
             kind,
             quantity,
@@ -569,6 +725,39 @@ impl OrderLifecycleDriver {
         self.mes.append(&event)?;
         self.drive_mes.push(event);
         Ok(())
+    }
+
+    /// 重放路径的 MES 对账补发（红队 W1-C35）：引擎 op 已成功（幂等键在
+    /// 账本）但正本文件缺该 event_id——此前 emit_mes 写失败错误上抛、事件
+    /// 两处皆无，重放 skip 即永久缺席 MES 账面（对账真值源恰是那份没写
+    /// 进去的文件，sync 也救不回）。按 event_id 对账正本，缺则按**该 op
+    /// 首次成功记录的序号**补发（重放期间 replay_skip 行会推高账本 seq，
+    /// 不得用当前 seq 重构 id），幂等。
+    ///
+    /// 红队 W2-C11：对账按逻辑键（stable_id + kind + seq）兼容两种落盘
+    /// 形态——W2-C53 引入 instance 判别量前的存量正本 event_id 是三段式
+    /// `{stable_id}:{kind}:{seq}`，只按新四段式精确串匹配认不出旧 id，
+    /// 重放任一修复前订单会对同单四跃迁各再补一条新 id，本地正本翻倍且
+    /// 被 sync 当差量再送 CH（MergeTree 无去重）。新格式在场**或**旧三段
+    /// 式在场，均视为已发。
+    fn emit_mes_if_missing(&mut self, kind: &str, quantity: u64) -> Result<(), ExeclineError> {
+        let Some(seq) = self
+            .ledger
+            .records()
+            .iter()
+            .rev()
+            .find(|r| r.op == kind && r.ok)
+            .map(|r| r.seq)
+        else {
+            return Ok(());
+        };
+        let stable_id = self.order.stable_id().as_str().to_string();
+        let event_id = format!("{stable_id}:{kind}:{seq}:{}", self.instance);
+        let legacy_event_id = format!("{stable_id}:{kind}:{seq}");
+        if self.mes.has_event(&event_id)? || self.mes.has_event(&legacy_event_id)? {
+            return Ok(());
+        }
+        self.emit_mes_seq(kind, quantity, seq)
     }
 }
 

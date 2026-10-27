@@ -22,6 +22,12 @@ fn shape_codes(src: &str) -> Vec<&'static str> {
     }
 }
 
+/// 语义层（validate）违例码集——形状门 E1003 经 validate 一次收齐面断言。
+fn codes(src: &str) -> Vec<&'static str> {
+    let doc: Document = load_str(src).unwrap_or_else(|e| panic!("解析失败：{e}"));
+    af_dsl::validate(&doc).codes()
+}
+
 // ---------- golden 样例：解析通过 ----------
 
 const SAMPLE_NAMES: [(&str, &str); 6] = [
@@ -403,4 +409,146 @@ fn unknown_retention_policy_is_e1004() {
         "stores:\n  - { name: s, type: kv, writer: n1, lifecycle: run, retention: { policy: fifo } }\n",
     );
     assert_eq!(shape_codes(&src), ["E1004"]);
+}
+
+// ---------- 红队 W3-C17：负值入无符号字段归 E2002 值域（非 E1004 枚举） ----------
+
+#[test]
+fn negative_into_unsigned_is_e2002_not_e1004() {
+    // serde 对无符号域报 `invalid value: integer -1, expected u32`——类型家族
+    // 对、值越界，属 E2002 值域（error.rs:62-63）；原映射把它与 unknown
+    // variant 一并塞 E1004「枚举值非法」，误导排障方向。
+    let cases = [
+        // loop max_iterations:-1（expected u32）
+        (
+            "  - id: n1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: -1\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: a }",
+            "",
+        ),
+        // store retention.max_items:-1（expected usize）
+        (
+            "  - id: n1\n    kind: task\n    emits: { answer: a }",
+            "stores:\n  - { name: s, type: kv, writer: n1, lifecycle: run, retention: { max_items: -1 } }\n",
+        ),
+        // context quota_tokens:-5（expected u64）
+        (
+            "  - id: n1\n    kind: task\n    context:\n      sections:\n        - { from: root, template_ref: pkg.x.t@1, quota_tokens: -5 }\n    emits: { answer: a }",
+            "",
+        ),
+    ];
+    for (nodes, stores) in cases {
+        assert_eq!(shape_codes(&doc(nodes, stores)), ["E2002"]);
+    }
+    // 对照组：枚举未知值仍归 E1004（词表域不受本次二分影响）。
+    let src = doc(
+        "  - id: n1\n    kind: task\n    emits: { answer: a }",
+        "stores:\n  - { name: s, type: queue, writer: n1, lifecycle: run, retention: { max_items: 8 } }\n",
+    );
+    assert_eq!(shape_codes(&src), ["E1004"]);
+}
+
+// ---------- 红队 W3-C18：types[].schema 形状强制（E1003） ----------
+
+#[test]
+fn non_object_schema_is_e1003() {
+    // model.rs 自述 schema 为「内联 JSON Schema 对象」，实现原为裸 Value 零
+    // 校验——标量/数组/布尔/null 形状零违例过审，CEL 合成绑定退化为 Null、
+    // 求值错误不判 ⇒ 布尔判定静默无证据。现形状层 fail-loud（E1003）。
+    let bad_schemas = [
+        ("字符串标量", "x"),
+        ("数字", "42"),
+        ("数组", "[1, 2]"),
+        ("布尔", "true"),
+        ("null", "null"),
+        ("空对象（无 type）", "{}"),
+        ("type 非六型", "{ type: blob }"),
+        (
+            "properties 子节点无 type",
+            "{ type: object, properties: { r: {} } }",
+        ),
+    ];
+    for (label, schema) in bad_schemas {
+        let src = format!(
+            "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: {{ ref: a, from: n1 }}\ntypes:\n  - {{ name: in_t, schema: {{ type: object, required: [q], properties: {{ q: {{ type: string }} }} }} }}\n  - {{ name: a, schema: {schema} }}\nnodes:\n  - id: n1\n    kind: task\n    uses: {{ model: route.main@1 }}\n    emits: {{ answer: a }}\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n"
+        );
+        assert_eq!(codes(&src), ["E1003"], "{label} 应被形状门拒（E1003）");
+    }
+    // 正例：六型与嵌套 properties/items 合法（含内联原始型与 list items）。
+    let ok = "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\ntypes:\n  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }\n  - { name: a, schema: { type: object, required: [items], properties: { items: { type: array, items: { type: integer } }, flag: { type: boolean } } } }\nnodes:\n  - id: n1\n    kind: task\n    uses: { model: route.main@1 }\n    emits: { answer: a }\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n";
+    assert_eq!(codes(ok), Vec::<&str>::new(), "合法 schema 形状零违例");
+}
+
+// ---------- 红队 W2-C-24：human.resume.schema 同门（E1003） ----------
+
+#[test]
+fn human_resume_schema_shapes_are_gated_e1003() {
+    // human.resume.schema 与 types[].schema 同为裸 serde_json::Value、同走
+    // cel::synth_from_schema（validate/m4.rs add_resume）——W3-C18 只门了
+    // types 面，标量/数组/null resume schema 仍零违例过审：resume 绑定退化为
+    // Null、human 节点 route 的 CEL 布尔判定静默无证据。同规则 fail-loud。
+    let bad_schemas = [
+        ("字符串标量", "x"),
+        ("数字", "42"),
+        ("数组", "[1, 2]"),
+        ("布尔", "true"),
+        ("null", "null"),
+        ("空对象（无 type）", "{}"),
+        ("type 非六型且非声明名", "{ type: blob }"),
+        (
+            "properties 子节点无 type",
+            "{ type: object, properties: { approved: {} } }",
+        ),
+    ];
+    for (label, schema) in bad_schemas {
+        let src = format!(
+            "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: {{ ref: a, from: n1 }}\ntypes:\n  - {{ name: in_t, schema: {{ type: object }} }}\n  - {{ name: a, schema: {{ type: object }} }}\nnodes:\n  - id: n1\n    kind: task\n    human: {{ station: s1, role: approver, resume: {{ schema: {schema} }} }}\n    emits: {{ answer: a }}\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n"
+        );
+        assert_eq!(
+            codes(&src),
+            ["E1003"],
+            "{label} 应被 human.resume.schema 形状门拒（E1003）"
+        );
+    }
+    // 正例：合法对象（六型 + 递归 properties + 已声明类型命名引用）零违例。
+    let ok = "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\ntypes:\n  - { name: in_t, schema: { type: object } }\n  - { name: a, schema: { type: object } }\nnodes:\n  - id: n1\n    kind: task\n    human:\n      station: s1\n      role: approver\n      resume:\n        schema: { type: object, required: [approved], properties: { approved: { type: boolean }, note: { type: in_t } } }\n    emits: { answer: a }\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n";
+    assert_eq!(
+        codes(ok),
+        Vec::<&str>::new(),
+        "合法 human.resume.schema 零违例"
+    );
+}
+
+// ---------- 红队 W3-C15：human.resume.schema 门覆盖 loop/map 体内嵌 human ----------
+
+#[test]
+fn nested_human_resume_schema_shapes_are_gated_e1003() {
+    // check_schema_shape 原只遍历根层 doc.nodes——loop/map 体内的 human 节点
+    // 逃逸门禁。而嵌套 human 恰是全部真实语料的形态（ADAS human_stop /
+    // sample5 approve / SWE-agent human_help 均在构造体内），add_resume 对
+    // 其 resume.schema 走同一 synth_from_schema——标量 schema ⇒ resume 绑定
+    // 退化为 Null、该 human 的 route CEL 布尔判定静默无证据。同门必须同
+    // 覆盖：体内 human 标量/无 type schema → E1003。
+    for (label, schema) in [("字符串标量", "x"), ("空对象（无 type）", "{}")] {
+        let src = format!(
+            "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: {{ ref: a, from: n1 }}\ntypes:\n  - {{ name: in_t, schema: {{ type: object }} }}\n  - {{ name: a, schema: {{ type: object }} }}\nnodes:\n  - id: n1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - id: approve\n            kind: task\n            human: {{ station: s1, role: approver, resume: {{ schema: {schema} }} }}\n            route:\n              default: exit\n              rules:\n                - {{ when: \"resume.approved == false\", goto: exit }}\n          - {{ id: g, kind: gate, assert: \"true\" }}\n        edges: []\n      max_iterations: 2\n      safety_points: [ {{ node: g, kind: gate }} ]\n    emits: {{ answer: a }}\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n"
+        );
+        assert_eq!(
+            codes(&src),
+            ["E1003"],
+            "loop 体内 human.resume.schema {label} 应被同门拒（E1003；W3-C15）"
+        );
+    }
+    // map 体同门。
+    let map_src = "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\ntypes:\n  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: array, items: { type: string } } } } }\n  - { name: a, schema: { type: object } }\nnodes:\n  - id: n1\n    kind: task\n    map:\n      over: input.q\n      body:\n        nodes:\n          - { id: approve, kind: task, human: { station: s1, role: approver, resume: { schema: 42 } } }\n        edges: []\n    emits: { answer: a }\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n";
+    assert_eq!(
+        codes(map_src),
+        ["E1003"],
+        "map 体内 human.resume.schema 标量应被同门拒（E1003；W3-C15）"
+    );
+    // 正例：体内 human 合法对象 schema 零违例（真实语料形态）。
+    let ok = "version: 1\nmeta:\n  name: t\n  graph_version: \"1.0\"\n  entry: n1\n  input: in_t\n  output: { ref: a, from: n1 }\ntypes:\n  - { name: in_t, schema: { type: object } }\n  - { name: a, schema: { type: object } }\nnodes:\n  - id: n1\n    kind: task\n    loop:\n      body:\n        nodes:\n          - id: approve\n            kind: task\n            human:\n              station: s1\n              role: approver\n              resume:\n                schema: { type: object, required: [approved], properties: { approved: { type: boolean } } }\n            route:\n              default: exit\n              rules:\n                - { when: \"resume.approved == false\", goto: exit }\n          - { id: g, kind: gate, assert: \"true\" }\n        edges: []\n      max_iterations: 2\n      safety_points: [ { node: g, kind: gate } ]\n    emits: { answer: a }\nedges: []\npolicies:\n  budgets: []\n  stop: []\n  failures: []\n";
+    assert_eq!(
+        codes(ok),
+        Vec::<&str>::new(),
+        "loop 体内 human 合法 resume.schema 零违例（W3-C15 不误伤）"
+    );
 }

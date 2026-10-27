@@ -798,3 +798,260 @@ fn report_ring_member_without_chat_flagged() {
         "应点名 writer-i1 零模型轮：{fs:#?}"
     );
 }
+
+// ============================================================
+// 红队 W2-C32：graph 图执行布局（runs/<item>-a<n>/nodes/<节点>/harness.db）
+// ——此前 nodes/ 不在任何甄别分支，图单四层 trace 不可工具核验（F4B-F4D
+// 实测形态：每节点 harness.db/normal.jsonl/critical.jsonl/effects.db，
+// run 根无 harness.db）。
+// ============================================================
+
+type GraphNode<'a> = (&'a str, &'a str, (u64, u64, u64, u64), &'a str);
+
+/// graph 图执行订单夹具：两节点（planner/coder），各 1 模型轮 + 1 工具轮；
+/// records.quota = 全节点 token 之和；plan_id 注册表编译形态（F4D 同款）。
+struct GraphFixture {
+    order_id: String,
+    /// 节点（名, run_id, 模型轮, 工具 effect）
+    nodes: Vec<GraphNode<'static>>,
+    /// records.quota（None = 用全节点真和）
+    quota: Option<(u64, u64, u64)>,
+    plan_id: String,
+}
+
+impl Default for GraphFixture {
+    fn default() -> Self {
+        GraphFixture {
+            order_id: "TR-graph".to_string(),
+            nodes: vec![
+                (
+                    "planner",
+                    "graph-planner",
+                    (0, 100, 20, 40),
+                    "external_once",
+                ),
+                ("coder", "graph-coder", (1, 200, 40, 80), "external_once"),
+            ],
+            quota: None,
+            plan_id: "plan.sweng_sop_full@1.1+348a0142d883".to_string(),
+        }
+    }
+}
+
+fn write_graph_order(f: &GraphFixture) -> PathBuf {
+    let parent =
+        std::env::temp_dir().join(format!("af-tracetree-graph-test-{}", std::process::id()));
+    std::fs::create_dir_all(&parent).unwrap();
+    let dir = parent.join(&f.order_id);
+    let _ = std::fs::remove_dir_all(&dir);
+    let run_dir = dir.join("runs").join("graph-item-glm-cp-a1");
+    for (name, ..) in &f.nodes {
+        std::fs::create_dir_all(run_dir.join("nodes").join(name)).unwrap();
+    }
+    let stable = format!("sid-{}", f.order_id);
+
+    // ledger.jsonl（8 op 全 ok）
+    let ledger: Vec<String> = [
+        ("create_order", "Created"),
+        ("bind_line", "Created"),
+        ("attach_voucher", "Created"),
+        ("release", "Released"),
+        ("start", "InProgress"),
+        ("attach_artifact", "InProgress"),
+        ("complete", "Completed"),
+        ("close", "Closed"),
+    ]
+    .iter()
+    .enumerate()
+    .map(|(i, (op, st))| {
+        format!(
+            r#"{{"seq":{seq},"ts_ms":{ts},"order_id":"{oid}","stable_id":"{sid}","op":"{op}","idem_key":"k","ok":true,"state_after":"{st}","order_after":{{}}}}"#,
+            seq = i + 1,
+            ts = i + 1,
+            oid = f.order_id,
+            sid = stable,
+            op = op,
+            st = st,
+        )
+    })
+    .collect();
+    std::fs::write(dir.join("ledger.jsonl"), ledger.join("\n") + "\n").unwrap();
+
+    // mes-events.jsonl（四类跃迁）
+    let mes: Vec<String> = ["release", "start", "complete", "close"]
+        .iter()
+        .enumerate()
+        .map(|(i, k)| {
+            format!(
+                r#"{{"work_order_id":"{sid}","occurred_at":{ts},"event_id":"{sid}:{k}:{i}","line_id":"line-A","station_id":"af-order-cli","kind":"{k}","quantity":1}}"#,
+                sid = stable,
+                ts = i + 1,
+                k = k,
+                i = i,
+            )
+        })
+        .collect();
+    std::fs::write(dir.join("mes-events.jsonl"), mes.join("\n") + "\n").unwrap();
+
+    // 节点产物：harness.db / normal.jsonl / critical.jsonl / effects.db
+    let mut sum = (0u64, 0u64, 0u64);
+    for (name, rid, (t, ti, to, tc), effect) in &f.nodes {
+        let ndir = run_dir.join("nodes").join(name);
+        let model_line = format!(
+            concat!(
+                r#"{{"seq":0,"level":"normal","kind":"harness.model","payload":{{"run_id":"{rid}","#,
+                r#""turn":{t},"model":"m","finish":"tool_use","usage":{{"input_tokens":{ti},"output_tokens":{to},"cache_read_tokens":{tc}}}}},"ts_ms":1}}"#
+            ),
+            rid = rid,
+            t = t,
+            ti = ti,
+            to = to,
+            tc = tc,
+        );
+        let tool_line = format!(
+            concat!(
+                r#"{{"seq":1,"level":"normal","kind":"harness.tool","payload":{{"run_id":"{rid}","#,
+                r#""turn":{t},"tool":"bash","effect":"{effect}","is_error":false,"error_code":""}},"ts_ms":2}}"#
+            ),
+            rid = rid,
+            t = t,
+            effect = effect,
+        );
+        std::fs::write(
+            ndir.join("normal.jsonl"),
+            format!("{model_line}\n{tool_line}\n"),
+        )
+        .unwrap();
+        std::fs::write(
+            ndir.join("critical.jsonl"),
+            format!(
+                r#"{{"seq":0,"level":"critical","kind":"harness.stop","payload":{{"run_id":"{rid}","turn":1,"status":{{"kind":"completed","signal":"TASK_COMPLETE"}}}},"ts_ms":9}}"#,
+                rid = rid
+            ),
+        )
+        .unwrap();
+        let hdb = rusqlite::Connection::open(ndir.join("harness.db")).unwrap();
+        hdb.execute(
+            "CREATE TABLE run_row (run_id TEXT, terminal_json TEXT, order_id TEXT)",
+            [],
+        )
+        .unwrap();
+        hdb.execute(
+            "INSERT INTO run_row VALUES (?1, ?2, ?3)",
+            rusqlite::params![
+                rid,
+                r#"{"kind":"completed","signal":"TASK_COMPLETE"}"#,
+                format!("{}-run", f.order_id)
+            ],
+        )
+        .unwrap();
+        let edb = rusqlite::Connection::open(ndir.join("effects.db")).unwrap();
+        edb.execute(
+            "CREATE TABLE effect_intent (workorder_id TEXT, seq INTEGER, payload_json TEXT, \
+             payload_sha256 TEXT, state TEXT, order_id TEXT)",
+            [],
+        )
+        .unwrap();
+        edb.execute(
+            "INSERT INTO effect_intent VALUES (?1, ?2, '{}', 'sha', 'executed', ?3)",
+            rusqlite::params![format!("wo-{name}"), 0, rid],
+        )
+        .unwrap();
+        sum.0 += ti;
+        sum.1 += to;
+        sum.2 += tc;
+    }
+
+    // records.jsonl：plan_id 注册表形态 + 全节点 quota 和
+    let (qi, qo, qc) = f.quota.unwrap_or(sum);
+    let rec = serde_json::json!({
+        "plan_id": f.plan_id,
+        "node_id": "line-A",
+        "item_id": "item",
+        "attempt": 1,
+        "host_alias": "h",
+        "unit_id": "graph-unit",
+        "unit_version": "0.1.0",
+        "status": "completed",
+        "verdict": true,
+        "evidence": {
+            "run_dir": format!("af-state/orders/{}/runs/graph-item-glm-cp-a1", f.order_id),
+            "evidence_digest": null,
+        },
+        "gate": "ok",
+        "usage": {"turns": 2, "unit_calls": 2, "http_retries": 0,
+                  "quota": {"input": qi, "output": qo, "cache_read": qc}},
+    });
+    std::fs::write(dir.join("records.jsonl"), format!("{rec}\n")).unwrap();
+    dir
+}
+
+/// graph 布局全绿：每节点一个 invoke_agent（nodes/planner、nodes/coder），
+/// L2 终态交叉 + L3/L4 单元断言逐节点过，token 全节点闭合，plan_id 注册表
+/// 形态放行——图单四层 trace 可工具核验（W2-C32 收口）。
+#[test]
+fn graph_layout_full_tree_ok() {
+    let dir = write_graph_order(&GraphFixture::default());
+    let r = af_execline::tracetree::verify_order_dir(&dir);
+    assert!(
+        r.findings.is_empty(),
+        "graph 布局全绿单不应有 findings：{:#?}",
+        r.findings
+    );
+    assert!(r.agent.is_none(), "graph 布局无扁平 invoke_agent");
+    assert!(r.ring.is_empty());
+    assert_eq!(r.graph.len(), 2, "每节点一个 invoke_agent");
+    // 成员序 = 目录名字典序（与 ring 同口径）：coder < planner。
+    assert_eq!(r.graph[0].run_dir_name, "nodes/coder");
+    assert_eq!(r.graph[0].node_id, "coder");
+    assert_eq!(r.graph[0].run_id, "graph-coder");
+    assert_eq!(r.graph[0].terminal_kind, "completed");
+    assert_eq!(r.graph[0].chat_events, 1);
+    assert_eq!(r.graph[0].tool_events, 1);
+    assert_eq!(
+        r.graph[0].effect_intents, 1,
+        "非纯工具恰一条 executed intent"
+    );
+    assert_eq!(r.graph[0].tokens, (200, 40, 80));
+    assert_eq!(r.graph[1].run_dir_name, "nodes/planner");
+    assert_eq!(r.graph[1].node_id, "planner");
+    assert_eq!(r.graph[1].run_id, "graph-planner");
+    assert_eq!(r.graph[1].tokens, (100, 20, 40));
+}
+
+/// graph 布局 token 闭合：records.quota ≠ 全节点和 → L3 记账断链 finding
+/// （口径与 report 环同：quota 是全节点之和）。
+#[test]
+fn graph_layout_token_sum_must_close_across_nodes() {
+    let dir = write_graph_order(&GraphFixture {
+        order_id: "TR-graph-tok".into(),
+        quota: Some((1, 2, 3)),
+        ..GraphFixture::default()
+    });
+    let r = af_execline::tracetree::verify_order_dir(&dir);
+    assert!(
+        r.findings
+            .iter()
+            .any(|f| f.contains("L3 chat") && f.contains("token 三和")),
+        "跨节点 token 闭合断链应点名：{:#?}",
+        r.findings
+    );
+}
+
+/// graph 布局甄别优先级：run 根无 harness.db 且 nodes/ 在场时不再按扁平
+/// 路径误报「打开 harness.db 失败」（W2-C32 探针的原始红形态）。
+#[test]
+fn graph_layout_not_misread_as_flat_run_root() {
+    let dir = write_graph_order(&GraphFixture {
+        order_id: "TR-graph-flat".into(),
+        ..GraphFixture::default()
+    });
+    let r = af_execline::tracetree::verify_order_dir(&dir);
+    assert!(
+        !r.findings
+            .iter()
+            .any(|f| f.contains("打开 harness.db 失败")),
+        "不得按 run 根扁平路径误报：{:#?}",
+        r.findings
+    );
+}

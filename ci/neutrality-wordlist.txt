@@ -23,17 +23,23 @@
 #
 # 【移交执行·裁决19】「G4 后词表再生成+重收敛」已于 G4 收尾批（2026-10-25）
 #   执行：机械源②对 63 条终态注册面 + 全部 manifest 图名 + 两包 prompts/ 模板名
-#   再生成，新增黑名单 5 词（reportkit/reflectkit/paper/web_fetch/pdf，见段内
+#   再生成，新增黑名单 5 词（reportkit/paper/web_fetch/pdf + reflexkit【原误书
+#   reflectkit，W3-C35 勘误 2026-10-27 更正词形】，见段内
 #   逐词登记）；report 不入表（rule-1：BindReport 词边界安全，校验/绑定报告是
 #   核心机制词）；render/doc/notes/extract/fetch/web 及新模板名段
 #   planner/engineer/reviewer/reader/writer/system 全为通用英语词，按剔除规则
 #   不入表（sweng 新模板 planner_system/engineer_system/reviewer_system、
-#   reportkit 模板 reader_system/writer_system 均无专有段）。reflectkit 为
-#   机械源②既有段（pkg.reflexkit.*）历史收敛正本漏登，随本次再收敛补登。
+#   reportkit 模板 reader_system/writer_system 均无专有段）。reflexkit 为
+#   机械源②既有段（pkg.reflexkit.*）历史收敛正本漏登，随本次再收敛补登
+#   （G4 收尾批登记时词形误书 reflectkit——对 pkg.reflexkit.* 实际段名
+#   pattern.findall 空匹配、覆盖率 0，W3-C35 勘误更正并加 scan 自检回归）。
 #   新增 5 词核心 src 实测 0 命中（grep -rniE 亲测），白名单零新增。
 #
 # 基线实测（2026-10-25 本 commit HEAD，ci/neutrality_scan.py）：
 #   核心 src（af-dsl+af-compiler，含 src/bin）全量命中 14 条，全部入白名单段——
+#   红队 W1-C60（2026-10-26）：词边界改 ASCII 口径（\b 的 \w 含 CJK，中文
+#   注释邻接面失明）后基线 17 条（13 白名单豁免 + 4 新见条目登记如下；
+#   可执行标识符零领域词不变）。
 #   可执行标识符零领域词；code/repo/patch/diff/commit/rubric/citation/video/
 #   web_search 两包敏感词 0 命中。
 # =============================================================================
@@ -70,7 +76,7 @@ searchkit	②	黑名单	包段（pkg.searchkit.*）
 hopqa	②	黑名单	专有名段（pkg.reactkit.hopqa_api 截段）
 swebench	②	黑名单	专有名段（pkg.sweagent.swebench_eval 截段）
 aci	②	黑名单	专有名段（pkg.sweagent.aci.*；ADR-006 裁决1 点名）
-reflectkit	②	黑名单	包段（pkg.reflexkit.*；机械源②既有段，历史收敛正本漏登，G4 收尾批补登）
+reflexkit	②	黑名单	包段（pkg.reflexkit.*；机械源②既有段，历史收敛正本漏登，G4 收尾批补登。红队 W3-C35 勘误 2026-10-27：原词形 reflectkit 多一 t，对自认要覆盖的 pkg.reflexkit.* 六个注册组件扫描覆盖率为 0——按实际段名更正，scan 自检含词形一致性回归）
 reportkit	②	黑名单	包段（pkg.reportkit.* / manifest 图 pkg.reportkit.paper_report；研究报告包）
 paper	②	黑名单	专有名段（pkg.reportkit.paper_report 图段；研究报告包域）
 web_fetch	②③④	黑名单	专有名段（pkg.report.web_fetch；ADR-006 web 检索域，同 web_search 先例）
@@ -87,15 +93,19 @@ citation	③④	黑名单	研究报告包领域词（引用）
 web_search	③④	黑名单	研究报告包领域词（web 检索）
 # ==== 白名单段（§2.4 条目级豁免：文件:行+次数；禁文件级豁免——开放问题 6 裁定维持） ====
 # 词	处置	命中位置	次数	出处	理由	登记日期
-terminal	白名单	crates/af-dsl/src/model.rs:637	1	规范词	failures[].terminal 终态义字段（提案 B §1.2），非「终端机」域	2026-10-25
+terminal	白名单	crates/af-dsl/src/model.rs:643	1	规范词	failures[].terminal 终态义字段（提案 B §1.2），非「终端机」域	2026-10-25
 adas	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制注释	registry.rs 模块头记述四稿 E2001 失败分类账裁决背景	2026-10-25
 autogen	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制注释	同上（AutoGen-Team-JSON）	2026-10-25
 gptswarm	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制注释	同上（GPTSwarm）	2026-10-25
 metagpt	白名单	crates/af-dsl/src/registry.rs:3	1	对齐稿名·挂载机制注释	同上（MetaGPT）	2026-10-25
 adaskit	白名单	crates/af-dsl/src/registry.rs:92	2	组件名·挂载机制注释	pkg.adaskit.* 组合引用示例（注释文本+代码示例串各 1 处）	2026-10-25
 git	白名单	crates/af-dsl/src/registry.rs:228	1	VCS 目录名·homonym	.git 隐藏目录跳过（目录名非 git 工具域）	2026-10-25
-sweng	白名单	crates/af-compiler/src/components.rs:59	1	组件名·挂载机制注释	pkg.sweng.locate 引用形示例（装载器 doc 注释）	2026-10-25
+sweng	白名单	crates/af-compiler/src/components.rs:62	1	组件名·挂载机制注释	pkg.sweng.locate 引用形示例（装载器 doc 注释；红队 W1-C60 ASCII 词边界后行号 59→62 漂移修正）	2026-10-26
 langgraph	白名单	crates/af-compiler/src/ir.rs:121	1	出处注记	checkpoint 语义出处（提案 B 互译表引注）	2026-10-25
 langgraph	白名单	crates/af-compiler/src/ir.rs:151	1	出处注记	interrupt(response_schema) 对应物语义出处	2026-10-25
 terminal	白名单	crates/af-compiler/src/ir.rs:578	1	规范词	failures[].terminal 终态义投影字段	2026-10-25
-terminal	白名单	crates/af-compiler/src/lower.rs:523	2	规范词	lowering 投影行 terminal: f.terminal 行内 2 处（字段名+访问表达式）	2026-10-25
+terminal	白名单	crates/af-compiler/src/lower.rs:710	2	规范词	lowering 投影行 terminal: f.terminal 行内 2 处（字段名+访问表达式；红队 W2 域分支合入 W2-C-26 使行号 587→699 漂移修正；红队 W3-C19 meta.output.ref 内联型登记块插入使 699→710 再漂移修正）	2026-10-27
+voyager	白名单	crates/af-compiler/src/ir.rs:23	1	图名示例·机制注释	sample6 子图路径示例 voyager_curriculum/explore/acquire（构造体路径键机制；红队 W1-C60 ASCII 词边界后可见，原 \b 口径对 CJK 邻接失明）	2026-10-26
+debate	白名单	crates/af-compiler/src/ir.rs:58	1	图名示例·机制注释	体内节点全局唯一连接键示例 rounds.debate_map（提案 B 路径键机制示例；红队 W1-C60 补见）	2026-10-26
+debate	白名单	crates/af-dsl/src/validate/mod.rs:30	1	图名示例·机制注释	点号路径示例 "rounds.debate_map.debater"（NodeRef.path 机制示例；红队 W1-C60 补见）	2026-10-26
+debate	白名单	crates/af-compiler/src/lower.rs:79	1	图名示例·机制注释	golden Multi-Agent-Debate 内联原始型 sentinel 实证携带者（W3-C20 注释引用 golden 语料名，与 ir.rs:58/validate/mod.rs:30 同类）	2026-10-26

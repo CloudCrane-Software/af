@@ -43,11 +43,41 @@
    在档新增：E1008 `dotted_node_id`（点号=构造体路径分隔符，id 段禁用）、
    E1054 `cel_limit_exceeded`（深>1000 或长>64KiB 前置拒）——均在 error.rs
    文档注记登记依据，正本回填随规范 v0.2 议程。
+   红队修复批新增/收紧（红队 W2-C47 补登记；裁决依据 ADR-011 裁决 6 与
+   W2 批 commit ff68d80/fa0ec74，正本回填随规范 v0.2 议程）：
+   · **E2212 `construct_conflict`**：同节点 loop+map 双构造并存 fail-closed
+     拒绝（解析域取 loop 体/类型域包 list<> 自相矛盾）。**码位迁移（红队
+     W3-C16 勘误 2026-10-27）**：原登 E2209 与提案-B §6 既有分派「E2209 ops
+     参数不闭合」撞码——迁至未分配的 E2212，E2209 归还 ops 参数闭合
+     （§6 表已同步登记）。
+   · **E2213 `map_frombody_inline_type`（红队 W3 补登 2026-10-27）**：
+     map.from_body 转发的体内端口类型为内联原始型即拒——`list<原始型>`
+     不在类型表达式文法（泛型载荷须已登记名或 signal），转发端口类型不可
+     表达 ⇒ 终态推导恒失败；af-dsl 阶段 fail-loud，禁止编译出无 is_final
+     终态工件的计划。
+   · **E1003 内建端口声明冲突（红队 W3-C17 补登 2026-10-27）**：内建端口
+     名（loop/map done:signal、check/gate passed:boolean）的显式 emits
+     声明须与内建固定类型同型，冲突类型或 from_body 死声明 → E1003 拒
+     （声明面否则被 emit_type 内建短路静默遮蔽，E2202/边核对/终态推导
+     三判定面口径分裂）。
+   · **E2202 恰一端口匹配**：meta.output.from 的同型匹配端口须恰一（同型
+     双端口=终态工件不可单义识别）；判定面 = emits ∪ 内建端口（loop/map
+     done:signal、check/gate passed:boolean）且按端口名去重（显式同名声明
+     不重复计数）。
+   · **CEL 注释语义**：词法扫描与 cel-parser 同口径跳过 `//` 行注释；`has`
+     宏确认状态跨越注释存活（注释不得隔断宏调用绕闸）；块注释文法不收，
+     跳过即给深括号绕 E1054 开门，仍拒。
+   · **route default:exit**：default 分支的 ¬(when 析取) 守卫并入 exit_guard
+     联合（非 loop 文档不再静默丢失默认分支守卫，「分支 guard 析取永真」
+     性质恢复）。
+   · **E2311 文案分叉**：多写者称「写者不唯一」；唯一实际写者≠声明称
+     「写者与声明不符」（此前混用「不唯一」，误导排障方向）。
 2. **golden 21 契约**：`crates/af-compiler/testdata/golden/` 21 份 IR 快照
    逐字节回归 + 篡改检测——语法/编译器任何改动零漂移的机器闸（C10：语法
    演进必须 ADR + 全量 golden）。
 3. **语义钉死契约**：`crates/af-dsl/testdata/farm-anomalies/` 39 份对抗
-   农田样本 + `tests/farm_anomalies_test.rs` 13 个表驱动测试（39/39）——
+   农田样本 + `tests/farm_anomalies_test.rs` 14 个表驱动测试（39/39；红队
+   W2-C51 勘误：原 13 未随 W1-C28 新增 iv48 同型双端口用例同步）——
    含预算 scope 穿体语义（C_AL09，FALSE-POSITIVE-SEMANTIC：合法穿体必过 +
    悬空路径照报 E2207 反例）与文档化边界 14 份 PASS 钉。
 4. **组件声明契约**：`uses.*` 引用串 ↔ `af/packages/**/components.json`

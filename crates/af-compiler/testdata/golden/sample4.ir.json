@@ -239,6 +239,7 @@
         ],
         "type": "object"
       },
+      "signal": {},
       "tally_result": {
         "properties": {
           "answers": {

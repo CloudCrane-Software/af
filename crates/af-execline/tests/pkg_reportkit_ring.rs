@@ -118,6 +118,9 @@ fn drive(unit: &ReportExecuteUnit, base: &Path, task_dir: &Path) -> af_execline:
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).expect("真环单元全相应走通")
@@ -138,6 +141,9 @@ fn drive_err(unit: &ReportExecuteUnit, base: &Path, task_dir: &Path) -> Execline
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).unwrap_err()
@@ -385,10 +391,24 @@ fn ring_fake_reader_writer_drive_passes_envelope_and_judges() {
         assert_eq!(l.max_tokens, Some(32000));
         assert_eq!(l.per_turn, 1, "llm.cents 每 turn 1 分（swev 同款预算记账）");
         assert_eq!(l.completion_signals, vec!["REPORT_DONE".to_string()]);
-        assert_eq!(l.spend_cap_cents, 300);
+        // 红队 W1-C33：环级共享预算账本——reader 拿环级满帽（300¢ = min
+        // (spec 帽, plan cost_cap)），writer 拿剩余额度（扣 reader 已用
+        // 2¢——此前每成员各拿满份帽，图级上限 4×300¢）。
         assert_eq!(l.tool_spend_cents, 1);
         assert!(l.budget_ledger_cents > 0, "预算账本绑定在场");
     }
+    assert_eq!(
+        launches[0].spend_cap_cents, 300,
+        "reader 拿环级满帽（W1-C33 共享账本）"
+    );
+    assert_eq!(
+        launches[1].spend_cap_cents, 298,
+        "writer 拿剩余额度（环级帽 300 − reader 已用 2¢，W1-C33）"
+    );
+    assert!(
+        launches[1].spend_cap_cents < launches[0].spend_cap_cents,
+        "环内后续成员帽须收敛到剩余额度"
+    );
     assert_eq!(reader.max_turns, 40, "spec v1 图面口径 turns 40");
     assert_eq!(reader.tool_free_turn_limit, 3);
 
@@ -658,6 +678,59 @@ fn arxiv_web_fetcher_whitelist_refuses_non_arxiv_offline() {
     assert!(ArxivWebFetcher.fetch("file:///tmp/x.txt").is_err());
 }
 
+/// 红队 W2-C31：重定向逐跳 host 复核——curl 不再 -L 裸跟，白名单必须在
+/// **每一跳**（含重定向落点）成立；本白名单外目标拒绝落盘。
+#[test]
+fn arxiv_web_fetcher_revalidates_every_redirect_hop_host() {
+    // 白名单内三 host 均可作重定向落点。
+    for url in [
+        "https://export.arxiv.org/abs/2401.00001",
+        "https://arxiv.org/abs/2401.00001",
+        "https://www.arxiv.org/abs/2401.00001",
+    ] {
+        assert!(
+            ArxivWebFetcher::check_hop(url).is_ok(),
+            "白名单内落点应放行：{url}"
+        );
+    }
+    // 白名单外/仿冒域/明文 http 一律拒。
+    for (url, why) in [
+        (
+            "https://attacker.example.com/abs/2401.00001",
+            "白名单外主机",
+        ),
+        ("https://arxiv.org.evil.io/abs/2401.00001", "仿冒域"),
+        ("https://evil-arxiv.org/abs/2401.00001", "形近域"),
+        ("http://export.arxiv.org/abs/2401.00001", "明文 http"),
+    ] {
+        let err = ArxivWebFetcher::check_hop(url).unwrap_err();
+        assert!(
+            err.contains("白名单") || err.contains("https"),
+            "{why}：{url} → {err}"
+        );
+    }
+}
+
+/// 红队 W2-C31：相对 Location 解析——绝对 https 原样、根相对并入现 host、
+/// 非 https 绝对目标拒绝（协议面不因重定向放宽）。
+#[test]
+fn arxiv_web_fetcher_resolves_relative_redirect_locations() {
+    let base = "https://export.arxiv.org/abs/2401.00001v1";
+    assert_eq!(
+        ArxivWebFetcher::resolve_redirect(base, "https://arxiv.org/abs/2401.00001").unwrap(),
+        "https://arxiv.org/abs/2401.00001",
+        "绝对 https Location 原样"
+    );
+    assert_eq!(
+        ArxivWebFetcher::resolve_redirect(base, "/abs/2401.00002").unwrap(),
+        "https://export.arxiv.org/abs/2401.00002",
+        "根相对 Location 并入现 host"
+    );
+    let err =
+        ArxivWebFetcher::resolve_redirect(base, "http://arxiv.org/abs/2401.00001").unwrap_err();
+    assert!(err.contains("https"), "非 https 绝对 Location 拒绝：{err}");
+}
+
 #[test]
 fn html_to_text_strips_scripts_tags_and_entities() {
     let html = "<html><head><title>T</title><style>body{hidden}</style>\
@@ -757,4 +830,201 @@ fn real_model_ring_smoke_minimal_plan() {
         "真模型调用>0：{rows}"
     );
     std::fs::remove_dir_all(&base).ok();
+}
+
+/// 红队 W1-C33：环级预算熔断——reader + writer 轮共享单一预算账本
+///（min(spec 帽, plan cost_cap)），账本耗尽即拒起下一成员；此前每成员
+/// 各拿满份帽（图级上限 4×300¢）。
+#[test]
+fn ring_budget_is_shared_across_members_and_circuit_breaks() {
+    let runner = FakeRingRunner::happy();
+    let base = std::env::temp_dir().join(format!("g5-ring-w1c33-{}", std::process::id()));
+    std::fs::remove_dir_all(&base).ok();
+    std::fs::create_dir_all(&base).unwrap();
+    let plan_src = real_report_plan();
+    let task_dir = ring_task_package(&base, &plan_src);
+    // 环级帽 = 2¢（spec 帽压到 2；FakeRingRunner reader 耗 2¢）——reader
+    // 跑完账本即尽，writer 第 1 轮熔断拒起。
+    let mut spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+    spec.spend_cap_cents = 2;
+    let unit = ReportExecuteUnit::new(
+        spec.clone(),
+        draft_fn_real_ring(runner.clone(), spec),
+        Arc::new(LocalFileFetcher),
+    )
+    .expect("真环单元装载应过三重门");
+    let err = drive_err(&unit, &base, &task_dir);
+    assert!(
+        err.to_string().contains("报告环预算熔断"),
+        "环级共享账本耗尽应熔断：{err}"
+    );
+    // 恰 reader 一个 launch：writer 因熔断门未起。
+    assert_eq!(runner.captured().len(), 1, "熔断后不得再起 writer");
+    std::fs::remove_dir_all(&base).ok();
+}
+
+// ---- 红队 W1-C33（完整化）：plan turns/token 帽强制 + 强制集外条目拒收 ----
+
+/// 改写真计划 plan.body.budget.budgets 后重建任务包（JSON 面 mutate）。
+fn ring_task_package_mutated(base: &Path, mutate: impl FnOnce(&mut Value)) -> PathBuf {
+    let mut plan: Value = serde_json::from_str(&real_report_plan()).expect("真计划应可解析");
+    mutate(&mut plan);
+    ring_task_package(base, &plan.to_string())
+}
+
+/// plan 级 turns 帽（study_turns，loop:study 作用域）：reader 恰耗 2 turns
+/// （FakeRingRunner reader 用量），帽压到 2 → writer 第 1 轮前熔断；且
+/// reader 单 launch 的 max_turns 收敛到剩余额度（min(spec 40, 2)）。
+#[test]
+fn ring_plan_turns_cap_circuit_breaks_before_next_launch() {
+    let runner = FakeRingRunner::happy();
+    let base = std::env::temp_dir().join(format!("g5-ring-w1c33-turns-{}", std::process::id()));
+    std::fs::remove_dir_all(&base).ok();
+    std::fs::create_dir_all(&base).unwrap();
+    let task_dir = ring_task_package_mutated(&base, |plan| {
+        for e in plan["body"]["budget"]["budgets"].as_array_mut().unwrap() {
+            if e["id"] == "study_turns" {
+                e["cap"] = json!(2);
+            }
+        }
+    });
+    let mut spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+    spec.spend_cap_cents = 300; // cents 帽留足，隔离 turns 维
+    let unit = ReportExecuteUnit::new(
+        spec.clone(),
+        draft_fn_real_ring(runner.clone(), spec),
+        Arc::new(LocalFileFetcher),
+    )
+    .expect("真环单元装载应过三重门");
+    let err = drive_err(&unit, &base, &task_dir);
+    assert!(
+        err.to_string().contains("turns"),
+        "plan turns 帽应熔断拒起下一成员：{err}"
+    );
+    assert_eq!(runner.captured().len(), 1, "turns 熔断后不得再起 writer");
+    assert_eq!(
+        runner.captured()[0].max_turns,
+        2,
+        "reader 单 launch turns 帽收敛到剩余额度（min(spec 40, plan 2)）"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+/// plan 级 token_cap（tokens_total，plan 作用域）：reader 耗 1000+200=1200
+/// tokens，帽压到 1000 → writer 第 1 轮前熔断（口径 in+out+cache_read，
+/// 与图执行器 account_node 同源）。
+#[test]
+fn ring_plan_token_cap_circuit_breaks_before_next_launch() {
+    let runner = FakeRingRunner::happy();
+    let base = std::env::temp_dir().join(format!("g5-ring-w1c33-tok-{}", std::process::id()));
+    std::fs::remove_dir_all(&base).ok();
+    std::fs::create_dir_all(&base).unwrap();
+    let task_dir = ring_task_package_mutated(&base, |plan| {
+        for e in plan["body"]["budget"]["budgets"].as_array_mut().unwrap() {
+            if e["id"] == "token_cap" {
+                e["cap"] = json!(1000);
+            }
+        }
+    });
+    let mut spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+    spec.spend_cap_cents = 300;
+    let unit = ReportExecuteUnit::new(
+        spec.clone(),
+        draft_fn_real_ring(runner.clone(), spec),
+        Arc::new(LocalFileFetcher),
+    )
+    .expect("真环单元装载应过三重门");
+    let err = drive_err(&unit, &base, &task_dir);
+    assert!(
+        err.to_string().contains("tokens_total"),
+        "plan token 帽应熔断拒起下一成员：{err}"
+    );
+    assert_eq!(runner.captured().len(), 1, "token 熔断后不得再起 writer");
+    std::fs::remove_dir_all(&base).ok();
+}
+
+/// plan 预算强制集外条目（clock_ms/plan）一律 fail-loud 拒收——与图执行器
+/// PlanBudgets::of 同纪律：静默忽略 = 声明帽免帽（W1-C34 同源）。
+#[test]
+fn ring_plan_budget_unsupported_entry_is_rejected() {
+    let runner = FakeRingRunner::happy();
+    let base = std::env::temp_dir().join(format!("g5-ring-w1c33-rej-{}", std::process::id()));
+    std::fs::remove_dir_all(&base).ok();
+    std::fs::create_dir_all(&base).unwrap();
+    let task_dir = ring_task_package_mutated(&base, |plan| {
+        plan["body"]["budget"]["budgets"]
+            .as_array_mut()
+            .unwrap()
+            .push(json!({ "id": "wall_clock", "dimension": "clock_ms", "scope": "plan", "cap": 99999 }));
+    });
+    let spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+    let unit = ReportExecuteUnit::new(
+        spec.clone(),
+        draft_fn_real_ring(runner.clone(), spec),
+        Arc::new(LocalFileFetcher),
+    )
+    .expect("真环单元装载应过三重门");
+    let err = drive_err(&unit, &base, &task_dir);
+    assert!(
+        err.to_string().contains("强制集"),
+        "强制集外预算条目应拒收（不得静默免帽）：{err}"
+    );
+    assert!(
+        runner.captured().is_empty(),
+        "拒收发生在起环之前，零 launch"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+// ---- 红队 W3-C-23：plan cost_cap 巨帽不得回绕成负帽（图执行器 W2-C-28 同族）----
+
+/// plan 级 cost_cap ≥ 2^63 时 u64→i64 须**饱和**换算（巨帽≈无帽，与图执行器
+/// W2-C-28 同款语义）：此前 `entry.cap as i64` 把 ≥2^63 的帽回绕成负数，环
+/// 级帽 min(spec, 负值)=负、reader 门 `0 ≥ 负帽` 即起动前误熔断并打印负帽
+/// nonsense 诊断。2^63 与 u64::MAX 两档：reader 不提前熔断、满环照常走通，
+/// 环级帽 = min(spec 帽, 饱和后 plan 帽) = spec 帽。
+#[test]
+fn ring_plan_giant_cost_cap_saturates_and_reader_does_not_melt_early() {
+    for (giant, tag) in [(9_223_372_036_854_775_808u64, "2p63"), (u64::MAX, "umax")] {
+        let runner = FakeRingRunner::happy();
+        let base = std::env::temp_dir().join(format!("g5-ring-w3c23-{tag}-{}", std::process::id()));
+        std::fs::remove_dir_all(&base).ok();
+        std::fs::create_dir_all(&base).unwrap();
+        let task_dir = ring_task_package_mutated(&base, |plan| {
+            for e in plan["body"]["budget"]["budgets"].as_array_mut().unwrap() {
+                if e["id"] == "cost_cap" {
+                    e["cap"] = json!(giant);
+                }
+            }
+        });
+        let spec = ReportUnitSpec::v1("glm-cp", ReportJudgeLocator::production(), repo_packages());
+        let unit = ReportExecuteUnit::new(
+            spec.clone(),
+            draft_fn_real_ring(runner.clone(), spec),
+            Arc::new(LocalFileFetcher),
+        )
+        .expect("真环单元装载应过三重门");
+        let out = drive(&unit, &base, &task_dir);
+        assert_eq!(
+            out.verdict,
+            Some(true),
+            "巨帽档 {tag}（{giant}）满环应照常走通（reader 不得起动前误熔断）：{}",
+            out.note
+        );
+        let launches = runner.captured();
+        assert_eq!(
+            launches.len(),
+            2,
+            "巨帽档 {tag} reader+writer 两 launch：{launches:?}"
+        );
+        assert_eq!(
+            launches[0].spend_cap_cents, 300,
+            "巨帽档 {tag} reader 帽 = min(spec 300, 饱和后 plan 帽) = 300（非负、非 1）"
+        );
+        assert_eq!(
+            launches[1].spend_cap_cents, 298,
+            "巨帽档 {tag} writer 帽 = 环级帽 300 − reader 已用 2¢"
+        );
+        std::fs::remove_dir_all(&base).ok();
+    }
 }

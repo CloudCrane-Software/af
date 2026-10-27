@@ -266,7 +266,9 @@ policies: {}
 #[test]
 fn documented_boundaries_stay_pass() {
     for name in [
-        "B10_type_schema_str.yaml",
+        // B10_type_schema_str.yaml 自红队 W3-C18 起移出 PASS 钉：schema 标量
+        // 形状由 shape::check_schema_shape 拒收（E1003）——原「文档化边界」
+        // 与 model.rs 自述矛盾，勘误后翻转为拒收例（见 schema_shape_test）。
         "B23_ops_param_unclosed.yaml",
         "B50_retention_zero.yaml",
         "B69_zero_writer.yaml",
@@ -277,7 +279,10 @@ fn documented_boundaries_stay_pass() {
         "C_CE02_list_literal.yaml",
         "C_CE03_map_literal.yaml",
         "C_CX20_two_edges_one_section.yaml",
-        "C_IV48_writer_port_forward_leak.yaml",
+        // C_IV48 自红队 W1-C28 起移出 PASS 钉：W 节点 fin/leak 双端口同型
+        // T_out 且 output.from=W——恰一端口匹配收紧后为 E2202（终态工件
+        // 不可单义识别；原「写者端口前递泄漏」文档化边界裁定被该收紧
+        // 取代——泄漏端口与终态端口同型即歧义，不再放行）。
         "C_IV49_evaluator_port_forward_leak.yaml",
         "C_RT06_exit_named_node.yaml",
     ] {
@@ -287,6 +292,19 @@ fn documented_boundaries_stay_pass() {
             "{name} 属文档化边界/复核存档（不在修复面），应保持 PASS：\n{report}"
         );
     }
+}
+
+/// 红队 W1-C28 收紧钉：C_IV48（W 节点 fin/leak 双端口同型 T_out 且
+/// output.from=W）自恰一端口匹配收紧起为 E2202——终态工件不可单义识别
+///（lower 面按类型相等逐端口推导 is_final，双匹配即双终态工件计划）。
+/// 原「写者端口前递泄漏」文档化边界裁定被本收紧取代。
+#[test]
+fn iv48_dual_same_type_output_ports_now_e2202() {
+    let report = farm("C_IV48_writer_port_forward_leak.yaml");
+    assert!(
+        report.has_code(af_dsl::error::ErrorCode::OutputNotEmitted),
+        "C_IV48 应报 E2202（恰一端口匹配）：\n{report}"
+    );
 }
 
 // ---------- C_AL09 语义钉死（编排者裁决 2026-10-25：农田误报，FALSE-POSITIVE-SEMANTIC） ----------

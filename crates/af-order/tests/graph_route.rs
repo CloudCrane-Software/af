@@ -33,8 +33,8 @@ fn graph_exec(data_root: &str) -> RealExec {
         profile: "glm-cp".into(),
         data_root: PathBuf::from(data_root),
         host: "anolis".into(),
-        max_turns: 60,
-        spend_cap_cents: 300,
+        max_turns: Some(60),
+        spend_cap_cents: Some(300),
     }
 }
 
@@ -115,6 +115,39 @@ fn graph_unit_materials_require_plan_json_in_task_package() {
     assert!(
         err.to_string().contains("plan.json"),
         "缺计划应点名约定路径：{err}"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+/// 红队 W2-C51：graph 臂与 swev/report 两臂同源注入现产判分锚——
+/// GraphUnitSpec.judge 此前恒 None，任何含 pkg.sweagent.swebench_eval
+/// 检查节点的图计划经 CLI 提交必然在分派面 fail-loud 拒载（「spec.judge
+/// 未配置」），图臂唯一走冻结判分链的单元从下单入口永不可达。
+#[test]
+fn graph_unit_for_injects_production_judge_locator() {
+    let base = std::env::temp_dir().join(format!("graph-route-judge-{}", std::process::id()));
+    std::fs::remove_dir_all(&base).ok();
+    let task_dir = base.join("graph-task-1");
+    std::fs::create_dir_all(&task_dir).unwrap();
+    std::fs::write(
+        task_dir.join("task.json"),
+        serde_json::json!({
+            "repo": "django/django",
+            "instance_id": "graph-task-1",
+            "problem_statement": "fix",
+            "image": "img",
+            "registry_root": "/tmp/some-packages"
+        })
+        .to_string(),
+    )
+    .unwrap();
+    std::fs::write(task_dir.join("plan.json"), "{\"v\":1}").unwrap();
+
+    let spec = graph_unit_for(&graph_exec(base.to_str().unwrap())).expect("材料齐应产 spec");
+    assert_eq!(
+        spec.judge.as_ref(),
+        Some(&af_execline::JudgeLocator::production()),
+        "graph 臂 judge = 现产判分锚（与 swev/report 两臂同源，逐字段相等）"
     );
     std::fs::remove_dir_all(&base).ok();
 }

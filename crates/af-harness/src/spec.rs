@@ -363,6 +363,22 @@ mod tests {
         assert!(matches!(bad_body, Error::Json(_)));
     }
 
+    /// 红队 W1-C29 锚侧钉：key_ref 长度界 128（`is_ref_name` 的
+    /// `len() <= 128` 条款）——af-compiler 镜像 `validate_endpoint` 已补齐
+    /// 同界，两侧边界同时钉死防再漂移（128 过 / 129 拒）。
+    #[test]
+    fn key_ref_length_boundary_is_128() {
+        let mut spec = decode_spec(crate::EXAMPLE_SPEC_JSON).unwrap();
+        spec.endpoint.key_ref = "k".repeat(128);
+        spec.validate()
+            .expect("128 字符 key_ref 应过（<= 128 上限内）");
+        spec.endpoint.key_ref = "k".repeat(129);
+        assert!(
+            spec.validate().is_err(),
+            "129 字符 key_ref 应拒（is_ref_name 长度条款）"
+        );
+    }
+
     #[test]
     fn rejects_secret_shaped_key_ref_and_url_userinfo() {
         let mut spec = decode_spec(crate::EXAMPLE_SPEC_JSON).unwrap();

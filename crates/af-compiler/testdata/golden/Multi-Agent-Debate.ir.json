@@ -567,6 +567,9 @@
         ],
         "type": "object"
       },
+      "string": {
+        "type": "string"
+      },
       "tally_result": {
         "properties": {
           "answers": {
@@ -1055,7 +1058,7 @@
           "peer_board"
         ],
         "consumes": {
-          "item": "{type:string}"
+          "item": "string"
         },
         "artifacts": {
           "prompt": {

@@ -615,6 +615,7 @@
         ],
         "type": "object"
       },
+      "signal": {},
       "stop_decision": {
         "properties": {
           "note": {

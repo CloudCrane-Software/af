@@ -64,6 +64,13 @@
                 "owner": "lang-team",
                 "share_budget_pct": 15
               },
+              "route_exit_guard": {
+                "source": "!((judge_inject.decision.warranted == true))",
+                "roots": [
+                  "judge_inject"
+                ],
+                "digest": "3aca91ef48afcf41968c7a1562480c88d6e730f301b768f8ebe513153e171624"
+              },
               "capability_refs": []
             },
             {
@@ -81,6 +88,13 @@
                 "owner": "lang-team",
                 "share_budget_pct": 10
               },
+              "route_exit_guard": {
+                "source": "!((memorize_guard.entry.writable == true))",
+                "roots": [
+                  "memorize_guard"
+                ],
+                "digest": "1e6a092e014c2cd0090d52fa2e7fb6de3ab58387bc9f2112de896aa06fb7ec38"
+              },
               "capability_refs": []
             },
             {
@@ -91,6 +105,13 @@
             {
               "id": "verdict",
               "kind": "check",
+              "route_exit_guard": {
+                "source": "!((verdict.passed == false))",
+                "roots": [
+                  "verdict"
+                ],
+                "digest": "8bfd68fcb3e59cd258f4eb34b311e7b2fe4465dc7f4447531fb36206bea4b888"
+              },
               "capability_refs": []
             }
           ],

@@ -72,6 +72,10 @@ pub const COMPLETION_SIGNAL: &str = "TASK_COMPLETE";
 pub const TOOL_FREE_TURN_LIMIT: u32 = 3;
 /// 单节点 launch 缺省成本硬顶（美分；plan cost_cap 在场时收敛到剩余额度）。
 pub const DEFAULT_NODE_SPEND_CAP_CENTS: i64 = 300;
+/// 失败行分类相（红队 W2-C34）：setup = 供给面（装载/装订/预算/容器前），
+/// run = 驱动相起（节点/envelope/预算熔断/判分）。
+const SETUP_PHASE: &str = "setup";
+const RUN_PHASE: &str = "run";
 
 // ============================================================
 // 单元声明
@@ -89,6 +93,10 @@ pub struct GraphUnitSpec {
     pub default_node_turns: u32,
     /// 单节点 launch 成本硬顶缺省。
     pub spend_cap_cents: i64,
+    /// 订单级总预算帽（红队 W2-C54：门面 `--spend-cap-cents` 的 graph 臂接线
+    /// ——plan 未声明 cost_cap 时以此为**总闸**，N 个节点收敛到同一总额；
+    /// 此前两臂旗标完全不读，落硬编码 300¢/节点且跨 N 节点无总闸）。
+    pub order_spend_cap_cents: Option<i64>,
     /// 工具单次开销（swev 环同款记账面）。
     pub tool_spend_cents: i64,
     /// swebench_eval 判定单元的判分锚（B 席嫁接，合流批；None = 该单元
@@ -107,6 +115,7 @@ impl GraphUnitSpec {
             profile: profile.into(),
             default_node_turns: DEFAULT_NODE_TURNS,
             spend_cap_cents: DEFAULT_NODE_SPEND_CAP_CENTS,
+            order_spend_cap_cents: None,
             tool_spend_cents: 1,
             judge: None,
             unit_version: "0.1.0",
@@ -167,207 +176,18 @@ impl ExecuteUnit for GraphExecuteUnit {
     }
 
     fn execute(&self, ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
-        // ---- setup 相①：任务包 + 计划装订四核对（planbind 唯一正本，先例术语）----
-        let task_dir = ctx.data_root.join(ctx.task_id);
-        let plan_src = std::fs::read_to_string(task_dir.join("plan.json")).map_err(|err| {
-            self.fail(format!(
-                "读计划失败（v1 约定：计划随任务包 <data_root>/<task>/plan.json；submit 级 --plan 档=开放问题 8 留 v0.2）: {err}"
-            ))
-        })?;
-        let input: Value = serde_json::from_str(
-            &std::fs::read_to_string(task_dir.join("task.json"))
-                .map_err(|err| self.fail(format!("读任务包 task.json 失败: {err}")))?,
-        )
-        .map_err(|err| self.fail(format!("task.json 不是合法 JSON: {err}")))?;
-        // 模板引用先收口（装订器④的装载清单）：plan JSON 通用遍历
-        // node_exec[].context[].template_ref。
-        let template_refs = collect_template_refs(&plan_src);
-        let refs: Vec<&str> = template_refs.iter().map(String::as_str).collect();
-        let bound = planbind::bind(
-            &plan_src,
-            &self.spec.registry_root,
-            &refs,
-            &BindExpectations::default(),
-        )?;
-        let plan = &bound.plan;
-
-        // ---- setup 相②：图输入 envelope 校验 + 线性化 + 预算面提取 ----
-        let input_schema = plan
-            .body
-            .types
-            .get(&plan.body.interface.input_type)
-            .cloned()
-            .ok_or_else(|| {
-                Self::envelope_err(format!(
-                    "图输入类型 {} 不在 types 词典",
-                    plan.body.interface.input_type
-                ))
-            })?;
-        if let Err(detail) = validate_schema(&input, &input_schema) {
-            return Err(Self::envelope_err(format!(
-                "图输入不符 {} schema：{}",
-                plan.body.interface.input_type, detail
-            )));
+        // 红队 W2-C34：失败行由单元落（RESULT-P4 §5「供给失败行由单元落、
+        // 订单侧不停终态」）——graph 此前只在成功尾部落 v1 行，任何失败路径
+        // （EX3001/EX4004/EX4006/EX4007/EX4008…）提前 return、record_sink 零
+        // 调用，失败单在结果轨与「从未开跑」不可区分。wrapper：setup 相失败
+        // 落 setup_failed、驱动相起失败落 run_failed（legacy 轨，失败行无 v1
+        // 投影），行附真实错误类别与 verdict=null；原错误类别原样上抛不翻案。
+        let phase = std::cell::Cell::new(SETUP_PHASE);
+        let started = std::time::Instant::now();
+        match self.drive_all(ctx, &phase, started) {
+            Ok(output) => Ok(output),
+            Err(err) => Err(self.emit_failure_row(ctx, err, phase.get())),
         }
-        let order = linearize(plan)?;
-        let budget = PlanBudgets::of(plan)?;
-
-        // ---- setup 相③：任务材料 + 容器（swev 环模式复用）----
-        let task = GraphTask::parse(&input)?;
-        let attempt_dir = ctx.attempt_dir;
-        std::fs::create_dir_all(attempt_dir)
-            .map_err(|err| self.fail(format!("建 run 目录失败: {err}")))?;
-        let artifacts_dir = attempt_dir.join("artifacts");
-        std::fs::create_dir_all(&artifacts_dir)
-            .map_err(|err| self.fail(format!("建工件面失败: {err}")))?;
-        let env = Arc::new(
-            swev::setup(
-                self.bridge.as_ref(),
-                ctx.host_alias,
-                &task.as_swev_task(),
-                &self.spec.profile,
-            )
-            .map_err(|err| self.fail(format!("起容器失败: {err}")))?,
-        );
-        let _guard = ContainerGuard {
-            bridge: self.bridge.clone(),
-            env: Some(env.clone()),
-        };
-
-        // ---- 驱动相：按拓扑序逐节点 ----
-        let registry = ComponentRegistry::load(&self.spec.registry_root).map_err(|err| {
-            ExeclineError::PlanBindMismatch {
-                detail: format!("组件注册表装载失败（{:#}）", err),
-            }
-        })?;
-        let mut stage = Drive::default();
-        for node_id in &order {
-            budget.gate(&stage)?;
-            let node = plan
-                .body
-                .node_exec
-                .iter()
-                .find(|n| &n.node_id == node_id)
-                .expect("线性化序内节点必有 node_exec 投影（planbind ③ 已对齐）");
-            let kind = plan
-                .body
-                .graph
-                .nodes
-                .iter()
-                .find(|n| &n.id == node_id)
-                .expect("node_exec 投影必归属 graph 节点（planbind ③ 已对齐）")
-                .kind
-                .clone();
-            // 入边工件集齐 + consumes 契约复核（下游面，B 席嫁接）：节点起动前
-            // 对入边载荷按 node.consumes 类型表达式过同一 check_typed 正门——
-            // 与上游 emissions 面互不替代（双声明各自独立核）。无 consumes
-            // 声明 = 不核（如实口径；旧计划缺省空）。
-            let mut inputs: BTreeMap<String, Value> = BTreeMap::new();
-            for edge in &plan.body.graph.edges {
-                if &edge.to == node_id {
-                    let payload = stage.payload(&edge.from, &edge.output).ok_or_else(|| {
-                        Self::envelope_err(format!(
-                            "节点 {node_id} 入边端口 {} 无上游工件（拓扑序断裂或产者缺席）",
-                            edge.input
-                        ))
-                    })?;
-                    inputs.insert(edge.input.clone(), payload);
-                }
-            }
-            for (port, type_expr) in &node.consumes {
-                if let Some(value) = inputs.get(port) {
-                    check_typed(&plan.body.types, node_id, port, type_expr, value)?;
-                }
-            }
-            let envelopes = match kind.as_str() {
-                "task" => self.drive_task_node(
-                    ctx,
-                    plan,
-                    &bound,
-                    &registry,
-                    node,
-                    &input,
-                    &mut stage,
-                    env.clone(),
-                    &budget,
-                )?,
-                "check" => {
-                    self.drive_check_node(ctx, &task, &registry, node, env.clone(), &inputs)?
-                }
-                other => {
-                    return Err(ExeclineError::GraphShapeUnsupported {
-                        detail: format!("节点 {node_id} kind={other} 超v1分派面（task|check）"),
-                    })
-                }
-            };
-            // envelope 结构校验 + 落工件面 + 入交接账。
-            stage.commit(plan, node_id, node, envelopes, &artifacts_dir)?;
-        }
-
-        // ---- 收尾相：终态工件 schema 校验 + 订单面产出 ----
-        let final_port = final_artifact_port(plan)?;
-        let final_payload = stage
-            .payload(&plan.body.interface.output_from, &final_port)
-            .ok_or_else(|| {
-                Self::envelope_err(format!(
-                    "终态工件 {}.{} 无 envelope 产出",
-                    plan.body.interface.output_from, final_port
-                ))
-            })?;
-        // 终态工件 typed 正门（对抗面 2026-10-25）：output_type 经 [`check_typed`]
-        // ——与 emissions（上游面）/consumes（下游面）同一校验器（命名类型解析 +
-        // list<T> 拆包，sop_no_qa 的 `list<code_file>` 表达式形态同覆盖）。此前
-        // `types.get(output_type)` 缺席即**静默跳过**终态校验——ghost 类型/非对象
-        // schema/非字符串 type 段均可溜过（EX4006 点名收口）。
-        check_typed(
-            &plan.body.types,
-            &plan.body.interface.output_from,
-            &final_port,
-            &plan.body.interface.output_type,
-            &final_payload,
-        )?;
-        // 判定语义：判定型终态（含 boolean pass 字段，如 qa_report）取其值；
-        // 非判定型（如 patch）产出即合格——envelope 已过结构校验。
-        let verdict = final_payload
-            .get("pass")
-            .and_then(Value::as_bool)
-            .or(Some(true));
-        let artifact_id = format!("graph-{}-{}", plan.body.interface.output_from, final_port);
-        let row = serde_json::json!({
-            "suite": "graph",
-            "plan_id": plan.body.plan_id,
-            "order_id": ctx.order_id,
-            "task_id": ctx.task_id,
-            "profile": self.spec.profile,
-            "nodes": order.len(),
-            "cents_used": stage.cents_used,
-            "tokens_used": stage.tokens_used,
-            "verdict": verdict,
-            "unit": self.unit_id(),
-            "unit_version": self.spec.unit_version,
-        });
-        ctx.record_sink
-            .append_v1(&row.to_string())
-            .map_err(|err| self.fail(format!("写 records 失败: {err}")))?;
-        let mut outputs = vec![task_dir.join("plan.json"), task_dir.join("task.json")];
-        outputs.extend(stage.envelope_files.values().cloned());
-        Ok(ExecOutput {
-            artifacts: vec![WorkArtifact {
-                artifact_id,
-                is_final: true,
-                qualified: verdict == Some(true),
-            }],
-            outputs,
-            note: format!(
-                "图执行器驱动 {} 节点（{} → …），判定 {:?}",
-                order.len(),
-                order.first().map(String::as_str).unwrap_or(""),
-                verdict
-            ),
-            verdict,
-            record: Some(row),
-            evidence: stage.envelope_files.values().cloned().collect(),
-        })
     }
 }
 
@@ -469,16 +289,24 @@ impl GraphExecuteUnit {
         // - 非可推导端口在场 → strict（API 面 schema 注入 + 闭环内校验门）。
         // 逐端口契约材料：端口名 + 类型表达式（emits 面；旧计划 is_final 端口
         // 回退 interface.output_type）+ 物化 schema（命名类型内联）。
-        let port_contracts: Vec<(String, String, Option<Value>)> = node
+        // 红队 W1-C31：契约键集 = **全部** artifact_contract 端口（无类型
+        // 且非终态端口此前被 filter_map 丢弃——strict declare 的 required
+        // 只含类型端口，而 commit 相要求产出键集==全部端口，双面键集互斥
+        // = 系统性死锁：只交类型端口 → commit EX4006；补交无类型端口 →
+        // 闭包「未知键」拒收，重试环无出口）。无类型端口仅进 required、
+        // 不给 schema/类型核对（与 commit 相「无类型声明 = 不核」同口径）。
+        let port_contracts: Vec<(String, Option<String>, Option<Value>)> = node
             .artifact_contract
             .iter()
-            .filter_map(|a| {
+            .map(|a| {
                 let expr = a
                     .r#type
                     .clone()
-                    .or_else(|| a.is_final.then(|| plan.body.interface.output_type.clone()))?;
-                let materialized = materialize_schema(&plan.body.types, &expr);
-                Some((a.name.clone(), expr, materialized))
+                    .or_else(|| a.is_final.then(|| plan.body.interface.output_type.clone()));
+                let materialized = expr
+                    .as_deref()
+                    .and_then(|e| materialize_schema(&plan.body.types, e));
+                (a.name.clone(), expr, materialized)
             })
             .collect();
         let bare_derivable = node.artifact_contract.len() == 1
@@ -495,9 +323,12 @@ impl GraphExecuteUnit {
             let note = port_contracts
                 .iter()
                 .filter_map(|(port, expr, schema)| {
-                    schema
-                        .as_ref()
-                        .map(|s| format!("    {port:?} (type {expr}): {s}"))
+                    schema.as_ref().map(|s| {
+                        format!(
+                            "    {port:?} (type {}): {s}",
+                            expr.clone().unwrap_or_default()
+                        )
+                    })
                 })
                 .collect::<Vec<_>>()
                 .join(",\n");
@@ -596,12 +427,38 @@ impl GraphExecuteUnit {
             budget_ledger_cents: spend_cap,
         };
         let report = match self.runner.run(launch) {
-            Ok(AgentRunOutcome { report, .. }) => report,
-            Err(AgentRunFailure { message, .. }) => {
-                return Err(self.fail(format!("节点 {} 模型环失败: {message}", node.node_id)))
+            // 红队 W2-C33：http_retries 两路径均累加入账（此前 Ok 路径随
+            // `..` 丢弃、Drive 无此字段、facts 硬编码 0——401 重取等供给面
+            // 重试在 graph 行不可见；swev/tb/report 环都记，唯 graph 遗漏）。
+            Ok(AgentRunOutcome {
+                report,
+                http_retries,
+            }) => {
+                stage.http_retries += http_retries;
+                report
+            }
+            Err(AgentRunFailure {
+                message,
+                http_retries,
+            }) => {
+                stage.http_retries += http_retries;
+                return Err(self.fail(format!(
+                    "节点 {} 模型环失败（http_retries={}）: {message}",
+                    node.node_id, http_retries
+                )));
             }
         };
         stage.account_node(&report);
+        // 红队 W2-C48：task 节点收尾即取工作区 diff（keyed-declare/终态消息
+        // 两路此前零取证——test_edit 记账在图臂整体不存在）；bare declare
+        // 路径的 envelope 推导复用本次取证（一次捕获两用）。碰测试面 =
+        // 判据被换（S0 D2 越权），记账进 stage 供终态判定收口。
+        let workspace_diff =
+            swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &node_dir)
+                .map_err(|err| self.fail(format!("节点 {} 工作区取证失败: {err}", node.node_id)))?;
+        for touched in swev::diff_touches_tests(&workspace_diff) {
+            stage.test_edit.push(format!("{}:{touched}", node.node_id));
+        }
         // harness 侧预算耗尽归并（B 席嫁接）：RunStatus::BudgetExhausted 不当
         // 成功静默——EX4007 结构化熔断（launch 硬顶 = plan cost_cap 收敛面）。
         if let af_harness::RunStatus::BudgetExhausted { .. } = &report.status {
@@ -645,16 +502,12 @@ impl GraphExecuteUnit {
                     &node.artifact_contract[0],
                 );
                 if schema.as_ref().is_some_and(derivable_port_fields) {
-                    let diff =
-                        swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &node_dir)
-                            .map_err(|err| {
-                            self.fail(format!(
-                                "节点 {} 裸 declare 工作区取证失败: {err}",
-                                node.node_id
-                            ))
-                        })?;
-                    let payload =
-                        serde_json::json!({ "diff": diff, "files": files_of_diff(&diff) });
+                    // 红队 W2-C48：复用收尾相取证（workspace_diff）——不再二次
+                    // 过桥；test_edit 记账已在收尾相完成。
+                    let payload = serde_json::json!({
+                        "diff": workspace_diff,
+                        "files": files_of_diff(&workspace_diff)
+                    });
                     let mut ports = BTreeMap::new();
                     ports.insert(port.clone(), payload);
                     return Ok(NodeEnvelopes {
@@ -743,16 +596,134 @@ impl GraphExecuteUnit {
         }
         // v1.1 分发表：四件 builtin 判定单元（B 席嫁接面）。
         let value = match name.as_str() {
-            n if n == sweng::name_of(sweng::REF_SWENG_TEST_UNIT) => sweng::test_unit(
-                self.bridge.as_ref(),
-                &env,
-                task.test_command.as_deref().unwrap_or(DEFAULT_TEST_COMMAND),
-                None,
-            ),
+            n if n == sweng::name_of(sweng::REF_SWENG_TEST_UNIT) => {
+                // 红队 W2-C48 ①：判据命令必须随任务包冻结声明（task.json 经
+                // setup 相 verify_task_digest 钉死）——缺非空声明 fail-loud
+                // 拒载。缺省全仓 `python -m pytest -q` 判据面废除：那条命令
+                // 是计划 schema 根本没声明的 shell 串、对模型全权可控的
+                // /testbed 跑全仓测试，判据不受任何契约约束。
+                let test_cmd = task
+                    .test_command
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| {
+                        self.fail(format!(
+                            "check 节点 {} 判据命令未声明（task.json 缺非空 test_command）——\
+                             W2-C48 起缺省 pytest 判据面废除，判据命令必须随任务包冻结",
+                            node.node_id
+                        ))
+                    })?;
+                // ② 判据退化门（W2-C48）：判分前取工作区 diff——模型碰测试面
+                //    = 判据被换，退出码 0 亦不得授予 pass（评分 harness 拥有
+                //    测试；swev 臂同款防线，图臂此前为零道）。
+                // 红队 W2-C49：pass 与否一律建 tester 节点目录（nodes/<id>/：
+                //    test.log + test-evidence.json + agent.diff），envelope 带
+                //    证据指针——订单证据树自此可复核 pass=true 与评审结论并存
+                //    的依据面。diff 取证失败 fail-loud：证据完整性不静默降级。
+                let work_dir = ctx.attempt_dir.join("nodes").join(&node.node_id);
+                std::fs::create_dir_all(&work_dir).map_err(|err| {
+                    self.fail(format!(
+                        "节点 {} 建 tester 证据目录失败: {err}",
+                        node.node_id
+                    ))
+                })?;
+                let diff =
+                    swev::capture_diff(self.bridge.as_ref(), ctx.host_alias, &env, &work_dir)
+                        .map_err(|err| {
+                            self.fail(format!("节点 {} 判据面取证失败: {err}", node.node_id))
+                        })?;
+                // 红队 W2-C10：review 入边显式接线——sop_full 声明 tester
+                // consumes review_report 与 reviewer→tester review 边，此前本
+                // 臂完全不传 inputs：类型化数据边制造「评审已接入」的假象，
+                // approved=false 对判定零因果（F4D 实盘 reviewer 两问题而
+                // tester pass=true 照常 qualified）。按 consumes 契约取
+                // review_report 类型恰一端口（与 aci_schema 臂同款合同面，禁
+                // 字典序首）：声明缺失/端口无载荷 fail-loud 不猜；图未声明该
+                // 边（手写计划面）= 纯退出码判据。
+                let review = {
+                    let mut declared = node
+                        .consumes
+                        .iter()
+                        .filter(|(_, ty)| ty.as_str() == "review_report")
+                        .map(|(port, _)| port);
+                    match (declared.next(), declared.next()) {
+                        (Some(port), None) => Some(inputs.get(port).cloned().ok_or_else(|| {
+                            self.fail(format!(
+                                "节点 {} test_unit 需要入边工件（review_report 端口 {port}）",
+                                node.node_id
+                            ))
+                        })?),
+                        (None, None) => None,
+                        _ => {
+                            return Err(self.fail(format!(
+                                "节点 {} test_unit 的 review_report 入边端口须恰一个（合同面）",
+                                node.node_id
+                            )));
+                        }
+                    }
+                };
+                let touched = swev::diff_touches_tests(&diff);
+                let mut verdict = sweng::test_unit(
+                    self.bridge.as_ref(),
+                    &env,
+                    "",
+                    Some(test_cmd),
+                    review.as_ref(),
+                    Some(&work_dir),
+                );
+                if let Some(ev) = verdict.get_mut("evidence") {
+                    ev["diff"] = serde_json::json!({
+                        "path": "agent.diff",
+                        "bytes": diff.len(),
+                        "sha256": swev::sha256_hex(&work_dir.join("agent.diff")),
+                    });
+                }
+                if !touched.is_empty() {
+                    if verdict["pass"].as_bool() == Some(true) {
+                        verdict = serde_json::json!({
+                            "pass": false,
+                            "failures": [format!(
+                                "test_edit 判据退化门：模型改动测试面 {touched:?}——退出码判据作废"
+                            )],
+                            "test_edit": touched,
+                        });
+                    } else {
+                        verdict["test_edit"] = serde_json::json!(touched);
+                    }
+                }
+                verdict
+            }
             "pkg.sweagent.aci_schema" => {
-                let Some(action) = inputs.values().next() else {
+                // 红队 W2-C29：载荷按 consumes 契约取 agent_action 端口，禁
+                // values().next()——inputs 是 BTreeMap，values().next()=端口
+                // 名字典序最小者，多入边时结构校验会跑在任意工件上（诱饵恰含
+                // thought/command/submit 即静默放行未校验的真 action，或令真
+                // action 漏校）。合同面=consumes 中类型恰为 agent_action 的
+                // 恰一端口：按声明精确取；声明缺失/重复/端口无载荷一律
+                // fail-loud，不猜。
+                let mut declared = node
+                    .consumes
+                    .iter()
+                    .filter(|(_, ty)| ty.as_str() == "agent_action")
+                    .map(|(port, _)| port);
+                let port = match (declared.next(), declared.next()) {
+                    (Some(port), None) => port.clone(),
+                    _ => {
+                        return Err(self.fail(format!(
+                            "节点 {} aci_schema 需要 consumes 恰一声明一个 \
+                             agent_action 类型入边端口（合同面；声明 {} 个）",
+                            node.node_id,
+                            node.consumes
+                                .iter()
+                                .filter(|(_, ty)| ty.as_str() == "agent_action")
+                                .count()
+                        )));
+                    }
+                };
+                let Some(action) = inputs.get(&port) else {
                     return Err(self.fail(format!(
-                        "节点 {} aci_schema 需要入边工件（agent_action）",
+                        "节点 {} aci_schema 需要入边工件（agent_action 端口 {port}）",
                         node.node_id
                     )));
                 };
@@ -808,10 +779,349 @@ impl GraphExecuteUnit {
         })
     }
 }
+impl GraphExecuteUnit {
+    /// 失败行落盘（legacy 轨）：sink 失败并案进文案转 EX3001（与
+    /// `record::fail_with_legacy_row` 同口径——不静默丢行）；sink 正常则
+    /// 原错误原样返回。
+    fn emit_failure_row(
+        &self,
+        ctx: &ExecContext<'_>,
+        err: ExeclineError,
+        phase: &str,
+    ) -> ExeclineError {
+        let note = format!("[{code}] {err}", code = err.code().as_str());
+        let row = if phase == RUN_PHASE {
+            crate::record::unit_run_failed_row(
+                "graph",
+                ctx.task_id,
+                &self.spec.profile,
+                ctx.trial,
+                err.code().as_str(),
+                ctx.attempt_dir,
+                &note,
+            )
+        } else {
+            crate::record::unit_setup_failed_row(
+                "graph",
+                ctx.task_id,
+                &self.spec.profile,
+                ctx.trial,
+                err.code().as_str(),
+                &note,
+            )
+        };
+        match ctx.record_sink.append_legacy(&row.to_string()) {
+            Ok(()) => err,
+            Err(sink_err) => ExeclineError::UnitFailed {
+                detail: format!("{err}；且失败行落盘失败: {sink_err}"),
+            },
+        }
+    }
 
-/// check 节点测试命令缺省（task.json test_command 未声明时；fail-closed 面在
-/// test_unit 自身——命令为空即 pass=false 观察）。
-pub const DEFAULT_TEST_COMMAND: &str = "python -m pytest -q";
+    fn drive_all(
+        &self,
+        ctx: &ExecContext<'_>,
+        phase: &std::cell::Cell<&'static str>,
+        started: std::time::Instant,
+    ) -> Result<ExecOutput, ExeclineError> {
+        // ---- setup 相①：任务包 + 计划装订四核对（planbind 唯一正本，先例术语）----
+        let task_dir = ctx.data_root.join(ctx.task_id);
+        let plan_src = std::fs::read_to_string(task_dir.join("plan.json")).map_err(|err| {
+            self.fail(format!(
+                "读计划失败（v1 约定：计划随任务包 <data_root>/<task>/plan.json；submit 级 --plan 档=开放问题 8 留 v0.2）: {err}"
+            ))
+        })?;
+        let task_json_path = task_dir.join("task.json");
+        // 红队 W1-C59①：判据面 digest 钉死核对（门面 submit 时计算）。
+        crate::exec::verify_task_digest(&task_json_path, ctx.task_sha256)?;
+        let input: Value = serde_json::from_str(
+            &std::fs::read_to_string(&task_json_path)
+                .map_err(|err| self.fail(format!("读任务包 task.json 失败: {err}")))?,
+        )
+        .map_err(|err| self.fail(format!("task.json 不是合法 JSON: {err}")))?;
+        // 模板引用先收口（装订器④的装载清单）：plan JSON 通用遍历
+        // node_exec[].context[].template_ref。
+        let template_refs = collect_template_refs(&plan_src);
+        let refs: Vec<&str> = template_refs.iter().map(String::as_str).collect();
+        // 红队 W2-C55：计划面摘要复核（先于装订）——预算帽全在 plan.json，
+        // 判据面（task.json）钉死不覆盖它；摘要漂移 = 计划面被换，拒绝执行。
+        crate::exec::verify_plan_digest(&task_dir.join("plan.json"), ctx.plan_sha256)?;
+        let bound = planbind::bind(
+            &plan_src,
+            &self.spec.registry_root,
+            &refs,
+            // 红队 W1-C32：WorkOrder 一次性绑定的 graph_version 作装订外部
+            // 期待——与 plan.compiled_from.graph_version 核对，漂移即拒
+            // （此前期待分支恒空 = 死代码，换计划图版本照样装订执行）。
+            &BindExpectations {
+                graph_version: ctx.graph_version.map(str::to_string),
+                // 红队 W2-C36：订单已绑定的 line 作装订期待（driver bind_line
+                // 先于 execute）——此前两单元恒传 None，planbind ③ 的 line
+                // 复验分支在生产是死代码，携带其他产线 line_id 的手写计划可
+                // 跨线运行无感。
+                line_id: Some(ctx.line_id.to_string()),
+            },
+        )?;
+        let plan = &bound.plan;
+
+        // ---- setup 相②：图输入 envelope 校验 + 线性化 + 预算面提取 ----
+        let input_schema = plan
+            .body
+            .types
+            .get(&plan.body.interface.input_type)
+            .cloned()
+            .ok_or_else(|| {
+                Self::envelope_err(format!(
+                    "图输入类型 {} 不在 types 词典",
+                    plan.body.interface.input_type
+                ))
+            })?;
+        if let Err(detail) = validate_schema(&input, &input_schema) {
+            return Err(Self::envelope_err(format!(
+                "图输入不符 {} schema：{}",
+                plan.body.interface.input_type, detail
+            )));
+        }
+        let order = linearize(plan)?;
+        let mut budget = PlanBudgets::of(plan)?;
+        // 红队 W2-C54：plan 未声明 cost_cap 时，门面订单级总帽顶上——
+        // 否则每节点各发 spec.spend_cap_cents（300¢ 硬编码缺省）、N 节点
+        // 300N¢ 无总闸（运营侧无旗标可压）。
+        if budget.cost_cap.is_none() {
+            budget.cost_cap = self
+                .spec
+                .order_spend_cap_cents
+                .and_then(|cap| u64::try_from(cap).ok());
+        }
+
+        // ---- setup 相③：任务材料 + 容器（swev 环模式复用）----
+        let task = GraphTask::parse(&input)?;
+        let attempt_dir = ctx.attempt_dir;
+        std::fs::create_dir_all(attempt_dir)
+            .map_err(|err| self.fail(format!("建 run 目录失败: {err}")))?;
+        let artifacts_dir = attempt_dir.join("artifacts");
+        std::fs::create_dir_all(&artifacts_dir)
+            .map_err(|err| self.fail(format!("建工件面失败: {err}")))?;
+        let env = Arc::new(
+            swev::setup(
+                self.bridge.as_ref(),
+                ctx.host_alias,
+                &task.as_swev_task(),
+                &self.spec.profile,
+            )
+            .map_err(|err| self.fail(format!("起容器失败: {err}")))?,
+        );
+        let _guard = ContainerGuard {
+            bridge: self.bridge.clone(),
+            env: Some(env.clone()),
+        };
+
+        // ---- 驱动相：按拓扑序逐节点 ----
+        // 红队 W2-C34：此后失败归 run_failed（供给面已就位——容器已起）。
+        phase.set(RUN_PHASE);
+        let registry = ComponentRegistry::load(&self.spec.registry_root).map_err(|err| {
+            ExeclineError::PlanBindMismatch {
+                detail: format!("组件注册表装载失败（{:#}）", err),
+            }
+        })?;
+        let mut stage = Drive::default();
+        for node_id in &order {
+            budget.gate(&stage)?;
+            let node = plan
+                .body
+                .node_exec
+                .iter()
+                .find(|n| &n.node_id == node_id)
+                .expect("线性化序内节点必有 node_exec 投影（planbind ③ 已对齐）");
+            let kind = plan
+                .body
+                .graph
+                .nodes
+                .iter()
+                .find(|n| &n.id == node_id)
+                .expect("node_exec 投影必归属 graph 节点（planbind ③ 已对齐）")
+                .kind
+                .clone();
+            // 入边工件集齐 + consumes 契约复核（下游面，B 席嫁接）：节点起动前
+            // 对入边载荷按 node.consumes 类型表达式过同一 check_typed 正门——
+            // 与上游 emissions 面互不替代（双声明各自独立核）。无 consumes
+            // 声明 = 不核（如实口径；旧计划缺省空）。
+            let mut inputs: BTreeMap<String, Value> = BTreeMap::new();
+            for edge in &plan.body.graph.edges {
+                if &edge.to == node_id {
+                    let payload = stage.payload(&edge.from, &edge.output).ok_or_else(|| {
+                        Self::envelope_err(format!(
+                            "节点 {node_id} 入边端口 {} 无上游工件（拓扑序断裂或产者缺席）",
+                            edge.input
+                        ))
+                    })?;
+                    inputs.insert(edge.input.clone(), payload);
+                }
+            }
+            for (port, type_expr) in &node.consumes {
+                if let Some(value) = inputs.get(port) {
+                    check_typed(&plan.body.types, node_id, port, type_expr, value)?;
+                }
+            }
+            let envelopes = match kind.as_str() {
+                "task" => self.drive_task_node(
+                    ctx,
+                    plan,
+                    &bound,
+                    &registry,
+                    node,
+                    &input,
+                    &mut stage,
+                    env.clone(),
+                    &budget,
+                )?,
+                "check" => {
+                    self.drive_check_node(ctx, &task, &registry, node, env.clone(), &inputs)?
+                }
+                other => {
+                    return Err(ExeclineError::GraphShapeUnsupported {
+                        detail: format!("节点 {node_id} kind={other} 超v1分派面（task|check）"),
+                    })
+                }
+            };
+            // envelope 结构校验 + 落工件面 + 入交接账。
+            stage.commit(plan, node_id, node, envelopes, &artifacts_dir)?;
+            // 双相熔断第二相（红队 W2-C31）：成员**完成后**对账——此前只在
+            // 起动前 gate，终态节点超帽仍会继续 check_typed/判定/落行照常
+            // 完工并判合格（cents/tokens_total 均无收尾门；launch 面无
+            // tokens 帽字段，收敛只能靠相位门）。任一维度超帽即 EX4007，
+            // 终态超帽不得完工。
+            budget.gate(&stage)?;
+        }
+
+        // ---- 收尾相：终态工件 schema 校验 + 订单面产出 ----
+        let final_port = final_artifact_port(plan)?;
+        let final_payload = stage
+            .payload(&plan.body.interface.output_from, &final_port)
+            .ok_or_else(|| {
+                Self::envelope_err(format!(
+                    "终态工件 {}.{} 无 envelope 产出",
+                    plan.body.interface.output_from, final_port
+                ))
+            })?;
+        // 终态工件 typed 正门（对抗面 2026-10-25）：output_type 经 [`check_typed`]
+        // ——与 emissions（上游面）/consumes（下游面）同一校验器（命名类型解析 +
+        // list<T> 拆包，sop_no_qa 的 `list<code_file>` 表达式形态同覆盖）。此前
+        // `types.get(output_type)` 缺席即**静默跳过**终态校验——ghost 类型/非对象
+        // schema/非字符串 type 段均可溜过（EX4006 点名收口）。
+        check_typed(
+            &plan.body.types,
+            &plan.body.interface.output_from,
+            &final_port,
+            &plan.body.interface.output_type,
+            &final_payload,
+        )?;
+        // 判定语义（红队 W2-C29 收紧）：判定型终态按其**类型 schema 声明**的
+        // 布尔判定字段取值（pass 优先、resolved 次之——swebench 官方判分
+        // 口径）；无判定字段 = 产物型终态（如 patch），产出即合格
+        // （envelope 已过结构校验）。此前硬编码
+        // `get("pass").or(Some(true))`——swebench_eval/human_gate/
+        // aci_schema 三类无 pass 终态的失败形态（resolved=false、error
+        // 非空）被「缺字段推定成功」放行、合格工件 close（fix_swe_task 的
+        // verdict 型只声明 resolved，失败判分照过）——缺字段不得推定成功。
+        let mut verdict = terminal_verdict(
+            &plan.body.types,
+            &plan.body.interface.output_type,
+            &final_payload,
+        );
+        // 红队 W2-C48：判据退化收口——任一节点取证到测试面改动（test_edit
+        // 记账在场），合格终态不得授予：判定压 None（qualified=false → close
+        // 门拒收），gate 如实记 test_edit（覆盖 ok/verify_failed——改过的
+        // 测试面「通过」不构成工作合格）。
+        let test_edited = !stage.test_edit.is_empty();
+        if test_edited && verdict == Some(true) {
+            verdict = None;
+        }
+        let artifact_id = format!("graph-{}-{}", plan.body.interface.output_from, final_port);
+        // 红队 W1-C36：结果行改走 af.plan.record.v1 统一行契约（swev/report
+        // 同款投影 record::swev_v1_row）——此前手拼行缺 node_id/item_id/
+        // attempt/host_alias/status/evidence/gate/usage/wall_ms/note 契约键、
+        // 混入 suite/order_id/nodes/cents_used 等契约外键（「执行单元必须
+        // 按此落行」被破）；evidence.run_dir 同步闭合 trace 工具 L1→L2
+        // 父子边（graph 布局支持面缺口同根）。
+        let facts = crate::record::ExecutionFacts {
+            suite: "graph",
+            task_id: ctx.task_id.to_string(),
+            profile: self.spec.profile.clone(),
+            trial: ctx.trial,
+            reward: verdict,
+            status: "completed".to_string(),
+            scaffold: "graph-v1",
+            reasoning_tier: "off",
+            run_dir: Some(attempt_dir.display().to_string()),
+            eval_sha256: None,
+            gate: if test_edited {
+                "test_edit"
+            } else if verdict == Some(true) {
+                "ok"
+            } else {
+                "verify_failed"
+            }
+            .to_string(),
+            attempts: 1,
+            http_retries: stage.http_retries,
+            turns: stage.turns as u32,
+            model_calls: stage.model_calls,
+            tokens: af_harness::TokenTotals {
+                input: stage.tokens_in,
+                output: stage.tokens_out,
+                cache_read: stage.tokens_cache,
+            },
+            agent_wall_ms: started.elapsed().as_millis() as u64,
+            verifier_note: {
+                let mut note = format!(
+                    "graph nodes={} cents={} tokens_total={}",
+                    order.len(),
+                    stage.cents_used,
+                    stage.tokens_used
+                );
+                if test_edited {
+                    note.push_str(&format!("；test_edit={:?}", stage.test_edit));
+                }
+                note
+            },
+        };
+        let row = crate::record::swev_v1_row(
+            &facts,
+            plan.body.plan_id.as_str(),
+            ctx.line_id,
+            ctx.host_alias,
+            self.unit_id(),
+            self.spec.unit_version,
+        );
+        ctx.record_sink
+            .append_v1(&row.to_string())
+            .map_err(|err| self.fail(format!("写 records 失败: {err}")))?;
+        let mut outputs = vec![task_dir.join("plan.json"), task_dir.join("task.json")];
+        outputs.extend(stage.envelope_files.values().cloned());
+        Ok(ExecOutput {
+            artifacts: vec![WorkArtifact {
+                artifact_id,
+                is_final: true,
+                qualified: verdict == Some(true),
+            }],
+            outputs,
+            note: format!(
+                "图执行器驱动 {} 节点（{} → …），判定 {:?}",
+                order.len(),
+                order.first().map(String::as_str).unwrap_or(""),
+                verdict
+            ),
+            verdict,
+            record: Some(row),
+            evidence: stage.envelope_files.values().cloned().collect(),
+        })
+    }
+}
+
+// 红队 W2-C48：原 DEFAULT_TEST_COMMAND（"python -m pytest -q"）缺省判据面
+// 已废除——check 节点 test_unit 缺非空 task.json test_command 即 fail-loud
+// 拒载（判据命令必须随任务包冻结声明）。
 
 // ============================================================
 // 图输入任务包
@@ -831,13 +1141,20 @@ struct GraphTask {
 
 impl GraphTask {
     fn parse(input: &Value) -> Result<Self, ExeclineError> {
+        // 红队 W1-C39：image 的硬性必填系**执行器容器 setup 的要求**（起
+        // 容器要镜像名），非 swe_task_input schema 面要求（schema 里 image
+        // 非必填、validate_schema 放行）——文案如实区分两门，不再把执行器
+        // 自加的要求说成 schema 面的要求。
         let str_field = |name: &str| {
             input
                 .get(name)
                 .and_then(Value::as_str)
                 .map(str::to_string)
                 .ok_or_else(|| ExeclineError::UnitFailed {
-                    detail: format!("图输入缺 {name} 字段（swe_task_input 面）"),
+                    detail: format!(
+                        "图输入缺 {name} 字段（执行器容器 setup 硬性必填——起容器需要镜像名；\
+                         非 swe_task_input schema 必填项）"
+                    ),
                 })
         };
         Ok(Self {
@@ -975,11 +1292,12 @@ impl PlanBudgets {
     fn of(plan: &ExecutablePlan) -> Result<Self, ExeclineError> {
         let mut b = Self::default();
         for entry in &plan.body.budget.budgets {
-            if entry.scope != "plan" {
-                continue;
-            }
-            match entry.dimension {
-                BudgetDimension::Cents => {
+            // 红队 W1-C34：预算面半开半闭收口——**强制面外的 dimension/scope
+            // 组合一律 fail-loud 拒收**（与本函数正典 id 门同一纪律：改名即
+            // 静默免帽 → 拒收；此前 scope!=plan 与 plan 级其余五维被静默
+            // 忽略，声明 clock_ms 帽得到无预算运行）。
+            match (entry.scope.as_str(), entry.dimension) {
+                ("plan", BudgetDimension::Cents) => {
                     if entry.id != "cost_cap" {
                         return Err(ExeclineError::PlanBindMismatch {
                             detail: format!(
@@ -991,7 +1309,7 @@ impl PlanBudgets {
                     }
                     b.cost_cap = Some(entry.cap);
                 }
-                BudgetDimension::TokensTotal => {
+                ("plan", BudgetDimension::TokensTotal) => {
                     if entry.id != "token_cap" {
                         return Err(ExeclineError::PlanBindMismatch {
                             detail: format!(
@@ -1003,7 +1321,51 @@ impl PlanBudgets {
                     }
                     b.token_cap = Some(entry.cap);
                 }
-                _ => {}
+                // 节点级 turns：强制面 = 节点 launch turns 帽（node_exec[].budget，
+                // drive_task_node 消费）——要求投影确实落在某 node_exec 上，
+                // 悬空 node: 路径（投影缺席 = 无人强制）同样拒收。
+                (scope, BudgetDimension::Turns) if scope.starts_with("node:") => {
+                    let path = &scope["node:".len()..];
+                    let Some(projection) = plan.body.node_exec.iter().find(|n| n.node_id == path)
+                    else {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "节点级 turns 预算 id {} 作用域 {scope:?} 不落在任何 \
+                                 node_exec 投影（声明无强制面，拒收）",
+                                entry.id
+                            ),
+                        });
+                    };
+                    // 红队 W2-C35：plan 预算条目与 node_exec 投影是同一事实的
+                    // 两份拷贝（执行面消费投影值）——装订期逐项互核 cap，手改
+                    // 计划把 plan 级 node:<id> turns 改小、投影留大即静默免帽
+                    // （C-34「静默忽略=免帽」纪律的半开面）。不一致即拒收。
+                    let projected = projection
+                        .budget
+                        .iter()
+                        .find(|b| b.dimension == BudgetDimension::Turns)
+                        .map(|b| b.cap);
+                    if projected != Some(entry.cap) {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "节点级 turns 预算 id {}：plan.body.budget 声明 cap={} 与 \
+                                 node_exec 投影 cap={:?} 不一致（同一事实两份拷贝必须互核；\
+                                 手改计划改小声明留大投影 = 静默免帽，拒收）",
+                                entry.id, entry.cap, projected
+                            ),
+                        });
+                    }
+                }
+                (scope, dim) => {
+                    return Err(ExeclineError::PlanBindMismatch {
+                        detail: format!(
+                            "预算条目 id {}（dimension={:?}, scope={:?}）不在执行面强制集内\
+                             （强制集：plan 级 cost_cap(cents)/token_cap(tokens_total) + 节点级\
+                             turns；其余组合声明即须强制，静默忽略=免帽，拒收）",
+                            entry.id, dim, scope
+                        ),
+                    });
+                }
             }
         }
         Ok(b)
@@ -1037,9 +1399,15 @@ impl PlanBudgets {
     }
 
     /// 单节点 launch 硬顶：plan cost_cap 在场时收敛到剩余额度。
+    ///
+    /// 红队 W2-C-28：u64 帽**饱和**换算——先 `as i64` 曾把 ≥2^63 的帽回绕成
+    /// 负数、再被 `.max(1)` 压成 1¢，「巨帽≈无帽」倒置为「巨帽=1¢ 立即
+    /// EX4007」。现剩余额度全程 u64 域计算（禁止先 `as i64`），装不下 i64
+    /// 即饱和到 i64::MAX——与同函数族 turns 帽
+    /// （`u32::try_from(b.cap).unwrap_or(u32::MAX)`）同款饱和语义：巨帽≈无帽。
     fn node_spend_cap(&self, default_cap: i64, cents_used: u64) -> i64 {
         match self.cost_cap {
-            Some(cap) => (cap as i64 - cents_used as i64).max(1),
+            Some(cap) => i64::try_from(cap.saturating_sub(cents_used)).unwrap_or(i64::MAX),
             None => default_cap,
         }
     }
@@ -1058,7 +1426,20 @@ struct Drive {
     envelope_files: BTreeMap<(String, String), PathBuf>,
     cents_used: u64,
     tokens_used: u64,
+    /// tokens 三分账（in/out/cache_read——v1 行 usage.quota 投影用）。
+    tokens_in: u64,
+    tokens_out: u64,
+    tokens_cache: u64,
     model_calls: u64,
+    turns: u64,
+    /// HTTP 层退避重试累计（红队 W2-C33：供给面重试审计——两路径累加，
+    /// 进 v1 行 usage.http_retries）。
+    http_retries: u64,
+    /// 判据退化记账（红队 W2-C48）：各 task 节点收尾取证的工作区 diff 中
+    /// 碰了测试面的 `(节点, 文件)`——此前图臂整体无此记账（keyed-declare
+    /// 支路连 diff 都不取），模型改测试后默认 pytest 通过即可翻绿。在场时
+    /// 合格终态不得授予（gate=test_edit，verdict 压 None）。
+    test_edit: Vec<String>,
 }
 
 impl Drive {
@@ -1073,6 +1454,10 @@ impl Drive {
     fn account_node(&mut self, report: &af_harness::RunReport) {
         self.model_calls += report.model_calls;
         self.cents_used += report.model_calls;
+        self.turns += report.turns as u64;
+        self.tokens_in += report.tokens.input;
+        self.tokens_out += report.tokens.output;
+        self.tokens_cache += report.tokens.cache_read;
         self.tokens_used += report.tokens.input + report.tokens.output + report.tokens.cache_read;
     }
 
@@ -1224,7 +1609,7 @@ fn declare_tool(ports: &[&str]) -> (ToolDecl, ToolFn, DeclarationCell) {
 ///   （畸形不入单元）。
 fn declare_tool_strict(
     node_id: &str,
-    contracts: &[(String, String, Option<Value>)],
+    contracts: &[(String, Option<String>, Option<Value>)],
     types: Arc<BTreeMap<String, Value>>,
 ) -> (ToolDecl, ToolFn, DeclarationCell) {
     let cell: DeclarationCell = Arc::new(std::sync::Mutex::new(None));
@@ -1274,9 +1659,11 @@ fn declare_tool_strict(
     // 闭环内校验门：闭包捕获 (node, 端口→类型表达式, types 词典)，逐调用
     // 校验——与 commit 相 check_typed 同源（采纳即必过 commit）。
     let node = node_id.to_string();
+    // 类型核对只覆盖有类型表达式的端口（无类型端口 = 键到位即可，与
+    // commit 相「无类型声明 = 不核」同口径——红队 W1-C31）。
     let port_types: Vec<(String, String)> = contracts
         .iter()
-        .map(|(p, e, _)| (p.clone(), e.clone()))
+        .filter_map(|(p, e, _)| e.clone().map(|e| (p.clone(), e)))
         .collect();
     let on_call: ToolFn = Arc::new(move |args: &Value| {
         let shape_hint =
@@ -1316,11 +1703,27 @@ fn declare_tool_strict(
 /// 内联（深度帽 16，与 [`SchemaValidator`] 同口径——API 面无词典可查）；
 /// 解析失败 → None（不静默造形——校验相 fail-loud 报基名缺席）。
 fn materialize_schema(types: &BTreeMap<String, Value>, type_expr: &str) -> Option<Value> {
+    materialize_schema_at(types, type_expr, 0)
+}
+
+/// 深度帽（红队 W2-C34）：与 inline_named_refs（16）同口径——手写计划的
+/// `list<list<...>>` 深层嵌套在此干净拒收（None = 该端口无 schema，下游
+/// check_typed 按「基名不在 types」转 EX4006），不在契约构造位无界递归/
+/// 栈溢出（此前裸递归，100k 深嵌套即 abort 而非干净拒收）。
+fn materialize_schema_at(
+    types: &BTreeMap<String, Value>,
+    type_expr: &str,
+    depth: u8,
+) -> Option<Value> {
+    const MAX_SCHEMA_DEPTH: u8 = 16;
+    if depth >= MAX_SCHEMA_DEPTH {
+        return None;
+    }
     if let Some(inner) = type_expr
         .strip_prefix("list<")
         .and_then(|t| t.strip_suffix('>'))
     {
-        let items = materialize_schema(types, inner)?;
+        let items = materialize_schema_at(types, inner, depth + 1)?;
         return Some(serde_json::json!({ "type": "array", "items": items }));
     }
     let schema = types.get(type_expr)?;
@@ -1730,24 +2133,43 @@ fn node_tool_fn(
     }
 }
 
-/// 终态工件端口（interface.output_from 的 is_final 端口；缺 → 线性链缺终态）。
+/// 终态工件端口（interface.output_from 的 is_final 端口；缺 → 线性链缺终态；
+/// **多于一个 → 拒收**——红队 W1-C28 第二半：终态类型匹配须恰一端口，
+/// 此前 `.find(|a| a.is_final)` 静默取首个，双终态手写计划的工件归属取决于
+/// 条目序，终态工件不可单义识别。编译面计划到不了这里（af-dsl E2202 恰一
+/// 端口匹配 fail-closed + lower is_final 推导同源），本门守 decode+planbind
+/// 可放行的手写计划面）。
 fn final_artifact_port(plan: &ExecutablePlan) -> Result<String, ExeclineError> {
-    plan.body
+    let finals: Vec<&str> = plan
+        .body
         .node_exec
         .iter()
         .find(|n| n.node_id == plan.body.interface.output_from)
-        .and_then(|n| {
+        .map(|n| {
             n.artifact_contract
                 .iter()
-                .find(|a| a.is_final)
-                .map(|a| a.name.clone())
+                .filter(|a| a.is_final)
+                .map(|a| a.name.as_str())
+                .collect()
         })
-        .ok_or_else(|| ExeclineError::EnvelopeMismatch {
+        .unwrap_or_default();
+    match finals.as_slice() {
+        [port] => Ok((*port).to_string()),
+        [] => Err(ExeclineError::EnvelopeMismatch {
             detail: format!(
                 "终态发射者 {} 无 is_final 工件端口",
                 plan.body.interface.output_from
             ),
-        })
+        }),
+        many => Err(ExeclineError::EnvelopeMismatch {
+            detail: format!(
+                "终态发射者 {} 有 {} 个 is_final 工件端口（{:?}）——终态工件不可单义识别，须恰一（红队 W1-C28）",
+                plan.body.interface.output_from,
+                many.len(),
+                many
+            ),
+        }),
+    }
 }
 
 /// JSON Schema 子集校验（sop 图 types 词典实际用到的面：type/required/
@@ -1951,6 +2373,48 @@ fn envelope_check(
 /// 类型表达式核对（envelope 正门）：list<T> 拆包逐项、命名类型对 plan.types
 /// 解析；值不符 = EX4006 点名节点/端口/类型。types 词典单参（plan.body.types
 /// 的投影）——校验器可独立单测。
+/// 终态判定字段解析（红队 W2-C29）：类型 schema 的布尔属性里 `pass` 优先、
+/// `resolved` 次取（swebench 判分惯例）；均无 = None（产物型终态）。
+/// list<T> 取元素 schema（终态载荷为数组时字段取值自然落空 = 不 qualified，
+/// fail-closed）。schema 未登记/无 properties = None（不可证明，不推定）。
+fn terminal_verdict_field(
+    types: &BTreeMap<String, Value>,
+    output_type: &str,
+) -> Option<&'static str> {
+    let base = output_type
+        .strip_prefix("list<")
+        .and_then(|t| t.strip_suffix('>'))
+        .unwrap_or(output_type);
+    let props = types
+        .get(base)?
+        .get("properties")
+        .and_then(Value::as_object)?;
+    for cand in ["pass", "resolved"] {
+        let is_bool = props
+            .get(cand)
+            .and_then(|p| p.get("type"))
+            .and_then(Value::as_str)
+            == Some("boolean");
+        if is_bool {
+            return Some(cand);
+        }
+    }
+    None
+}
+
+/// 终态 verdict：判定型取声明字段值（缺字段 = None = 不 qualified）；
+/// 产物型（无判定字段）= Some(true)（产出即合格，既有语义）。
+fn terminal_verdict(
+    types: &BTreeMap<String, Value>,
+    output_type: &str,
+    payload: &Value,
+) -> Option<bool> {
+    match terminal_verdict_field(types, output_type) {
+        Some(field) => payload.get(field).and_then(Value::as_bool),
+        None => Some(true),
+    }
+}
+
 fn check_typed(
     types: &BTreeMap<String, Value>,
     node_id: &str,
@@ -2280,5 +2744,55 @@ mod tests {
             cut.chars().count(),
             10 + 1 + "\n…[truncated at 10 chars]".chars().count() - 1
         );
+    }
+
+    /// 红队 W2-C-28——cost 帽 u64→i64 **饱和**换算：先 `as i64` 曾把 ≥2^63 的
+    /// u64 帽回绕成负数、再被 `.max(1)` 压成 1¢——「巨帽≈无帽」倒置为
+    /// 「巨帽=1¢ 立即 EX4007」，与同文件 turns 帽饱和换算
+    /// （`u32::try_from(b.cap).unwrap_or(u32::MAX)`）同类未修。饱和语义 =
+    /// 巨帽≈无帽（剩余额度按 u64 算、装不下 i64 即饱和到 i64::MAX）。
+    #[test]
+    fn node_spend_cap_saturates_giant_u64_caps_instead_of_wrapping_to_one_cent() {
+        let budget = |cost_cap: Option<u64>| PlanBudgets {
+            cost_cap,
+            token_cap: None,
+        };
+        // 巨帽两档（裁判实测复现值）：2^63 恰是 as i64 回绕边界、u64::MAX 全帽。
+        for cap in [u64::MAX, 1u64 << 63] {
+            let got = budget(Some(cap)).node_spend_cap(300, 0);
+            assert_eq!(
+                got,
+                i64::MAX,
+                "cost_cap={cap} 巨帽不得回绕成 1¢ 立即熔断（饱和≈无帽）"
+            );
+            // 有消耗时仍饱和：u64::MAX − 42 仍装不下 i64（2^63 − 42 可精确
+            // 表达，归入下方精确档）。
+            if cap == u64::MAX {
+                assert_eq!(
+                    budget(Some(cap)).node_spend_cap(300, 42),
+                    i64::MAX,
+                    "cost_cap={cap} 减 42¢ 后仍巨帽"
+                );
+            }
+        }
+        // 2^63 − 42 恰装得下 i64：精确剩余、不饱和不回绕。
+        assert_eq!(
+            budget(Some(1u64 << 63)).node_spend_cap(300, 42),
+            ((1u64 << 63) - 42) as i64
+        );
+        // 常规帽不漂移：剩余额度精确收敛。
+        assert_eq!(budget(Some(600)).node_spend_cap(300, 0), 600);
+        assert_eq!(budget(Some(3)).node_spend_cap(300, 1), 2);
+        // 边界内巨帽：i64::MAX 本身可精确表达（不饱和也正确）。
+        assert_eq!(
+            budget(Some(i64::MAX as u64)).node_spend_cap(300, 7),
+            i64::MAX - 7
+        );
+        // 耗尽/超耗：诚实给 0（生产面 gate() 先 EX4007 拦住，纯函数面不撒谎
+        // 也不 .max(1) 造假帽——fail-closed 方向）。
+        assert_eq!(budget(Some(600)).node_spend_cap(300, 600), 0);
+        assert_eq!(budget(Some(600)).node_spend_cap(300, 700), 0);
+        // plan 未声明 cost_cap：spec 缺省帽原样。
+        assert_eq!(budget(None).node_spend_cap(300, 42), 300);
     }
 }

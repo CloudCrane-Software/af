@@ -79,9 +79,9 @@ fi
 echo "  [0] 预检 OK（工具/组件/workspace manifest）"
 
 # ---- 1. cargo fmt --check ---------------------------------------------------
-echo "== step1 cargo fmt --check"
-step 1 "cargo fmt --check" -- \
-  bash -c "cd '$AF_ROOT' && cargo fmt --check --all"
+echo "== step1 cargo fmt --check + K5 判分链路径 lint（总计划 §2 裁决7：K5 并入编译阶段 1）"
+step 1 "cargo fmt --check + K5 判分链路径 lint" -- \
+  bash -c "cd '$AF_ROOT' && cargo fmt --check --all && python3 ci/k5-path-lint.py"
 
 # ---- 2. clippy + 警告基线门 --------------------------------------------------
 echo "== step2 clippy（基线门：新增警告才 fail）"
@@ -234,6 +234,40 @@ fv_advisory() {
     echo "9a Rocq 陈述库 coqc 类型检查: ${rp}/10 通过${rf:+，$rf 失败}"
     rm -rf "$RP"
     [ "$rp" -eq 10 ] || rc=1
+    # —— 9a-2 定理清单/陈述对账（红队 W3-C29）：coqc 只查陈述良构，删除定理
+    # 或改前提/结论（弱化）可能照过（全库 Admitted 形态 21 条）——按文件计
+    # 数拦不住证明载体缩水。对账 theorems-manifest.txt：①定理名集合逐位；
+    # ②陈述块（^Theorem 起、^Proof. 前止）规范串 SHA-256。有意变更定理面须
+    # 同步更新清单（承 9b harness 计数断言 32/0/32 同一登记纪律）；仅改证明
+    # 体（Admitted→Qed）不触发。未纳入 step9 的证明集（确定性组 17 harness、
+    # Verus 29、proofs/kani 镜像）继续明确标为覆盖外（见本文件头注）。
+    local MAN="$AF_ROOT/proofs/rocq-规范库-v0/theorems-manifest.txt"
+    local RPDIR="$AF_ROOT/proofs/rocq-规范库-v0"
+    if [ ! -f "$MAN" ]; then
+      echo "9a FAIL: 定理清单对账正本缺席（$MAN）——陈述库漂移防护失效"
+      rc=1
+    else
+      local man_names now_names man_hash now_hash
+      man_names=$(grep -v '^#' "$MAN" | awk -F'\t' '$1 != "statements-sha256" && NF >= 2 {print $2}' | sort)
+      now_names=$(grep -h "^Theorem " "$RPDIR"/T*.v | sed 's/^Theorem \([^ :]*\).*/\1/' | sort)
+      man_hash=$(grep '^statements-sha256' "$MAN" | awk '{print $2}')
+      now_hash=$(
+        (cd "$RPDIR" && for f in T*.v; do
+          sed -n '/^Theorem /,/^Proof\./p' "$f" | sed '/^Proof\./d'
+        done) | sha256sum | cut -d' ' -f1
+      )
+      if [ "$man_names" != "$now_names" ]; then
+        echo "9a FAIL: 定理名集合漂移（期望 $(echo "$man_names" | wc -l) 条 ↔ 实得 $(echo "$now_names" | wc -l) 条；差异：$(comm -3 <(echo "$man_names") <(echo "$now_names") | tr '\n' ' '))——定理被删/改名或有增，须更新 theorems-manifest.txt"
+        rc=1
+      fi
+      if [ "$man_hash" != "$now_hash" ]; then
+        echo "9a FAIL: 定理陈述漂移（SHA-256 期望 ${man_hash:0:12}… ↔ 实得 ${now_hash:0:12}…）——陈述/前提被弱化或改写，须更新 theorems-manifest.txt 并附裁决依据"
+        rc=1
+      fi
+      if [ "$man_names" = "$now_names" ] && [ "$man_hash" = "$now_hash" ]; then
+        echo "9a-2 定理清单对账: $(echo "$man_names" | wc -l) 条定理名逐位一致 + 陈述块 SHA-256 一致（${man_hash:0:12}…）"
+      fi
+    fi
   else
     echo "9a WARN: coqc 不在 PATH——Rocq 面 advisory 未跑（工具缺席，非内容失败）"
     rc=1
@@ -249,9 +283,26 @@ fv_advisory() {
         PATH="$KDIR/bin:$PATH" \
         CARGO_TARGET_DIR="$HOME/afbuild-phase2fv-kani" \
         timeout 100 cargo kani > "$OUT/step9-kani.log" 2>&1); then
-      echo "9b Kani INV 镜像快检: exit=0"
-      grep -E '^Complete - ' "$OUT/step9-kani.log" | tail -1 || \
-        echo "（日志缺 Complete 汇总行——见 ci/out/step9-kani.log）"
+      # 9b 判定不再只看退出码（红队 W1-C44）：cargo kani 对「harness 被删减
+      #     甚至全删」仍 exit 0（No proof harnesses found 也是 0）——解析
+      #     Complete 汇总行并断言 harness 计数恰 32（INV 镜像面契约）且
+      #     0 failures；缺行/计数漂移均 FAIL（证明集缩水此前零防护）。
+      #     有意变更 harness 数须同步更新本断言与 INV 镜像契约登记。
+      local complete verified_k failures_k total_k
+      complete=$(grep -E '^Complete - ' "$OUT/step9-kani.log" | tail -1)
+      if [ -z "$complete" ]; then
+        echo "9b FAIL: 日志缺 Complete 汇总行（见 ci/out/step9-kani.log）"
+        rc=1
+      else
+        verified_k=$(echo "$complete" | grep -oE '[0-9]+ successfully verified harnesses' | grep -oE '^[0-9]+')
+        failures_k=$(echo "$complete" | grep -oE '[0-9]+ failures' | grep -oE '^[0-9]+')
+        total_k=$(echo "$complete" | grep -oE '[0-9]+ total' | grep -oE '^[0-9]+')
+        echo "9b Kani INV 镜像快检: exit=0 | $complete"
+        if [ "${verified_k:-0}" -ne 32 ] || [ "${failures_k:-1}" -ne 0 ] || [ "${total_k:-0}" -ne 32 ]; then
+          echo "9b FAIL: harness 计数断言不过（期望 32 verified / 0 failures / 32 total，实得 ${verified_k:-缺}/${failures_k:-缺}/${total_k:-缺}——证明集被删减或有失败）"
+          rc=1
+        fi
+      fi
     else
       echo "9b WARN: Kani 快检非零退出（超时 100s 或验证失败——详见 ci/out/step9-kani.log）"
       tail -5 "$OUT/step9-kani.log" 2>/dev/null | sed 's/^/      | /'

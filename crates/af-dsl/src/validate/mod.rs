@@ -19,6 +19,7 @@ mod refs;
 
 use crate::error::{ErrorCode, Report};
 use crate::model::{Document, EdgeDecl, LoopDecl, NodeDecl, PortType, StoreDecl};
+use crate::validate::refs::TYPE_DEPTH;
 use std::collections::{BTreeMap, BTreeSet};
 
 /// 节点在作用域索引中的条目。
@@ -75,6 +76,9 @@ pub struct ValidateOptions {
 pub fn validate_with(doc: &Document, opts: &ValidateOptions) -> Report {
     let mut report = Report::default();
     report.violations.extend(crate::shape::check_vocab(doc));
+    report
+        .violations
+        .extend(crate::shape::check_schema_shape(doc));
     let index = Index::build(doc, &mut report);
     refs::check(doc, &index, &mut report);
     loop_guard::check(&index, &mut report);
@@ -134,6 +138,22 @@ impl<'a> Index<'a> {
         // 收齐」契约——空文档应报 E2001 而非崩溃）。
         self.scopes.entry(label.to_string()).or_default();
         for n in nodes {
+            // E2212 构造×构造并存（红队 W1-C25；原登 E2209，W3-C16 码位迁移
+            // 归还 ops 参数不闭合——见 error.rs 码位史）：loop+map 同节点此前
+            // 不被任何判定拒绝，而 emit_type 对其 emits.from_body 因 map 在场
+            // 一律包 list<>（loop 单独在场不包）——类型推导取决于无关字段
+            // 在场与否；fail-closed 拒绝组合本身。
+            if n.loop_spec.is_some() && n.map.is_some() {
+                report.push(
+                    ErrorCode::ConstructConflict,
+                    label,
+                    format!(
+                        "节点 {:?} 同时携带 loop 与 map 双构造（构造×构造组合非法；二构造必须分节点——\
+                         解析面取 loop 体而类型面因 map 包 list<>，端口类型推导自相矛盾）",
+                        n.id
+                    ),
+                );
+            }
             let path = if parent_path.is_empty() {
                 n.id.clone()
             } else {
@@ -266,6 +286,19 @@ impl<'a> Index<'a> {
             }
         }
     }
+}
+
+/// from_body/内建端口推导类型（公开面，红队 W2-C26）：按 Index/emit_type
+/// **同规则**求值——内建端口（loop/map done:signal、check/gate
+/// passed:boolean）+ emits 表（Type 直取、FromBody 递归推导、map 包
+/// list<>）。af-compiler lowering 的 is_final 判定、执行面 consume 校验
+/// 均经此函数取类型，杜绝「IR 另复制一套推导器」的双实现漂移。
+/// 不可解析（悬空/超深/环）= None（调用方按「不可证明」处理，不推定）。
+pub fn derived_emit_type(doc: &Document, node_path: &str, port: &str) -> Option<PortType> {
+    let mut sink = Report::default();
+    let ix = Index::build(doc, &mut sink);
+    let node = ix.resolve_root_path(node_path)?;
+    ix.emit_type(node, port, TYPE_DEPTH)
 }
 
 /// 构造节点的体 scope 标签（loop/map 皆有则取 loop 体）。

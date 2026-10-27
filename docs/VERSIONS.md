@@ -2,10 +2,16 @@
 
 > 2026-10-25 · G5 文档版本化批。**当前形态的版本面快照**——每行注明版本值、
 > 载体与核定方式。不写工期、不写未来承诺；演进项一律标注「v0.2 议程」在档。
+>
+> 2026-10-26 · 红队修复批（W1）追加注记：本表口径不变；修复批改动
+> （AFB 语义收紧五项 + golden 7 份随批再生 + 执行面/CI 收口）见
+> `docs/adr/011-redteam-w1-fixes.md`，crate 版本仍 0.1.0（阶段内修复，
+> 不进位）。
 
 ## 一、crate 版本（22 crate，全部 0.1.0）
 
-第二阶段主线五件（ADR-002；`af-plan` 折入 af-compiler，独立建位列开放问题
+第二阶段主线五件（ADR-002；`af-plan` 折入 af-compiler——折入经 ADR-013
+追认裁决（2026-10-27，红队 W2-C-03 补登正式载体），独立建位列 §五开放议程
 ——软件工程包设计 §7-2）：
 
 | crate | version | 内容锚 |
@@ -29,7 +35,7 @@ af-sandbox/af-station/af-stop/af-trace/af-workorder）均为 0.1.0，语义结�
 | golden 语料 | 21 份 IR 快照（逐字节+篡改检测回归） | `crates/af-compiler/testdata/golden/` |
 | 对齐语料 | 15/15 走通 L1-L4 全链（G3 矩阵 v2，2026-10-24） | `计划/研究组/G3-全链闸门-L1L4-v2-20261024.md`；快照正本 `计划/研究组/对齐计划快照/` |
 | 逃逸舱记账 | 97 条 / 15 稿（稿均 6.47，七类 kind） | golden `body.escapes` 与 plan 快照 `escapes` 交叉同值 |
-| 对抗农田钉死 | 39 份样本 13 测试（39/39） | `crates/af-dsl/testdata/farm-anomalies/` + `tests/farm_anomalies_test.rs` |
+| 对抗农田钉死 | 39 份样本 14 测试（39/39；红队 W2-C51 勘误：原 13 未随 W1-C28 新增用例同步） | `crates/af-dsl/testdata/farm-anomalies/` + `tests/farm_anomalies_test.rs` |
 
 ## 三、包与组件（af/packages/）
 
@@ -52,6 +58,7 @@ af-sandbox/af-station/af-stop/af-trace/af-workorder）均为 0.1.0，语义结�
 
 - AFB 规范 v0.2 议程：提案-B §1.2 `budgets.scope` 记法显式化、E1008/E1054
   码表正本回填、theorems v0.2（A-03/A-07 陈述修订）。
-- `af-plan` 独立建位（类型搬迁去重）——软件工程包设计 §7-2。
+- `af-plan` 独立建位（类型搬迁去重）——软件工程包设计 §7-2（折入现状经
+  ADR-013 追认为阶段内裁决；本项为 v0.2 评估议题，在档非承诺）。
 - trace 工具对 graph 单元 suite-summary 形 records（无 evidence.run_dir）的
   父子边支持——G5 正式批登记。

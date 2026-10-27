@@ -668,6 +668,9 @@ fn drive_once(
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).expect("报告单元全相应走通（v1 缝）")
@@ -792,6 +795,9 @@ fn drive_err(unit: &ReportExecuteUnit, base: &Path, task_dir: &Path) -> Execline
         data_root: &data_root,
         attempt_dir: &attempt,
         record_sink: &sink,
+        graph_version: None,
+        task_sha256: None,
+        plan_sha256: None,
         trial: false,
     };
     unit.execute(&ctx).unwrap_err()
@@ -850,4 +856,103 @@ fn execution_facts_reuse_for_report_suite() {
     let row = af_execline::record::swev_legacy_row(&facts);
     assert_eq!(row["suite"], "report");
     assert_eq!(row["reward"], true);
+}
+
+/// 红队 W1-C61：渲染器入指纹门——rubric 的 R5 判据 = report.md 与
+/// `render.render_markdown` 输出一致（渲染器既是生产者又是裁判基准），改
+/// render.py 一个函数即可翻转 R5 而两件钉死脚本字节不动；此前双指纹门只
+/// 盖 citation/rubric，第三件漂移照过。
+#[test]
+fn judge_fingerprint_gate_rejects_tampered_renderer_with_ex3002() {
+    let prod = ReportJudgeLocator::production();
+    let script = std::fs::read_to_string(&prod.render_script).unwrap();
+    let tampered = script.replace("def render_markdown", "def render_markdown_x");
+    let dir = kit_dir("fp-render");
+    let bad = dir.join("render_tampered.py");
+    std::fs::write(&bad, tampered).unwrap();
+    let locator = ReportJudgeLocator {
+        render_script: bad.clone(),
+        ..prod
+    };
+    let err = locator.check_fingerprints().unwrap_err();
+    assert_eq!(err.code(), ErrorCode::JudgeFingerprintMismatch, "{err}");
+    assert!(err.to_string().starts_with("EX3002"), "{err}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn judge_fingerprint_gate_rejects_planted_pyc_shadow() {
+    // 红队 W2-C52：判分目录出现 __pycache__/*.pyc 即拒——rubric_unit.py 经
+    // `import render` 动态加载渲染器，Python 对在场且头部 mtime/size 匹配的
+    // pyc 优先于源文件加载：不改一个锚定 .py 字节即可用影子字节码翻转 R5
+    // 判据（投毒复现在案）。-B 只禁写，读取侧由此门兜底。
+    let prod = ReportJudgeLocator::production();
+    let dir = kit_dir("pyc-shadow");
+    std::fs::create_dir_all(dir.join("__pycache__")).unwrap();
+    std::fs::write(
+        dir.join("__pycache__").join("render.cpython-314.pyc"),
+        b"\x00\x00",
+    )
+    .unwrap();
+    let locator = ReportJudgeLocator {
+        render_script: dir.join("render.py"),
+        ..prod
+    };
+    // 真脚本逐位复刻（过 sha256 锚）——使失败点唯一地落在 pyc 在场性门。
+    std::fs::write(
+        &locator.render_script,
+        std::fs::read_to_string(&prod.render_script).unwrap(),
+    )
+    .unwrap();
+    let err = locator.check_fingerprints().unwrap_err();
+    assert_eq!(err.code(), ErrorCode::JudgeFingerprintMismatch, "{err}");
+    assert!(
+        err.to_string().contains("__pycache__"),
+        "拒收文案须点名影子字节码：{err}"
+    );
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn rubric_unit_bare_run_without_b_writes_no_bytecode() {
+    // 红队 W3-C-06（勘误后补防再生）：判分子进程虽由 report_unit.rs 统一以
+    // -B + PYTHONDONTWRITEBYTECODE=1 派生（禁写），但人工复算/F5c 基准树
+    // 重放常**裸跑** `python3 rubric_unit.py`（无 -B）——其 `import render`
+    // 会把 tools/__pycache__/render.*.pyc 落盘（2026-10-27 06:17 主线再生件
+    // 成因），随后触发在场性门把整树 report 臂判死（EX3002），且实测「已清」
+    // 不是不变量（10 份同名 pyc 散在 af 各工作树）。修复=rubric_unit.py 在
+    // import render 前置 sys.dont_write_bytecode：裸跑也不落任何字节码、
+    // 加载面自证照常、rc=0。本测试用临时副本裸跑（不污染在仓脚本），
+    // env_remove 防 CI 环境已带禁写变量而使断言空转。
+    let prod = ReportJudgeLocator::production();
+    let dir = kit_dir("bare-run-no-bytecode");
+    let units = dir.join("units");
+    let tools = dir.join("tools");
+    std::fs::create_dir_all(&units).unwrap();
+    std::fs::create_dir_all(&tools).unwrap();
+    std::fs::copy(&prod.rubric_script, units.join("rubric_unit.py")).unwrap();
+    std::fs::copy(&prod.render_script, tools.join("render.py")).unwrap();
+    let sha = paper_sha();
+    let task = task_json(1, 40, &sha);
+    let report = valid_report(&dir, &sha);
+    std::fs::write(dir.join("task.json"), task.to_string()).unwrap();
+    std::fs::write(dir.join("report.json"), report.to_string()).unwrap();
+    std::fs::write(dir.join("report.md"), render_md(&dir)).unwrap();
+    let out = std::process::Command::new(&prod.python)
+        .arg(units.join("rubric_unit.py"))
+        .arg(dir.join("task.json"))
+        .arg(dir.join("report.json"))
+        .env_remove("PYTHONDONTWRITEBYTECODE")
+        .output()
+        .expect("裸跑判分子进程应可拉起");
+    assert!(
+        out.status.success(),
+        "裸跑（无 -B、无禁写环境）应 rc=0 且加载面自证过：{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        !tools.join("__pycache__").exists(),
+        "裸跑不得在 tools/ 落任何字节码（防再生须成不变量，非一次性动作）"
+    );
+    std::fs::remove_dir_all(&dir).ok();
 }

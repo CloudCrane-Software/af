@@ -407,3 +407,77 @@ fn has_macro_rejected_as_e1052() {
     // 对照：标识符仅以 has 结尾（非裸 has）不是宏。
     check("input.q == \"x\"", &e).unwrap_or_else(|err| panic!("常规表达式不误伤：{err:?}"));
 }
+
+// ---------- 红队修复批（W1）：词法扫描跳过 CEL 注释 ----------
+
+#[test]
+fn comments_are_skipped_by_lex_scan() {
+    // cel-parser 0.10.1 文法只收 // 行注释（CEL.g4：COMMENT : '//' …）；
+    // 词法扫描（括号深度与 has() 宏补位）须与解析器同口径跳过——注释
+    // 文本中的 has( 与括号不得计入（此前中文注释里 has( 误报 E1052、
+    // 注释括号误计深度）。
+    let e = env(&[("input", vmap(&[("q", vstr("x"))]))]);
+    for src in [
+        "true // nothing here",
+        "true // has(input.q)",
+        "true // (((((",
+        "input.q == \"x\" // 中文注释里有 has( 与 (((( 括号",
+    ] {
+        check(src, &e).unwrap_or_else(|err| panic!("行注释内词法不误伤 {src:?}：{err:?}"));
+    }
+    // 对照：除号不是注释起点；字符串字面量里的 // 不是注释。
+    check("1 / 2 == 0", &e).unwrap_or_else(|err| panic!("除号不误伤：{err:?}"));
+    check("input.q == \"// has(\"", &e).unwrap_or_else(|err| panic!("字面量内 // 不误伤：{err:?}"));
+    err_of("input.q == \"// has(\" && has(input.q)", &e);
+    // 对照：真宏调用仍拦（E1052）；块注释不在文法内（解析必拒 E1051，
+    // 词法面不得跳过——跳过即给深括号绕过 E1054 前置闸开门）。
+    let err = err_of("has(input.q) // 尾注", &e);
+    assert_eq!(err.code.code(), "E1052");
+    let err = err_of("/* has(input.q) */ true", &e);
+    assert_eq!(err.code.code(), "E1051");
+}
+
+// ---------- 红队修复批（W2）：has 宏不得被 // 行注释隔断绕闸 ----------
+
+#[test]
+fn has_macro_across_line_comment_is_still_rejected() {
+    // 红队 W2-C24：`has //注释\n(...)`——词法扫描进入行注释时曾清掉
+    // pending_has，注释后的 `(` 不再置 has_macro，保守子集闸被绕
+    // （cel-parser 把注释作 HIDDEN 通道照常解析出 has 宏）。
+    let e = env(&[("input", vmap(&[("q", vstr("x"))]))]);
+    for src in [
+        "has //comment\n(input.q)",
+        "has//c\n(input.q)",
+        "has // 中文注释\n(input.q)",
+    ] {
+        let err = err_of(src, &e);
+        assert_eq!(err.code.code(), "E1052", "{src:?} 应拦宏：{err:?}");
+    }
+    // 对照：注释后的空白不改变判定（pending_has 跨越注释保持）。
+    // 对照：除号不是注释——`has / x` 之后 ident 已清，不构成宏隔断误判面，
+    // 真正的宏调用（无注释）仍由既有用例钉住。
+    check("true // has(input.q)", &e)
+        .unwrap_or_else(|err| panic!("注释文本内 has( 不误伤（W1-C23 口径不回退）：{err:?}"));
+}
+
+#[test]
+fn deep_expression_parses_on_default_stack_thread() {
+    // 红队 W3-C16：默认（小）栈线程上深 1000 表达式必须被解析/拒绝，而非
+    // 栈溢出 SIGABRT——修复前 antlr4rust 递归下降跑在调用方栈上，debug 构建
+    // 8MB 主栈深约 100 起崩（农田 C_CE29 深 1000 PASS 样本原依赖 256MB 大栈
+    // 测试线程达成，生产 CLI 主线程无保护）。解析已改 64MB 大栈工作线程，
+    // 本测试刻意不包大栈：深度 ≤1000 合法过、>1000 走 E1054 前置拒。
+    let e = env(&[("input", vmap(&[("q", vstr("x"))]))]);
+    // 深 1000（恰阈值内）：((((…1…)))) 语义 = 1，非布尔→E1053（不是崩溃）。
+    let deep_ok = format!("{}1{}", "(".repeat(1000), ")".repeat(1000));
+    let err = err_of(&deep_ok, &e);
+    assert_ne!(
+        err.code.code(),
+        "E1051",
+        "深 1000 不应解析失败（栈溢出会体现为 panic/abort）：{err:?}"
+    );
+    // 深 1200（阈值外）：前置闸 E1054。
+    let deep_over = format!("{}1{}", "(".repeat(1200), ")".repeat(1200));
+    let err = err_of(&deep_over, &e);
+    assert_eq!(err.code.code(), "E1054", "深 1200 应被前置闸拒：{err:?}");
+}

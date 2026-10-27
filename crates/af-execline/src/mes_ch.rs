@@ -225,9 +225,15 @@ impl MesSink for MesChSink {
                     detail: format!("outbox 重试仍失败（文件保留，at-least-once）: {err}"),
                 })?;
         }
-        // ② 读侧对账：正本全集 − CH 已有 = 差量
+        // ② 读侧对账：正本全集 − CH 已有 = 差量。
+        // 红队 W1-C63：event_id → line_id 对照——event_id 缺 line 判别量
+        //（stable_id(=order_id) + kind + ledger seq），同 order_id 在不同
+        // 产线/不同 state 根下的两单事件逐字节同 id；差量按 event_id 去重
+        // 会互相吞掉对方的记账事件（正本 4 条、CH 永少一笔且无告警）。
+        // 同 id 异 line = 身份面冲突，fail-loud 拒并——不静默少记。
         let events = MesFileWriter::load(self.file.path())?;
-        let mut in_ch: Vec<String> = Vec::new();
+        let mut in_ch: std::collections::BTreeMap<String, String> =
+            std::collections::BTreeMap::new();
         for work_order in events
             .iter()
             .map(|event| event.work_order_id.as_str())
@@ -242,11 +248,27 @@ impl MesSink for MesChSink {
                 .map_err(|err| ExeclineError::MesCh {
                     detail: format!("CH 读侧对账失败（{work_order}）: {err}"),
                 })?;
-            in_ch.extend(rows.into_iter().map(|row| row.event_id));
+            for row in rows {
+                in_ch.insert(row.event_id, row.line_id);
+            }
+        }
+        for event in &events {
+            if let Some(ch_line) = in_ch.get(&event.event_id) {
+                if ch_line != &event.line_id {
+                    return Err(ExeclineError::MesCh {
+                        detail: format!(
+                            "MES event_id 身份面冲突：{} 已在 CH 记账于 line {:?}，本正本为 \
+                             line {:?}（event_id 无 line 判别量，同 order_id 跨线/跨根复用即冲突；\
+                             拒并防差量互吞——order_id 须全局唯一或分线命名）",
+                            event.event_id, ch_line, event.line_id
+                        ),
+                    });
+                }
+            }
         }
         let pending: Vec<&MesEvent> = events
             .iter()
-            .filter(|event| !in_ch.contains(&event.event_id))
+            .filter(|event| !in_ch.contains_key(&event.event_id))
             .collect();
         // ③ 差量送批：Parked = EX2003 fail-loud
         let mut delivered = 0usize;

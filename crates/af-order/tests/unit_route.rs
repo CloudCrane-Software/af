@@ -52,8 +52,8 @@ fn resolve_unit_default_behavior_is_unchanged() {
         profile: "glm-cp".into(),
         data_root: PathBuf::from("/tmp/swev-s1"),
         host: "anolis".into(),
-        max_turns: 60,
-        spend_cap_cents: 100,
+        max_turns: Some(60),
+        spend_cap_cents: Some(100),
     };
     assert_eq!(
         resolve_unit(UnitChoice::Auto, Some(&exec)).unwrap(),
@@ -72,8 +72,8 @@ fn resolve_unit_matrix_strict_sides() {
         profile: "glm-cp".into(),
         data_root: PathBuf::from("/tmp/pkgroot"),
         host: "local".into(),
-        max_turns: 60,
-        spend_cap_cents: 300,
+        max_turns: Some(60),
+        spend_cap_cents: Some(300),
     };
     // swev/report 缺三件套 → OR1001。
     for u in [UnitChoice::Swev, UnitChoice::Report] {
@@ -167,8 +167,8 @@ fn report_unit_materials_come_from_task_package() {
         profile: "glm-cp".into(),
         data_root: base.clone(),
         host: "local".into(),
-        max_turns: 60,
-        spend_cap_cents: 300,
+        max_turns: Some(60),
+        spend_cap_cents: Some(300),
     };
     let spec = report_unit_for(&exec).expect("任务包齐全应产 spec");
     assert_eq!(spec.profile, "glm-cp");

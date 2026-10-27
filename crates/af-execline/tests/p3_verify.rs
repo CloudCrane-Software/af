@@ -174,6 +174,7 @@ fn fake_judge(tag: &str, json_line: &str) -> (JudgeLocator, PathBuf) {
             script_sha256: sha256_of(&script),
             python,
             script,
+            import_chain: Vec::new(),
         },
         root,
     )
@@ -201,7 +202,8 @@ fn run_verify(
     (resolved, note, sha, root)
 }
 
-/// 读假判分 venv 记下的 argv（[python, script, task_json, log, diff]）。
+/// 读假判分 venv 记下的 argv（[python, -B, script, task_json, log, diff]；
+/// W3-C34 起 -B 为解释器旗标，判分脚本仍恰收三个位置参数）。
 fn judge_argv(jroot: &Path) -> Vec<String> {
     std::fs::read_to_string(jroot.join("argv.txt"))
         .unwrap()
@@ -287,12 +289,14 @@ fn verify_timeout_marker_before_hash_and_note_stack() {
             "eval 超时击杀（已落标记 1800s）；[log_parsed=false] judge: \
              {\"resolved\": false, \"log_parsed\": false}"
         );
-        // verify→judge argv 接线：[python, script, task_json, eval.log, agent.diff]
-        // ——判分三件套的路径拼装（swev.rs:207-209 消费 work_dir.join）。
+        // verify→judge argv 接线：[python, -B, script, task_json, eval.log,
+        // agent.diff]——判分三件套的路径拼装（swev.rs:207-209 消费
+        // work_dir.join）；-B 为 W3-C34 解释器禁写旗标，不占脚本参数位。
         assert_eq!(
             judge_argv(&jroot),
             vec![
                 judge.python.display().to_string(),
+                "-B".to_string(),
                 judge.script.display().to_string(),
                 root.join("task.json").display().to_string(),
                 root.join("eval.log").display().to_string(),
@@ -368,6 +372,7 @@ fn fake_locator_with_python(tag: &str, python_body: Option<&str>) -> JudgeLocato
         script_sha256: sha256_of(&script),
         python,
         script,
+        import_chain: Vec::new(),
     }
 }
 

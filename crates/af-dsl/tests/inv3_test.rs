@@ -30,7 +30,7 @@ fn doc(node_block: &str, edges: &str) -> String {
     format!(
         "version: 1\n\
 meta:\n  name: t\n  graph_version: \"1.0\"\n  entry: verifier\n  input: in_t\n  output: {{ ref: a, from: verifier }}\n\
-types:\n  - {{ name: in_t, schema: {{ type: object, required: [q], properties: {{ q: {{ type: string }} }} }} }}\n  - {{ name: a, schema: {{ type: object }} }}\n\
+types:\n  - {{ name: in_t, schema: {{ type: object, required: [q], properties: {{ q: {{ type: string }} }} }} }}\n  - {{ name: a, schema: {{ type: object }} }}\n  - {{ name: b, schema: {{ type: object }} }}\n\
 nodes:\n{node_block}edges: {edges}\n"
     )
 }
@@ -152,7 +152,7 @@ fn loop_body_check_self_loop_is_e2321() {
 #[test]
 fn two_self_edges_report_two_e2321() {
     let src = doc(
-        "  - { id: verifier, kind: check, consumes: { x: a, y: a }, emits: { p: a, q: a } }\n",
+        "  - { id: verifier, kind: check, consumes: { x: a, y: b }, emits: { p: a, q: b } }\n",
         "[{ from: verifier, output: p, to: verifier, input: x }, { from: verifier, output: q, to: verifier, input: y }]",
     );
     assert_eq!(check(&src), ["E2321", "E2321"]);
@@ -187,7 +187,8 @@ fn indirect_self_verification_not_flagged_v01() {
     // solver 消费 fixer 的 fixed 端口，而 fixer 消费 solver 的 patch——
     // solver 实际参与生成自己验收的工件，但无直接自环 → 不报 E2321。
     let src = doc(
-        "  - { id: verifier, kind: check, consumes: { fixed: a }, emits: { patch: a, answer: a } }\n  - { id: fixer, kind: transform, consumes: { raw: a }, emits: { fixed: a } }\n",
+        // 端口类型两两可区分（同型双端口自红队 W1-C28 起为 E2202 歧义）。
+        "  - { id: verifier, kind: check, consumes: { fixed: a }, emits: { patch: b, answer: a } }\n  - { id: fixer, kind: transform, consumes: { raw: b }, emits: { fixed: a } }\n",
         "[{ from: verifier, output: patch, to: fixer, input: raw }, { from: fixer, output: fixed, to: verifier, input: fixed }]",
     );
     assert_eq!(check(&src), Vec::<&str>::new());

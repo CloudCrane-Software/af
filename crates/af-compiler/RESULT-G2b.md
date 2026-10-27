@@ -89,6 +89,12 @@
 | 13 | `node_exec[].unit` 缺草案字段 `selector`（契约 §7.1 为 `{unit_id, unit_version, selector}`；实现 `UnitBinding` 仅 `{unit_id, unit_version}`） | **契约字段缺失**（独立验证点名项）：v0.1 组件绑定面无 selector 数据源——`topology_selector` 属 af-dsl 图清单注入链（草稿级），非组件注册表面——不伪造占位；unit 绑定声明面开后回填（同遗留 3 性质） |
 | 14 | `node_exec[].budget` 为数组 `[{id, dimension, cap}]`（草案为单对象 `{dimension, unit, per_turn, node_cap}`） | 节点预算 = IR 预算账中 `scope == node:<路径>` 条目的逐条投影（id/dimension/cap 三元组，DSL 声明面原样；无命中即空数组）；草案单对象形的 `per_turn`/`node_cap` 无编译期来源 |
 | 15 | `artifact_contract[]` 多键 `provenance`（草案仅 name/is_final/qualified_by） | ADR-010 envelope 溯源：`envelope<T>` 声明机械解析回填 `provenance.envelope_of`（裁决 3），须在计划面可见。键位有正当理由，原漏登本表，兹补登 |
+| 16 | `components.memory` 为数组 `Vec<String>`（草案 §7.1 为**单引用串** `"c-...@1.x"`） | uses.memory 声明面为列表形（多记忆组件可同报）；计划面按数组投影。同类偏差原漏登（红队 W1-C30 勘误补登——#1 已登 tools 同族，memory 单→多漏登），兹补登 |
+| 17 | `components.loop_policy`/`context_compaction` 恒 `null`（草案 §7.1 为组件引用串） | v0.1 uses 无该两键声明面（bind.rs 注释自认「v0.1 uses 无声明面（占位）」）——与 #4/#7 同族「恒空占位」偏差，原漏登（红队 W1-C30 勘误补登），兹补登；声明面开后回填 |
+| 18 | `node_exec[].context` 为 `Vec<SectionSpec>`（草案 §7.1 node_exec 条目键仅 node_id/unit/components/budget/artifact_contract/retry，无 context） | 节点提示词装配面的 context 段声明（模板引用/配额/停止面）是执行面 AgentSpec 四元组的编译期来源；serde default 无 skip，恒序列化（空数组在场）。原漏登（红队 W2-C27 勘误补登） |
+| 19 | `node_exec[].consumes` 为 `BTreeMap<String,String>`（草案无此键） | 下游面契约：节点入边端口→类型表达式的显式声明（执行面 check_typed 对账正本）；无 consumes 声明 = 不核（旧计划缺省空）。原漏登（红队 W2-C27 勘误补登） |
+| 20 | `artifact_contract[].r#type` 为 `Option<String>`（草案 artifact 内部仅 name/is_final/qualified_by） | 端口类型表达式（命名/list<>/内联）是 typed envelope 交接（EX4006）与终态推导的判定依据；None = 无类型声明不核（与 commit 相同口径）。原漏登（红队 W2-C27 勘误补登） |
+| 21 | `node_exec` 与 `graph.nodes` **非 1:1**（草案注「与 graph.nodes 按 id 对齐」） | node_exec 由 IR 绑定报告全量点号路径投影（含构造体体内节点，如 sample2 的 build.apply/build.engineer/build.qa），graph 仅含根图节点（构造体降维进 subgraphs）——「对齐」实为**归属核对**（每个 node_exec 路径须归属某根节点或子图路径），非逐 id 一对多一；装订期按此核对（planbind ③）。原漏登（红队 W2-C27 勘误补登） |
 
 ## 遗留（转 G2c/执行面对接）
 
@@ -101,6 +107,10 @@
 7. af/packages 首批组件声明 = 三门样例引用闭包（7 条）；其余 golden 源引用（crewkit/reactkit/reflexkit 等）未注册——按需扩清单即放行，E9001 fail-closed 语义已验证（Voyager 实跑拒绝）。
 
 ## 更新记录
+
+- **2026-10-26（红队修复批 W2-C27）——偏差表补登 #18-#21**：执行器合流批新增 4 项 plan 面出入原漏登（node_exec[].context、node_exec[].consumes、artifact_contract[].type、node_exec 与 graph.nodes 非 1:1 的归属核对关系），违反本表自立的「偏差表须全量」标准（#12-#15/W1-C30 补登动作即以此为标准），全数补登（表 17→21 条）；样本实证 sample2 编译产物（node_exec 7 条 vs graph.nodes 4 条 + subgraphs）。
+
+- **2026-10-26（红队修复批 W1-C30）——偏差表补登 #16/#17**：独立验证标准「偏差表须全量」（本表 #12-#15 补登动作即以此为标准）再核 §7.1 草案 components 面，memory 单引用→数组与 loop_policy/context_compaction 恒 null 两处出入原漏登，全数补登（表 15→17 条）。
 
 - **2026-10-24（分支 `phase2-g2b-hyg`，任务包 P2-Q03）——G2b 卫生债清偿。依据：G2G3-放行裁决-20261024.md §一附条件**（G2 门放行附强制条件，「放行不豁免，CI integration 批强制清除」），三件：
   1. **fmt 全量归零**：`cargo fmt -p af-compiler` 一次收齐（基线 `cargo fmt -p af-compiler -- --check` rc=1，去重 117 处 hunk——本工作树实跑复核 120 行原始 `Diff in` 去重 117，与独立验证报告 §7 计数一致；其中 49 处出自 G2b、68 处 G2a 基线既有，归属见该报告分文件表）。清偿后 `cargo fmt --check -p af-compiler` **rc=0**。**零语义**：改动仅 13 个 `.rs` 文件的格式（611 插入/183 删除），非空白字符多重集核对仅尾随逗号增补与配对大括号增减（rustfmt 机械动作），全量 `cargo test -p af-compiler` **53/53 原绿**（af-dsl 244/244 非干扰）。

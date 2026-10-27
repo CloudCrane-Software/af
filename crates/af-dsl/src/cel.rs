@@ -93,6 +93,68 @@ fn run_captured<R>(f: impl FnOnce() -> R) -> Result<R, ()> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|_| ())
 }
 
+/// 受控大栈线程执行（红队 W3-C16）：antlr4rust 递归下降的栈帧随构建档
+/// 差一个数量级——release 下 8MB 主栈括号深 1000 优雅 PASS，debug 下
+/// （cargo build/test 默认档，生产 CLI 即此档）深约 100 起即栈溢出
+/// SIGABRT（rc=134），而农田语料 C_CE28/29 要求深 500/1000 PASS、原测试
+/// 靠 256MB 大栈线程达成、生产主线程无保护。解析改在固定大栈工作线程
+/// 上跑：阈值语义（>1000 拒）与「本机 8MB 主栈优雅过」标定自此不再
+/// 依赖构建档与调用方栈大小（worker 栈与主栈解耦）。线程构建失败
+/// （极少见）回退主线程执行——行为不劣于修复前。
+// 256MB = 农田语料深 500/1000 两样本在原测试大栈线程（farm_anomalies_test
+// run_on_big_stack）实测通过的同一量级；debug 构建 antlr4rust 帧约 80KB/层
+// （8MB 主栈深约 100 崩的实测折算），深 1000 需 ~80MB，留 3 倍余量。线程栈
+// 为虚拟内存预留（非实提交），不构成实存压力。
+const CEL_WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
+
+/// 在受控大栈工作线程上执行判定主体（W3-C16）。`CelEnv` 克隆进线程、结果
+/// 只有 `CelCheck`/`CelError`（均 Send）回传——`Program` 含 `Rc` 不可跨线程，
+/// 故 compile→提取→求值全链条在线程内完成。线程构建/join 失败（极少见）
+/// 回退主线程执行——行为不劣于修复前。
+fn check_on_big_stack(source: &str, scan: &LexScan, env: &CelEnv) -> Result<CelCheck, CelError> {
+    let source_owned = source.to_owned();
+    let scan_owned = LexScan {
+        max_depth: scan.max_depth,
+        has_macro: scan.has_macro,
+    };
+    let env_owned = env.clone();
+    let cell = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let cell2 = cell.clone();
+    let builder = std::thread::Builder::new()
+        .name("af-dsl-cel-parse".into())
+        .stack_size(CEL_WORKER_STACK_BYTES);
+    let spawned = builder.spawn(move || {
+        let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            check_inner(&source_owned, &scan_owned, &env_owned)
+        }));
+        *cell2.lock().unwrap_or_else(|e| e.into_inner()) = Some(out);
+    });
+    match spawned {
+        Ok(handle) => {
+            if handle.join().is_err() {
+                return Err(CelError {
+                    code: ErrorCode::CelParse,
+                    detail: format!(
+                        "解析失败：大栈工作线程异常退出（{source:?}）——fail-loud，不在 \
+                         调用方栈上重试（debug 主栈深约 100 即 SIGABRT，红队 W3-C16）"
+                    ),
+                });
+            }
+            match cell.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                Some(Ok(result)) => result,
+                _ => Err(CelError {
+                    code: ErrorCode::CelParse,
+                    detail: format!(
+                        "解析失败：cel-parser 内部 panic（尾部运算符/空输入触发 antlr4rust \
+                         错误恢复 panic，已兜底归一）：{source:?}"
+                    ),
+                }),
+            }
+        }
+        Err(_) => check_inner(source, scan, env),
+    }
+}
+
 /// 前置闸阈值（农田实测标定，ANOMALIES.md A-2：本机 8MB 主栈括号深 1000
 /// 优雅 PASS、深 2000 起 SIGABRT；对齐稿 15 + 样例 6 的最长 CEL 表达式
 /// 155 字节）：深度上限取实测过界 1000（>1000 拒），长度上限 64 KiB
@@ -110,9 +172,15 @@ struct LexScan {
     has_macro: bool,
 }
 
-/// 字符串字面量感知的词法扫描：跳过 `'…'`/`"…"` 字面量（含 `\` 转义），
-/// 统计括号最大嵌套深度与 has() 宏调用形态。O(n) 单遍、零递归、零分配
-/// 到路径热区之外——深/长表达式在此闸住，不进 antlr4rust 递归下降。
+/// 字符串字面量与注释感知的词法扫描：跳过 `'…'`/`"…"` 字面量（含 `\`
+/// 转义）与 `//` 行注释（cel-parser 0.10.1 文法唯一注释形：
+/// `COMMENT : '//' (~'\n')* -> channel(HIDDEN)`——词法面与解析器同口径；
+/// 此前注释文本里的 `has(` 误报 E1052、注释内括号误计深度，红队 W1-C23。
+/// 块注释 `/* */` **不跳过**：文法不收（解析必拒 E1051），且若词法跳过
+/// 而解析器按真词元下潜，深括号会绕过 E1054 前置闸直击 antlr4rust
+/// SIGABRT 面——跳过即不安全），统计括号最大嵌套深度与 has() 宏调用
+/// 形态。O(n) 单遍、零递归、零分配到路径热区之外——深/长表达式在此
+/// 闸住，不进 antlr4rust 递归下降。
 fn lex_scan(source: &str) -> LexScan {
     let mut out = LexScan {
         max_depth: 0,
@@ -124,7 +192,16 @@ fn lex_scan(source: &str) -> LexScan {
     let mut ident = String::new();
     // 上一个完整标识符恰为 `has`，等待确认后随 `(`（允许中间空白）。
     let mut pending_has = false;
+    // `/` 悬置：等下一字符判 `//`（行注释）或按除号放行。
+    let mut slash_pending = false;
+    let mut line_comment = false;
     for c in source.chars() {
+        if line_comment {
+            if c == '\n' {
+                line_comment = false;
+            }
+            continue;
+        }
         if let Some(q) = in_quote {
             if escaped {
                 escaped = false;
@@ -134,6 +211,22 @@ fn lex_scan(source: &str) -> LexScan {
                 in_quote = None;
             }
             continue;
+        }
+        if slash_pending {
+            slash_pending = false;
+            if c == '/' {
+                // 行注释：隐藏通道到行尾。pending_has/ident **跨越注释保持**
+                // （红队 W2-C24）——此前 `/` 分支预清 pending_has，`has //c\n
+                // (x)` 的注释后 `(` 不再置 has_macro，保守子集闸被绕（解析器
+                // 把注释作 HIDDEN 通道照常解析出 has 宏）。保持后注释后的
+                // `(` 仍能确认宏调用；注释文本自身的内容不计入。
+                line_comment = true;
+                continue;
+            }
+            // 非注释：`/` 是除号——宏调用形 `has (…` 被除号隔断不成立，
+            // ident/pending_has 在此才清（此前预清即误伤注释形态）。
+            ident.clear();
+            pending_has = false;
         }
         match c {
             '\'' | '"' => {
@@ -157,6 +250,12 @@ fn lex_scan(source: &str) -> LexScan {
                 ident.clear();
                 pending_has = false;
                 depth = depth.saturating_sub(1);
+            }
+            '/' => {
+                // `/` 悬置等下一字符判 `//`（注释）或除号——**不预清**
+                // ident/pending_has（红队 W2-C24）：注释形态下 pending_has
+                // 须跨越注释存活，除号形态在 slash_pending 分支才清。
+                slash_pending = true;
             }
             c if c.is_alphanumeric() || c == '_' => {
                 ident.push(c);
@@ -200,7 +299,8 @@ fn limit_violation(source: &str, scan: &LexScan) -> Option<String> {
 /// 含 has() 宏词法补位）→ 根（E2203）→ 布尔（E1053），首个违例即返
 /// （§1.4 草图同款单错出口）。通过 → [`CelCheck`]。
 pub fn check(source: &str, env: &CelEnv) -> Result<CelCheck, CelError> {
-    // ⓪ 前置闸：深/长表达式不进 antlr4rust 递归下降（SIGABRT 面）。
+    // ⓪ 前置闸：深/长表达式不进 antlr4rust 递归下降（SIGABRT 面）。闸判定
+    //    本身 O(n) 无递归，留在调用方栈。
     let scan = lex_scan(source);
     if let Some(detail) = limit_violation(source, &scan) {
         return Err(CelError {
@@ -208,6 +308,17 @@ pub fn check(source: &str, env: &CelEnv) -> Result<CelCheck, CelError> {
             detail,
         });
     }
+    // ①-④ 判定主体：红队 W3-C16——antlr4rust 递归下降（parse 与 execute 两面）
+    //    改在 256MB 受控大栈工作线程上跑。debug 构建（cargo build/test 默认档，
+    //    生产 CLI 即此档）8MB 主栈括号深约 100 起即栈溢出 SIGABRT（rc=134，
+    //    实测复现），而农田语料 C_CE28/29 要求深 500/1000 PASS、原测试靠
+    //    256MB 大栈线程达成、生产主线程无保护；大栈线程使「>1000 拒」阈值
+    //    与「本机 8MB 主栈优雅过」标定不再依赖构建档与调用方栈大小。
+    check_on_big_stack(source, &scan, env)
+}
+
+/// 判定主体（①解析 → ②算子 → ③根 → ④布尔）；在大栈线程或回退路径上执行。
+fn check_inner(source: &str, scan: &LexScan, env: &CelEnv) -> Result<CelCheck, CelError> {
     // ① 解析：Err → 编译错误；panic → antlr4rust 错误恢复路径，兜底归一。
     let program = match run_captured(|| Program::compile(source)) {
         Ok(Ok(p)) => p,

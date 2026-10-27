@@ -145,8 +145,9 @@ pub fn parse_args(args: &[String]) -> Result<Command, OrderError> {
 /// `--flag value` 拆分结果：flag（全名含 `--` → 值）有序表 + 位置参数。
 type SplitFlags<'a> = (Vec<(&'a str, String)>, Vec<&'a str>);
 
-/// 把 `--flag value` 拆进 flags、其余归位置参数。未知 flag / 缺值 = 用法错误。
-/// flag 键存全名（含 `--`），与 `require_flag` / `flag_value` 的查询名一致。
+/// 把 `--flag value` 拆进 flags、其余归位置参数。未知 flag / 缺值 / 同名
+/// 旗标重复 = 用法错误。flag 键存全名（含 `--`），与 `require_flag` /
+/// `flag_value` 的查询名一致。
 fn split_flags<'a>(args: &'a [String], allowed: &[&str]) -> Result<SplitFlags<'a>, OrderError> {
     let mut flags = Vec::new();
     let mut positional = Vec::new();
@@ -174,9 +175,29 @@ fn split_flags<'a>(args: &'a [String], allowed: &[&str]) -> Result<SplitFlags<'a
             index += 1;
         }
     }
+    // 红队 W2-C36：同名旗标重复出现此前被静默取首个（flag_value 的 find），
+    // 后续值无声丢弃——--state 这类决定账本落点的旗标静默取错目录尤其危险。
+    // 重复 = OR1001 fail-loud，一次点名全部重复旗标。
+    let mut duplicated: Vec<&str> = Vec::new();
+    for (key, _) in &flags {
+        let count = flags.iter().filter(|(other, _)| *other == *key).count();
+        if count > 1 && !duplicated.contains(key) {
+            duplicated.push(key);
+        }
+    }
+    if !duplicated.is_empty() {
+        duplicated.sort_unstable();
+        return Err(OrderError::Usage {
+            detail: format!(
+                "参数重复出现: {}（同名旗标只允许一次；重复值此前会被静默丢弃）",
+                duplicated.join(" ")
+            ),
+        });
+    }
     Ok((flags, positional))
 }
 
+/// 取旗标值（split_flags 已保证同名旗标不重复，find 即唯一值）。
 fn flag_value<'a>(flags: &'a [(&'a str, String)], name: &str) -> Option<&'a str> {
     flags
         .iter()
@@ -216,7 +237,29 @@ fn run_submit(
         path: spec_path.display().to_string(),
         detail: err.to_string(),
     })?;
-    let spec = parse_spec(&text)?;
+    let mut spec = parse_spec(&text)?;
+
+    // 红队批（W1）三件先行计算（均在凭证签发前——凭证/订单/MES 三面同值）：
+    // ① 单元路由（stub 判别）；② 任务包判据面 sha256（W1-C59）；③ 计划
+    //    graph_version（W1-C32：门面按计划图版本取值，统一值域）。
+    let selected = resolve_unit(unit, exec)?;
+    let task_digest = pin_task_digest(&selected, exec);
+    let plan_digest = pin_plan_digest(&selected, exec);
+    let plan_graph_version = read_plan_graph_version(&selected, exec)
+        .unwrap_or_else(|| DEFAULT_GRAPH_VERSION.to_string());
+    // W1-C64：stub 冒烟档 MES line_id 加 stub: 前缀——冒烟单与真单此前在
+    // MES 账面逐字段不可区分（同 kind/quantity/station/line），下游
+    // mes_line_hour_mv 按线聚合会把冒烟产量计入产线；前缀即判别量，
+    // 产线聚合口径按前缀排除。凭证/订单绑定/MES 三面用同一前缀值。
+    let line_binding = match selected {
+        crate::exec::SelectedUnit::Stub => af_workorder::LineBinding {
+            line_id: format!("stub:{}", spec.line.line_id),
+            line_version: spec.line.line_version.clone(),
+        },
+        _ => spec.line.clone(),
+    };
+    // 凭证面 line 钉死（W1-C41）与 MES/订单面用同一值：冒烟档即 stub: 前缀。
+    spec.line = line_binding.clone();
 
     // 状态目录与订单目录（order_id 已过路径安全校验）
     let state = StateDir::new(state_root);
@@ -227,7 +270,8 @@ fn run_submit(
 
     // 签发预算凭证（ed25519；重复 submit 读回原凭证，不重签）
     let stable_id = StableId::generate(&spec.order_id);
-    let (voucher, voucher_record) = voucher::issue_or_load(&order_dir, &spec, &stable_id)?;
+    let (voucher, voucher_record) =
+        voucher::issue_or_load(&order_dir, &spec, &stable_id, plan_digest.as_deref())?;
 
     // 真引擎子进程客户端（定位或构建 af-engine；EX1001/EX1002 fail-loud）
     let (workspace, target_dir) = resolve_build_dirs(workspace, target_dir);
@@ -238,9 +282,14 @@ fn run_submit(
     // 占位（stub 单元不消费这些字段）。
     let cfg = DriverConfig {
         order_id: spec.order_id.clone(),
-        graph_version: DEFAULT_GRAPH_VERSION.to_string(),
+        // W1-C32：门面按任务包计划图版本取值（graph/report 档 = 计划
+        // compiled_from.graph_version；无计划档回落骨架缺省）——与
+        // planbind 装订期待同一值域，一次性绑定真核对。
+        graph_version: plan_graph_version.clone(),
         sla: Sla::new(None, Priority::Normal),
-        line: spec.line.clone(),
+        line: line_binding,
+        task_sha256: task_digest,
+        plan_sha256: plan_digest,
         voucher,
         out_dir: order_dir.clone(),
         station_id: DEFAULT_STATION_ID.to_string(),
@@ -275,7 +324,6 @@ fn run_submit(
     // 单元路由（裁决7：--unit swev|report|graph|stub；缺省=现行为）。报告臂装载期
     // 即过 planbind 三重门（指纹/模板/档案）+ 任务包材料核对（fail-loud）；
     // 图臂 = 图执行器（planbind 四核对 + 拓扑序逐节点驱动）。
-    let selected = resolve_unit(unit, exec)?;
     let report = match selected {
         SelectedUnit::Swev => {
             let exec = exec.expect("resolve 已保证 Swev 携三件套");
@@ -361,6 +409,8 @@ fn run_submit(
             "task": e.task,
             "profile": e.profile,
             "host": e.host,
+            // 红队 W2-C33：如实回显声明面——null = 用户未给旗标（各单元
+            // 自载缺省生效），不把 CLI 缺省值冒充用户预算。
             "max_turns": e.max_turns,
             "spend_cap_cents": e.spend_cap_cents,
         })),
@@ -425,6 +475,12 @@ fn run_list(state_root: &Path) -> Result<String, OrderError> {
 // ---------- show ----------
 
 fn run_show(order_id: &str, state_root: &Path) -> Result<String, OrderError> {
+    // 红队 W2-C39：order_id 位置参数与 submit 共用同一路径安全门——绝对
+    // 路径（Path::join 会替换 state 根）、分隔符、`..` 段在此拒尽，不得
+    // 读出 state/orders/ 之外的账本。
+    crate::spec::validate_order_id(order_id).map_err(|err| OrderError::Usage {
+        detail: format!("order_id 不当作目录名（{err}）"),
+    })?;
     let order_dir = StateDir::new(state_root).order_dir(order_id);
     let ledger_path = order_dir.join(state::LEDGER_FILE);
     if !ledger_path.is_file() {
@@ -606,4 +662,322 @@ mod tests {
             assert_eq!(err.exit_code(), 2, "{err}");
         }
     }
+
+    /// W2-C36：同名旗标重复出现 = OR1001 用法错误并点名重复旗标。此前
+    /// flag_value 以 find 取首个匹配，重复旗标的后续值被无声丢弃——--state
+    /// 这类决定账本落点的旗标静默取错目录尤其危险，必须 fail-loud。
+    #[test]
+    fn duplicate_flags_are_rejected_as_usage_errors() {
+        let args = |parts: &[&str]| -> Vec<String> {
+            parts.iter().map(|part| (*part).to_string()).collect()
+        };
+        let expect_usage = |parts: &[&str], needles: &[&str]| {
+            let err = parse_args(&args(parts)).unwrap_err();
+            assert!(
+                matches!(err, OrderError::Usage { .. }),
+                "{parts:?} 应为用法错误: {err}"
+            );
+            assert_eq!(err.exit_code(), 2, "{parts:?} 用法错误退出码 2: {err}");
+            let text = err.to_string();
+            assert!(text.starts_with("OR1001:"), "{parts:?} 应报 OR1001: {text}");
+            for needle in needles {
+                assert!(
+                    text.contains(needle),
+                    "{parts:?} 应点名重复旗标 {needle}: {text}"
+                );
+            }
+        };
+
+        // --state 重复（决定账本落点，此前静默取首个目录）
+        expect_usage(
+            &[
+                "submit", "--spec", "o.json", "--state", "/a", "--state", "/b",
+            ],
+            &["--state"],
+        );
+        // 执行面旗标重复（此前同样静默取首个）
+        expect_usage(
+            &[
+                "submit",
+                "--spec",
+                "o.json",
+                "--state",
+                "s",
+                "--task",
+                "t1",
+                "--task",
+                "t2",
+                "--profile",
+                "p",
+                "--data-root",
+                "d",
+            ],
+            &["--task"],
+        );
+        expect_usage(
+            &[
+                "submit",
+                "--spec",
+                "o.json",
+                "--state",
+                "s",
+                "--task",
+                "t",
+                "--profile",
+                "p",
+                "--data-root",
+                "d",
+                "--max-turns",
+                "5",
+                "--max-turns",
+                "6",
+            ],
+            &["--max-turns"],
+        );
+        // 多个旗标各自重复：一次点名全部
+        expect_usage(
+            &[
+                "submit", "--spec", "a.json", "--spec", "b.json", "--state", "s", "--state", "t",
+            ],
+            &["--spec", "--state"],
+        );
+        // list / show 子命令同门
+        expect_usage(&["list", "--state", "a", "--state", "b"], &["--state"]);
+        expect_usage(
+            &["show", "wo-1", "--state", "a", "--state", "b"],
+            &["--state"],
+        );
+    }
+}
+
+// ---------- 红队批（W1）辅助：判据面摘要钉死 + 计划图版本读取 ----------
+
+/// W2-C55：任务包计划面 sha256（graph/report 档 = `<data_root>/<task>/plan.json`）
+/// ——提交时钉死、凭证面留档（重放对账）、执行前由单元复核。graph/report 两臂
+/// 全部预算帽（cost_cap/token_cap/节点 turns）都写在 plan.json 里，而 C-59 的
+/// digest 只覆盖 task.json——不钉计划面即可「同 graph_version、同
+/// registry_digest 换一份 plan.json」放宽预算且所有装订检查放行。文件缺席
+/// = None，不核对。
+fn pin_plan_digest(selected: &SelectedUnit, exec: Option<&RealExec>) -> Option<String> {
+    let exec = exec?;
+    if !matches!(selected, SelectedUnit::Graph | SelectedUnit::Report) {
+        return None;
+    }
+    af_execline::file_sha256_hex(&exec.data_root.join(&exec.task).join("plan.json"))
+}
+
+/// W1-C59①：门面 submit 时计算任务包判据面 sha256——swev 档 =
+/// `<data_root>/<task>.json`（判分真值源 fail_to_pass/pass_to_pass 所在）；
+/// graph/report 档 = `<data_root>/<task>/task.json`（图输入与 check 节点
+/// test_command 所在）。执行单元消费前核对（exec::verify_task_digest），
+/// 漂移即拒。文件缺席（缺省冒烟/材料后置）= None，不核对。
+fn pin_task_digest(selected: &SelectedUnit, exec: Option<&RealExec>) -> Option<String> {
+    let exec = exec?;
+    let path = match selected {
+        SelectedUnit::Swev => exec.data_root.join(format!("{}.json", exec.task)),
+        SelectedUnit::Graph | SelectedUnit::Report => {
+            exec.data_root.join(&exec.task).join("task.json")
+        }
+        SelectedUnit::Stub => return None,
+    };
+    af_execline::file_sha256_hex(&path)
+}
+
+/// W1-C32：任务包计划 compiled_from.graph_version（graph/report 档）。
+/// 文件缺席/缺键 = None（回落 DEFAULT_GRAPH_VERSION）。
+fn read_plan_graph_version(selected: &SelectedUnit, exec: Option<&RealExec>) -> Option<String> {
+    let exec = exec?;
+    if !matches!(selected, SelectedUnit::Graph | SelectedUnit::Report) {
+        return None;
+    }
+    let plan_path = exec.data_root.join(&exec.task).join("plan.json");
+    let plan: Value = serde_json::from_str(&fs::read_to_string(plan_path).ok()?).ok()?;
+    plan.pointer("/body/compiled_from/graph_version")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+#[cfg(test)]
+mod w1_tests {
+    use super::*;
+
+    /// C-59①：pin_task_digest 对 swev/graph/report 各取其判据真值源文件。
+    #[test]
+    fn pin_task_digest_reads_criteria_source_per_unit() {
+        let dir = std::env::temp_dir().join(format!("af-order-w1-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("task-x")).unwrap();
+        fs::write(dir.join("task-x.json"), b"swev-task-json").unwrap();
+        fs::write(dir.join("task-x/task.json"), b"graph-task-json").unwrap();
+        let exec = |task: &str| RealExec {
+            data_root: dir.clone(),
+            task: task.to_string(),
+            host: "local".into(),
+            profile: "glm-cp".into(),
+            max_turns: Some(60),
+            spend_cap_cents: Some(300),
+        };
+        let swev = pin_task_digest(&SelectedUnit::Swev, Some(&exec("task-x")));
+        assert_eq!(
+            swev,
+            af_execline::file_sha256_hex(&dir.join("task-x.json")),
+            "swev 档 = <data_root>/<task>.json"
+        );
+        let graph = pin_task_digest(&SelectedUnit::Graph, Some(&exec("task-x")));
+        assert_eq!(
+            graph,
+            af_execline::file_sha256_hex(&dir.join("task-x/task.json")),
+            "graph 档 = <data_root>/<task>/task.json"
+        );
+        assert_eq!(
+            pin_task_digest(&SelectedUnit::Stub, Some(&exec("task-x"))),
+            None,
+            "stub 档无判据面"
+        );
+        assert_eq!(pin_task_digest(&SelectedUnit::Swev, None), None);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// C-32：read_plan_graph_version 取任务包计划 compiled_from.graph_version。
+    #[test]
+    fn read_plan_graph_version_reads_compiled_from() {
+        let dir = std::env::temp_dir().join(format!("af-order-w1gv-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("task-y")).unwrap();
+        fs::write(
+            dir.join("task-y/plan.json"),
+            r#"{"v":1,"body":{"compiled_from":{"graph_version":"9.9","registry_digest":"0"}}}"#,
+        )
+        .unwrap();
+        let exec = RealExec {
+            data_root: dir.clone(),
+            task: "task-y".into(),
+            host: "local".into(),
+            profile: "glm-cp".into(),
+            max_turns: Some(60),
+            spend_cap_cents: Some(300),
+        };
+        assert_eq!(
+            read_plan_graph_version(&SelectedUnit::Graph, Some(&exec)),
+            Some("9.9".to_string())
+        );
+        assert_eq!(
+            read_plan_graph_version(&SelectedUnit::Swev, Some(&exec)),
+            None,
+            "非计划档不取"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+/// 红队批（W3-C24）回归：--unit 路由矩阵用法错误的拒绝必须发生在解析期
+/// （早于订单目录创建/凭证签发）。主线 438fa6d 曾是「先 create_dir_all →
+/// issue_or_load 签凭证 → 才 resolve_unit」——被拒命令在盘上留下
+/// voucher.json + 0600 voucher-key.seed，随后同 order_id 改预算的合法
+/// submit 被 OR2003「预算不可经重放偷改」永久误拒（合法请求被先前非法
+/// 请求毒化）。W1 修复分支序（resolve_unit 先行）合龙后，本测试三段钉死：
+/// ①非法 stub+三件套 → OR1001 且 state 根零文件；②改预算合法重放 →
+/// 不得 OR2003（引擎定位在凭证签发之后才 fail-loud）；③盘上凭证
+/// amount=新预算——重放不被旧值毒化。
+#[test]
+fn unit_matrix_violation_leaves_zero_residue_and_does_not_poison_budget_replay() {
+    let root = std::env::temp_dir().join(format!("af-order-w3c24-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let state = root.join("state");
+    let spec = |budget: u64, name: &str| {
+        let path = root.join(name);
+        fs::write(
+            &path,
+            format!(
+                r#"{{"order_id":"wo-w3c24","line":{{"line_id":"line-A","line_version":"1.0"}},"budget":{budget}}}"#
+            ),
+        )
+        .unwrap();
+        path
+    };
+
+    // ① 非法形态：--unit stub 与执行三件套同提 = OR1001，state 根零残留
+    //    （订单目录、voucher.json、种子一律不得落盘）。
+    let spec42 = spec(42, "order-42.json");
+    let err = run(&[
+        "submit".into(),
+        "--spec".into(),
+        spec42.display().to_string(),
+        "--state".into(),
+        state.display().to_string(),
+        "--unit".into(),
+        "stub".into(),
+        "--task".into(),
+        "t".into(),
+        "--profile".into(),
+        "p".into(),
+        "--data-root".into(),
+        root.display().to_string(),
+    ])
+    .unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("OR1001") && msg.contains("互斥"), "{msg}");
+    fn residue_count(dir: &Path) -> usize {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .map(|entry| {
+                if entry.path().is_dir() {
+                    1 + residue_count(&entry.path())
+                } else {
+                    1
+                }
+            })
+            .sum()
+    }
+    assert_eq!(
+        residue_count(&state),
+        0,
+        "被拒命令零残留（拒绝发生在解析期，早于目录创建/凭证签发）"
+    );
+
+    // ② 改预算合法重放（budget 42→99，合法 stub 形态）：--workspace 指向
+    //    空 Cargo 目录 → af-engine 定位/构建 fail-loud（EX1001/EX1002），
+    //    该失败点在凭证签发**之后**——能走到它本身就证明 OR2003 毒化门已过。
+    let empty_ws = root.join("empty-ws");
+    fs::create_dir_all(&empty_ws).unwrap();
+    let spec99 = spec(99, "order-99.json");
+    let err2 = run(&[
+        "submit".into(),
+        "--spec".into(),
+        spec99.display().to_string(),
+        "--state".into(),
+        state.display().to_string(),
+        "--unit".into(),
+        "stub".into(),
+        "--workspace".into(),
+        empty_ws.display().to_string(),
+        "--target-dir".into(),
+        root.join("td").display().to_string(),
+    ])
+    .unwrap_err();
+    let msg2 = err2.to_string();
+    assert!(
+        !msg2.contains("OR2003"),
+        "合法改预算重放不得被先前被拒命令的残留误拒（毒化路径）: {msg2}"
+    );
+    assert!(
+        msg2.contains("EX1001") || msg2.contains("EX1002"),
+        "引擎面失败发生在凭证签发后（测试缝）: {msg2}"
+    );
+
+    // ③ 盘上凭证按新预算签发 = 预算变更被采纳，不被旧值 42 毒化。
+    let voucher: Value = serde_json::from_str(
+        &fs::read_to_string(state.join("orders").join("wo-w3c24").join("voucher.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        voucher["amount"],
+        serde_json::json!(99),
+        "凭证 amount 必须是新预算 99（残留毒化则此处为 42 或 OR2003）"
+    );
+    let _ = fs::remove_dir_all(&root);
 }

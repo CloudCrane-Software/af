@@ -69,18 +69,47 @@ impl fmt::Display for LowerError {
 impl std::error::Error for LowerError {}
 
 /// `Document` → `IrProgram`（纯函数）。
+/// 类型表达式规范串（红队 W3-C20）：内联原始型规范化为**原始名**
+/// （string/integer/number/boolean），而非 `PortType::display()` 的
+/// `"{type:string}"` sentinel——后者不在计划类型表达式文法
+/// （name | list<> | envelope<> | signal）内、plan.types 无此基名：
+/// 执行面 check_typed 对有人边载荷的该端口硬拒「基名不在 plan.types」、
+/// materialize_schema 静默返 None（端口零形状信息）。规范化后内联型经
+/// `inline_prims` 并入 plan.types（独立原始型条目 `{type: <prim>}`），
+/// 边核对面/物化面/执行面同可解析（golden Multi-Agent-Debate 的
+/// `consumes.item="{type:string}"` 即该 sentinel 的实证携带者）。
+fn norm_type_expr(t: &m::PortType) -> String {
+    match t {
+        m::PortType::Named(r) => r.display(),
+        m::PortType::Inline(p) => p.r#type.display().to_string(),
+    }
+}
+
 pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
     let mut lw = Lowering {
+        doc,
+        inline_prims: BTreeSet::new(),
         graph_name: doc.meta.name.clone(),
         graph_version: doc.meta.graph_version.clone(),
         output_from: doc.meta.output.from.clone(),
-        output_type: doc.meta.output.r#ref.display(),
+        output_type: norm_type_expr(&doc.meta.output.r#ref),
         subgraphs: BTreeMap::new(),
         node_exec: BTreeMap::new(),
         escapes: BTreeMap::new(),
     };
+    // meta.output.ref 内联原始型登记（红队 W3-C19）：interface.output_type
+    // 经 norm_type_expr 规范化为裸名（string/integer/…），但 inline_prims
+    // 原只从 emits/consumes 收集、ensure_used_builtin_type_entries 只补
+    // signal——「output.ref 内联原始型 + 终态 from_body 派生自内建
+    // passed:boolean」路径产出 output_type="boolean" 而 plan.types 无该基名
+    // 条目的计划（编译 rc=0、执行面 check_typed 按基名查 types 必 EX4006，
+    // 「编译过、执行拒」）。终态发射者的 ref 必为内联原始型（derived
+    // passed:boolean 与之同型），故在 source 处登记一次即闭合该路径。
+    if let m::PortType::Inline(p) = &doc.meta.output.r#ref {
+        lw.inline_prims.insert(p.r#type.display().to_string());
+    }
     let (nodes, edges) = lw.scope(&doc.nodes, &doc.edges, "")?;
-    let body = IrBody {
+    let mut body = IrBody {
         graph: GraphTemplate {
             graph_version: doc.meta.graph_version.clone(),
             name: doc.meta.name.clone(),
@@ -91,17 +120,28 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
         },
         interface: InterfaceSpec {
             input_type: doc.meta.input.clone(),
-            output_type: doc.meta.output.r#ref.display(),
+            output_type: norm_type_expr(&doc.meta.output.r#ref),
             output_from: doc.meta.output.from.clone(),
             intent: doc.meta.intent.clone(),
         },
         // 类型词典（重复名 = stage 1 E2003 面，last-wins 机械收集）；
         // schema 为透传 Value，经 canonical_value 规范键序（见 ir.rs 契约护栏）
-        types: doc
-            .types
-            .iter()
-            .map(|t| (t.name.clone(), canonical_value(&t.schema)))
-            .collect(),
+        // 类型词典 = 声明 types + 内联原始型条目（红队 W3-C20：规范串
+        // string/integer/... 的执行面解析位——声明面无同名时补
+        // `{type: <prim>}`；声明面已有同名（极少见）时声明优先，不覆写）。
+        types: {
+            let mut types: BTreeMap<String, serde_json::Value> = doc
+                .types
+                .iter()
+                .map(|t| (t.name.clone(), canonical_value(&t.schema)))
+                .collect();
+            for prim in &lw.inline_prims {
+                types
+                    .entry(prim.clone())
+                    .or_insert_with(|| serde_json::json!({ "type": prim }));
+            }
+            types
+        },
         stores: doc
             .stores
             .iter()
@@ -113,14 +153,67 @@ pub fn lower(doc: &m::Document) -> Result<IrProgram, LowerError> {
         // trust 注记一等占位（ADR-010 §5）：v0.1 恒空
         trust: BTreeMap::new(),
     };
+    ensure_used_builtin_type_entries(&mut body);
     Ok(IrProgram {
         ir_version: IR_VERSION,
         body,
     })
 }
 
+/// 类型表达式的基名（剥 list<>/envelope<> 包裹；YAML 面无嵌套泛型）。
+fn port_base_name(expr: &str) -> &str {
+    let mut cur = expr;
+    loop {
+        if let Some(inner) = cur.strip_prefix("list<").and_then(|s| s.strip_suffix('>')) {
+            cur = inner;
+            continue;
+        }
+        if let Some(inner) = cur
+            .strip_prefix("envelope<")
+            .and_then(|s| s.strip_suffix('>'))
+        {
+            cur = inner;
+            continue;
+        }
+        break;
+    }
+    cur
+}
+
+/// 使用面内建类型条目补登记（红队 W2-C-27）：`signal` 是语言内建控制类型
+/// （`m::TypeExpr::Signal`；af-dsl refs 对其 type_resolves 恒真——声明面
+/// 无条目也合法可用），而执行面 check_typed（graph_unit）按基名查
+/// plan.types：多份合法 DSL 语料（golden 语料面）产出 signal 型端口/
+/// 终态，进图即 EX4006「基名 signal 不在 plan.types」——计划自包含（单文件
+/// 即编排真相）对该类型面不成立。与内联原始型（W3-C20）同法收口：扫描
+/// interface 输入/终态 + 全节点 consumes/emits 的类型表达式，使用面出现
+/// signal 基名而声明面无同名条目时补 `{}`（空 JSON Schema = 无形状约束
+/// ——signal 载荷形状由组件定义、计划侧不核，与 af-dsl 恒真解析同口径）；
+/// 声明面已有同名时声明优先。其余基名（Named 型）af-dsl 已强制可解析，
+/// 不在此兜底。
+fn ensure_used_builtin_type_entries(body: &mut IrBody) {
+    let uses_signal = port_base_name(&body.interface.input_type) == "signal"
+        || port_base_name(&body.interface.output_type) == "signal"
+        || body.node_exec.values().any(|n| {
+            n.consumes.values().any(|t| port_base_name(t) == "signal")
+                || n.artifacts.values().any(|a| {
+                    a.r#type
+                        .as_deref()
+                        .is_some_and(|t| port_base_name(t) == "signal")
+                })
+        });
+    if uses_signal {
+        body.types
+            .entry("signal".to_string())
+            .or_insert_with(|| serde_json::json!({}));
+    }
+}
+
 /// 逐作用域降维状态（根图 + 嵌套体共用）。
-struct Lowering {
+struct Lowering<'a> {
+    /// 全量文档（红队 W2-C26：from_body 端口的 is_final 类型推导经
+    /// `af_dsl::derived_emit_type` 同规则求值，不另复制推导器）。
+    doc: &'a m::Document,
     graph_name: String,
     graph_version: String,
     /// `meta.output.from`（终态工件发射者，is_final 判定用）。
@@ -133,9 +226,12 @@ struct Lowering {
     node_exec: BTreeMap<String, NodeExec>,
     /// L4 逃逸记账（键 = 点号路径）。
     escapes: BTreeMap<String, EscapeSpec>,
+    /// 内联原始型名收集（红队 W3-C20：emits/consumes/interface 引用到的
+    /// 原始型并入 plan.types，使规范串在执行面可解析）。
+    inline_prims: BTreeSet<String>,
 }
 
-impl Lowering {
+impl<'a> Lowering<'a> {
     /// 子图名：`<图名>/<构造节点路径>`（路径中 `.` → `/`；§3.2 降维命名
     /// 确定性——机械拼接，不依赖哈希或计数器状态）。
     fn subgraph_name(&self, owner_path: &str) -> String {
@@ -174,8 +270,8 @@ impl Lowering {
             } else {
                 format!("{parent}.{}", n.id)
             };
-            self.node_exec
-                .insert(path.clone(), self.node_exec(n, &path)?);
+            let node_projection = self.node_exec(n, &path)?;
+            self.node_exec.insert(path.clone(), node_projection);
 
             let loop_spec = match &n.loop_spec {
                 Some(lp) => Some(self.loop_spec(lp, &path)?),
@@ -246,7 +342,7 @@ impl Lowering {
     }
 
     /// 节点执行投影（uses/consumes/emits/context/ops/assert/reads/writes）。
-    fn node_exec(&self, n: &m::NodeDecl, path: &str) -> Result<NodeExec, LowerError> {
+    fn node_exec(&mut self, n: &m::NodeDecl, path: &str) -> Result<NodeExec, LowerError> {
         let mut components = Components {
             model: None,
             tools: BTreeMap::new(),
@@ -284,11 +380,40 @@ impl Lowering {
                 em.iter()
                     .map(|(port, spec)| {
                         let (ty, fb) = match spec {
-                            m::EmitSpec::Type(t) => (Some(t.display()), None),
+                            m::EmitSpec::Type(t) => {
+                                let norm = norm_type_expr(t);
+                                if let m::PortType::Inline(p) = t {
+                                    self.inline_prims.insert(p.r#type.display().to_string());
+                                }
+                                (Some(norm), None)
+                            }
                             m::EmitSpec::FromBody { from_body } => (None, Some(from_body.clone())),
                         };
+                        // 终态判定（红队 W2-C26 收紧）：显式类型端口按
+                        // 类型串相等（既有口径）；from_body 端口必须经
+                        // af-dsl emit_type **同规则推导**且推导类型等于
+                        // meta.output.ref 才置 is_final——此前
+                        // `fb.is_some()` 析取项对 from_body 不看类型，
+                        // 非同型 from_body 端口被误标终态（执行面
+                        // final_artifact_port 取首个 is_final 即选错工件，
+                        // 与 af-dsl E2202「恰一端口匹配」不闭环）。推导
+                        // 不出（不可解析）= 不可证明，不置（fail-closed）。
                         let is_final = path == self.output_from
-                            && (ty.as_deref() == Some(self.output_type.as_str()) || fb.is_some());
+                            && match (&ty, &fb) {
+                                (Some(t), _) => t == &self.output_type,
+                                (None, Some(_)) => {
+                                    // 红队 W2-C-26：推导类型经 norm_type_expr
+                                    // 规范化后再比——`display()` 对内联原始型
+                                    // 返回哨兵串 "{type:string}"，与 output_type
+                                    // 的裸名规范形永不等，af-dsl E2202 认可的
+                                    // 内联 ref 终态发射者被错误剥夺 is_final
+                                    // （全计划零终态工件 → 执行面必拒）。
+                                    af_dsl::derived_emit_type(self.doc, path, port).is_some_and(
+                                        |derived| norm_type_expr(&derived) == self.output_type,
+                                    )
+                                }
+                                (None, None) => false,
+                            };
                         (
                             port.clone(),
                             ArtifactSpec {
@@ -310,7 +435,16 @@ impl Lowering {
             consumes: n
                 .consumes
                 .as_ref()
-                .map(|c| c.iter().map(|(k, v)| (k.clone(), v.display())).collect())
+                .map(|c| {
+                    c.iter()
+                        .map(|(k, v)| {
+                            if let m::PortType::Inline(p) = v {
+                                self.inline_prims.insert(p.r#type.display().to_string());
+                            }
+                            (k.clone(), norm_type_expr(v))
+                        })
+                        .collect()
+                })
                 .unwrap_or_default(),
             artifacts,
             context: n
@@ -424,29 +558,82 @@ impl Lowering {
 /// 规范 JSON `{"roots":[…],"source":"…"}`——serde_json Map 默认 BTreeMap 序，
 /// 键序=字典序，确定性成立）。cel-parser 0.10.1 对畸形串的 antlr4rust 错误
 /// 恢复 panic 以 catch_unwind 兜底归一（承 af-graph `predicate.rs` 纪律）。
-fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
-    let compile = || Program::compile(source);
-    let program = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(compile)) {
-        Ok(Ok(p)) => p,
-        Ok(Err(e)) => {
-            return Err(LowerError::CelCompile {
-                source: source.into(),
-                detail: e.to_string(),
-            })
-        }
-        Err(_) => {
-            return Err(LowerError::CelCompile {
-                source: source.into(),
-                detail: "cel-parser 内部 panic（antlr4rust 错误恢复路径）".into(),
-            })
-        }
-    };
-    let roots: BTreeSet<String> = program
+///
+/// 解析在受控大栈工作线程上执行（红队 W2-C-21，承 af-dsl cel.rs W3-C16
+/// 同一纪律）：antlr4rust 递归下降的栈帧随构建档差一个数量级——E1054
+/// 深度阈值 1000 按 release 档标定，debug 档（cargo build/test 默认档，
+/// 生产 CLI 即此档）在调用方 8MB 主栈上深约 59 即 SIGABRT（exit 134），
+/// 「深>1000 前置拒」在真实运行档位形同虚设；且栈溢出是 abort 非 unwind
+/// panic，catch_unwind 兜不住。解析改在固定大栈工作线程上跑后，可达深度
+/// 与调用方栈大小/构建档解耦。`Program` 含 `Rc` 不可跨线程，故
+/// compile→引用提取全链条在线程内完成、仅回传 `BTreeSet<String>`（Send）。
+/// 线程构建失败（极少见）回退调用方线程执行——行为不劣于修复前。
+// 256MB 与 af-dsl cel.rs 同一标定：debug 档 antlr4rust 帧约 80KB/层，
+// E1054 上限深 1000 需 ~80MB，留 3 倍余量；线程栈为虚拟内存预留（非实
+// 提交），不构成实存压力。
+const CEL_WORKER_STACK_BYTES: usize = 256 * 1024 * 1024;
+
+/// compile + 引用提取（大栈线程内执行的最小单元；`Program` 不出线程）。
+fn compile_cel_roots(source: &str) -> Result<BTreeSet<String>, LowerError> {
+    let program =
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Program::compile(source))) {
+            Ok(Ok(p)) => p,
+            Ok(Err(e)) => {
+                return Err(LowerError::CelCompile {
+                    source: source.into(),
+                    detail: e.to_string(),
+                })
+            }
+            Err(_) => {
+                return Err(LowerError::CelCompile {
+                    source: source.into(),
+                    detail: "cel-parser 内部 panic（antlr4rust 错误恢复路径）".into(),
+                })
+            }
+        };
+    Ok(program
         .references()
         .variables()
         .into_iter()
         .map(str::to_owned)
-        .collect();
+        .collect())
+}
+
+fn cel_ref(source: &str) -> Result<CelRef, LowerError> {
+    let source_owned = source.to_owned();
+    let cell = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let cell2 = cell.clone();
+    let spawned = std::thread::Builder::new()
+        .name("af-compiler-cel-parse".into())
+        .stack_size(CEL_WORKER_STACK_BYTES)
+        .spawn(move || {
+            let out = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                compile_cel_roots(&source_owned)
+            }));
+            *cell2.lock().unwrap_or_else(|e| e.into_inner()) = Some(out);
+        });
+    let roots: BTreeSet<String> = match spawned {
+        Ok(handle) => {
+            if handle.join().is_err() {
+                return Err(LowerError::CelCompile {
+                    source: source.into(),
+                    detail: "cel-parser 工作线程异常退出（红队 W2-C-21 大栈线程 \
+                             fail-loud，不在调用方栈上重试）"
+                        .into(),
+                });
+            }
+            match cell.lock().unwrap_or_else(|e| e.into_inner()).take() {
+                Some(Ok(Ok(roots))) => roots,
+                _ => {
+                    return Err(LowerError::CelCompile {
+                        source: source.into(),
+                        detail: "cel-parser 内部 panic（antlr4rust 错误恢复路径）".into(),
+                    })
+                }
+            }
+        }
+        Err(_) => compile_cel_roots(source)?,
+    };
     let canonical = serde_json::json!({ "roots": roots, "source": source });
     let text = serde_json::to_string(&canonical)
         .map_err(|e| LowerError::Serialize(format!("CelRef 规范序列化失败：{e}")))?;

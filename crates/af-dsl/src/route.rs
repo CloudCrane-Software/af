@@ -34,8 +34,8 @@ pub struct EdgeGuard {
     pub guard: String,
 }
 
-/// 归一化产物：边守卫集（按目标名确定序）+ exit 分支联合守卫（无 exit 分支
-/// 则 None；多条 exit 规则按文档序析取）。
+/// 归一化产物：边守卫集（按目标名确定序）+ exit 分支联合守卫（无 exit
+/// 分支则 None；规则型 exit 按文档序、default:exit 的全否守卫殿后，析取）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RouteNorm {
     pub edges: Vec<EdgeGuard>,
@@ -188,15 +188,21 @@ pub fn normalize(
         });
     }
 
-    // exit 分支联合守卫（文档序析取）。
+    // exit 分支联合守卫：规则型 exit 分支（文档序）+ default:exit 的
+    // guard_d（红队 W1-C24：default:exit 本就是 exit 分支，其守卫
+    // ¬(when₁∨…∨whenₙ) 此前被整体丢弃——非 loop（无 exit_when 兜底）
+    // 文档静默丢失默认分支守卫，「分支守卫析取永真」性质破缺）。
     let exit_guard = {
-        let exits: Vec<String> = route
+        let mut exits: Vec<String> = route
             .rules
             .iter()
             .enumerate()
             .filter(|(_, r)| r.goto == EXIT)
             .map(|(i, _)| rule_guard(i))
             .collect();
+        if route.default == EXIT {
+            exits.push(default_guard.clone());
+        }
         (!exits.is_empty()).then(|| exits.join(" || "))
     };
 

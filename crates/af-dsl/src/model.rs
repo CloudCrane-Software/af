@@ -210,9 +210,15 @@ impl<'de> Deserialize<'de> for EmitSpec {
                         from_body: path.clone(),
                     })
                 } else {
-                    Err(serde::de::Error::custom(
-                        "invalid type: emits 端口映射值只允许 {from_body: 节点.端口}",
-                    ))
+                    // 红队 W2-C23 附带（语法一致性）：其余映射按 PortType 同
+                    // 规则求值——`{type: string|integer|boolean|number}` 内联
+                    // 形在 meta.output.ref/边类型等 PortType 位早已合法，
+                    // emits 面却不认，check/gate 显式声明 passed（与内建
+                    // 端口同名）不可表达、W2-C23 的去重回归缺一面。对象
+                    // schema 仍一律拒（PortType 只收原始四型，纪律不破）。
+                    PortType::try_from_value(serde_yaml::Value::Mapping(m))
+                        .map(EmitSpec::Type)
+                        .map_err(serde::de::Error::custom)
                 }
             }
             other => PortType::try_from_value(other)

@@ -17,6 +17,42 @@
 
 合计：**Kani 49（32+17）· Verus 29 · Rocq 10/10 陈述**——对应 FV-1 裁决书 §一 四流验收全达成。
 
+### 57 条义务分母覆盖率（红队 W1-C42 补披露，2026-10-26）
+
+theorems-v1 定稿 **57 条**（A16 + B23 + C9 + D9）。逐条对照四流载体：
+
+- **有内核裁决证明载体：40 条**（70.2%）——A-01..A-16 全 16（Kani INV 32
+  harness）；B-01/B-03/B-04/B-06/B-09/B-11/B-13 + C-01/C-02/C-03/C-07 共
+  11（Kani 17 harness）；B-14/B-15/C-04 共 3（FV-0.1 route Verus 12
+  verified）；D-01..D-09 全 9（Verus 29 verified）；**B-16**（FV-0.2
+  镜像 Kani harness：合法域 27-goto 分配全枚举 + **非法编码域
+  `mirror_normalize_illegal_goto_e2102_exact_count`（红队 W3-C28 补）
+  ——合法域内 valid 恒真、E2102 分支不可达，原「已机器穷尽 E2102」对该
+  半边不成立、仅 af-dsl 单测依据（W3-C28 勘误）；补探针后 cargo kani 亲跑
+  **4 verified/0 failures**（proofs/kani/kani-run.log 顶部 W3-C28 复跑段，
+  2026-10-27），E2102 计数语义（soundness+completeness 双向精确）与 E2101
+  抑制、不产边集均在内核断言——theorems-v1.md:366 工具栏登记与实况自此
+  一致；残余 = 镜像↔实现对账单测，与 B-14/B-15 的残余状态同构，红队
+  W2-C43 勘误补入）。
+- **部分证据/不可立**：C-05（部分证据，§二）；**A-16 运行时半边**（57 条中
+  唯一「运行时半边 v0 不可立」——theorems-v1.md:216：评估 ground truth 对候选
+  不可读的拦截层为执行面读权限白名单占位，落地后方可 Kani 建 harness）。
+  **A-08/A-10② 不属不可立**（红队 W2-C-39 勘误——原误列）：A-08 档位=静态可
+  证明+可全判位（theorems-v1.md:147；Kani镜像员-INV组/RUNLOG.md:60-61
+  a08_soundness/a08_completeness 双 harness SUCCESS）；A-10② 档位=引理可全判
+  （Rocq 抽象模型）+「按 writer 路由」前提在执行面 TCB 显式假设
+  （theorems-v1.md:165；RUNLOG.md:65 a10_no_conflict_lemma SUCCESS）。
+- **受阻归因如实登记**：C-06/C-08/C-09（kani-compiler ICE / CBMC 病态面，
+  对应表 §三）。
+- **有 Rocq 陈述、无内核裁决**：B-20（T10 Admitted）。
+- **在义务清单、四流均无证明载体：12 条**（21.1%）——B-02/B-05/B-07/B-08/
+  B-10/B-12/B-17/B-18/B-19/B-21/B-22/B-23（B-12 有覆盖注记、B-17..B-23 移交
+  Kani 执行面切片/Rocq/Verus/TCB 后续批次，见对应表 §三.6）。
+  （红队 W2-C42/C43 勘误 2026-10-26：原披露「39 条有载体 + 15 条（26%）
+  无载体」算术不闭合——39+1(C-05)+3(受阻)+1(B-20)+15=59 ≠ 57，且枚举数与
+  声称数不符；B-16 误列无载体（FV-0.2 载体在仓可复核）。按 57 个编号机算
+  更正为 40/12，旧「15 条/26%」口径作废。）
+
 定理-实装冲突 2 项（A-03/A-07，源码零改动）与机器反例实证见
 `Kani镜像员-INV组/CONFLICTS.md`（conflict-demo harness，feature 门控不入默认集）；
 陈述修订全部进 `计划/研究组/形式化/theorems-v0.2-议程.md`。

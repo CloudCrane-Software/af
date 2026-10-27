@@ -244,6 +244,61 @@ pub fn swev_v1_row(
     })
 }
 
+// ---- GRAPH/REPORT 供给失败行（红队 W2-C34）----
+// RESULT-P4 §5「供给失败行由单元落、订单侧不停终态」在 graph/report 两单元
+// 此前缺位：两轨只在成功尾部落行，任何失败路径提前 return，失败单在结果轨
+// 与「从未开跑」不可区分（盘上实证：F5-report/F4B/F4C 双轨 0 字节）。行形状
+// 对齐 swev 失败行键面（字段齐备含 null，D-20），suite 按单元如实（graph /
+// report），error_code 附真实错误类别（EX 码），verdict（reward）恒 null——
+// 失败行只落 legacy 轨，无 v1 投影（RESULT-P4 §4 同口径）。
+
+/// graph/report setup_failed 行（供给面：任务包装载/计划装订/预算提取失败）。
+pub fn unit_setup_failed_row(
+    suite: &str,
+    task_id: &str,
+    profile: &str,
+    trial: bool,
+    error_code: &str,
+    note: &str,
+) -> Value {
+    json!({
+        "suite": suite,
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "setup_failed",
+        "error_code": error_code,
+        // run 目录未建/执行未启动 → null（D-20 口径：字段齐备含 null）。
+        "run_dir": null,
+        "verifier_note": clip300(note),
+    })
+}
+
+/// graph/report run_failed 行（驱动相起：节点驱动/envelope/预算/判分失败）。
+pub fn unit_run_failed_row(
+    suite: &str,
+    task_id: &str,
+    profile: &str,
+    trial: bool,
+    error_code: &str,
+    run_dir: &Path,
+    note: &str,
+) -> Value {
+    json!({
+        "suite": suite,
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "run_failed",
+        "error_code": error_code,
+        // D-20 项 1：run_failed 行也记实际目录（trail 留在现场供复核）。
+        "run_dir": run_dir.display().to_string(),
+        "verifier_note": clip300(note),
+    })
+}
+
 /// setup_failed 行（af-bench main.rs:656-667：字段齐备含 null，D-20）。
 pub fn swev_setup_failed_row(task_id: &str, profile: &str, trial: bool, note: &str) -> Value {
     json!({

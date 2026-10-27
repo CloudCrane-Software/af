@@ -69,13 +69,18 @@ Theorem A10_writer_closure_completeness :
   forall d : Document,
     writer_closure_pass d ->
     (forall s : StoreName,
+        0 < set_card (writer_set d s) ->       (* W2-C44：零写者前提 *)
         set_card (writer_set d s) = 1
         /\ exists w : NodeName,
              node_in w (writer_set d s) /\ declared_writer d s = Some w)
     /\ ~ report_contains (compile d) E2311
     /\ ~ report_contains (compile d) E2312.
 Proof. Admitted. (* 待证（completeness）：闭包核对通过 ⇒ 写者集合恰为
-                    声明 writer 单点，且编译不因 E2311/E2312 拒。 *)
+                    声明 writer 单点，且编译不因 E2311/E2312 拒。
+                    零写者 store 不在「恰一」结论取域（CONFLICTS #2/#2b
+                    机器反例：闭包可通过而 card=0）——与 Kani 侧
+                    a10_completeness_closure 的「每 store ≥1 写者」前提
+                    同口径，RUNLOG §3 在案；红队 W2-C44 补入。 *)
 
 (* —— ② 性质引理：抽象写事件模型 —— *)
 

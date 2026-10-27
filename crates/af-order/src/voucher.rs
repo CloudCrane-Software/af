@@ -35,6 +35,26 @@ pub struct VoucherRecord {
     pub order_id: String,
     pub stable_id: String,
     pub amount: u64,
+    /// 产线绑定（红队 W1-C41：身份面字段一并钉死——凭证面对 amount 变更
+    /// fail-loud（OR2003「预算不可经重放偷改」），line 同属身份面却无防线，
+    /// 换 line 重放被静默吞掉；旧行无此键 = None，不核对（历史盘兼容）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_id: Option<String>,
+    /// 产线版本（红队 W2-C-35：LineBinding 两字段同属身份面——spec 面
+    /// check_line 两键都强制非空，凭证面却只钉 line_id，重放时只换
+    /// line_version 即静默放行（bind_line 幂等跳过、订单绑定保持首驱版本、
+    /// 零诊断）。与 line_id 同纪律 fail-loud；旧行无此键 = None，不核对
+    /// （历史盘兼容）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub line_version: Option<String>,
+    /// 任务包计划面 sha256（红队 W2-C55：graph/report 两臂全部预算帽
+    /// （cost_cap/token_cap/节点 turns）都写在 plan.json 里，而 C-59 的
+    /// digest 钉死只覆盖 task.json——提交后换一份同 graph_version、同
+    /// registry_digest 的 plan.json 即可放宽预算且所有装订检查放行。凭证
+    /// 面钉首绑摘要：重放时与当前计划面对账，不符即拒（与 line 同纪律）。
+    /// 旧行无此键 = None，不核对（历史盘兼容）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_sha256: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
     pub payload: String,
@@ -62,6 +82,7 @@ pub fn issue_or_load(
     order_dir: &Path,
     spec: &OrderSpec,
     stable_id: &StableId,
+    plan_sha256: Option<&str>,
 ) -> Result<(BudgetVoucher, VoucherRecord), OrderError> {
     let voucher_path = order_dir.join(VOUCHER_FILE);
     if voucher_path.is_file() {
@@ -73,6 +94,46 @@ pub fn issue_or_load(
                     record.order_id, record.amount, spec.order_id, spec.budget
                 ),
             });
+        }
+        // 红队 W1-C41：line 身份面核对——盘上有 line（新凭证）而本次不符
+        // = 换线重放，与换预算同性质 fail-loud（OR2003 同码）。
+        if let Some(recorded_line) = &record.line_id {
+            if recorded_line != &spec.line.line_id {
+                return Err(OrderError::Voucher {
+                    detail: format!(
+                        "已有凭证与本单不符: 盘上 line_id={}，本次 line_id={}（产线绑定不可经重放偷改——\
+                         身份面字段与预算同纪律，红队 W1-C41）",
+                        recorded_line, spec.line.line_id
+                    ),
+                });
+            }
+        }
+        // 红队 W2-C-35：line_version 与 line_id 同属 LineBinding 身份面（spec
+        // check_line 两键都强制非空）——只钉 line_id 时换版本重放被静默放行
+        // （bind_line 幂等跳过、订单绑定保持首驱版本、零诊断），同性质 fail-loud。
+        if let Some(recorded_version) = &record.line_version {
+            if recorded_version != &spec.line.line_version {
+                return Err(OrderError::Voucher {
+                    detail: format!(
+                        "已有凭证与本单不符: 盘上 line_version={}，本次 line_version={}（产线版本不可经重放偷改——\
+                         LineBinding 两字段同属身份面，红队 W2-C-35）",
+                        recorded_version, spec.line.line_version
+                    ),
+                });
+            }
+        }
+        // 红队 W2-C55：plan 摘要身份面核对——盘上有摘要而本次不符 = 换计划
+        // 重放（放宽预算的标准手法），与换预算/换线同性质 fail-loud。
+        if let (Some(recorded), Some(current)) = (&record.plan_sha256, plan_sha256) {
+            if recorded != current {
+                return Err(OrderError::Voucher {
+                    detail: format!(
+                        "已有凭证与本单不符: 盘上 plan_sha256={}，本次 {}（任务包计划面不可经重放偷换——\
+                         graph/report 预算帽全在 plan.json，红队 W2-C55）",
+                        recorded, current
+                    ),
+                });
+            }
         }
         return Ok((budget_voucher(&record), record));
     }
@@ -98,6 +159,9 @@ pub fn issue_or_load(
         order_id: spec.order_id.clone(),
         stable_id: stable_id.as_str().to_string(),
         amount: spec.budget,
+        line_id: Some(spec.line.line_id.clone()),
+        line_version: Some(spec.line.line_version.clone()),
+        plan_sha256: plan_sha256.map(str::to_string),
         note: spec.note.clone(),
         payload,
         algorithm: SIGNATURE_ALGORITHM_ED25519.to_string(),
@@ -199,6 +263,44 @@ mod tests {
         }
     }
 
+    #[test]
+    fn plan_digest_is_pinned_and_replay_checked() {
+        // 红队 W2-C55：plan.json 摘要入凭证身份面——首绑建档，重放时与当前计划
+        // 面对账，不符即拒（与换预算/换线同纪律）。graph/report 预算帽全在
+        // plan.json，不钉计划面即可「同版本同注册表换计划」放宽预算。
+        let dir = std::env::temp_dir().join(format!("af-voucher-w2c55-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let stable = af_workorder::StableId::generate("wo-plan-digest");
+        let digest_a = "a".repeat(64);
+        let digest_b = "b".repeat(64);
+
+        let (_, record) =
+            issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a)).unwrap();
+        assert_eq!(
+            record.plan_sha256.as_deref(),
+            Some(digest_a.as_str()),
+            "首绑摘要应入凭证材料"
+        );
+        // 同摘要重放：照过（幂等）。
+        issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_a))
+            .expect("同计划面重放应放行");
+        // 换计划面重放：拒（OR2003 同码）。
+        let err = issue_or_load(&dir, &spec("wo-plan-digest", 42), &stable, Some(&digest_b))
+            .expect_err("换 plan.json 重放应拒");
+        assert!(
+            err.to_string().contains("plan_sha256"),
+            "拒因须点名计划面摘要：{err}"
+        );
+        // 旧凭证无此键（历史盘兼容）：None 不核对。
+        let legacy = dir.join("legacy");
+        std::fs::create_dir_all(&legacy).unwrap();
+        let (_, rec) = issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).unwrap();
+        assert_eq!(rec.plan_sha256, None, "未提供摘要 = 不建档不核对");
+        issue_or_load(&legacy, &spec("wo-plan-digest", 42), &stable, None).expect("无摘要面不核对");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     fn scratch(tag: &str) -> std::path::PathBuf {
         let dir =
             std::env::temp_dir().join(format!("af-order-voucher-{}-{tag}", std::process::id()));
@@ -226,7 +328,7 @@ mod tests {
     fn issue_persists_and_second_load_returns_same_record() {
         let dir = scratch("issue");
         let stable = StableId::generate("wo-v1");
-        let (voucher, record) = issue_or_load(&dir, &spec("wo-v1", 42), &stable).unwrap();
+        let (voucher, record) = issue_or_load(&dir, &spec("wo-v1", 42), &stable, None).unwrap();
         assert_eq!(voucher.voucher_id, "bv-wo-v1");
         assert_eq!(voucher.amount, 42);
         assert!(voucher.signed, "签发即 signed=true（release 门材料）");
@@ -252,10 +354,10 @@ mod tests {
             .mode();
         assert_eq!(mode & 0o777, 0o600, "种子必须 0600");
 
-        let (_, again) = issue_or_load(&dir, &spec("wo-v1", 42), &stable).unwrap();
+        let (_, again) = issue_or_load(&dir, &spec("wo-v1", 42), &stable, None).unwrap();
         assert_eq!(again, record, "重复签发读回同一份材料，不重签");
 
-        let err = issue_or_load(&dir, &spec("wo-v1", 43), &stable).unwrap_err();
+        let err = issue_or_load(&dir, &spec("wo-v1", 43), &stable, None).unwrap_err();
         assert!(err.to_string().contains("OR2003"), "{err}");
         assert!(err.to_string().contains("43"), "{err}");
         let _ = fs::remove_dir_all(&dir);

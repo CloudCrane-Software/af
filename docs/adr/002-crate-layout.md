@@ -1,6 +1,10 @@
 # ADR-002: 落仓与 crate 划分
 
-- 状态：已裁决（2026-10-24，编排者）
+- 状态：已裁决（2026-10-24，编排者）；**部分被 [ADR-013](013-af-plan-fold-in.md)
+  取代（2026-10-27）**：规划表 `crates/af-plan` 行作废——af-plan 从未独立
+  建位，其职责（可执行计划对象 + 落地契约类型）折入 af-compiler
+  （`src/plan.rs` 的 `ExecutablePlan`），独立建位议题留 v0.2 开放议程。
+  本文件正文保留为裁决时点原貌（ADR README 纪律：不原地改写）。
 
 ## 裁决
 
@@ -22,6 +26,14 @@ af-bench 的 swev/tb 模块**迁移而非重写**（保留判分三件套契约�
 - 与 af-graph（图模板+校验器）、af-harness（AgentSpec 四元组）复用距离最短；
 - gitea 远端与 GitHub 镜像统一覆盖，无新仓库管理面；
 - 组件仓库（使命指令 COMPONENT_REPO）以 `packages/` 目录 + manifest 承担，不另建外部仓。
+
+## 勘误（2026-10-26，红队 W1-C04）
+
+- af-order 门面命令面按实交付为 **submit / list / show** 三子命令：submit
+  一命令走通全生命周期（`OrderLifecycleDriver` 内部驱动 release/start/
+  complete/close，引擎 9-op 在役），approve/close 不设门面子命令——本文与
+  总计划 §0 的「submit/approve/list/close」四命令枚举由本勘误修订（详见
+  [ADR-011](011-redteam-w1-fixes.md) 裁决 5）。
 
 ## 边界
 

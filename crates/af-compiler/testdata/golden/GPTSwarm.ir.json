@@ -361,6 +361,13 @@
             {
               "id": "verdict_gate",
               "kind": "gate",
+              "route_exit_guard": {
+                "source": "!((verdict_gate.passed == false))",
+                "roots": [
+                  "verdict_gate"
+                ],
+                "digest": "ff9da2e675e51ae4b8c434e2eaa689fd9b65abc90ea3cead0e047493740f5529"
+              },
               "capability_refs": []
             }
           ],

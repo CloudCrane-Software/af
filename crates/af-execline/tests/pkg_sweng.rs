@@ -621,6 +621,7 @@ fn u1_swebench_eval_fingerprint_gate_fails_loud_before_any_container_work() {
         python: PathBuf::from("/nonexistent/python"),
         script: PathBuf::from("/nonexistent/swev-judge.py"),
         script_sha256: "0".repeat(64),
+        import_chain: Vec::new(),
     };
     let work = std::env::temp_dir().join(format!("pkg-sweng-u1-{}", std::process::id()));
     std::fs::create_dir_all(&work).unwrap();
@@ -725,7 +726,7 @@ fn u3_test_unit_verdict_from_exit_code_and_tail_lines() {
     let env = fake_env();
     // 通过臂：exit=0 → pass=true，无 failures。
     let bridge = FakeBridge::new(vec![Ok((true, "Ran 2 tests\nOK\n__AF_RC=0".into()))]);
-    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, None, None);
     assert_eq!(v["pass"], true);
     assert_eq!(v["failures"], json!([]));
 
@@ -734,7 +735,7 @@ fn u3_test_unit_verdict_from_exit_code_and_tail_lines() {
         false,
         "FAIL test_a\nFAIL test_b\n__AF_RC=1".into(),
     ))]);
-    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, None, None);
     assert_eq!(v["pass"], false);
     assert_eq!(v["failures"], json!(["FAIL test_a", "FAIL test_b"]));
 
@@ -745,6 +746,8 @@ fn u3_test_unit_verdict_from_exit_code_and_tail_lines() {
         &env,
         "./runtests.py",
         Some("python -m pytest tests/x"),
+        None,
+        None,
     );
     assert_eq!(v["pass"], true);
     assert!(
@@ -759,7 +762,7 @@ fn u3_test_unit_caps_failure_lines_at_ten_and_handles_no_command() {
     let env = fake_env();
     let body: String = (0..15).map(|i| format!("FAIL case_{i}\n")).collect();
     let bridge = FakeBridge::new(vec![Ok((false, format!("{body}__AF_RC=1")))]);
-    let v = sweng::test_unit(&bridge, &env, "cmd", None);
+    let v = sweng::test_unit(&bridge, &env, "cmd", None, None, None);
     let failures = v["failures"].as_array().unwrap();
     assert_eq!(failures.len(), 10, "末 N=10 行：{failures:?}");
     assert_eq!(failures[0], "FAIL case_5");
@@ -767,7 +770,7 @@ fn u3_test_unit_caps_failure_lines_at_ten_and_handles_no_command() {
 
     // 命令源双缺 → fail-closed 观察而非崩溃。
     let bridge = FakeBridge::new(vec![]);
-    let v = sweng::test_unit(&bridge, &env, "", None);
+    let v = sweng::test_unit(&bridge, &env, "", None, None, None);
     assert_eq!(v["pass"], false);
     assert!(
         v["failures"][0]
@@ -778,6 +781,50 @@ fn u3_test_unit_caps_failure_lines_at_ten_and_handles_no_command() {
         v
     );
     assert!(bridge.calls().is_empty());
+}
+
+/// 红队 W2-C49：evidence_dir 给定时无论成败一律留档——test.log（完整观察
+/// 文本含 __AF_RC/exit 尾行）+ test-evidence.json（命令/退出码/判定/体量），
+/// envelope 带 evidence 指针；不给目录 = 无 evidence 键（行为同旧）。
+#[test]
+fn u3_test_unit_archives_evidence_pass_or_fail() {
+    let env = fake_env();
+    let dir = std::env::temp_dir().join(format!("u3-evidence-{}", std::process::id()));
+
+    // pass 臂：观察不丢（旧行为在此把 body 整体丢弃）。
+    let bridge = FakeBridge::new(vec![Ok((true, "Ran 2 tests\nOK\n__AF_RC=0".into()))]);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, None, Some(&dir));
+    assert_eq!(v["pass"], true);
+    assert_eq!(v["evidence"]["log"], json!("test.log"));
+    assert_eq!(v["evidence"]["exit_code"], json!(0));
+    let log = std::fs::read_to_string(dir.join("test.log")).expect("test.log 在盘");
+    assert!(
+        log.contains("Ran 2 tests") && log.contains("exit=0"),
+        "观察文本含 exit= 尾行: {log:?}"
+    );
+    let summary: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("test-evidence.json")).unwrap())
+            .unwrap();
+    assert_eq!(summary["pass"], json!(true));
+    assert_eq!(summary["exit_code"], json!(0));
+    assert_eq!(summary["command"], json!("./runtests.py"));
+
+    // fail 臂：同目录复用（覆盖写），evidence 如实。
+    let bridge = FakeBridge::new(vec![Ok((false, "FAIL a\n__AF_RC=1".into()))]);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, None, Some(&dir));
+    assert_eq!(v["pass"], false);
+    assert_eq!(v["evidence"]["exit_code"], json!(1));
+    let summary: Value =
+        serde_json::from_str(&std::fs::read_to_string(dir.join("test-evidence.json")).unwrap())
+            .unwrap();
+    assert_eq!(summary["pass"], json!(false));
+
+    // 不给目录：无 evidence 键（旧 envelope 形状不变）。
+    let bridge = FakeBridge::new(vec![Ok((true, "OK\n__AF_RC=0".into()))]);
+    let v = sweng::test_unit(&bridge, &env, "./runtests.py", None, None, None);
+    assert!(v.get("evidence").is_none(), "{}", v);
+
+    std::fs::remove_dir_all(&dir).ok();
 }
 
 // ============================================================
@@ -796,6 +843,108 @@ fn u4_human_gate_fail_closed_both_configs() {
     let enabled = sweng::HumanGateConfig { enabled: true };
     let v = sweng::human_gate(&enabled, &json!({}));
     assert_eq!(v, json!({"ask": false}), "v1 恒不打扰人工（fail-closed）");
+}
+
+// ============================================================
+// U3 · 红队 W2-C10：review_report 入边工件对判定的因果（一票否决/证据面）
+// ============================================================
+
+/// 红队 W2-C10 单测层：test_unit 的 review 门四态——approved=false 一票否决
+/// （退出码 0 亦翻假、问题点名前置）、approved=true 维持退出码判定、契约失信
+/// （缺 approved 布尔）fail-closed 否决、review=None 纯退出码行为不变。
+#[test]
+fn u3_test_unit_review_gate_four_states() {
+    let env = fake_env();
+    // 假桥恒退出码 0（"OK __AF_RC=0"）。
+    let ok_bridge = || FakeBridge::new(vec![Ok((true, "Ran 2 tests\nOK\n__AF_RC=0".into()))]);
+    let bad_bridge = || FakeBridge::new(vec![Ok((true, "FAILED tests/x.py\n__AF_RC=1".into()))]);
+
+    // ① approved=false + 退出码 0 → 翻假，评审问题点名前置。
+    let v = sweng::test_unit(
+        &ok_bridge(),
+        &env,
+        "./runtests.py",
+        None,
+        Some(&json!({"approved": false, "issues": ["no diff supplied", "steps 3-4 unverified"]})),
+        None,
+    );
+    assert_eq!(v["pass"], json!(false), "approved=false 一票否决：{v}");
+    let failures = v["failures"].as_array().unwrap();
+    assert!(
+        failures[0].as_str().unwrap().contains("approved=false"),
+        "首行点名否决依据: {failures:?}"
+    );
+    assert!(
+        failures.iter().any(|f| f
+            .as_str()
+            .unwrap()
+            .contains("review issue: no diff supplied")),
+        "评审问题逐条点名: {failures:?}"
+    );
+
+    // ② approved=true + 退出码 0 → 维持 pass=true。
+    let v = sweng::test_unit(
+        &ok_bridge(),
+        &env,
+        "./runtests.py",
+        None,
+        Some(&json!({"approved": true, "issues": []})),
+        None,
+    );
+    assert_eq!(v["pass"], json!(true), "approved=true 不误伤: {v}");
+
+    // ③ 契约失信（缺 approved 布尔）→ fail-closed 否决并点名。
+    let v = sweng::test_unit(
+        &ok_bridge(),
+        &env,
+        "./runtests.py",
+        None,
+        Some(&json!({"issues": ["whatever"]})),
+        None,
+    );
+    assert_eq!(v["pass"], json!(false), "契约失信 fail-closed: {v}");
+    assert!(
+        v["failures"].as_array().unwrap()[0]
+            .as_str()
+            .unwrap()
+            .contains("契约失信"),
+        "点名契约失信: {v}"
+    );
+
+    // ④ review=None + 退出码非零 → 纯退出码判定（行为不变）。
+    let v = sweng::test_unit(&bad_bridge(), &env, "./runtests.py", None, None, None);
+    assert_eq!(v["pass"], json!(false), "无 review 边=纯退出码: {v}");
+    assert!(
+        v["failures"].as_array().unwrap()[0]
+            .as_str()
+            .unwrap()
+            .contains("FAILED"),
+        "退出码失败行照录: {v}"
+    );
+
+    // ⑤ approved=false + 退出码非零 → 评审行前置、退出码失败行不吞。
+    let v = sweng::test_unit(
+        &bad_bridge(),
+        &env,
+        "./runtests.py",
+        None,
+        Some(&json!({"approved": false, "issues": ["missing evidence"]})),
+        None,
+    );
+    let failures: Vec<&str> = v["failures"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f.as_str().unwrap())
+        .collect();
+    assert!(
+        failures[0].contains("approved=false")
+            && failures
+                .iter()
+                .any(|f| f.contains("review issue: missing evidence"))
+            && failures.iter().any(|f| f.contains("FAILED")),
+        "两界面失败行并存（评审前置+退出码照录）: {failures:?}"
+    );
 }
 
 // ============================================================
@@ -1080,6 +1229,8 @@ fn real_container_sampling_tools_and_units() {
         &tb,
         "python3 -V",
         Some("python3 -c 'raise SystemExit(3)'"),
+        None,
+        None,
     );
     assert_eq!(v["pass"], false, "U3 真退出码：{v}");
 

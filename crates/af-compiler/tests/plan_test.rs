@@ -573,3 +573,210 @@ fn sop_full_v1_1_token_cap_calibrated_to_f4c_measurement() {
         "reviewer_turns 不动"
     );
 }
+
+#[test]
+fn from_body_port_is_final_requires_derived_type_match() {
+    // 红队 W2-C26：from_body 端口的 is_final 必须经 af-dsl emit_type 同规则
+    // 推导且等于 meta.output.ref——此前 lower.rs 的 `fb.is_some()` 析取项
+    // 对 from_body 不看类型，非同型 from_body 端口被误标终态（执行面
+    // final_artifact_port 取首个 is_final 即选错工件，与 af-dsl E2202
+    // 「恰一端口匹配」不闭环）。
+    let src = r#"version: 1
+meta:
+  name: t
+  graph_version: "1.0"
+  entry: collector
+  input: in_t
+  output: { ref: out_t, from: collector }
+types:
+  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }
+  - { name: out_t, schema: { type: object, required: [text], properties: { text: { type: string } } } }
+  - { name: other_t, schema: { type: object, required: [num], properties: { num: { type: integer } } } }
+nodes:
+  - id: collector
+    kind: task
+    loop:
+      body:
+        nodes:
+          - { id: worker, kind: task, uses: { model: route.main@1 }, emits: { good: out_t, bad: other_t } }
+          - { id: g, kind: gate, assert: "true" }
+        edges: []
+      max_iterations: 2
+      safety_points: [ { node: g, kind: gate } ]
+    emits:
+      final: { from_body: worker.good }
+      extra: { from_body: worker.bad }
+edges: []
+policies:
+  budgets: []
+  stop: []
+  failures: []
+"#;
+    let doc = af_dsl::load_str(src).expect("探针文档应装载");
+    let report = af_dsl::validate(&doc);
+    assert!(report.is_ok(), "应过 af-dsl 校验（恰一匹配）：{report}");
+    let ir = lower(&doc).expect("lowering 应成功");
+    let node = ir
+        .body
+        .node_exec
+        .get("collector")
+        .expect("collector 投影应在场（键=点号路径）");
+    let final_port = node.artifacts.get("final").expect("final 端口应在场");
+    let extra_port = node.artifacts.get("extra").expect("extra 端口应在场");
+    assert!(
+        final_port.is_final,
+        "from_body 推导类型 out_t = meta.output.ref，承终态位"
+    );
+    assert!(
+        !extra_port.is_final,
+        "from_body 推导类型 other_t ≠ out_t，不得置终态（W2-C26：误标即选错工件）"
+    );
+}
+
+#[test]
+fn inline_primitive_output_ref_from_body_is_final_matches_normalized() {
+    // 红队 W2-C-26：内联原始型（{type: string} 等）作 meta.output.ref 时，
+    // from_body 终态端口的 is_final 恒为 false——(None, Some(_)) 分支用
+    // `derived.display()`（内联原始型返回哨兵串 "{type:string}"）与
+    // `self.output_type`（已经 norm_type_expr 规范为裸名 "string"）比较，
+    // 两形永不等；af-dsl E2202 认可的合法终态发射者在 lowering 被剥夺
+    // is_final ⇒ 全计划零终态工件 ⇒ 执行面 final_artifact_port 必拒
+    // （graph_unit「终态发射者 build 无 is_final 工件端口」）。修复 =
+    // 比较前经同一 norm_type_expr 规范化（内联原始型与命名型同一裸名口径）。
+    let src = r#"version: 1
+meta:
+  name: t_inline_final
+  graph_version: "1.0"
+  entry: collector
+  input: in_t
+  output: { ref: { type: string }, from: collector }
+types:
+  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }
+  - { name: other_t, schema: { type: object, required: [num], properties: { num: { type: integer } } } }
+nodes:
+  - id: collector
+    kind: task
+    loop:
+      body:
+        nodes:
+          - { id: worker, kind: task, uses: { model: route.main@1 }, emits: { good: { type: string }, bad: other_t } }
+          - { id: g, kind: gate, assert: "true" }
+        edges: []
+      max_iterations: 2
+      safety_points: [ { node: g, kind: gate } ]
+    emits:
+      final: { from_body: worker.good }
+      extra: { from_body: worker.bad }
+edges: []
+policies:
+  budgets: []
+  stop: []
+  failures: []
+"#;
+    let doc = af_dsl::load_str(src).expect("探针文档应装载");
+    let report = af_dsl::validate(&doc);
+    assert!(
+        report.is_ok(),
+        "af-dsl E2202 应认可内联原始型终态发射者：{report}"
+    );
+    let ir = lower(&doc).expect("lowering 应成功");
+    assert_eq!(
+        ir.body.interface.output_type, "string",
+        "output_type 应已规范为裸名"
+    );
+    let node = ir.body.node_exec.get("collector").expect("投影应在场");
+    let final_port = node.artifacts.get("final").expect("final 端口应在场");
+    let extra_port = node.artifacts.get("extra").expect("extra 端口应在场");
+    assert!(
+        final_port.is_final,
+        "from_body 推导内联 string 经规范化 = output_type，应承终态位（W2-C-26）"
+    );
+    assert!(
+        !extra_port.is_final,
+        "from_body 推导 other_t ≠ string，不得置终态"
+    );
+    let final_count: usize = ir
+        .body
+        .node_exec
+        .values()
+        .flat_map(|n| n.artifacts.values())
+        .filter(|a| a.is_final)
+        .count();
+    assert_eq!(
+        final_count, 1,
+        "全计划应恰一 is_final 工件（执行面 final_artifact_port 门槛）"
+    );
+}
+
+#[test]
+fn builtin_passed_frombody_final_registers_boolean_type_entry() {
+    // 红队 W3-C19：内联原始型登记只从 emits/consumes 收集、内建类型只补
+    // signal——「meta.output.ref 为内联原始型 + 终态 from_body 派生自
+    // check/gate 内建 passed:boolean」路径产出 interface.output_type=
+    // "boolean" 而 plan.types 无 boolean 条目的计划（编译 rc=0）；执行面
+    // 终态 typed 正门（graph_unit check_typed 按基名查 plan.types）必以
+    // EX4006 硬拒——「编译过、执行拒」。本测钉计划自包含契约的两半：
+    // ①types 含 output 基名条目（执行面 check_typed 查询位）；②from_body
+    // 派生内建 passed 的终态端口 is_final=true（执行面 final_artifact_port
+    // 门槛）。loop 体不包 list<>，内建 passed:boolean 与内联 boolean ref
+    // 同型转发合法。
+    let src = r#"version: 1
+meta:
+  name: t_builtin_passed_final
+  graph_version: "1.0"
+  entry: collector
+  input: in_t
+  output: { ref: { type: boolean }, from: collector }
+types:
+  - { name: in_t, schema: { type: object, required: [q], properties: { q: { type: string } } } }
+nodes:
+  - id: collector
+    kind: task
+    loop:
+      body:
+        nodes:
+          - { id: chk, kind: check, assert: "true" }
+        edges: []
+      max_iterations: 2
+      safety_points: [ { node: chk, kind: check } ]
+    emits:
+      final: { from_body: chk.passed }
+edges: []
+policies:
+  budgets: []
+  stop: []
+  failures: []
+"#;
+    let doc = af_dsl::load_str(src).expect("探针文档应装载");
+    let report = af_dsl::validate(&doc);
+    assert!(
+        report.is_ok(),
+        "loop.from_body 转发内建 passed 与内联 boolean ref 同型，应零违例：{report}"
+    );
+    let ir = lower(&doc).expect("lowering 应成功");
+    assert_eq!(ir.body.interface.output_type, "boolean");
+    // ①执行面 check_typed 契约：output 基名必须在 plan.types 有条目。
+    let boolean =
+        ir.body.types.get("boolean").expect(
+            "内联 output.ref 的基名 boolean 必须入 plan.types（W3-C19，否则执行面 EX4006）",
+        );
+    assert_eq!(
+        boolean.get("type").and_then(|t| t.as_str()),
+        Some("boolean"),
+        "内联原始型条目 = {{type: <prim>}} 形"
+    );
+    // ②执行面 final_artifact_port 契约：全计划恰一 is_final 工件。
+    let finals: Vec<&str> = ir
+        .body
+        .node_exec
+        .values()
+        .flat_map(|n| n.artifacts.values())
+        .filter(|a| a.is_final)
+        .map(|_| "final")
+        .collect();
+    assert_eq!(
+        finals.len(),
+        1,
+        "from_body 派生内建 passed 应承终态位（全计划恰一 is_final）"
+    );
+}

@@ -376,6 +376,13 @@
                   }
                 }
               },
+              "route_exit_guard": {
+                "source": "!((resume.approved == false))",
+                "roots": [
+                  "resume"
+                ],
+                "digest": "951f8c05878ef70fdc78b983d7118bc4989dcc2c4b283fd4d1273992d51320cc"
+              },
               "capability_refs": []
             },
             {
@@ -635,6 +642,7 @@
         ],
         "type": "object"
       },
+      "signal": {},
       "task_output": {
         "properties": {
           "artifact_ref": {

@@ -18,6 +18,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
 
+use af_compiler::ir::BudgetDimension;
+use af_compiler::ExecutablePlan;
 use af_workorder::WorkArtifact;
 use serde_json::{json, Value};
 
@@ -44,6 +46,11 @@ pub struct ReportJudgeLocator {
     pub rubric_sha256: String,
     /// 同包确定性渲染器（report.md 与 rubric R5 的同一正本）。
     pub render_script: PathBuf,
+    /// 渲染器 sha256 锚（红队 W1-C61：rubric 的 R5 判据 = report.md 与
+    /// `render.render_markdown` 输出一致——渲染器既是生产者又是裁判基准，
+    /// 此前双指纹门只盖 citation/rubric 两脚本，改 render.py 一个函数即可
+    /// 翻转 R5 而两件钉死脚本字节不动；第三件入指纹门）。
+    pub render_sha256: String,
 }
 
 impl ReportJudgeLocator {
@@ -58,18 +65,32 @@ impl ReportJudgeLocator {
             citation_sha256: "0c34b5956bf4a09aef24368f5f4ab6cf7a1cd97132ce8643c909dacbeb9905dc"
                 .into(),
             rubric_script: pkg_root.join("units/rubric_unit.py"),
-            rubric_sha256: "af63af2c0d16ff890d081938a77853d6e817f3e0a7b765fc4e5096a3e16d3654"
+            // 红队 W2-C50：锚随加载侧自证更新——rubric_unit.py 增 render 模块
+            // 加载面校验（__file__ 须为源 .py 且 __cached__ 路径不得在盘），
+            // 影子字节码即使骗过 import 也会在产出判据前 exit 3 fail-loud。
+            // 红队 W3-C-06：锚随防再生再换版——import render 前置
+            // sys.dont_write_bytecode=True，裸跑（无 -B）亦零字节码落盘。
+            rubric_sha256: "e8b67eb676f684756de6b36d44cb9f7c964267acafa074dc6d4df33d7c1f2067"
                 .into(),
             render_script: pkg_root.join("tools/render.py"),
+            render_sha256: "255f68f7795706637749a9559fbb85444afcd92687b2398012dd94b077b4db76"
+                .into(),
         }
     }
 
-    /// 双指纹门（装载期 + verify 入口，双重防线）：任一脚本 sha256 ≠ 声明锚
-    /// 即 EX3002 拒跑——不降级、不跳判、不静默换脚本（裁决6 判据 9 的牙齿）。
+    /// 判分指纹门（装载期 + verify 入口，双重防线），两部分同以 EX3002 拒跑：
+    /// ①三指纹锚——citation/rubric/render 任一脚本 sha256 ≠ 声明锚（W1-C61
+    /// 把渲染器纳入第三锚）；②字节码在场性——判分目录出现 __pycache__/*.pyc
+    /// （W2-C52，见下）。不降级、不跳判、不静默换脚本（裁决6 判据 9 的牙齿）。
+    /// 适用分支：本门随本树（红队修复线）生效；主线 @438fa6d 的本文件只有
+    /// citation/rubric 双指纹、无 render 锚、无在场性扫描——修复树报出的
+    /// EX3002 不得归因于旧主线（W3-C-06 勘误）。
     pub fn check_fingerprints(&self) -> Result<(), ExeclineError> {
         for (script, anchor) in [
             (&self.citation_script, &self.citation_sha256),
             (&self.rubric_script, &self.rubric_sha256),
+            // 红队 W1-C61：渲染器入指纹门（R5 判据基准的第三件）。
+            (&self.render_script, &self.render_sha256),
         ] {
             let actual = crate::suite::swev::sha256_hex(script).ok_or_else(|| {
                 ExeclineError::JudgeFingerprintMismatch {
@@ -86,19 +107,68 @@ impl ReportJudgeLocator {
                 });
             }
         }
+        // 红队 W2-C52：判分目录字节码在场性门——rubric_unit.py 经
+        // `import render` 动态加载渲染器，Python 对在场且头部 mtime/size
+        // 匹配的 `__pycache__/render.*.pyc` 会**优先于源文件**加载（-B 只禁
+        // 写不禁读）：三个被 sha256 锚住的 .py 之外若存在任何字节码，即是
+        // 独立于源码锚的影子执行面——不改一个锚定字节即可翻转 R5 判据
+        // （投毒复现：pyc 的 render_markdown 返回攻击者串 ⇒ R5 由 false 翻
+        // true）。判分子进程 -B 只防再生，读取侧由此门兜底：判分目录
+        // （三脚本所在目录）出现 __pycache__/*.pyc 一律 fail-loud。
+        let mut judge_dirs: Vec<PathBuf> = Vec::new();
+        for script in [
+            &self.citation_script,
+            &self.rubric_script,
+            &self.render_script,
+        ] {
+            if let Some(parent) = script.parent() {
+                if !judge_dirs.iter().any(|d| d == parent) {
+                    judge_dirs.push(parent.to_path_buf());
+                }
+            }
+        }
+        for dir in judge_dirs {
+            let Ok(entries) = std::fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if name == "__pycache__" || name.ends_with(".pyc") {
+                    return Err(ExeclineError::JudgeFingerprintMismatch {
+                        script: entry.path().display().to_string(),
+                        expected:
+                            "判分目录不得存在字节码（__pycache__/*.pyc——影子执行面，禁写+禁读）"
+                                .into(),
+                        actual: "在场".into(),
+                    });
+                }
+            }
+        }
         Ok(())
     }
 }
 
 /// citation 验证器子进程调用（argv 契约：恰三位置参数
 /// `[task.json, report.json, sources_dir]`；不注入 env、不经 wrapper shell）。
+/// 判分/渲染子进程统一构造（红队 W2-C52）：`-B` +
+/// `PYTHONDONTWRITEBYTECODE=1`——禁写 `__pycache__` 字节码。rubric_unit.py
+/// 以 `import render` 动态加载渲染器（R5 判据基准），Python 对**已在场**的
+/// 有效 .pyc 仍会优先加载（-B 只禁写不禁读），故读取侧由
+/// [`ReportExecuteUnit::check_fingerprints`] 的 pyc 在场性门兜底。
+fn judge_python(locator: &ReportJudgeLocator) -> Command {
+    let mut cmd = Command::new(&locator.python);
+    cmd.arg("-B");
+    cmd.env("PYTHONDONTWRITEBYTECODE", "1");
+    cmd
+}
+
 pub fn invoke_citation(
     locator: &ReportJudgeLocator,
     task_json: &Path,
     report_json: &Path,
     sources_dir: &Path,
 ) -> std::io::Result<std::process::Output> {
-    Command::new(&locator.python)
+    judge_python(locator)
         .arg(&locator.citation_script)
         .arg(task_json)
         .arg(report_json)
@@ -112,7 +182,7 @@ pub fn invoke_rubric(
     task_json: &Path,
     report_json: &Path,
 ) -> std::io::Result<std::process::Output> {
-    Command::new(&locator.python)
+    judge_python(locator)
         .arg(&locator.rubric_script)
         .arg(task_json)
         .arg(report_json)
@@ -293,11 +363,20 @@ pub fn html_to_text(html: &str) -> String {
 /// arXiv web 摄取（F-第五单真实出网面；anolis 出网预检 2026-10-25：
 /// export.arxiv.org abs/api HTTPS 200 直连可用、PDF 200 但慢）。
 ///
-/// 域白名单外一律拒（不静默放行、不经代理绕行）；抓取用 curl 子进程
+/// 域白名单外一律拒（不静默放行、不经代理绕行）。抓取用 curl 子进程
 /// （判分子进程同款纪律——argv 直传不经 shell，无注入面）。host 统一改写
 /// export.arxiv.org（arXiv 官方导出面），路径原样保留。
+///
+/// 红队 W2-C31：白名单必须在**每一跳**成立——curl 不再 `-L` 裸跟（旧行为
+/// 跟随任意 host/scheme 重定向且事后不复核，白名单外主机的响应体可进
+/// citation 判据面），改由本面逐跳手跟：每个落点过 [`Self::check_hop`]，
+/// 白名单外即拒（不落盘）；快照 url 记**最终实际取数 URL**（非请求原 URL，
+/// 溯源不失真）。
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ArxivWebFetcher;
+
+/// 重定向跳数上限（与旧 `--max-redirs 5` 同值）。
+const MAX_REDIRECT_HOPS: usize = 5;
 
 impl ArxivWebFetcher {
     /// 出网前域名核对（https + 白名单）。
@@ -317,16 +396,62 @@ impl ArxivWebFetcher {
         Ok(format!("https://export.arxiv.org{path}"))
     }
 
-    /// 抓取核心：白名单核对 → curl → title/html_to_text → FetchedDoc。
-    pub fn fetch_to_doc(source: &str) -> Result<FetchedDoc, String> {
-        let url = Self::normalize_url(source)?;
+    /// 红队 W2-C31：重定向落点核对（https + 白名单 host）——返回
+    /// `(host, path)`；非白名单/非 https 即拒。pub=离线测试缝（html_to_text
+    /// 同款）。
+    pub fn check_hop(url: &str) -> Result<(&str, &str), String> {
+        let rest = url.strip_prefix("https://").ok_or_else(|| {
+            format!("web 摄取仅支持 https（重定向目标非 https：{url}）——协议面不因重定向放宽")
+        })?;
+        let (host, path) = match rest.find('/') {
+            Some(pos) => (&rest[..pos], &rest[pos..]),
+            None => (rest, "/"),
+        };
+        if !ARXIV_HOSTS.contains(&host) {
+            return Err(format!(
+                "web 摄取域白名单（设计 §2.2：v1 限 arxiv.org 域）拒绝重定向落点 {host}——{url}"
+            ));
+        }
+        Ok((host, path))
+    }
+
+    /// 红队 W2-C31：相对 Location 解析（curl `%{redirect_url}` 恒为绝对
+    /// URL；此处兜根相对与直给路径两种写法，其余 fail-loud）。pub=离线测试缝。
+    pub fn resolve_redirect(base: &str, location: &str) -> Result<String, String> {
+        let loc = location.trim();
+        if let Some(rest) = loc.strip_prefix("https://") {
+            let _ = rest;
+            return Ok(loc.to_string());
+        }
+        if loc.contains("://") {
+            return Err(format!(
+                "web 摄取仅支持 https 重定向（Location={loc}）——协议面不因重定向放宽"
+            ));
+        }
+        let (host, base_path) = Self::check_hop(base)?;
+        if let Some(path) = loc.strip_prefix('/') {
+            return Ok(format!("https://{host}/{path}"));
+        }
+        // 同目录相对（RFC 3986 merge）：去掉 base 最后一段后拼接。
+        let dir = match base_path.rfind('/') {
+            Some(pos) => &base_path[..pos],
+            None => "",
+        };
+        Ok(format!("https://{host}{dir}/{loc}"))
+    }
+
+    /// 单跳 curl（绝不 -L——重定向由本面逐跳核 host 后手跟）。返回
+    /// `(http_code, redirect_url)`，响应体落 `body_path`。
+    fn curl_once(url: &str, body_path: &Path) -> Result<(String, String), String> {
         let out = Command::new("curl")
-            .arg("-sSL")
-            .arg("--max-redirs")
-            .arg("5")
+            .arg("-sS")
             .arg("-m")
             .arg(WEB_FETCH_TIMEOUT_SECS.to_string())
-            .arg(&url)
+            .arg("-o")
+            .arg(body_path)
+            .arg("-w")
+            .arg("%{http_code} %{redirect_url}")
+            .arg(url)
             .output()
             .map_err(|err| format!("拉起 curl 失败（web 摄取需本机 curl）: {err}"))?;
         if !out.status.success() {
@@ -336,12 +461,70 @@ impl ArxivWebFetcher {
                 String::from_utf8_lossy(&out.stderr)
             ));
         }
-        let body = String::from_utf8_lossy(&out.stdout).into_owned();
-        if body.trim().is_empty() {
-            return Err(format!("抓取 {url} 空响应体"));
+        let line = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let (code, redirect) = line
+            .split_once(' ')
+            .map(|(c, r)| (c.trim().to_string(), r.trim().to_string()))
+            .unwrap_or_else(|| (line.clone(), String::new()));
+        if code.len() != 3 || !code.chars().all(|c| c.is_ascii_digit()) {
+            return Err(format!("curl 未返回可解析 HTTP 状态（{url} → {line:?}）"));
         }
-        let title = extract_html_title(&body).unwrap_or_else(|| url.clone());
-        Ok(FetchedDoc::from_text(source, title, &html_to_text(&body)))
+        Ok((code, redirect))
+    }
+
+    /// 抓取核心：白名单核对 → 逐跳（每跳核 host）→ title/html_to_text →
+    /// FetchedDoc（url=最终实际取数 URL）。
+    pub fn fetch_to_doc(source: &str) -> Result<FetchedDoc, String> {
+        let mut url = Self::normalize_url(source)?;
+        let body_path = std::env::temp_dir().join(format!(
+            "af-arxiv-fetch-{}-{}.body",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = Self::check_hop(&url)?; // 首跳同门（normalize 已核，双保险）
+        let mut hops = 0usize;
+        let final_url;
+        loop {
+            let (code, redirect) = Self::curl_once(&url, &body_path)?;
+            if code.as_str() >= "300" && code.as_str() < "400" {
+                hops += 1;
+                if hops > MAX_REDIRECT_HOPS {
+                    let _ = std::fs::remove_file(&body_path);
+                    return Err(format!(
+                        "web 摄取重定向超过 {MAX_REDIRECT_HOPS} 跳（{source}）"
+                    ));
+                }
+                if redirect.is_empty() {
+                    let _ = std::fs::remove_file(&body_path);
+                    return Err(format!("web 摄取收到 {code} 重定向但无 Location（{url}）"));
+                }
+                url = Self::resolve_redirect(&url, &redirect)?;
+                Self::check_hop(&url)?;
+                continue;
+            }
+            if !code.starts_with('2') {
+                let _ = std::fs::remove_file(&body_path);
+                return Err(format!("web 摄取 HTTP {code}（{url}）"));
+            }
+            final_url = url;
+            break;
+        }
+        let body = std::fs::read_to_string(&body_path)
+            .map_err(|err| format!("抓取响应体不可读（{final_url}）: {err}"))?;
+        let _ = std::fs::remove_file(&body_path);
+        if body.trim().is_empty() {
+            return Err(format!("抓取 {final_url} 空响应体"));
+        }
+        let title = extract_html_title(&body).unwrap_or_else(|| final_url.clone());
+        // 快照 url=最终实际取数 URL（红队 W2-C31：溯源不再记请求原 URL）。
+        Ok(FetchedDoc::from_text(
+            final_url,
+            title,
+            &html_to_text(&body),
+        ))
     }
 }
 
@@ -510,6 +693,83 @@ fn validate_node(schema: &Value, payload: &Value, path: &str) -> Result<(), Stri
     Ok(())
 }
 
+/// 环级预算帽（红队 W1-C33 完整化）：plan.body.budget 的**白名单提取**——
+/// 报告环即 paper_report 的 study 环，强制集 =
+/// plan 级 `cost_cap`（cents）/`token_cap`（tokens_total）+ turns
+/// （scope `plan` 或 `loop:study`——环面无节点投影，node: 作用域不在集内）。
+/// **强制集外条目一律 fail-loud 拒收**（与图执行器 `PlanBudgets::of` 同纪律，
+/// W1-C34 同源：静默忽略 = 声明帽免帽）。canonical id 门对 cents/tokens_total
+/// 生效（只认 cost_cap/token_cap）；turns 按 scope+dimension 强制（改名不改
+/// 作用域/维度即仍被强制，无免帽面，故不设 id 门）。
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RingBudgets {
+    /// plan 级 cents 帽（id 必须 = cost_cap）。
+    pub cents: Option<i64>,
+    /// turns 帽（scope plan 或 loop:study；环级累计口径）。
+    pub turns: Option<u32>,
+    /// plan 级 tokens_total 帽（id 必须 = token_cap；口径 in+out+cache_read，
+    /// 与图执行器 account_node 同源）。
+    pub tokens: Option<u64>,
+}
+
+impl RingBudgets {
+    /// 白名单提取 + 强制集外拒收（fail-loud，装订期）。
+    pub fn of(plan: &ExecutablePlan) -> Result<Self, ExeclineError> {
+        let mut b = Self::default();
+        for entry in &plan.body.budget.budgets {
+            match (entry.scope.as_str(), entry.dimension) {
+                ("plan", BudgetDimension::Cents) => {
+                    if entry.id != "cost_cap" {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "plan 级 cents 预算 id {} 非正典 cost_cap（执行面只认 \
+                                 cost_cap——改名即静默免帽，拒收）",
+                                entry.id
+                            ),
+                        });
+                    }
+                    // 红队 W3-C-23：u64 帽**饱和**换算——先 `as i64` 曾把
+                    // ≥2^63 的帽回绕成负数，环级帽 min(spec, 负值)=负、
+                    // reader 门 0≥负帽起动前即误熔断。与图执行器同族预算
+                    // （graph_unit node_spend_cap，红队 W2-C-28）同款饱和语
+                    // 义：i64 装不下即饱和到 i64::MAX，巨帽≈无帽；换算结果
+                    // 恒非负，负帽不可能再入场。
+                    b.cents = Some(i64::try_from(entry.cap).unwrap_or(i64::MAX));
+                }
+                ("plan", BudgetDimension::TokensTotal) => {
+                    if entry.id != "token_cap" {
+                        return Err(ExeclineError::PlanBindMismatch {
+                            detail: format!(
+                                "plan 级 tokens_total 预算 id {} 非正典 token_cap（执行面\
+                                 只认 token_cap——改名即静默免帽，拒收）",
+                                entry.id
+                            ),
+                        });
+                    }
+                    b.tokens = Some(entry.cap);
+                }
+                // turns：环 = study 环（paper_report loop:study 作用域正本）；
+                // plan 级 turns 同样作用于整环。取小防多条目互相松绑。
+                (scope, BudgetDimension::Turns) if scope == "plan" || scope == "loop:study" => {
+                    let cap = entry.cap.min(u32::MAX as u64) as u32;
+                    b.turns = Some(b.turns.map_or(cap, |prev: u32| prev.min(cap)));
+                }
+                (scope, dim) => {
+                    return Err(ExeclineError::PlanBindMismatch {
+                        detail: format!(
+                            "预算条目 id {}（dimension={:?}, scope={:?}）不在报告环执行面强制集内\
+                             （强制集：plan 级 cost_cap(cents)/token_cap(tokens_total) + turns\
+                             （plan/loop:study）；其余组合声明即须强制，静默忽略=免帽，拒收）",
+                            entry.id, dim, scope
+                        ),
+                    });
+                }
+            }
+        }
+        Ok(b)
+    }
+}
+
 /// 起草输入（reader/writer 模板正文 + 论文文本头 + 研读焦点 + 环上下文）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct DraftInput {
@@ -526,6 +786,13 @@ pub struct DraftInput {
     pub task_json: PathBuf,
     /// 计划 types 表提取的环面类型（envelope 校验正本）。
     pub plan_types: RingTypes,
+    /// 环级预算帽（红队 W1-C33：plan.body.budget 白名单提取——reader + 全部
+    /// writer 轮**共享单一账本**：cents（min(spec 帽, plan cost_cap)）、turns
+    /// （plan/loop:study）、tokens_total（plan token_cap）。此前每成员各拿
+    /// 整份 spend_cap_cents + 全新账本，图级上限 = 4×300¢，与 spec 自述
+    /// 「图面口径 cents 300」不符；plan.body.budget 此前零消费，turns/token
+    /// 帽更被整体静默忽略。Default = 无 plan 级帽（仅 spec 帽生效）。
+    pub ring_caps: RingBudgets,
 }
 
 /// 起草产出：报告 JSON + 环用量（reader/writer 双节点聚合——进行落盘 usage）。
@@ -708,6 +975,64 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
             Ok(Value::String(signal.clone()))
         }) as crate::agent::ToolFn;
 
+        // 环级共享预算账本（红队 W1-C33）：reader + 全部 writer 轮共用一份
+        // 帽（llm.cents 口径 1 模型调用 = 1¢，与图执行器 account_node 同源）
+        // ——此前每成员各拿整份 spec.spend_cap_cents + 全新 budget_ledger，
+        // 图级上限 4×300¢，spec 自述「图面口径 cents 300」名不副实；plan 级
+        // cost_cap 在场时取小（plan.body.budget 此前零消费）。turns/tokens
+        // 两维同口径收敛（C33 完整化）：turns 逐 launch 收敛到剩余额度，
+        // 三维均在成员起动前对账熔断（耗尽即拒起下一 launch）。
+        let ring_cap_cents = spec
+            .spend_cap_cents
+            .min(input.ring_caps.cents.unwrap_or(i64::MAX));
+        let mut ring_spent_cents: i64 = 0;
+        let ring_remaining = |spent: i64| -> i64 { (ring_cap_cents - spent).max(1) };
+        let ring_tokens_used = |turns_usage: &DraftOutput| -> u64 {
+            turns_usage.tokens.input + turns_usage.tokens.output + turns_usage.tokens.cache_read
+        };
+        // 成员起动前对账（cents/turns/tokens_total 三维，与图执行器预算 gate
+        // 同纪律：超限 fail-loud，不再各拿满份帽）。cents 维对账**有效帽**
+        // ring_cap_cents = min(spec 帽, plan cost_cap)——两者取小才是环级
+        // 真帽（只对 plan 帽会放跑 spec 帽压低的场景）。
+        let ring_gate =
+            |stage: &str, spent_cents: i64, usage: &DraftOutput| -> Result<(), String> {
+                if spent_cents >= ring_cap_cents {
+                    return Err(format!(
+                    "报告环预算熔断：{stage} 前环内累计 {spent_cents}¢ ≥ 环级帽 {ring_cap_cents}¢ \
+                         （= min(spec {spec}¢, plan cost_cap)——reader+writer 共享单一账本）",
+                    spec = spec.spend_cap_cents,
+                ));
+                }
+                if let Some(cap) = input.ring_caps.turns {
+                    if u64::from(usage.turns) >= u64::from(cap) {
+                        return Err(format!(
+                            "报告环预算熔断：{stage} 前环内累计 turns {} ≥ 环级帽 {cap} \
+                             （plan turns 帽，scope plan/loop:study——reader+writer 共享）",
+                            usage.turns,
+                        ));
+                    }
+                }
+                if let Some(cap) = input.ring_caps.tokens {
+                    let used = ring_tokens_used(usage);
+                    if used >= cap {
+                        return Err(format!(
+                            "报告环预算熔断：{stage} 前环内累计 tokens_total {used} ≥ 环级帽 \
+                             {cap}（plan token_cap，口径 in+out+cache_read）"
+                        ));
+                    }
+                }
+                Ok(())
+            };
+        // 单 launch turns 帽收敛到剩余额度（plan turns 帽在场时）——与 cents
+        // 的 ring_remaining 同手法，防单成员一次性烧穿环级余量。
+        let ring_max_turns = |usage: &DraftOutput| -> u32 {
+            match input.ring_caps.turns {
+                Some(cap) => spec.max_turns.min(cap.saturating_sub(usage.turns).max(1)),
+                None => spec.max_turns,
+            }
+        };
+        ring_gate("reader", ring_spent_cents, &usage)?;
+
         let reader_user = format!(
             "研究焦点：{focus}\n\n论文（摄取快照 paper_doc）：\n- url: {url}\n- title: {title}\n\
              - sha256: {sha}\n- snapshot_ref: {snap}\n\n论文快照正文（截头）：\n{head}\n\n\
@@ -742,7 +1067,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                     ),
                 ],
                 policy: crate::agent::llm_cents_policy(
-                    spec.max_turns,
+                    ring_max_turns(&usage),
                     &spec.completion_signal,
                     spec.tool_free_turn_limit,
                 ),
@@ -751,9 +1076,9 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                 "[harness] bash 不在报告环工具集——用 submit_notes 提交".to_string()
             }),
             key_cmd: profile.key_cmd,
-            spend_cap_cents: spec.spend_cap_cents,
+            spend_cap_cents: ring_remaining(ring_spent_cents),
             tool_spend_cents: spec.tool_spend_cents,
-            budget_ledger_cents: spec.spend_cap_cents,
+            budget_ledger_cents: ring_remaining(ring_spent_cents),
             extra_tools: vec![
                 crate::agent::ToolBinding {
                     name: "web_fetch".into(),
@@ -784,6 +1109,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
         };
         usage.turns += reader_report.turns;
         usage.model_calls += reader_report.model_calls;
+        ring_spent_cents += reader_report.model_calls as i64;
         usage.tokens.input += reader_report.tokens.input;
         usage.tokens.output += reader_report.tokens.output;
         usage.tokens.cache_read += reader_report.tokens.cache_read;
@@ -831,6 +1157,10 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
         let mut last_draft: Option<String> = None;
         for round in 1..=RING_MAX_ITERATIONS {
             usage.iterations = round;
+            // 环级熔断门（W1-C33，完整化）：cents/turns/tokens_total 三维
+            // 共享账本对账——任一维度耗尽即拒起下一成员（与图执行器预算
+            // gate 同纪律：超限 fail-loud，不再各拿满份帽）。
+            ring_gate(&format!("writer 第 {round} 轮"), ring_spent_cents, &usage)?;
             let report_slot: Arc<Mutex<Option<Value>>> = Arc::new(Mutex::new(None));
             let slot = report_slot.clone();
             let signal = spec.completion_signal.clone();
@@ -893,7 +1223,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                          pass the object as this parameter's value, do not wrap it again",
                     )],
                     policy: crate::agent::llm_cents_policy(
-                        spec.max_turns,
+                        ring_max_turns(&usage),
                         &spec.completion_signal,
                         spec.tool_free_turn_limit,
                     ),
@@ -902,9 +1232,9 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                     "[harness] bash 不在报告环工具集——用 submit_report 提交".to_string()
                 }),
                 key_cmd: profile.key_cmd,
-                spend_cap_cents: spec.spend_cap_cents,
+                spend_cap_cents: ring_remaining(ring_spent_cents),
                 tool_spend_cents: spec.tool_spend_cents,
-                budget_ledger_cents: spec.spend_cap_cents,
+                budget_ledger_cents: ring_remaining(ring_spent_cents),
                 extra_tools: vec![crate::agent::ToolBinding {
                     name: "submit_report".into(),
                     handler: submit_report_tool,
@@ -929,6 +1259,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
             };
             usage.turns += writer_report.turns;
             usage.model_calls += writer_report.model_calls;
+            ring_spent_cents += writer_report.model_calls as i64;
             usage.tokens.input += writer_report.tokens.input;
             usage.tokens.output += writer_report.tokens.output;
             usage.tokens.cache_read += writer_report.tokens.cache_read;
@@ -1077,6 +1408,11 @@ impl ReportUnitSpec {
     }
 }
 
+/// 失败行分类相（红队 W2-C34）：setup = 供给面（任务包/计划装订），
+/// run = ingest 相起（摄取/起草/判分）。
+const SETUP_PHASE: &str = "setup";
+const RUN_PHASE: &str = "run";
+
 // ============================================================
 // 执行单元
 // ============================================================
@@ -1135,10 +1471,33 @@ impl ExecuteUnit for ReportExecuteUnit {
     }
 
     fn execute(&self, ctx: &ExecContext<'_>) -> Result<ExecOutput, ExeclineError> {
+        // 红队 W2-C34：失败行由单元落（RESULT-P4 §5）——report 此前只在成功
+        // 尾部双轨落行，任何失败路径提前 return、record_sink 零调用，失败单
+        // 在结果轨与「从未开跑」不可区分（盘上实证：F5-report results/records
+        // 双 0 字节）。wrapper：setup 相失败落 setup_failed、ingest 相起失败落
+        // run_failed（legacy 轨，失败行无 v1 投影），行附真实错误类别与
+        // verdict=null；原错误类别原样上抛不翻案。
+        let phase = std::cell::Cell::new(SETUP_PHASE);
         let started = std::time::Instant::now();
+        match self.drive_all(ctx, &phase, started) {
+            Ok(output) => Ok(output),
+            Err(err) => Err(self.emit_failure_row(ctx, err, phase.get())),
+        }
+    }
+}
+
+impl ReportExecuteUnit {
+    fn drive_all(
+        &self,
+        ctx: &ExecContext<'_>,
+        phase: &std::cell::Cell<&'static str>,
+        started: std::time::Instant,
+    ) -> Result<ExecOutput, ExeclineError> {
         // ---- setup 相：任务包装载 + 计划装订三核对（planbind 唯一正本）----
         let task_dir = ctx.data_root.join(ctx.task_id);
         let task_json = task_dir.join("task.json");
+        // 红队 W1-C59①：判据面 digest 钉死核对（门面 submit 时计算）。
+        crate::exec::verify_task_digest(&task_json, ctx.task_sha256)?;
         let task: ReportTask =
             serde_json::from_str(&std::fs::read_to_string(&task_json).map_err(|err| {
                 self.fail(format!("读任务包失败 {}: {err}", task_json.display()))
@@ -1149,6 +1508,9 @@ impl ExecuteUnit for ReportExecuteUnit {
                 "读计划失败（v1 约定：计划随任务包 plan.json）: {err}"
             ))
         })?;
+        // 红队 W2-C55：计划面摘要复核（先于装订）——报告环预算帽（cost_cap/
+        // token_cap/turns）全在 plan.json；摘要漂移 = 计划面被换，拒绝执行。
+        crate::exec::verify_plan_digest(&task_dir.join("plan.json"), ctx.plan_sha256)?;
         let bound = planbind::bind(
             &plan_src,
             &self.spec.registry_root,
@@ -1156,7 +1518,16 @@ impl ExecuteUnit for ReportExecuteUnit {
                 &self.spec.reader_template_ref,
                 &self.spec.writer_template_ref,
             ],
-            &BindExpectations::default(),
+            // 红队 W1-C32：WorkOrder 一次性绑定的 graph_version 作装订外部
+            // 期待（此前期待分支恒空 = 死代码，图版本漂移的计划照样装订）。
+            &BindExpectations {
+                graph_version: ctx.graph_version.map(str::to_string),
+                // 红队 W2-C36：订单已绑定的 line 作装订期待（driver bind_line
+                // 先于 execute）——此前恒传 None，planbind ③ 的 line 复验
+                // 分支在生产是死代码，携带其他产线 line_id 的手写计划可跨线
+                // 运行无感。
+                line_id: Some(ctx.line_id.to_string()),
+            },
         )?;
         let min_citations = task
             .rubric_params
@@ -1165,6 +1536,8 @@ impl ExecuteUnit for ReportExecuteUnit {
             .unwrap_or(3) as usize;
 
         // ---- ingest 相：工具副作用落快照（谁写=fetcher、写哪=sources/）----
+        // 红队 W2-C34：此后失败归 run_failed（供给面已就位，run 目录随建）。
+        phase.set(RUN_PHASE);
         let attempt_dir = ctx.attempt_dir;
         std::fs::create_dir_all(attempt_dir)
             .map_err(|err| self.fail(format!("建 run 目录失败: {err}")))?;
@@ -1202,6 +1575,10 @@ impl ExecuteUnit for ReportExecuteUnit {
             attempt_dir: attempt_dir.to_path_buf(),
             task_json: task_json.clone(),
             plan_types,
+            // W1-C33：plan.body.budget 白名单提取（cents/turns/tokens_total
+            // 三维，强制集外 fail-loud 拒收）——reader + 全部 writer 轮共享
+            // 单一账本；此前仅 find cost_cap，turns/token 帽被静默忽略。
+            ring_caps: RingBudgets::of(&bound.plan)?,
         };
         let draft =
             (self.draft)(&draft_input).map_err(|err| self.fail(format!("起草失败: {err}")))?;
@@ -1211,7 +1588,7 @@ impl ExecuteUnit for ReportExecuteUnit {
             .map_err(|err| self.fail(format!("写 report.json 失败: {err}")))?;
 
         // report.md：与 rubric R5 同一渲染器（同构性由同一脚本保证）。
-        let render_out = Command::new(&self.spec.judges.python)
+        let render_out = judge_python(&self.spec.judges)
             .arg(&self.spec.judges.render_script)
             .arg(attempt_dir.join("report.json"))
             .output()
@@ -1332,5 +1709,42 @@ impl ExecuteUnit for ReportExecuteUnit {
             record: Some(v1_row),
             evidence,
         })
+    }
+    /// 失败行落盘（legacy 轨）：sink 失败并案进文案转 EX3001（与
+    /// `record::fail_with_legacy_row` 同口径——不静默丢行）；sink 正常则原
+    /// 错误原样返回。
+    fn emit_failure_row(
+        &self,
+        ctx: &ExecContext<'_>,
+        err: ExeclineError,
+        phase: &str,
+    ) -> ExeclineError {
+        let note = format!("[{code}] {err}", code = err.code().as_str());
+        let row = if phase == RUN_PHASE {
+            crate::record::unit_run_failed_row(
+                "report",
+                ctx.task_id,
+                &self.spec.profile,
+                ctx.trial,
+                err.code().as_str(),
+                ctx.attempt_dir,
+                &note,
+            )
+        } else {
+            crate::record::unit_setup_failed_row(
+                "report",
+                ctx.task_id,
+                &self.spec.profile,
+                ctx.trial,
+                err.code().as_str(),
+                &note,
+            )
+        };
+        match ctx.record_sink.append_legacy(&row.to_string()) {
+            Ok(()) => err,
+            Err(sink_err) => ExeclineError::UnitFailed {
+                detail: format!("{err}；且失败行落盘失败: {sink_err}"),
+            },
+        }
     }
 }

@@ -12,7 +12,9 @@
 
 ## 〇、一句话结论
 
-**17/17 harness 内核 VERIFIED-SUCCESSFUL（Kani 0.68.0 / CBMC 6.11.0 终跑单次全绿），覆盖 11 条陈述**（C-01/C-02/C-03/C-07 + B-01/B-03/B-04/B-06 + B-09/B-11/B-13）；**3 条标记已完成**（B-14/B-15/C-04——FV-0.1 route::normalize 三性质 12 verified/0 errors，按指令不重证）；**C-05 部分证据**（镜像签名纯度+源码锚，全程序性质不可单 harness 全判——陈述工具注记原文即「混合证据形态」）；**C-06/C-08/C-09 受阻归因**（工具不可达/病态面，与 theorems-v1 审计修订注记一致）。
+**17/17 harness 内核 VERIFIED-SUCCESSFUL（Kani 0.68.0 / CBMC 6.11.0 终跑单次全绿），覆盖 11 条陈述**（C-01/C-02/C-03/C-07 + B-01/B-03/B-04/B-06 + B-09/B-11/B-13）+ **B-02 三值透传弱陈述面（部分载体，红队 W3-C31 勘误 2026-10-27：driver_mirror 两条 harness 实际断言耗尽收束=on_exhausted 且终跑 SUCCESSFUL，原分类误列无载体——见 §二 B-02 行与 §三.6）**；**3 条标记已完成**（B-14/B-15/C-04——FV-0.1 route::normalize 三性质 12 verified/0 errors，按指令不重证）；**C-05 部分证据**（镜像签名纯度+源码锚，全程序性质不可单 harness 全判——陈述工具注记原文即「混合证据形态」）；**C-06/C-08/C-09 受阻归因**（工具不可达/病态面，与 theorems-v1 审计修订注记一致）。
+
+> **全库覆盖率（红队 W1-C42 补登，2026-10-26；W2-C42/C43 机算勘误后 2026-10-27 回填；计数经下方 §三.6 `coverage-check` 块机算）**：theorems-v1 共 **57 条义务**（A16/B23/C9/D9，`grep -c '^## [A-D]-'` 机算），四流合计 **40 条有内核裁决载体**（Kani INV 32 harness→A 全 16；本表 Kani 17 harness→11 条；FV-0.1→B-14/B-15/C-04；状态机组 Verus 29 verified→D 全 9；**B-16→FV-0.2 镜像 Kani harness：合法域 `mirror_normalize_all_gotos_exhaustive` 27-goto 分配全枚举 3 verified + 非法编码域 `mirror_normalize_illegal_goto_e2102_exact_count`（W3-C28 补，E2102 半边——合法域内该分支不可达、原仅单测依据）4 verified/0 failures 复跑**，FV0-工具链PoC-20261024.md:79-80 + theorems-v1.md:362-368 工具栏在案——原口径误列无载体，红队 W2-C43 勘误补入；**证据工件 `proofs/kani/`（含 kani-run.log：2026-10-27 W3-C28 复跑段 4 verified 在顶、首跑 3 verified 历史段保留）已于 2026-10-27 红队 W2-C-37 入仓，在仓可复核**）= **40/57（70.2%）**；其余 17 条按「部分证据（C-05 + B-02 三值透传弱陈述面，红队 W3-C31 勘误 2026-10-27 移入）/仅陈述（B-20，Rocq T10 Admitted）/受阻（C-06/08/09）/无载体（11 条，B-12 有覆盖注记仍计无载体）」如实分类，**不以覆盖率数字冒充全量已证**——分类与清单见 §三.6。
 
 ## 一、内核裁决汇总（实跑输出，摘自 logs/kani-suite-final.log）
 
@@ -50,6 +52,7 @@
 | **C-05** 编译期无隐藏输入 | 部分——`c01` 镜像函数签名纯度（无 &mut 外部态）+ lower.rs:1-4 源码锚；cel_ref 摘要面（lower.rs:369-389，BTreeSet roots + SHA-256 规范 JSON）只读引用未单独 harness | 同左 | ⚠️ 部分（全程序性质，单 harness 不可全判——陈述工具注记原文「混合证据形态如实登记」） |
 | **C-07** 降维命名确定性 | `c07_naming_injective_and_stateless` / `c07_entry_is_first_node_or_empty_body_error` / `c07_graph_version_stamps_parent` | lower.rs:123-125（名=图名/路径机械拼接）、:300-305、:346-351（entry=首元素，空体→EmptyBody）、:307-311（version stamp 父图） | ✅ SUCCESSFUL ×3（命名单射+双跑一致；entry=body[0]/空体 Err 不 panic；stamp 后版本=父图版本） |
 | **B-01** loop 迭代边界 | `b01_b06_e2002_e2004_sound_and_complete`（编译侧 E2002）+ `b01_counter_bounds_and_exhaustion` + `b01_no_new_round_after_exhaustion`（运行侧） | loop_guard.rs:26-32（E2002：==0 → ValueOutOfRange）、【规范】:20 | ✅ SUCCESSFUL ×3（max_iterations==0 ⇔ E2002 sound+complete；iter 恒 ∈[1,max]；耗尽不开新轮、on_exhausted 收束） |
+| **B-02** on_exhausted 三值收束（弱陈述面） | 部分——`b01_counter_bounds_and_exhaustion`（断言 (c) 耗尽收束：未命中 exit ⇒ outcome==on_exhausted，lib.rs:286-292）+ `b01_no_new_round_after_exhaustion`（专项断言 outcome==on_exhausted，lib.rs:297-309）；镜像头注明列覆盖面（lib.rs:11「driver_mirror → …B-02 三值透传」） | 【规范】:21-23、theorems-v1.md:236-242（:242 自标 UNCERTAIN「本条只立弱陈述」） | ⚠️ 部分（三值透传/收束值域有内核裁决：kani-suite-final.log:2664/:2870 两条 VERIFIED-SUCCESSFUL、:10338 pass=17；continue/fail 下游节点语义与 keep_best 选择函数未建 harness——不计完整，不把弱陈述升格为全证。红队 W3-C31 勘误 2026-10-27 自 no-carrier 移入） |
 | **B-03** carried iteration 重建 | `b03_iteration_rebuild_empty` | 【规范】:24-25 | ✅ SUCCESSFUL（iteration ⇒ 轮始为空；run/persistent ⇒ 逐位保留） |
 | **B-04** carried 上界判定/截断 | `b04_carried_bounded_exhaustive_flags`（编译侧）+ `b04_truncate_respects_declared_bound`（运行侧） | loop_guard.rs:40-51、af-graph model.rs:92-94（is_bounded，Some(0) 视为已声明）、lower.rs:312-325（上界声明面透传+排序）、【规范】:24 | ✅ SUCCESSFUL ×2（2³ 旗标全枚举：无界 ⇔ E2002(slot2,idx) 逐项双向往返，Some(0) 不产码；截断后 len ≤ cap 且 = min(n,c)；None 不截） |
 | **B-06** 安全点必经 | `b01_b06_e2002_e2004_sound_and_complete`（编译侧 E2004）+ `b01_counter_bounds_and_exhaustion` 后件 (b)（运行侧必经） | loop_guard.rs:33-39（E2004）、【规范】:28 | ✅ SUCCESSFUL（sp_len==0 ⇔ E2004；计入完成数 = 已开跑轮次中经判定数——必经性的可判定形态） |
@@ -67,7 +70,35 @@
 3. **C-09（拒绝式信封/unknown_kinds）**：envelope.rs:14 入参 serde_yaml::Value，FV-0 实测 >4 分钟不收敛（阻断二）；未做。
 4. **C-05**：部分证据（见 §二），未列全 verified——如实。
 5. **Verus 路线（陈述对 B-01/B-04/B-06/C-02/C-03 的首选工具）**：安装未成。40+1 次代理下载全败（curl exit 35，SSL wrong version number；FV-0 §2.3 预记的「SSL 窗口性失败」本批次全程未开窗）。`verus-prepared/b_loop_guard_e2002_e2004.rs` 为已写未跑的 Verus 镜像草稿（B-01/B-04/B-06 编译+运行侧，含无界不变式形态），**未获任何内核裁决**，不计入 verified。本轮内核证据全部为 Kani 有界域穷尽（域声明见 lib.rs 头注），无界归纳版留给 Verus 窗口开启后的后续批次——分层如实。
-6. **不在义务清单**：B-02/B-05/B-07/B-08/B-10/B-12/B-16..B-23（B-12 的聚合完整面已由 B-09 发射总数=n + B-13 双射前提覆盖注记；其余为 Kani 执行面切片/Rocq/待 TCB 义务）。
+6. **B 组未证条目（红队 W1-C42 勘误 2026-10-26——原写「不在义务清单」系错误措辞：B-02/B-05/B-07/B-08/B-10/B-12/B-16..B-23 共 14 条全部是 theorems-v1 §B 组正式义务（`grep -c '^## B-'` = 23），应为「**在义务清单、本批无证明载体**」**）：B-12 的聚合完整面已由 B-09 发射总数=n + B-13 双射前提覆盖注记；B-20 已有 Rocq T10_envelope血缘包装.v 陈述（Admitted，「只译不证」，非证明）；其余 11 条（B-05/B-07/B-08/B-10/B-12/B-17/B-18/B-19/B-21/B-22/B-23）四流均无证明载体——**B-16 已于 2026-10-27 红队 W2-C42/C43 机算勘误中移入有载体**（FV-0.2 27-goto 分配全枚举 Kani harness 3 verified，证据链接见 §〇；B-12 的覆盖注记不构成内核裁决，仍计无载体）；**B-02 已于 2026-10-27 红队 W3-C31 勘误中移入部分载体**（「有实际 Kani 断言及成功裁决」与「无证明载体」不能并存：镜像头注 lib.rs:11 明列 B-02 三值透传、两条 harness 断言耗尽收束=on_exhausted（lib.rs:286-292/:297-309）且终跑 SUCCESSFUL（kani-suite-final.log:2664/:2870，:10338 pass=17 fail=0）；计部分而非完整——harness 只断言收束值透传与值域，continue/fail 下游节点语义与 keep_best 选择函数未建 harness，theorems-v1.md:242 自标 UNCERTAIN 只立弱陈述）。全库 57 条义务的覆盖率与分类如下（清单由脚本对 theorems-v1 条目头机算闭合校验：40+17=57——有载体 40（含 B-16）+部分 2（C-05、B-02）+仅陈述 1+受阻 3+无载体 11、类间无交、并集=全集；2026-10-27 复算通过）：
+
+```coverage-check
+分母: theorems-v1.md ^## 条目头 = 57 (A16/B23/C9/D9)
+covered-kani-inv: A-01..A-16
+covered-kani-17: B-01 B-03 B-04 B-06 B-09 B-11 B-13 C-01 C-02 C-03 C-07
+covered-fv01: B-14 B-15 C-04
+covered-verus-d: D-01..D-09
+covered-fv02-goto-enum: B-16
+  # 红队 W3-C28 勘误+补证（2026-10-27）：B-16 的 E2102 半边原仅有 af-dsl 单测
+  # 依据（合法域 27 分配全枚举内 valid 恒真、E2102 分支不可达，`已机器穷尽
+  # E2102` 对该半边不成立）——proofs/kani 新增 mirror_normalize_illegal_goto_
+  # e2102_exact_count（含非法编码 3 的符号域 4×4×4，断言 E2102 计数=非法
+  # 恰现次数双向精确 + E2101 抑制 + 不产边集），cargo kani 亲跑 4 verified/
+  # 0 failures（proofs/kani/kani-run.log 顶部 W3-C28 复跑段），E2102 半边
+  # 内核证据补齐，covered 维持且口径自此成立。
+  # 红队 W3-C31 勘误（2026-10-27）：B-02 三值透传弱陈述面自 no-carrier 移入
+  # partial——driver_mirror 两条 harness 实际断言耗尽收束=on_exhausted 且终跑
+  # SUCCESSFUL（kani-suite-final.log:2664/:2870、:10338 pass=17），「无载体」
+  # 与「有实际 Kani 断言及成功裁决」不能并存；continue/fail 下游语义与
+  # keep_best 选择函数未建 harness（theorems-v1.md:242 自标 UNCERTAIN），
+  # 故记部分不升格全证。
+partial: C-05 B-02（三值透传弱陈述面）
+statement-admitted: B-20
+blocked: C-06 C-08 C-09
+no-carrier: B-05 B-07 B-08 B-10 B-12 B-17 B-18 B-19 B-21 B-22 B-23
+```
+
+（复算命令：`grep -c '^## A-'|^## B-'|^## C-'|^## D-' theorems-v1.md` 得 16/23/9/9；四流内核裁决源 = Kani镜像员-INV组/RUNLOG.md:27「32 successfully verified harnesses」、本表 §一「pass=17 fail=0」、FV0-工具链PoC-20261024.md §1.2（FV-0.1 12 verified）、状态机组-Verus/RUN-SUMMARY.md §1「29 verified, 0 errors」。）
 
 ## 四、镜像↔实现对账（诚实边界）
 

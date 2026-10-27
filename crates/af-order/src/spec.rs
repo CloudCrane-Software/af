@@ -157,7 +157,10 @@ fn check_line(obj: &Map<String, Value>) -> Result<(), SpecError> {
 }
 
 /// order_id 要当 state/orders/ 的目录名：非空、非 `.`/`..`、无路径分隔符、无空白。
-fn validate_order_id(order_id: &str) -> Result<(), SpecError> {
+/// pub(crate)（红队 W2-C39）：show 分支的位置参数同样要当目录名——此前只
+/// submit 路径过此门，`show <任意串>` 可读出 state 目录外乃至任意路径下
+/// 名为 ledger.jsonl 的文件（绝对路径还会替换 state 根）。
+pub(crate) fn validate_order_id(order_id: &str) -> Result<(), SpecError> {
     let invalid = |reason: &str| SpecError::Invalid {
         field: "order_id",
         reason: reason.into(),
