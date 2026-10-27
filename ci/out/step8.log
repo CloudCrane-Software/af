@@ -1,4 +1,4 @@
-== step8 neutrality 门开始 2026-10-27 05:43:51
+== step8 neutrality 门开始 2026-10-27 08:19:48
 [PASS] Z0-pre 沙箱 /home/pan-ding/afb-neut-sbx（cp 集：Cargo.toml/Cargo.lock/rust-toolchain.toml/crates/af，11M）；target=/home/pan-ding/afbuild-neutrality
 -- 阶段1 对照臂（包原样）
   对照臂 af-dsl exit=0
@@ -6,8 +6,9 @@
 [PASS] C1 对照臂 cargo test exit=0（R0：基线本身不绿则本门结论无效；裁决15 挂门前置断言常态化）
 -- 阶段2 隔离臂（清空保留空目录）
   af/packages 已清空（保留空目录）：0 项残留
-  隔离臂 af-dsl 失败 2 项（exit 码不作判据，失败集才是）
-  隔离臂 af-compiler 失败 21 项（exit 码不作判据，失败集才是）
+  隔离臂 af-dsl 失败 2 项（exit 码不作判据，失败集才是；解析=2 汇总=2 未归类=0）
+  隔离臂 af-compiler 失败 21 项（exit 码不作判据，失败集才是；解析=21 汇总=21 未归类=0）
+[PASS] R8 解析对账：原始 FAILED 行=23 = 解析键=23 = cargo 汇总=23，未归类行=0（W3-C38）
 [PASS] I1 隔离臂失败集 ⊆ 预期红名单（23 项）——核心测试无一意外失败
 [PASS] I2 预期红名单 ⊆ 隔离臂失败集——fail-closed 有牙齿
 [PASS] I3 集合精确相等（23 项，无漂移）
@@ -19,7 +20,7 @@
 -- 阶段4 N2 扫描 + N3 登记闭集
 [PASS] S1 领域词扫描白名单外命中 = 0（命中 18 处）
 [PASS] R7 闭集守卫 OK：21 份 IR golden 与登记互为闭集
-词表 SHA-256：25a03450b2bbfbbb2e55eb2c286ba6b9ea9192ab6fd57861ec5aa3e66d476617
+词表 SHA-256：22fd0c64269cfadaa09af13c9b1c71e223ddeb01f10208dfa02d5e9f9c4d6624
 [PASS] Z0 正仓 git status 前后零差（沙箱只读正仓）
-== step8 汇总：PASS=12 FAIL=0（判据 C1/I1/I2/I3/I4/P-A/P-B/P-C/S1/R7/Z0）
+== step8 汇总：PASS=13 FAIL=0（判据 C1/I1/I2/I3/I4/R8/P-A/P-B/P-C/S1/R7/Z0）
 == step8 neutrality 门全绿
