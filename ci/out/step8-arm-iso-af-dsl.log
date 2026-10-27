@@ -9,14 +9,14 @@ test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fini
 
 running 17 tests
 test operator_whitelist_locks_spec_fifteen ... ok
-test unknown_root_rejected_as_e2203 ... ok
+test method_call_rejected_as_e1052 ... ok
 test brackets_inside_string_literals_do_not_count_depth ... ok
 test size_function_rejected_as_e1052 ... ok
+test unknown_root_rejected_as_e2203 ... ok
 test non_boolean_rejected_as_e1053 ... ok
-test method_call_rejected_as_e1052 ... ok
 test parse_failure_and_parser_panic_both_normalized_to_e1051 ... ok
-test judgment_order_is_parse_then_operators_then_roots_then_boolean ... ok
 test expr_bytes_over_limit_rejected_as_e1054 ... ok
+test judgment_order_is_parse_then_operators_then_roots_then_boolean ... ok
 test has_macro_across_line_comment_is_still_rejected ... ok
 test ternary_and_negate_not_in_conservative_subset ... ok
 test has_macro_rejected_as_e1052 ... ok
@@ -26,30 +26,30 @@ test sixteen_legal_fixtures_pass_all_three_judgments ... ok
 test deep_expression_parses_on_default_stack_thread ... ok
 test nesting_depth_over_limit_rejected_as_e1054 ... ok
 
-test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
 
      Running tests/construct_conflict_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/construct_conflict_test-29492cefe298f19b)
 
 running 2 tests
-test loop_alone_and_map_alone_still_pass ... ok
 test loop_plus_map_on_same_node_is_e2212 ... ok
+test loop_alone_and_map_alone_still_pass ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
 
      Running tests/envelope_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/envelope_test-910dc7d1ecd6f57a)
 
 running 12 tests
+test negative_version_is_e0003 ... ok
 test multiple_unknown_top_keys_collect_all ... ok
+test bool_version_is_e0002 ... ok
+test string_version_is_e0002 ... ok
 test float_version_is_e0002 ... ok
 test non_mapping_root_is_e0001 ... ok
-test bool_version_is_e0002 ... ok
 test missing_version_key_is_e0001 ... ok
-test string_version_is_e0002 ... ok
 test unknown_top_key_is_e0004 ... ok
-test version_two_rejects_without_parsing_body ... ok
-test negative_version_is_e0003 ... ok
 test valid_envelope_proceeds_to_shape_layer ... ok
 test yaml_syntax_error_is_e0001 ... ok
+test version_two_rejects_without_parsing_body ... ok
 test version_u64_above_i64_max_is_e0003_not_e0002 ... ok
 
 test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
@@ -59,11 +59,11 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 14 tests
 test al08_failures_route_into_body_rejected_as_e2204 ... ok
 test b60_empty_nodes_reports_e2001_not_panic ... ok
-test m001_output_ref_unregistered_reports_e2205 ... ok
-test d209_blast_reports_e2205 ... ok
 test iv48_dual_same_type_output_ports_now_e2202 ... ok
-test entry_and_output_from_calibers_cannot_diverge_post_e1008 ... ok
+test d209_blast_reports_e2205 ... ok
+test m001_output_ref_unregistered_reports_e2205 ... ok
 test al09_budget_scope_into_body_is_confirmed_semantics ... ok
+test entry_and_output_from_calibers_cannot_diverge_post_e1008 ... ok
 test ce04_has_macro_rejected_as_e1052 ... ok
 test alias_family_dotted_ids_rejected_as_e1008 ... ok
 test alias_false_kills_now_reject_for_e1008 ... ok
@@ -72,46 +72,46 @@ test off_table_flips_are_designed_rejections ... ok
 test cel_crashers_report_e1054_not_sigabrt ... ok
 test cel_threshold_passers_still_pass ... ok
 
-test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
 
      Running tests/inv1_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/inv1_test-355e1f01aa781890)
 
 running 37 tests
-test latest_k_with_zero_k_is_e2401 ... ok
-test llm_node_reads_unknown_store_is_e2001_only ... ok
-test non_llm_node_reads_store_is_fine ... ok
 test llm_node_without_context_and_in_edges_is_e2304 ... ok
+test llm_node_reads_unknown_store_is_e2001_only ... ok
 test map_implicit_item_not_visible_at_root_is_e2402 ... ok
+test latest_k_with_zero_k_is_e2401 ... ok
 test non_llm_node_in_edges_without_context_is_clean ... ok
 test all_context_codes_collected_in_one_report ... ok
-test non_llm_node_with_context_in_port_not_sectioned_is_clean ... ok
+test latest_k_without_args_k_is_e2401 ... ok
+test input_field_not_in_schema_is_e2301 ... ok
+test non_llm_node_reads_store_is_fine ... ok
 test llm_node_reads_store_is_e2303 ... ok
 test llm_node_reads_mixed_stores_lists_declared_only_in_e2303 ... ok
 test arg_not_in_formals_is_e2402 ... ok
-test input_field_not_in_schema_is_e2301 ... ok
-test latest_k_without_args_k_is_e2401 ... ok
 test edge_port_not_incoming_is_e2301 ... ok
 test in_port_referenced_twice_is_e2304 ... ok
-test quota_zero_with_policy_none_on_store_is_legal ... ok
+test non_llm_node_with_context_in_port_not_sectioned_is_clean ... ok
 test quota_zero_with_policy_none_on_non_store_is_e2401_and_e2302 ... ok
+test quota_zero_with_policy_none_on_store_is_legal ... ok
 test policy_on_template_section_is_e2401 ... ok
 test quota_zero_is_e2302 ... ok
 test retrieve_without_component_is_e2401 ... ok
 test retrieve_without_args_k_is_e2401 ... ok
-test store_section_missing_store_name_is_e2301_and_e2401 ... ok
-test template_vars_literal_and_valid_refs_are_clean ... ok
 test store_not_declared_is_e2301 ... ok
 test section_missing_source_field_is_e2301 ... ok
 test store_policy_missing_is_e2401 ... ok
-test store_policy_unknown_is_e2401 ... ok
-test summarize_without_component_is_e2401 ... ok
-test store_view_policy_on_input_section_is_e2401 ... ok
-test template_vars_empty_ref_is_e2403 ... ok
-test template_vars_arg_dangling_is_e2403 ... ok
-test template_vars_input_field_dangling_is_e2403 ... ok
 test spec_inv1_fixture_triggers_exactly_e2301_e2303 ... ok
+test template_vars_literal_and_valid_refs_are_clean ... ok
+test template_vars_empty_ref_is_e2403 ... ok
+test store_section_missing_store_name_is_e2301_and_e2401 ... ok
+test template_vars_input_field_dangling_is_e2403 ... ok
 test arg_resolution_walks_scope_chain_outward ... ok
+test template_vars_arg_dangling_is_e2403 ... ok
+test store_view_policy_on_input_section_is_e2401 ... ok
+test store_policy_unknown_is_e2401 ... ok
 test uncovered_in_port_is_e2304 ... ok
+test summarize_without_component_is_e2401 ... ok
 test total_quota_cap_is_configurable_and_default_off ... ok
 test six_golden_samples_pass_full_m2_validation ... ok
 
@@ -120,16 +120,16 @@ test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/inv2_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/inv2_test-454cad788309ac1d)
 
 running 11 tests
+test sole_writer_mismatch_message_says_mismatch_not_multi ... ok
 test sole_writer_differs_from_declared_is_e2311 ... ok
 test two_writers_is_e2311 ... ok
-test sole_writer_mismatch_message_says_mismatch_not_multi ... ok
-test multi_writer_message_still_says_not_sole ... ok
 test spec_inv2_fixture_triggers_e2312_and_e2322 ... ok
 test zero_writer_is_tolerated_in_m1 ... ok
-test uncovered_outer_store_written_in_body_is_e2211 ... ok
+test multi_writer_message_still_says_not_sole ... ok
 test all_inv2_codes_collected_in_one_report ... ok
-test writer_declared_as_body_path_matches ... ok
 test nested_body_write_requires_outer_carried_too ... ok
+test writer_declared_as_body_path_matches ... ok
+test uncovered_outer_store_written_in_body_is_e2211 ... ok
 test six_golden_samples_pass_full_m1_validation ... ok
 
 test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
@@ -137,14 +137,14 @@ test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/inv3_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/inv3_test-2056c3debba1c396)
 
 running 10 tests
-test indirect_self_verification_not_flagged_v01 ... ok
-test check_consuming_other_producer_is_clean ... ok
 test task_self_loop_is_not_e2321 ... ok
+test check_consuming_other_producer_is_clean ... ok
+test indirect_self_verification_not_flagged_v01 ... ok
 test two_self_edges_report_two_e2321 ... ok
 test verifier_consuming_builtin_passed_of_other_check_is_clean ... ok
 test gate_self_loop_is_e2321 ... ok
-test human_marked_node_self_loop_is_e2321 ... ok
 test loop_body_check_self_loop_is_e2321 ... ok
+test human_marked_node_self_loop_is_e2321 ... ok
 test spec_inv3_fixture_triggers_exactly_e2321 ... ok
 test six_golden_samples_pass_full_m3_validation ... ok
 
@@ -153,15 +153,15 @@ test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/inv4_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/inv4_test-1a770f3382a0b282)
 
 running 12 tests
-test check_with_unit_reading_eval_input_store_is_clean ... ok
-test two_offenders_report_two_e2331_in_path_order ... ok
-test check_without_unit_reading_eval_input_store_is_e2331 ... ok
-test gate_with_unit_reading_eval_input_store_is_e2331 ... ok
 test non_eval_input_store_is_freely_readable ... ok
 test writer_reading_own_eval_input_store_is_clean ... ok
-test plain_task_reading_eval_input_store_is_e2331 ... ok
+test check_with_unit_reading_eval_input_store_is_clean ... ok
 test dangling_writer_suppresses_e2331_noise ... ok
+test check_without_unit_reading_eval_input_store_is_e2331 ... ok
+test gate_with_unit_reading_eval_input_store_is_e2331 ... ok
+test two_offenders_report_two_e2331_in_path_order ... ok
 test section_reference_to_eval_input_store_is_e2331 ... ok
+test plain_task_reading_eval_input_store_is_e2331 ... ok
 test spec_inv4_fixture_triggers_exactly_e2331_with_e2303 ... ok
 test sample4_answers_ref_readers_stay_clean ... ok
 test six_golden_samples_pass_full_m3_validation ... ok
@@ -173,18 +173,18 @@ test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 18 tests
 test safety_point_check_on_check_is_clean ... ok
 test safety_point_human_on_human_node_is_clean ... ok
-test safety_point_message_carries_paths ... ok
 test safety_point_on_task_node_is_e2322 ... ok
+test safety_point_message_carries_paths ... ok
 test three_guards_collected_in_one_report ... ok
-test empty_safety_points_is_e2004 ... ok
-test safety_point_human_on_plain_node_is_e2322 ... ok
 test carried_bytes_only_bound_is_clean ... ok
-test unbounded_carried_and_uncovered_are_distinct_codes ... ok
+test safety_point_gate_on_gate_is_clean ... ok
+test safety_point_human_on_plain_node_is_e2322 ... ok
+test dangling_safety_point_stays_e2107_only ... ok
 test safety_point_kind_mismatch_is_e2322 ... ok
 test empty_safety_points_message_carries_loop_path ... ok
-test safety_point_gate_on_gate_is_clean ... ok
+test empty_safety_points_is_e2004 ... ok
 test zero_max_iterations_is_e2002 ... ok
-test dangling_safety_point_stays_e2107_only ... ok
+test unbounded_carried_and_uncovered_are_distinct_codes ... ok
 test fully_guarded_loop_is_clean ... ok
 test unbounded_carried_is_e2002 ... ok
 test zero_max_iterations_message_carries_loop_path ... ok
@@ -197,12 +197,12 @@ test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 running 15 tests
 test item_visible_inside_map_body_assert ... ok
 test assert_bare_inputs_value_is_not_boolean_e1053 ... ok
-test stop_when_node_id_root_not_in_global_vocabulary ... ok
+test item_assert_inside_map_body_judged_with_item_root ... ok
 test stop_when_unknown_root_is_e2203 ... ok
-test exit_when_non_boolean_is_e1053 ... ok
+test stop_when_node_id_root_not_in_global_vocabulary ... ok
 test assert_inputs_binding_from_incoming_edges ... ok
 test resume_visible_from_human_node_route_in_same_scope ... ok
-test item_assert_inside_map_body_judged_with_item_root ... ok
+test exit_when_non_boolean_is_e1053 ... ok
 test cel_judgment_and_reference_checks_collect_together ... ok
 test exit_when_body_node_root_resolves_through_scope_chain ... ok
 test exit_when_attempt_and_scope_chain_roots_pass ... ok
@@ -216,43 +216,43 @@ test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/parse_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/parse_test-4e4d98f94aef9652)
 
 running 41 tests
+test edge_without_from_is_e1002 ... ok
 test escape_kind_outside_seven_is_e1004 ... ok
-test malformed_type_expression_is_e1003 ... ok
 test body_without_nodes_is_e1002 ... ok
 test inline_object_schema_on_port_is_e1003 ... ok
-test edge_without_from_is_e1002 ... ok
+test malformed_type_expression_is_e1003 ... ok
+test escape_without_accounting_field_is_e1002 ... ok
 test from_body_with_extra_key_is_rejected ... ok
 test nested_generic_type_expression_is_e1003 ... ok
-test escape_without_accounting_field_is_e1002 ... ok
+test non_numeric_max_iterations_is_e1003 ... ok
 test node_without_id_is_e1002 ... ok
 test non_type_port_value_is_e1003 ... ok
-test route_without_default_is_e1002 ... ok
-test non_numeric_max_iterations_is_e1003 ... ok
-test safety_point_kind_evaluator_is_e1004 ... ok
-test unknown_failure_class_is_e1004 ... ok
-test unknown_budget_dimension_is_e1004 ... ok
-test unknown_field_in_budget_is_e1001 ... ok
-test topology_selector_parses_structurally ... ok
-test unknown_field_in_escape_is_e1001 ... ok
-test unknown_field_in_carried_is_e1001 ... ok
-test unknown_field_in_meta_is_e1001 ... ok
-test unknown_field_in_loop_is_e1001 ... ok
-test unknown_field_in_node_is_e1001 ... ok
-test unknown_field_in_edge_is_e1001 ... ok
-test unknown_field_in_op_is_e1001 ... ok
-test unknown_field_in_route_is_e1001 ... ok
-test unknown_field_in_section_is_e1001 ... ok
-test unknown_field_in_safety_point_is_e1001 ... ok
 test negative_into_unsigned_is_e2002_not_e1004 ... ok
-test unknown_field_in_topology_selector_is_e1001 ... ok
+test route_without_default_is_e1002 ... ok
+test unknown_failure_class_is_e1004 ... ok
+test safety_point_kind_evaluator_is_e1004 ... ok
+test unknown_field_in_budget_is_e1001 ... ok
+test unknown_budget_dimension_is_e1004 ... ok
+test unknown_field_in_meta_is_e1001 ... ok
+test unknown_field_in_escape_is_e1001 ... ok
+test unknown_field_in_node_is_e1001 ... ok
+test topology_selector_parses_structurally ... ok
 test unknown_field_in_human_is_e1001 ... ok
+test unknown_field_in_carried_is_e1001 ... ok
+test unknown_field_in_loop_is_e1001 ... ok
+test escape_with_adjudicated_kind_parses ... ok
+test unknown_field_in_op_is_e1001 ... ok
+test unknown_lifecycle_is_e1004 ... ok
+test unknown_field_in_route_is_e1001 ... ok
+test unknown_field_in_safety_point_is_e1001 ... ok
+test unknown_field_in_edge_is_e1001 ... ok
+test unknown_field_in_topology_selector_is_e1001 ... ok
 test unknown_field_in_uses_is_e1001 ... ok
+test unknown_field_in_section_is_e1001 ... ok
+test unknown_retention_policy_is_e1004 ... ok
+test unknown_field_in_store_is_e1001 ... ok
 test unknown_stop_outcome_is_e1004 ... ok
 test unknown_store_type_is_e1004 ... ok
-test unknown_field_in_store_is_e1001 ... ok
-test unknown_lifecycle_is_e1004 ... ok
-test unknown_retention_policy_is_e1004 ... ok
-test escape_with_adjudicated_kind_parses ... ok
 test human_resume_schema_shapes_are_gated_e1003 ... ok
 test non_object_schema_is_e1003 ... ok
 test nested_human_resume_schema_shapes_are_gated_e1003 ... ok
@@ -263,97 +263,97 @@ test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
      Running tests/refs_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/refs_test-a422f95442145376)
 
 running 48 tests
-test budget_cap_zero_is_e2207 ... ok
-test edge_output_port_missing_is_e2201 ... ok
-test duplicate_store_names_is_e2003 ... ok
-test duplicate_type_names_is_e2003 ... ok
+test dual_same_type_emit_ports_ambiguate_output ... ok
 test budget_loop_scope_requires_loop_construct ... ok
+test duplicate_node_ids_is_e2003 ... ok
+test budget_cap_zero_is_e2207 ... ok
+test duplicate_type_names_is_e2003 ... ok
 test budget_scope_dangling_is_e2207 ... ok
+test duplicate_store_names_is_e2003 ... ok
+test edge_input_port_not_consumed_is_e2201 ... ok
+test edge_endpoint_ghost_is_e2001 ... ok
+test edge_output_port_missing_is_e2201 ... ok
 test entry_ghost_is_e2001 ... ok
 test emits_unknown_type_is_e2205 ... ok
 test envelope_payload_unknown_type_is_e2205 ... ok
-test duplicate_node_ids_is_e2003 ... ok
-test dual_same_type_emit_ports_ambiguate_output ... ok
-test edge_endpoint_ghost_is_e2001 ... ok
 test edge_type_mismatch_is_e2201 ... ok
-test edge_input_port_not_consumed_is_e2201 ... ok
-test failure_route_dangling_is_e2204 ... ok
 test failure_fallback_route_dangling_is_e2204 ... ok
-test list_payload_unknown_type_is_e2205 ... ok
+test failure_route_dangling_is_e2204 ... ok
 test failure_route_keywords_and_nodes_are_ok ... ok
-test map_over_input_field_dangling_is_e2105 ... ok
+test list_payload_unknown_type_is_e2205 ... ok
 test map_over_input_field_not_array_is_e2104 ... ok
-test map_over_node_dangling_is_e2105 ... ok
-test map_over_port_not_list_is_e2104 ... ok
-test meta_input_unknown_type_is_e2205 ... ok
 test from_body_node_dangling_is_e2106 ... ok
-test builtin_passed_conflicting_declaration_is_rejected ... ok
-test builtin_done_port_still_feeds_edges ... ok
-test carried_unknown_store_is_e2001 ... ok
-test explicit_builtin_done_declaration_is_not_double_counted ... ok
 test builtin_done_conflicting_declaration_is_rejected ... ok
+test builtin_done_port_still_feeds_edges ... ok
+test builtin_passed_conflicting_declaration_is_rejected ... ok
+test loop_frombody_builtin_passed_still_passes ... ok
+test map_over_input_field_dangling_is_e2105 ... ok
+test carried_unknown_store_is_e2001 ... ok
 test from_body_port_dangling_is_e2106 ... ok
 test loop_args_ref_dangling_is_e2105 ... ok
+test explicit_builtin_done_declaration_is_not_double_counted ... ok
 test explicit_builtin_passed_declaration_is_not_double_counted ... ok
-test minimal_base_doc_validates_clean ... ok
-test loop_node_builtin_done_port_feeds_edge ... ok
-test loop_frombody_builtin_passed_still_passes ... ok
 test map_frombody_inline_primitive_is_rejected ... ok
+test loop_node_builtin_done_port_feeds_edge ... ok
+test builtin_port_from_body_spec_is_rejected_as_shadowed ... ok
+test map_over_node_dangling_is_e2105 ... ok
+test meta_input_unknown_type_is_e2205 ... ok
+test minimal_base_doc_validates_clean ... ok
+test map_over_port_not_list_is_e2104 ... ok
 test reads_unknown_store_is_e2001 ... ok
 test output_from_ghost_is_e2001 ... ok
-test builtin_port_from_body_spec_is_rejected_as_shadowed ... ok
-test writes_unknown_store_is_e2001 ... ok
 test output_type_not_emitted_is_e2202 ... ok
-test two_distinct_same_type_ports_still_reject_as_e2202 ... ok
-test writer_path_ghost_is_only_e2001 ... ok
 test store_item_unknown_type_is_e2205 ... ok
+test two_distinct_same_type_ports_still_reject_as_e2202 ... ok
+test writes_unknown_store_is_e2001 ... ok
 test store_retention_unbounded_is_e2208 ... ok
-test same_id_in_different_scopes_is_ok ... ok
-test safety_point_dangling_is_e2107 ... ok
+test writer_path_ghost_is_only_e2001 ... ok
 test builtin_only_terminal_is_rejected_e2202 ... ok
+test safety_point_dangling_is_e2107 ... ok
+test same_id_in_different_scopes_is_ok ... ok
 
 test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
 
      Running tests/registry_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/registry_test-bc492fa023a5171e)
 
 running 20 tests
-test parse_rejects_empty_graph_fields ... ok
-test parse_rejects_duplicate_ref_within_manifest ... ok
 test parse_rejects_at_sign_in_name_or_version ... ok
+test parse_rejects_empty_graph_fields ... ok
 test parse_rejects_empty_graphs_list ... ok
 test parse_rejects_empty_package_name ... ok
-test parse_valid_manifest_composes_versioned_refs ... ok
+test parse_rejects_duplicate_ref_within_manifest ... ok
 test parse_rejects_missing_source_field ... ok
 test parse_rejects_unknown_field ... ok
+test parse_valid_manifest_composes_versioned_refs ... ok
 test scan_empty_root_yields_empty_registry_fail_closed ... ok
-test scan_builds_sorted_ref_set_from_fixture_packages ... ok
-test registry_options_only_touches_declared_graphs ... ok
 test scan_missing_root_is_error ... ok
+test registry_options_only_touches_declared_graphs ... ok
+test scan_builds_sorted_ref_set_from_fixture_packages ... ok
+test scan_cross_package_duplicate_ref_is_error ... ok
+test scan_invalid_manifest_is_error ... ok
 test scan_package_dir_without_manifest_is_error ... ok
+test scan_root_not_dir_is_error ... ok
+test scan_skips_non_package_files ... ok
 test repo_packages_registry_covers_all_four_draft_refs ... FAILED
 test repo_packages_registry_strictly_matches_draft_refs ... FAILED
-test scan_root_not_dir_is_error ... ok
-test scan_invalid_manifest_is_error ... ok
-test scan_skips_non_package_files ... ok
-test scan_cross_package_duplicate_ref_is_error ... ok
 test injection_closes_e2001_but_default_still_rejects ... ok
 
 failures:
 
 ---- repo_packages_registry_covers_all_four_draft_refs stdout ----
 
-thread 'repo_packages_registry_covers_all_four_draft_refs' (2393887) panicked at crates/af-dsl/tests/registry_test.rs:273:5:
+thread 'repo_packages_registry_covers_all_four_draft_refs' (2560437) panicked at crates/af-dsl/tests/registry_test.rs:273:5:
 assertion `left == right` failed: adaskit/autogen/swarmkit/sweng/reportkit
   left: 0
  right: 5
-note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 ---- repo_packages_registry_strictly_matches_draft_refs stdout ----
 
-thread 'repo_packages_registry_strictly_matches_draft_refs' (2393888) panicked at crates/af-dsl/tests/registry_test.rs:297:5:
+thread 'repo_packages_registry_strictly_matches_draft_refs' (2560438) panicked at crates/af-dsl/tests/registry_test.rs:297:5:
 assertion `left == right` failed: 清单应恰为草稿闭包（14 条）∪ G4 任务图白名单（2 条）
   left: {}
  right: {"pkg.adaskit.discovered_maze@1", "pkg.adaskit.discovered_wordle@1", "pkg.adaskit.mas_search@1", "pkg.autogen.team.graph_flow@1.0", "pkg.autogen.team.magentic_one@1.0", "pkg.autogen.team.round_robin@1.0", "pkg.autogen.team.selector@1.0", "pkg.autogen.team.swarm@1.0", "pkg.reportkit.paper_report@1.0", "pkg.swarmkit.graph.fanout_vote@1.4", "pkg.swarmkit.graph.plan_execute_review@2.1", "pkg.swarmkit.graph.react_baseline@1.0", "pkg.sweng.fix_swe_task@1.0", "pkg.sweng.sop_full@1.1", "pkg.sweng.sop_minimal@1.0", "pkg.sweng.sop_no_qa@1.0"}
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 
 
 failures:
@@ -366,23 +366,23 @@ error: test failed, to rerun pass `-p af-dsl --test registry_test`
      Running tests/route_test.rs (/home/pan-ding/afbuild-neutrality/debug/deps/route_test-8d3198882f2f0800)
 
 running 21 tests
-test default_exit_produces_negated_disjunction_exit_guard ... ok
 test duplicate_target_is_e2103_for_rule_rule_and_rule_default ... ok
 test default_exit_with_exit_rules_joins_disjunction ... ok
+test multiple_exit_rules_are_benign_and_union ... ok
+test default_exit_produces_negated_disjunction_exit_guard ... ok
 test default_exit_without_rules_is_true_guard ... ok
 test exit_branches_produce_no_edge_and_union_guard ... ok
-test multiple_exit_rules_are_benign_and_union ... ok
 test no_rules_default_guard_is_literal_true ... ok
 test single_rule_guards_are_when_and_negated_when ... ok
-test uncovered_out_edge_is_e2101 ... ok
 test two_rules_priority_prefixes_later_guard ... ok
 test unknown_goto_is_e2102_for_rule_and_default ... ok
+test uncovered_out_edge_is_e2101 ... ok
 test route_without_default_is_rejected_as_e1002 ... ok
 test bare_passed_is_legal_on_verification_node_route ... ok
 test route_when_non_boolean_is_e1053 ... ok
+test route_uncovered_out_edge_is_exactly_e2101 ... ok
 test route_when_unknown_root_is_e2203 ... ok
 test route_goto_unknown_target_is_exactly_e2102 ... ok
-test route_uncovered_out_edge_is_exactly_e2101 ... ok
 test route_when_non_subset_function_is_e1052 ... ok
 test route_duplicate_target_is_exactly_e2103 ... ok
 test branch_guards_are_mutually_exclusive_and_collectively_exhaustive ... ok
@@ -394,13 +394,13 @@ test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; fin
 
 running 10 tests
 test selector_without_fallback_is_rejected_as_e1002 ... ok
+test selector_when_unknown_root_is_e2203 ... ok
 test selector_when_node_id_root_is_not_in_global_vocabulary ... ok
+test declared_set_is_a_set ... ok
+test undeclared_fallback_is_e2001_even_when_rules_declared ... ok
 test unversioned_candidate_form_is_e2001 ... ok
 test undeclared_rule_candidate_is_e2001_with_default_empty_registry ... ok
-test declared_set_is_a_set ... ok
 test declared_set_membership_does_not_excuse_unversioned_form ... ok
-test undeclared_fallback_is_e2001_even_when_rules_declared ... ok
-test selector_when_unknown_root_is_e2203 ... ok
 test declared_versioned_candidates_pass_clean ... ok
 test selector_when_non_subset_function_is_e1052 ... ok
 
