@@ -3,25 +3,25 @@
   "_note": "numbers.json（G0 逃逸加固批 step12 计数复算门；2026-10-28 A 组落本仓 af-wt-g0a/g0a，合流批 af-wt-g0merge/g0merge 随 g0c/g0d 合入同批更新门数账三键）。全部 value 为本树 2026-10-28 实算值、source 命令在本树可复跑（cwd 缺省=仓根）。部署形态：run.sh step12 以 --repo=$AF_ROOT 调用，本文件与 ci/run.sh 同一提交更新（门数账自举纪律：run.sh 加 step 当批必须同改 gates.* 三键，否则 step12 自红——防「为防再发而堆门」失控，红队复盘 PP4:292）。跨机制入键口径按 G0-CI 批总对账 §三.3 终稿：fv.kani_inv_harness.count/.manifest_sha256 属 B2（9a/9b 基线机算批，g0b 未过复核未合流、键不占位）、mutations.probes 属 B3（元探针批，同上）、ci.steps_total 供 D2 xcheck 对 AGENT.md 门数消费——三键由兄弟批落地时同批登记（本树无其产物，预登记会复算红，故不占位；键名拼法照终稿原文，勿改）。retro.corpus_total（红队三波语料 168）未入本表：其正本 /tmp/af-rt-retro-corpus.json 为易失路径且违反 /tmp 分流白名单纪律（AGENT.md 硬纪律 7），step12 SPEC §⑧.3 已登记为裁决点——语料迁耐久路径后同批补键。",
   "numbers": {
     "gates.ci_steps": {
-      "value": 13,
+      "value": 14,
       "source": "grep -cE '^echo \"== step[0-9]+' ci/run.sh",
       "unit": "步",
       "last_recomputed": "2026-10-28",
-      "note": "口径=step 门号登记行（每个 step 槽一行 echo \"== stepN …\"；step13 共宿三子查 13a/13b/13c 共用一个槽号、一个登记行）。G0 合流批 2026-10-28 串行合入 g0a（step10/11/12）后为 12，再合入 g0c（step13 共宿槽）后=13（同 commit 改 run.sh，门数账自举）；原「step() 调用行+if fv_advisory」口径在 step13/14 共宿槽（13a/b/c 不走 step N 形态、step14 为 bespoke 块）下会漏计，故改按门号登记行计数——与 ci/xcheck.py count_run_sh_steps 的口径一致（bespoke 形态必须计数，g0d SPEC-2 设计在案）。AGENT.md 硬纪律 5「九门」勘误行对账本键；README.md/docs/VERSIONS.md 手写「十三门」由 watch 正则对值。g0d（step14）合入后=14。"
+      "note": "口径=step 门号登记行（每个 step 槽一行 echo \"== stepN …\"；step13 共宿三子查 13a/13b/13c 共用一个槽号、一个登记行）。G0 合流批 2026-10-28 串行合入 g0a（step10/11/12）后为 12、g0c（step13 共宿槽）后=13、g0d（step14 覆盖与枚举批）后=14（各 merge commit 同批改键，门数账自举）；原「step() 调用行+if fv_advisory」口径在 step13/14 共宿槽（13a/b/c 不走 step N 形态、step14 为 bespoke 块）下会漏计，故改按门号登记行计数——与 ci/xcheck.py count_run_sh_steps 的口径一致（bespoke 形态必须计数，g0d SPEC-2 设计在案）。AGENT.md 硬纪律 5「九门+G0 五门=14 step」勘误行对账本键；README.md/docs/VERSIONS.md 手写「十四门」由 watch 正则对值。G0-B 支线（g0b）未过复核未合流——其 step3 改写/9a9b 基线机算/mutations 三机制不新增 step 槽（step3 编号不变、9a/9b 在 step9 内、mutations 挂 step0/合流入口），descope 不改变 14 步口径。"
     },
     "ci.steps_total": {
-      "value": 13,
+      "value": 14,
       "source": "grep -cE '^echo \"== step[0-9]+' ci/run.sh",
       "unit": "步",
       "last_recomputed": "2026-10-28",
-      "note": "总对账 §三.3 终稿裁定的跨机制键名（供 D2 xcheck 对 AGENT.md 门数消费）。与 gates.ci_steps 同源同值同命令（A 示例原名保留，二者拼写不同但口径同一——step12 逐键复算，漂移即红）。g0d（step14）合入后=14，由合流批同批更新。"
+      "note": "总对账 §三.3 终稿裁定的跨机制键名（供 D2 xcheck 对 AGENT.md 门数消费）。与 gates.ci_steps 同源同值同命令（A 示例原名保留，二者拼写不同但口径同一——step12 逐键复算，漂移即红）。G0 全批（A/C/D）合流后=14，由合流批随 g0d merge commit 同批兑现。"
     },
     "gates.ci_hard": {
-      "value": 12,
+      "value": 13,
       "source": "grep -E '^echo \"== step[0-9]+' ci/run.sh | grep -vcE 'advisory[[:alnum:]_-]'",
       "unit": "门",
       "last_recomputed": "2026-10-28",
-      "note": "硬门分列键（step1-8/10-13；step9 FV advisory 不计入——其登记行含 advisory 字样，step7 的 advisory-db 连字符复合词按 xcheck 同款负向断言排除）；与 gates.ci_steps 分列消歧——复盘:117「六门=阶段门 vs 九门=CI step」裸键歧义由此根治。原「^step [0-9]+ 」口径在共宿槽下漏计 step13/14，合流批改按门号登记行扣 advisory 计数。g0d（step14）合入后=13。"
+      "note": "硬门分列键（step1-8/10-14；step9 FV advisory 不计入——其登记行含 advisory 字样，step7 的 advisory-db 连字符复合词按 xcheck 同款负向断言排除）；与 gates.ci_steps 分列消歧——复盘:117「六门=阶段门 vs 九门=CI step」裸键歧义由此根治。原「^step [0-9]+ 」口径在共宿槽下漏计 step13/14，合流批改按门号登记行扣 advisory 计数。"
     },
     "gates.fv_advisory": {
       "value": 1,
@@ -87,7 +87,7 @@
       "group": 1,
       "cn_map": {"六": 6, "七": 7, "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12, "十三": 13, "十四": 14},
       "skip_pattern": "勘误|原文|→|口径|全绿",
-      "note": "手写门数对值（复盘:118）。扫描面=run.sh step12 的 --docs 集（README.md/docs/VERSIONS.md 两件规范性文书）；ci/REPORT.md 是 CI 骨架实施批的历史记录（其「六步门」为 2026-10-25 当时事实），不进 --docs——节区限定方向见 step12 SPEC §⑧.5（watch 只扫规范性节），历史文书当现行口径会误红。skip=勘误/历史语境窗口豁免（±40 字符）：本批回写后 README:7/VERSIONS:11,58 同行既有现行「十三门」又有勘误注记「九门」，行级豁免会连现行口径一并放过，故用窗口级（step12 SPEC §④ 实测同款）。"
+      "note": "手写门数对值（复盘:118）。扫描面=run.sh step12 的 --docs 集（README.md/docs/VERSIONS.md 两件规范性文书）；ci/REPORT.md 是 CI 骨架实施批的历史记录（其「六步门」为 2026-10-25 当时事实），不进 --docs——节区限定方向见 step12 SPEC §⑧.5（watch 只扫规范性节），历史文书当现行口径会误红。skip=勘误/历史语境窗口豁免（±40 字符）：本批回写后 README:7/VERSIONS:17,63 同行既有现行「十四门」又有勘误注记「九门」，行级豁免会连现行口径一并放过，故用窗口级（step12 SPEC §④ 实测同款）。"
     }
   ]
 }

@@ -2,7 +2,7 @@
 # =============================================================================
 # AF CI 骨架（ci-skeleton 定案管道）— AF/ci/run.sh
 #
-# 十三步验收管道，全部真实执行、逐步计时、产物落 AF/ci/out/：
+# 十四步验收管道，全部真实执行、逐步计时、产物落 AF/ci/out/：
 #   1 fmt     cargo fmt --check                          硬门：非零即红
 #   2 clippy  cargo clippy + 基线门（ci/clippy_gate.py）   硬门：只拦新增警告
 #   3 test    cargo test -j4 --workspace                 硬门：非零即红
@@ -425,6 +425,59 @@ step 13b "arm-wiring 三臂防线逐格断言（删任一格即红；absent 格�
   bash -c "cd '$AF_ROOT' && python3 ci/arm_wiring_check.py --validate ci/arm-wiring.yaml && python3 ci/arm_wiring_check.py --check ci/arm-wiring.yaml --report ci/out/arm-wiring-report.json"
 step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail-loud）" -- \
   bash -c "cd '$AF_ROOT' && python3 ci/budget_cast_lint.py --root . --whitelist ci/budget-cast-whitelist.json --debt-register ci/debt-register.md"
+
+# ---- 14. 机读一致性批（G0-CI 机制批 2026-10-28；复盘 C2/C4/PP2 落点） ------------------
+# 三机制共宿一步（SPEC-1/2/3 同一 diff 块；遵守「禁止堆门」纪律，合计常跑 <5s）：
+#   14a branches.yaml 锚+夹具名单对账（ci/branches_check.py，SPEC-1）
+#   14b 枚举跨文书一致性（ci/xcheck.py，SPEC-2；3/4 组对账：门数/packages/词表，
+#       码位组按 SPEC ⑧ 遗留登记、每次运行显式 [LEGACY] 行）
+#   14c criteria.yaml 六要素 schema 校验+终验清单机生成（ci/criteria_check.py
+#       --emit-checklist ci/out/final-checklist.md，SPEC-3）
+# 退出码语义（各 SPEC ③）：0=全过；1=任一硬红 → 本步 FAIL 且 OVERALL=1；2=仅
+#   advisory WARN（头注漂移/G0 勘误未同步/文本降级/coverage 格式待校准）→ SUMMARY
+#   落显式 WARN 行、不改 OVERALL（与 step9 ADVISORY 同型；禁两态死代码——复盘 C3
+#   ci/run.sh:357 教训）。异常退出（非 0/2，如 python 崩溃）按硬红，不静默放行。
+# 分支级 llvm-cov 覆盖报告不在此步：nightly/diff 触发子作业（对齐 mutations/ 触发
+#   规则先例），产物 ci/out/branch-coverage.json 由 14a 在场时对账。
+# 门计数可见性：本步为 bespoke 块（退出码 2 须落 WARN 行而非 FAIL，step 助手不表达），
+#   按 step9 先例以 `echo "== step14 …"` 行向机读面登记门号（xcheck 门数对账据此计数）。
+# 路径纪律：三脚本缺省路径一律由 __file__/AF_ROOT 推导到本工作树（root 钉死，
+#   红队 P2-2）；branches_check 自跑 cargo test --workspace -- --list 时继承环境
+#   CARGO_TARGET_DIR（step3 已全域构建，秒级；W3-C-25 共享 target 教训不破）。
+echo "== step14 机读一致性批（branches 锚对账 + xcheck 3/4 组 + criteria schema）"
+machine_batch() {
+  local rc_a=0 rc_b=0 rc_c=0 rc hard=0 warn=0
+  echo "== 14a branches.yaml 分支覆盖夹具对账（SPEC-1：锚有效性+夹具名单对账；coverage nightly 面在场才判）"
+  (cd "$AF_ROOT" && python3 ci/branches_check.py); rc_a=$?
+  echo "== 14b 枚举跨文书一致性（SPEC-2：门数/packages/词表 3/4 组；码位组遗留登记）"
+  (cd "$AF_ROOT" && python3 ci/xcheck.py); rc_b=$?
+  echo "== 14c criteria.yaml 六要素 schema + 终验清单机生成（SPEC-3）"
+  (cd "$AF_ROOT" && python3 ci/criteria_check.py --emit-checklist "$OUT/final-checklist.md"); rc_c=$?
+  echo "== 14 子检查退出码：branches=$rc_a xcheck=$rc_b criteria=$rc_c（0=过 1=硬红 2=advisory WARN）"
+  for rc in "$rc_a" "$rc_b" "$rc_c"; do
+    case $rc in
+      0) ;;
+      2) warn=1 ;;
+      *) hard=1 ;;   # 1=硬红；其它=异常退出（崩溃/环境缺件），按硬红处理
+    esac
+  done
+  [ $hard -eq 1 ] && return 1
+  [ $warn -eq 1 ] && return 2
+  return 0
+}
+T14_0=$(now_ns)
+machine_batch > "$OUT/step14.log" 2>&1
+b14_rc=$?
+T14_1=$(now_ns); T14_MS=$(( (T14_1 - T14_0) / 1000000 ))
+case $b14_rc in
+  0) b14_verdict="PASS" ;;
+  2) b14_verdict="PASS-WITH-WARN" ;;
+  *) b14_verdict="FAIL" ;;
+esac
+[ "$b14_rc" -eq 1 ] && OVERALL=1
+SUMMARY+=("step14  $b14_verdict  ${T14_MS}ms  机读一致性批（branches+xcheck+criteria；advisory WARN 不改 OVERALL）")
+printf '  [14] %s %6dms  机读一致性批（branches 锚对账 + xcheck 3/4 + criteria schema）\n' "$b14_verdict" "$T14_MS"
+cat "$OUT/step14.log"
 
 # ---- 汇总 -------------------------------------------------------------------
 echo "== 汇总"

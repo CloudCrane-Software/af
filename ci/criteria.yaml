@@ -1,0 +1,100 @@
+# criteria.yaml —— 判据六要素 schema 正本（G0-CI 机制批 · 子代理 D，2026-10-28 施工批落库 v1）
+# 依据：复盘 PP2（判据六要素：分子/分母/正本字段/计数规则/无数据=未达成/生产者+属主+排期）
+#      + PP5/C7（观察面 machine-validated block：生产者/属主/排期/采集面/期满退出/升级路径，
+#        第七要素「环境真值与资源护栏」按复盘 PP5 升级②并列登记）+ 5.1 criteria.yaml 行。
+# 判据全部摘自盘上真实门终裁文书（锚点见各条 source_field/count_rule），非虚构。
+# 校验：python3 ci/criteria_check.py [--emit-checklist ci/out/final-checklist.md]
+#   （缺 schema 字段/反空过条款缺失/判据数 >12 无豁免 → exit 1；waiver 在场 → WARN exit 2）
+# 版本史：v1=SPEC-3 示例判据落库；唯一数值勘误=G4-4 分母 12→13（见该条 count_rule 漂移登记：
+#   红队 W3-C38 新增 R8 判据后 step8 实数 13，门终裁原文 12 为 2026-10-25 当时口径）。
+#   过渡期声明（SPEC ⑧.3）：本文件数值不由 criteria_check 复算，真伪归 step12 numbers.json。
+schema: criteria-v1
+gates:
+  - gate: G4
+    title: 两领域包真实现门（2026-10-25 已终裁放行——本块为回填示范，验证 schema 可承载真实判据）
+    terminal_adjudication: 计划/研究组/G4-门终裁-20261025.md §一
+    criteria:
+      - id: G4-1
+        claim: 软件工程包 sweng v1 真实现（manifest+图×4+组件声明+prompts/template_ref+MANIFEST.sha256+15 件分级实现）
+        numerator: {definition: sweng 包在位交付件数（manifest 1+图 4+组件声明+prompts 6+MANIFEST.sha256+15 件分级实现登记）}
+        denominator: {definition: 同上清单全量件数, source_field: af/packages/sweng/ 目录 + RESULT-G4-sweng.md 交付清单}
+        source_field: af/packages/sweng/*（manifest/components/prompts/graphs）；证据=RESULT-G4-sweng.md
+        count_rule: 目录实存件逐一在场且 MANIFEST.sha256 逐件核对过；F4D 在径 verdict=true + 独立 resolved=true（打捞复现，W2-C11 勘误口径）
+        no_data_clause: 无数据=未达成（目录缺件或 MANIFEST 校验缺记录即该判据未达成，不得以叙述补记）
+        producer: G4 施工批（sweng 门员）
+        owner: G4 施工批门员
+        schedule: 已排期（2026-10-25 门终裁回填）
+      - id: G4-2
+        claim: 研究报告包 reportkit v1 真实现（paper_report 图+pkg.report.*×6+citations 五字段 schema+快照落盘归属+planbind 消费）
+        numerator: {definition: reportkit 六件组件（web_search/web_fetch/pdf_extract/citation_unit/rubric_unit/mem.notes）实现在位数}
+        denominator: {value: 6, definition: G4 门终裁 §一第二行登记的六件}
+        source_field: af/packages/reportkit/components.json（pkg.report.* 六件）；证据=RESULT-G4-reportkit.md
+        count_rule: components.json 内 pkg.report.* 段计数==6 且 F5c 订单内 cite_check 通过
+        no_data_clause: 无数据=未达成（F5c cite_check 无输出即未达成）
+        producer: G4 施工批（reportkit 门员）
+        owner: G4 施工批门员
+        schedule: 已排期（2026-10-25 门终裁回填）
+      - id: G4-3
+        claim: 各 1 个真实端到端任务（sweng=F4D scikit-learn-10908；reportkit=F5c arXiv 2610.31351）
+        numerator: {definition: 完成端到端任务数（在径 verdict=true）}
+        denominator: {value: 2, definition: 两包各 1}
+        source_field: af-state 订单档案 F4D/F5c + MES/CH 读回记录
+        count_rule: 在径 verdict=true 计 1/单；F4D 独立判分 resolved=true 系 close 后打捞复现（W2-C02/C-11 caveat 已登记，不掩记）
+        no_data_clause: 无数据=未达成（订单目录缺席/MES 无读回即未达成）
+        producer: F 系施工批
+        owner: G4 门终裁人
+        schedule: 已排期（2026-10-25 门终裁回填）
+      - id: G4-4
+        claim: 任务中立性机器检查常设化（CI step8：N1 删包自洽+N2 领域词扫描白名单外 0 命中+N3 golden 登记）
+        numerator: {definition: step8 中立性门判据通过数}
+        denominator: {value: 13, definition: step8 判据实数 13（C1/I1/I2/I3/I4/R8/P-A/P-B/P-C/S1/R7/Z0）}
+        source_field: ci/out/step8.log + ci/neutrality-expected-fail.txt（23 项）+ ci/neutrality-wordlist.txt
+        count_rule: >-
+          白名单外命中数==0；隔离臂失败集恰为 23 项预期红名单（I1/I2 双向包含）；
+          step8 汇总 PASS=13 FAIL=0 与判据名集合逐位对账。
+          口径漂移登记：G4 门终裁原文（2026-10-25）为「12 判据全过」；红队 W3-C38 新增
+          R8 解析对账判据（随 3e2194c/e6e05a0 合流进主线）后实数 13——本登记同步为 13，
+          证据=ci/out/step8.log「== step8 汇总：PASS=13 FAIL=0（判据 C1/I1/I2/I3/I4/R8/
+          P-A/P-B/P-C/S1/R7/Z0）」。
+        no_data_clause: 无数据=未达成（step8.log 缺席或 expected-fail 名单为空即未达成）
+        producer: G4 施工批 Phase 3（中立性门员）
+        owner: 中立性门员（常设）
+        schedule: 每 CI 必跑（已常设）
+  - gate: G0
+    title: 第三阶段加固+收口门（进行中——criteria.yaml 即 G0 自身判据载体，「加固门自身先被加固」）
+    terminal_adjudication: （未终裁；使命判据=计划/第三阶段开发计划-20261027.md §2 + §5「G0 的自身判据按逃逸复盘 C1/C2 机制建」）
+    criteria:
+      - id: G0-1
+        claim: CI 机制批落地（复盘 §5.1 P0 子集：deliverables.yaml/step10-12/branches.yaml/xcheck/criteria.yaml 等按计划 §2.1 表）
+        numerator: {definition: 计划 §2.1 表已合流入 ci/run.sh 并带 mutation 探针的机制数}
+        denominator: {value: 12, definition: 计划 §2.1 表机制行数}
+        source_field: 计划/第三阶段开发计划-20261027.md §2.1 表 ↔ af/ci/run.sh step 序列
+        count_rule: 每机制=run.sh 可见 step 或并入 step13/14 的可核子项+探针在 mutations/；只写文档未入 run.sh 不计数
+        no_data_clause: 无数据=未达成（无 run.sh diff 即未达成）
+        producer: G0-CI机制批（本批四子代理）
+        owner: 主代理（统稿）
+        schedule: 本批（2026-10-27 起）
+      - id: G0-2
+        claim: 现状开口先行修复（计划 §2.2：report_unit.rs:1112/1262 未饱和 cast、ci/run.sh:338 手写基线 32、:357 ADVISORY 两态死代码）
+        numerator: {definition: 三开口已修并附回归证据数}
+        denominator: {value: 3, definition: 计划 §2.2 三项}
+        source_field: 计划/第三阶段开发计划-20261027.md §2.2 ↔ AF crates/af-execline/src/suite/report_unit.rs + ci/run.sh
+        count_rule: 每项=代码 diff 在主线+对应负例测试在场；仅注释/文书不计数
+        no_data_clause: 无数据=未达成
+        producer: G0 修复批
+        owner: 主代理
+        schedule: 本批
+    observation_windows:            # C7/PP5 六/七要素 machine-validated block
+      - id: G0-OBS-1
+        claim: 旧入口退役观察期跨天复核（义务收口）
+        producer: 观察期复核车（bench-retire-obs-review.py）
+        owner: 运营者+资源组
+        schedule: 中间复核 ≥2026-10-27 01:05:52；期满复核 2026-10-29 01:05:52；归档批 10-29 10:00 自动任务已排
+        collect_surface: [ps/旧链日志, MES, 订单, alarms.log, /tmp 头寸]   # v2 扩容面（复盘 C7 升级②：缺文件=判据未达成）
+        expiry: 期满（2026-10-29 01:05:52）打完成标记并自停定时器；in_window 参与判定
+        escalation: red 告警/黄灯越线入台账并挂单；watch 节拍 N=3 无递增即红；到期未复核升级运营者
+        env_guard:                   # 第七要素（复盘 PP5 升级②，可选）
+          machine_truth: 机器清单盘读定时实测回写（禁手写时点值）
+          red_lines: [镜像闸 ≥85%, 根盘 100%, anolis MemAvailable <24G fail-closed]
+        no_data_clause: 无数据=未达成
+        source_field: 计划/研究组/旧bench退役归档-runbook.md §六-3（人权威）+ numbers.json obs.*（机正本，step12 并轨后生效）
