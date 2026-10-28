@@ -1,0 +1,19 @@
+# doc-claims.txt —— step11 自述-实现对账机读清单（G0 逃逸加固批 A 组，2026-10-28 落本仓 af-wt-g0a/g0a）
+# 格式：TSV，表头固定 11 列（claim_id/freshness/owner/source_file/source_line/quote/evidence/expect/evidence_path/evidence_sha256/note）；# 起始行=注释。
+# 运行（ci/run.sh step11）：python3 ci/step11_check.py --file $AF_ROOT/doc-claims.txt --repo $AF_ROOT --docs-root $AF_ROOT
+#   全部 source_file/evidence_path 均相对本仓根（$AF_ROOT）解析——零硬编码他树绝对路径（总对账 §六.0 纪律）。
+# 证据四形态：cmd:<命令>（cwd=--repo 复跑，stdout 须==expect）/ test:<测试名>（git grep 在 crates/+ci/run.sh 在场）／
+#            exempt:history（不可复跑事实：evidence_path+sha256）/ exempt:manual（note 须含 date:YYYY-MM-DD 且年龄 ≤freshness）。
+# 新鲜度档位：7d=默认；1d=跨天/速变判据；exempt=显式豁免（PP3:286）。引文核位防编造：quote 归一化空白后须为 source_file:source_line 行的子串。
+claim_id	freshness	owner	source_file	source_line	quote	evidence	expect	evidence_path	evidence_sha256	note
+DC-RUN-001	7d	CI 门维护者（G0-A 批）	ci/run.sh	5	十二步验收管道	cmd:grep -cE '^step [0-9]+ |^if fv_advisory' ci/run.sh	12	-	-	口径=step() 硬门调用行 11（step1-11）+ step9 advisory 块 1（fv_advisory 不走 step() 函数，run.sh 独立登记）。对账 numbers.json gates.ci_steps / ci.steps_total 两键；原「六步」头注为实测漂移（C2 活例），本批同改
+DC-RUN-002	7d	CI 门维护者（G0-A 批）	ci/run.sh	17	硬门：计数/证据/descope 不符即红	cmd:grep -c 'step1[012]_check.py' ci/run.sh	3	-	-	step10/11/12 三门分别挂 ci/step10_check.py / step11_check.py / step12_check.py（脚本与 G0 规格草案逐位一致，零硬编码路径，全部经 --root/--repo 参数化）。缺件/解析失败 exit 2，经 step() 转 OVERALL=1（fail-closed）
+DC-RUN-003	7d	CI 门维护者（G0-A 批）	ci/run.sh	378	step 10 "承诺-交付对账 deliverables.yaml" --	cmd:ls ci/step10_check.py ci/step11_check.py ci/step12_check.py | wc -l	3	-	-	三门脚本在场性（step10 头注声明与本行调用互为对账）；python3 -m py_compile 三门全过（G0-A 批 RESULT ②节）
+DC-README-001	7d	README 维护者（G0-A 批回写）	README.md	16	bash ci/run.sh # 十二门验收管道	cmd:grep -c '十二门' README.md	4	-	-	README 四处「十二门」（:7 现状段/:16 快速开始/:62 CI 表题/:92 布局行）与 numbers.json gates.ci_steps=12 同值；原文「九门」为 2026-10-28 前口径，勘误语境由 step12 watch 窗口级 skip 豁免
+DC-VERSIONS-001	7d	VERSIONS 维护者（G0-A 批回写）	docs/VERSIONS.md	58	十二门 + step9 FV advisory	cmd:grep -c '十二门' docs/VERSIONS.md	2	-	-	VERSIONS 两处（:12 勘误注记 / :58 §四 CI 管道现行行）；同批次四已挂 {{numbers.gates.ci_steps}}/{{numbers.gates.ci_hard}}/{{numbers.gates.fv_advisory}} 三占位符（单源机算）
+DC-VERSIONS-002	7d	中立性门维护者（G0-A 批复核）	docs/VERSIONS.md	59	文件实为 23 项，本表停记 22	cmd:grep -vc '^#' ci/neutrality-expected-fail.txt	23	-	-	C2 跨文书计数漂移活例：本表停记 22 而 ci/neutrality-expected-fail.txt 实为 23 项（19→22→23 三代史，复盘:113）。已按 grep -vc '^#' 亲数勘误，并把该行改挂 {{numbers.redlist.count}} 占位符——手写计数是漂移源，单源机算才是根治
+DC-VERSIONS-003	7d	VERSIONS 维护者（G0-A 批回写）	docs/VERSIONS.md	16	crate 版本（{{numbers.af.crates}} crate，全部 0.1.0）	cmd:ls crates | wc -l	22	-	-	crate 计数改挂 {{numbers.af.crates}} 占位符；af-plan 不在其中（descope 载体=ADR-013，取代 ADR-002 的 crates/af-plan 行）
+DC-EXEC-001	7d	af-order 属主	crates/af-order/src/exec.rs	185	`--unit` 值解析（swev|report|stub；其余 OR1001）。	test:unit_choice_parses_three_values_and_rejects_garbage	-	-	-	登记在案的自述-实现漂移债务：注记枚举漏 graph（:191 接受集含 graph，tests/unit_route.rs 有专测）——注记修复为四值时须同批改写本 claim，否则本门复算即红（C1 自述提取完整性）。测试在场由 step11 断言、通过与否由 step3 承载（SPEC §⑧.1 职责分离）
+DC-TEST-001	7d	af-order 属主	crates/af-order/tests/unit_route.rs	34	fn unit_choice_parses_three_values_and_rejects_garbage()	test:unit_choice_parses_three_values_and_rejects_garbage	-	-	-	DC-EXEC-001 的测试面锚点：测试名 git grep 在 crates/ 在场即算有背书（swev/report/stub 三值解析 + 垃圾值拒）；不替代 step3 的全量测试判定
+DC-REPORT-001	7d	G0-A 批（step12 属主）	ci/REPORT.md	10	六步门全部实现	exempt:manual	-	-	-	date:2026-10-28；历史语境人工豁免：ci/REPORT.md 是 2026-10-25 CI 骨架实施批的历史记录，「六步门」为当时事实而非现行口径（现行=十二门）。豁免理由=该文书不进 step12 --docs 扫描面（节区限定，step12 SPEC §⑧.5 方向），本 claim 显式登记该裁决并带属主+日期，防后人把历史文书当现行漂移处理
+DC-ADR-001	exempt	编排者（裁决记录）	docs/adr/014-escape-threshold-policy.md	3	状态：**已批准 2026-10-27，编排者**	exempt:history	-	docs/adr/014-escape-threshold-policy.md	41d3fcd0ba61b2884e5eb2ed81410b7b4b79c49898c41122db3c8e6e8961e667	不可复跑的历史事实（编排者批准时刻）：证据=ADR-014 正式载体在场且 SHA-256 一致，不设年龄衰减（PP3:286 新鲜度机定义的历史豁免档）。ADR-014 与仓内 ADR-012 撞号澄清见该文头注
