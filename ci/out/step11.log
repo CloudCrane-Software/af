@@ -1,6 +1,6 @@
 OK  [DC-RUN-001] 引文@ci/run.sh:5 + cmd 复跑=14（档位 7d，复跑即新鲜）
-OK  [DC-RUN-002] 引文@ci/run.sh:17 + cmd 复跑=3（档位 7d，复跑即新鲜）
-OK  [DC-RUN-003] 引文@ci/run.sh:381 + cmd 复跑=3（档位 7d，复跑即新鲜）
+OK  [DC-RUN-002] 引文@ci/run.sh:19 + cmd 复跑=3（档位 7d，复跑即新鲜）
+OK  [DC-RUN-003] 引文@ci/run.sh:444 + cmd 复跑=3（档位 7d，复跑即新鲜）
 OK  [DC-README-001] 引文@README.md:17 + cmd 复跑=4（档位 7d，复跑即新鲜）
 OK  [DC-VERSIONS-001] 引文@docs/VERSIONS.md:63 + cmd 复跑=2（档位 7d，复跑即新鲜）
 OK  [DC-VERSIONS-002] 引文@docs/VERSIONS.md:64 + cmd 复跑=23（档位 7d，复跑即新鲜）

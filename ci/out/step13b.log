@@ -32,4 +32,4 @@
   [OK  ] G1-test-command-frozen                       present   | 锚点 graph_unit.rs:606 → 命中行 606（漂移 0）窗口内命中
   [OK  ] G2-criteria-degeneration-gate                present   | 锚点 graph_unit.rs:617 → 命中行 617（漂移 0）窗口内命中
   [OK  ] G3-evidence-tree                             present   | 锚点 graph_unit.rs:620 → 命中行 620（漂移 0）窗口内命中
-== arm-wiring --check: 33 格 = 33 PASS / 0 WARN / 0 FAIL → 报告 /home/pan-ding/workspace/af-wt-g0merge/ci/out/arm-wiring-report.json
+== arm-wiring --check: 33 格 = 33 PASS / 0 WARN / 0 FAIL → 报告 ci/out/arm-wiring-report.json
