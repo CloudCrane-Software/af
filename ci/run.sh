@@ -2,7 +2,7 @@
 # =============================================================================
 # AF CI 骨架（ci-skeleton 定案管道）— AF/ci/run.sh
 #
-# 六步验收管道，全部真实执行、逐步计时、产物落 AF/ci/out/：
+# 十二步验收管道，全部真实执行、逐步计时、产物落 AF/ci/out/：
 #   1 fmt     cargo fmt --check                          硬门：非零即红
 #   2 clippy  cargo clippy + 基线门（ci/clippy_gate.py）   硬门：只拦新增警告
 #   3 test    cargo test -j4 --workspace                 硬门：非零即红
@@ -14,6 +14,12 @@
 #   8 neutrality 删包自洽+领域词扫描+golden 登记        硬门（ci/neutrality_gate.sh）
 #   9 fv-advisory 形式验证早警报（Rocq coqc + Kani INV 镜像）advisory：FAIL 只 WARN
 #             不红（非阻塞；工具缺席同 WARN；预算 <2min；Verus 本体不装——失败史在案）
+#  10 reconcile 承诺-交付对账（deliverables.yaml）   硬门：计数/证据/descope 不符即红
+#  11 doc-claims 自述-实现对账（doc-claims.txt）      硬门：断言无测试名/豁免即红
+#  12 numbers 计数复算（numbers.json+占位符）         硬门：复算值≠登记值即红
+#             （G0 逃逸加固批 A 组「对账三件套」2026-10-28 落地；step13 横切与对称/
+#              step14 覆盖与枚举属同批兄弟组落点——全批合流后为 14 step，口径见
+#              AGENT.md 硬纪律 5 勘误行与 numbers.json 的 gates.*/ci.steps_total 键）
 #
 # 外部依赖: cargo+rustup(rustfmt/clippy 组件)、python3、unshare（sudo 可选）、
 #           AF/bin/cosign、AF/poc/poc-cue/bin/cue、AF/poc/poc-cas 真实测试资产；
@@ -362,6 +368,38 @@ T9_1=$(now_ns); T9_MS=$(( (T9_1 - T9_0) / 1000000 ))
 SUMMARY+=("step9  $a_verdict  ${T9_MS}ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）")
 printf '  [9] %s %6dms  FV advisory（Rocq coqc + Kani INV 镜像 32，非阻塞）\n' "$a_verdict" "$T9_MS"
 cat "$OUT/step9.log"
+
+# ---- 10. 承诺-交付对账（G0 逃逸加固批 A 组；红队复盘 C1；硬门） -----------------
+# deliverables.yaml（仓根）四件事：①承诺正本计数对账 ②逐项 check ③done 证据
+# sha256+发布窗口 ④descoped 必须 ADR。跨机制口径（B1/B2 产物条目字段）按
+# G0-CI 批总对账 §三.1 终稿：evidence_path 指向 ci/out/ 的产物类条目
+# （step3-provenance.json、step9-failures.json）由 B1/B2 产出、本门消费。
+echo "== step10 承诺-交付对账 deliverables.yaml"
+step 10 "承诺-交付对账 deliverables.yaml" -- \
+  python3 "$CI_DIR/step10_check.py" --file "$AF_ROOT/deliverables.yaml" \
+    --root "$AF_ROOT" --window-days 7
+
+# ---- 11. 自述-实现对账（G0 批 A 组；红队复盘 C1/C10/PP3；硬门） -----------------
+# doc-claims.txt（仓根）逐条 claim：引文核位 + 测试名或显式豁免在册 + 新鲜度档位
+# （7d/1d）。schema 口径按 G0-CI 批总对账 §三.2 终稿。
+echo "== step11 自述-实现对账 doc-claims.txt"
+step 11 "自述-实现对账 doc-claims.txt" -- \
+  python3 "$CI_DIR/step11_check.py" --file "$AF_ROOT/doc-claims.txt" \
+    --repo "$AF_ROOT" --docs-root "$AF_ROOT"
+
+# ---- 12. 计数复算（G0 批 A 组；红队复盘 C2/C3/PP4；硬门） -----------------------
+# numbers.json（仓根）：限定名键逐键跑来源命令复算比对；扫描文书 {{numbers.*}}
+# 占位符可解析性；watch 正则对手写计数对值。schema 口径按总对账 §三.3 终稿
+# （跨机制入键 fv.kani_inv_harness.* 属 B2、mutations.probes 属 B3、ci.steps_total
+# 供 D2 xcheck 消费——兄弟批落地时同批登记）。
+# --docs 取规范性文书（README.md/docs/VERSIONS.md）：ci/REPORT.md 是 CI 骨架实施批
+# 的历史记录（其「六步门」为 2026-10-25 当时事实），不属现行口径扫描面—— watch
+# 节区限定方向见 step12 SPEC §⑧.5，历史文书进扫描面会把历史记录误判为现行漂移。
+echo "== step12 计数复算 numbers.json + {{numbers.*}} 占位符"
+step 12 "计数复算 numbers.json + {{numbers.*}} 占位符" -- \
+  python3 "$CI_DIR/step12_check.py" --file "$AF_ROOT/numbers.json" \
+    --repo "$AF_ROOT" --docs-root "$AF_ROOT" \
+    --docs README.md --docs docs/VERSIONS.md
 
 # ---- 汇总 -------------------------------------------------------------------
 echo "== 汇总"

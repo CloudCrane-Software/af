@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "_note": "numbers.json（G0 逃逸加固批 A 组「对账三件套」step12 计数复算门，2026-10-28 落本仓 af-wt-g0a/g0a）。全部 value 为本树 2026-10-28 实算值、source 命令在本树可复跑（cwd 缺省=仓根）。部署形态：run.sh step12 以 --repo=$AF_ROOT 调用，本文件与 ci/run.sh 同一提交更新（门数账自举纪律：run.sh 加 step10-12 当批必须同改 gates.* 三键，否则 step12 自红——防「为防再发而堆门」失控，红队复盘 PP4:292）。跨机制入键口径按 G0-CI 批总对账 §三.3 终稿：fv.kani_inv_harness.count/.manifest_sha256 属 B2（9a/9b 基线机算批）、mutations.probes 属 B3（元探针批）、ci.steps_total 供 D2 xcheck 对 AGENT.md 门数消费——三键由兄弟批落地时同批登记（本树无其产物，预登记会复算红，故不占位；键名拼法照终稿原文，勿改）。retro.corpus_total（红队三波语料 168）未入本表：其正本 /tmp/af-rt-retro-corpus.json 为易失路径且违反 /tmp 分流白名单纪律（AGENT.md 硬纪律 7），step12 SPEC §⑧.3 已登记为裁决点——语料迁耐久路径后同批补键。",
+  "numbers": {
+    "gates.ci_steps": {
+      "value": 12,
+      "source": "grep -cE '^step [0-9]+ |^if fv_advisory' ci/run.sh",
+      "unit": "步",
+      "last_recomputed": "2026-10-28",
+      "note": "口径=step() 硬门调用行（step1-11）+ step9 advisory 块（fv_advisory 不走 step() 函数，run.sh 独立登记）。2026-10-28 G0 批 A 组落地 step10/11/12 后由 9 改 12（同 commit 改 run.sh，门数账自举）。AGENT.md 硬纪律 5「九门」勘误行对账本键；README.md/docs/VERSIONS.md 手写「十二门」由 watch 正则对值。G0 全批（step13/14 由兄弟批落地）合流后=14。"
+    },
+    "ci.steps_total": {
+      "value": 12,
+      "source": "grep -cE '^step [0-9]+ |^if fv_advisory' ci/run.sh",
+      "unit": "步",
+      "last_recomputed": "2026-10-28",
+      "note": "总对账 §三.3 终稿裁定的跨机制键名（供 D2 xcheck 对 AGENT.md 门数消费）。与 gates.ci_steps 同源同值（A 示例原名保留，二者拼写不同但口径同一——step12 逐键复算，漂移即红）。G0 全批合流后=14，届时由合流批同批更新（step13/14 不属本批落点）。"
+    },
+    "gates.ci_hard": {
+      "value": 11,
+      "source": "grep -cE '^step [0-9]+ ' ci/run.sh",
+      "unit": "门",
+      "last_recomputed": "2026-10-28",
+      "note": "硬门分列键（step1-11）；与 gates.ci_steps 分列消歧——复盘:117「六门=阶段门 vs 九门=CI step」裸键歧义由此根治。G0 全批合流后=13。"
+    },
+    "gates.fv_advisory": {
+      "value": 1,
+      "source": "grep -c '^if fv_advisory' ci/run.sh",
+      "unit": "门",
+      "last_recomputed": "2026-10-28",
+      "note": "advisory 分列键（step9，非阻塞，两态均不改 OVERALL）。"
+    },
+    "redlist.count": {
+      "value": 23,
+      "source": "grep -vc '^#' ci/neutrality-expected-fail.txt",
+      "unit": "项",
+      "last_recomputed": "2026-10-28",
+      "note": "中立性门预期红名单（19→22→23 三代史即 C2:113 跨文书漂移案例；23=23=23 三方对账见主线 43e8215 提交说明）。2026-10-28 本批落地时复核：docs/VERSIONS.md 停记 22 而文件实为 23——文书侧漂移活例，已把该行改挂 {{numbers.redlist.count}} 占位符（单源机算）。"
+    },
+    "registry.pkgs": {
+      "value": 37,
+      "source": "grep -c '\"name\": \"pkg\\.' af/packages/components.json",
+      "unit": "件",
+      "last_recomputed": "2026-10-28",
+      "note": "根级 components.json 的 pkg.* 声明件数（复盘 A2:392 亲测口径原样登记；文书侧 35 即 35vs37 漂移，C2 活例）。注意与「根级 name 条目 44 + 包级 19 = 63」是两套口径：本键只数根级 pkg.*，勿与 63 混用。"
+    },
+    "af.crates": {
+      "value": 22,
+      "source": "ls crates | wc -l",
+      "unit": "个",
+      "last_recomputed": "2026-10-28",
+      "note": "复盘 A2:387 亲测；af-plan 不在其中（descope 载体=ADR-013）。docs/VERSIONS.md §一 标题已改挂 {{numbers.af.crates}} 占位符。"
+    },
+    "adr.count": {
+      "value": 14,
+      "source": "ls docs/adr/[0-9]*.md | wc -l",
+      "unit": "篇",
+      "last_recomputed": "2026-10-28",
+      "note": "ADR-001~014（AGENT.md:45 主线 e6e05a0 口径；014=逃逸舱占比治理阈值，红队 W3 合流后新增）；README.md 布局行同口径，docs/adr/README.md 不计入。"
+    },
+    "fv.rocq_theorems": {
+      "value": 21,
+      "source": "grep -v '^#' proofs/rocq-规范库-v0/theorems-manifest.txt | awk -F'\\t' '$1 != \"statements-sha256\" && NF >= 2' | wc -l",
+      "unit": "条",
+      "last_recomputed": "2026-10-28",
+      "note": "定理清单条数（run.sh step9 9a-2 期望 21 条；2026-10-27 合流终验「21 条 SHA-256 一致」）。"
+    },
+    "fv.kani_inv_mirror": {
+      "value": 32,
+      "source": "grep -c '#\\[kani::proof\\]' proofs/Kani镜像员-INV组/harness/src/mirror_inv*.rs | awk -F: '{s+=$2} END{print s}'",
+      "unit": "harness",
+      "last_recomputed": "2026-10-28",
+      "note": "INV 镜像套件口径=mirror_inv1-4.rs（12+8+6+6=32，与 run.sh step9 9b 断言 32 verified/0 failures/32 total 同源）；conflict_demo.rs 另有 2 处 kani::proof 属性不在本口径内（两口径差异见 step12 SPEC §⑧.7）。B2 落地 fv.kani_inv_harness.* 双键时须与本键同值或显式分列。"
+    },
+    "neutrality.wordlist": {
+      "value": 62,
+      "source": "grep -vc '^#' ci/neutrality-wordlist.txt",
+      "unit": "词条",
+      "last_recomputed": "2026-10-28",
+      "note": "领域词扫描词条数（枚举跨文书一致性机制的比对面之一：方案 §1.3 项数 vs wordlist 清点，复盘:121）。"
+    }
+  },
+  "watch": [
+    {
+      "key": "gates.ci_steps",
+      "pattern": "(六|七|八|九|十|十一|十二|十三|十四)门",
+      "group": 1,
+      "cn_map": {"六": 6, "七": 7, "八": 8, "九": 9, "十": 10, "十一": 11, "十二": 12, "十三": 13, "十四": 14},
+      "skip_pattern": "勘误|原文|→|口径|全绿",
+      "note": "手写门数对值（复盘:118）。扫描面=run.sh step12 的 --docs 集（README.md/docs/VERSIONS.md 两件规范性文书）；ci/REPORT.md 是 CI 骨架实施批的历史记录（其「六步门」为 2026-10-25 当时事实），不进 --docs——节区限定方向见 step12 SPEC §⑧.5（watch 只扫规范性节），历史文书当现行口径会误红。skip=勘误/历史语境窗口豁免（±40 字符）：本批回写后 README:7/VERSIONS:11,58 同行既有现行「十二门」又有勘误注记「九门」，行级豁免会连现行口径一并放过，故用窗口级（step12 SPEC §④ 实测同款）。"
+    }
+  ]
+}
