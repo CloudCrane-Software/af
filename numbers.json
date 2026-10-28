@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "_note": "numbers.json —— G0-CI 机制批 B 组（真伪门三件套）入键贡献件（2026-10-28，af-wt-g0b/g0b，base=e6e05a0）。键名按 G0-CI 批总对账 §三.3 终稿原文登记（A 的 numbers.json _note：「键名拼法照终稿原文，勿改」；同 _note 裁定「三键由兄弟批落地时同批登记」——本文件即 B 批的登记件）。本树 run.sh 无 step10-12（A 组落点），A 的 gates.* 等键不可在本树复算，故本文件只含 B2/B3 三键；合流批须与 A 的 numbers.json（af-wt-g0a，11 键）取并集后交 step12 跑（ci/step12_check.py 亦由合流批带入本线）。【已知 schema 冲突——合流批须裁决，证据见 g0b-report.md §七】：A 已合流的 ci/step12_check.py:23 KEY_RE=^[a-z0-9_]+\\.[a-z0-9_]+$ 只收单点键名，fv.kani_inv_harness.count / fv.kani_inv_harness.manifest_sha256 两个双点键名会被判「非限定名」；同文件 :69-72 要求来源命令 stdout 必须 int 可解析，manifest_sha256 的十六进制值不满足。建议按终稿键名放宽 step12 schema（KEY_RE 允许多点域路径、value 允许十六进制串比对），而非改键名——终稿键名已被 A 的 _note / SPEC-B2 ①.2 / SPEC-B3 ①.3 / 总对账 §三.3 四方钉死，改键名即制造新的跨文书漂移。mutations.probes（单点+整数）无冲突。registry sha 的机读绑定在 ci/baselines/mutations-registry.sha256（mutation_runner.sh check-registry 每次 step0 对账），mutations.probes 键 note 记录现值供人眼对账。",
+  "numbers": {
+    "fv.kani_inv_harness.count": {
+      "value": 32,
+      "source": "bash ci/baseline_calc.sh gen-kani | awk -F'\\t' '$1==\"count\"{print $2}'",
+      "unit": "harness",
+      "last_recomputed": "2026-10-28",
+      "note": "B2（9b 基线机算）：Kani INV 镜像 harness 数从 proofs 源机算（gen-kani 尊重 lib.rs #[cfg(feature=..)] 门控，conflict_demo 2 条默认不计），替 run.sh 9b 原手写常数 32（SPEC-B2 ①.3/⑤.4：手写常数=判据基准可改，C3 rootCause）。与 A 的 fv.kani_inv_mirror 键同值 32（mirror_inv1-4.rs 口径，两口径并录）。有意增删 harness 须同批 gen-kani 再生成 ci/baselines/kani-inv-harness.manifest 并同改本键（防悄悄改基线=逃逸）。"
+    },
+    "fv.kani_inv_harness.manifest_sha256": {
+      "value": "dd67716e557489817398753ac5c9147cf57203ff3a6b0ad7ef35609ee54c85ab",
+      "source": "sha256sum ci/baselines/kani-inv-harness.manifest | cut -d' ' -f1",
+      "unit": "sha256",
+      "last_recomputed": "2026-10-28",
+      "note": "B2：9b 正本（ci/baselines/kani-inv-harness.manifest）整文件哈希——正本被手改而本键未同步即漂移红（与 ci/baselines/mutations-registry.sha256 同一「防悄悄改基线」纪律）。值=十六进制串：A 的 step12 现 schema 只收 int 值（:69-72），本键须合流批放宽 value 类型后才可入对账（冲突详 _note 与 g0b-report.md §七）；放宽前本键以登记值+note 形式留档，sha 机读面由 baseline_calc.sh verify-kani（run.sh 9b 每次实跑）承担。"
+    },
+    "mutations.probes": {
+      "value": 2,
+      "source": "python3 -c \"import json;print(len(json.load(open('mutations/registry.yaml', encoding='utf-8'))['probes']))\"",
+      "unit": "探针",
+      "last_recomputed": "2026-10-28",
+      "note": "B3（mutations/ 元探针框架）：探针清单条数（复盘 C3-② :136「探针清单（数量+每探针期望值）哈希入 numbers.json，删即计数漂移红」）。当前 2 探针=MUT-001（删门脚本 ci/k5-path-lint.py 后 step1 门命令必须非零退出且 stderr 含文件名）+MUT-002（删任一探针条目后 check-registry 必须 exit 1+「探针清单漂移」，自指防护）。mutations/registry.yaml 整文件 sha256 现值=46b08df4ef0b1c8a6eba97f3388aa3b9ca9a40095c9ef063f8cd9dc8ea0036b6（机读绑定在 ci/baselines/mutations-registry.sha256，run.sh step0 check-registry 每次对账；有意增删探针须同批 bash ci/mutation_runner.sh update-registry-baseline 重钉基线并同改本键）。"
+    }
+  }
+}

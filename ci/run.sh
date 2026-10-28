@@ -12,8 +12,10 @@
 #             （sudo unshare -n 优先；no_new_privs 沙箱回退 unshare -Urn，隔离语义等价）
 #   7 deny    cargo deny --offline check               硬门：licenses/bans/sources/advisories
 #   8 neutrality 删包自洽+领域词扫描+golden 登记        硬门（ci/neutrality_gate.sh）
-#   9 fv-advisory 形式验证早警报（Rocq coqc + Kani INV 镜像）advisory：FAIL 只 WARN
-#             不红（非阻塞；工具缺席同 WARN；预算 <2min；Verus 本体不装——失败史在案）
+#   9 fv-advisory 形式验证早警报（Rocq coqc + Kani INV 镜像）advisory：FAIL 不改
+#             退出码（非阻塞；工具缺席=ADVISORY-WARN、跑了且判据红=ADVISORY-FAIL
+#             落 ci/out/step9-failures.json 供 step10 消费——G0-B2 三态化；
+#             预算 <2min；Verus 本体不装——失败史在案）
 #
 # 外部依赖: cargo+rustup(rustfmt/clippy 组件)、python3、unshare（sudo 可选）、
 #           AF/bin/cosign、AF/poc/poc-cue/bin/cue、AF/poc/poc-cas 真实测试资产；
@@ -24,7 +26,8 @@
 #             登记 ci/out/step0.log（史实：/tmp usrquota 默认 TMPDIR 曾致
 #             os error 122 连锁门红，改磁盘 TMPDIR 后九门全绿）。
 # 退出码: 0=全绿；1=有硬门失败（所有步骤仍会跑完，一次拿全量诊断）；
-#         step9 advisory 失败不影响退出码（SUMMARY 标 ADVISORY-WARN）。
+#         step9 advisory 失败不影响退出码（SUMMARY 标 ADVISORY-WARN/ADVISORY-FAIL，
+#         ADVISORY-FAIL 另落 ci/out/step9-failures.json 由 step10 对账门消费）。
 # =============================================================================
 set -u -o pipefail
 
@@ -109,6 +112,16 @@ done
 if ! (cd "$AF_ROOT" && cargo metadata --no-deps --format-version 1 >/dev/null 2>>"$OUT/step0.log"); then
   PREFLIGHT+=("cargo metadata 失败：workspace manifest 已损坏（查看 ci/out/step0.log）")
 fi
+# ---- 0.x mutations 元探针完整性（G0-B3；复盘 §三 C3-② :136 / PP1） -------------
+# 探针清单（数量+每探针期望值）哈希钉 ci/baselines/mutations-registry.sha256：
+#   删/改任一探针即「探针清单漂移」红（自指防护——防护被关掉本身就是红，
+#   基线缺席同样 fail-closed）。有意变更须 mutation_runner.sh
+#   update-registry-baseline 与注册表改动同批评审提交（防悄悄改基线=逃逸）。
+#   不占新 step 编号（门数账纪律）；全量演练（should-run 判 full）挂合流入口。
+if ! bash "$CI_DIR/mutation_runner.sh" check-registry --root "$AF_ROOT" >>"$OUT/step0.log" 2>&1; then
+  echo "step0 FAIL: mutations 探针清单漂移（删/改探针未走 update-registry-baseline 同批评审）"
+  exit 1
+fi
 if [ ${#PREFLIGHT[@]} -gt 0 ]; then
   printf '预检失败:\n' ; printf '  %s\n' "${PREFLIGHT[@]}"
   exit 2
@@ -126,9 +139,26 @@ step 2 "cargo clippy + clippy_gate" -- \
   bash -c "cd '$AF_ROOT' && cargo clippy --workspace --all-targets -j4 --message-format=json > ci/out/step2-clippy.jsonl 2>/dev/null; rc=\$?; [ \$rc -ne 0 ] && exit \$rc; python3 ci/clippy_gate.py ci/out/step2-clippy.jsonl"
 
 # ---- 3. cargo test ----------------------------------------------------------
+# 【G0-B1】step3 pre-step provenance 门（红队 W3-C-25 / 复盘 §三 C8 / §五 5.1）：
+#   共享 CARGO_TARGET_DIR 跨工作树时，cargo 对 workspace 成员的 fingerprint
+#   local 表为空，freshness 退化为「输出 mtime vs 源 mtime」比较，不校验内容
+#   与路径——从本树跑 cargo test 会原样执行另一棵工作树构建的测试二进制并报
+#   exit 0（假绿）。W3-C-25 实证：共享 target 内 exec_contract-*.d 的
+#   CARGO_MANIFEST_DIR env-dep 全部指向另一棵工作树。
+#   语义：ensure 判脏即清（外来污染且清不动/拒清 → step3 直接红不跑测试）；
+#   cargo test 跑完无论成败都 record 三要素落 ci/out/step3-provenance.json
+#   （缺件或异值的「绿」不得作为结案证据，由 step10 消费）。step 编号不变
+#   （AGENT.md 硬纪律 5「九门」门数账口径）。详见 ci/provenance_check.sh 头注。
+echo "== step3 pre-step provenance 门（W3-C-25：共享 target 跨工作树假绿防护——判脏即清，绿记录带三要素）"
 echo "== step3 cargo test"
-step 3 "cargo test -j4 --workspace" -- \
-  bash -c "cd '$AF_ROOT' && cargo test -j4 --workspace"
+step 3 "provenance 门 + cargo test -j4 --workspace" -- \
+  bash -c "cd '$AF_ROOT' && bash ci/provenance_check.sh ensure --root '$AF_ROOT'; pvc=\$?; \
+             [ \$pvc -ne 0 ] && exit \$pvc; \
+             cargo test -j4 --workspace; rc=\$?; \
+             bash ci/provenance_check.sh record --root '$AF_ROOT' \
+               --out '$OUT/step3-provenance.json' --test-log '$OUT/step3.log' \
+               >> '$OUT/step3-provenance-record.log' 2>&1 || true; \
+             exit \$rc"
 
 # ---- 4. CUE 配方预编译 --------------------------------------------------------
 echo "== step4 cue vet/export + 结构断言"
@@ -324,19 +354,32 @@ fv_advisory() {
       #     甚至全删」仍 exit 0（No proof harnesses found 也是 0）——解析
       #     Complete 汇总行并断言 harness 计数恰 32（INV 镜像面契约）且
       #     0 failures；缺行/计数漂移均 FAIL（证明集缩水此前零防护）。
-      #     有意变更 harness 数须同步更新本断言与 INV 镜像契约登记。
-      local complete verified_k failures_k total_k
-      complete=$(grep -E '^Complete - ' "$OUT/step9-kani.log" | tail -1)
-      if [ -z "$complete" ]; then
+      #     【G0-B2】期望值不再手写常数 32：由
+      #     ci/baselines/kani-inv-harness.manifest（baseline_calc gen-kani 从
+      #     proofs 源机算）的 count 行读入；正本缺席/漂移即 9b 红（先显式判
+      #     退出码再消费，禁裸管道吞退出码——复盘 §三 C3-③ :137）。手写常数
+      #     = 判据基准可改（C3 rootCause :131）。
+      #     有意变更 harness 数须同批再生成正本并登记依据。
+      local complete verified_k failures_k total_k exp_k
+      if ! grep -q '^Complete - ' "$OUT/step9-kani.log"; then
         echo "9b FAIL: 日志缺 Complete 汇总行（见 ci/out/step9-kani.log）"
         rc=1
       else
+        complete=$(grep -E '^Complete - ' "$OUT/step9-kani.log" | tail -1)
+        # 9b 基线对账（C3-③：manifest 机算替手写 32；正本缺席/漂移即红）
+        # 路径参数化到本工作树（root 钉死纪律）：fv_advisory 在调用方 cwd 下跑，
+        # 不用相对路径 ci/baseline_calc.sh。
+        if ! bash "$CI_DIR/baseline_calc.sh" verify-kani --root "$AF_ROOT" >>"$OUT/step9-kani.log" 2>&1; then
+          echo "9b FAIL: 基线对账不过（kani-inv-harness.manifest 缺席或漂移）——先 gen-kani 再生成正本并登记依据（见 ci/out/step9-kani.log）"
+          rc=1
+        fi
+        exp_k=$(awk -F'\t' '$1=="count"{print $2}' "$AF_ROOT/ci/baselines/kani-inv-harness.manifest")
         verified_k=$(echo "$complete" | grep -oE '[0-9]+ successfully verified harnesses' | grep -oE '^[0-9]+')
         failures_k=$(echo "$complete" | grep -oE '[0-9]+ failures' | grep -oE '^[0-9]+')
         total_k=$(echo "$complete" | grep -oE '[0-9]+ total' | grep -oE '^[0-9]+')
         echo "9b Kani INV 镜像快检: exit=0 | $complete"
-        if [ "${verified_k:-0}" -ne 32 ] || [ "${failures_k:-1}" -ne 0 ] || [ "${total_k:-0}" -ne 32 ]; then
-          echo "9b FAIL: harness 计数断言不过（期望 32 verified / 0 failures / 32 total，实得 ${verified_k:-缺}/${failures_k:-缺}/${total_k:-缺}——证明集被删减或有失败）"
+        if [ "${verified_k:-0}" -ne "${exp_k:-x}" ] || [ "${failures_k:-1}" -ne 0 ] || [ "${total_k:-0}" -ne "${exp_k:-x}" ]; then
+          echo "9b FAIL: harness 计数断言不过（基线机算期望 ${exp_k:-缺} verified / 0 failures / ${exp_k:-缺} total，实得 ${verified_k:-缺}/${failures_k:-缺}/${total_k:-缺}——证明集被删减或有失败）"
           rc=1
         fi
       fi
@@ -353,10 +396,23 @@ fv_advisory() {
   return $rc
 }
 T9_0=$(now_ns)
+# 【G0-B2】a_verdict 三态化（开发计划 §2.2：消除两态死代码；复盘 C3 rootCause
+#   :131）：ADVISORY-PASS=跑了且判据全绿 / ADVISORY-WARN=工具缺席（coqc/Kani
+#   不在，维持现状语义）/ ADVISORY-FAIL=**跑了且 9a/9b 判据红**——现状这类也落
+#   PASS/WARN 属死代码（绿灯不承载守护承诺）。退出码仍非阻塞（step9 advisory
+#   定位与「九门」门数账口径不变），但 ADVISORY-FAIL 必须落结构化产物
+#   ci/out/step9-failures.json（fail 项+日志指针），由 step10 对账门消费：
+#   存在未消化的 ADVISORY-FAIL 不得结案——把「不改退出码」从死代码变成有
+#   消费者的显式契约。
 if fv_advisory > "$OUT/step9.log" 2>&1; then
-  a_verdict="ADVISORY-PASS"          # 非阻塞：两态均不改 OVERALL（exit code 不受影响）
+  a_verdict="ADVISORY-PASS"          # 非阻塞：退出码不受影响（九门口径不变）
 else
-  a_verdict="ADVISORY-WARN"
+  if grep -qE '^(9a|9b) FAIL' "$OUT/step9.log"; then
+    a_verdict="ADVISORY-FAIL"
+    grep -E '^(9a|9b) FAIL' "$OUT/step9.log" | python3 -c 'import json,sys; print(json.dumps({"verdict":"ADVISORY-FAIL","step9_failures":sys.stdin.read().splitlines(),"log":"ci/out/step9.log"}, ensure_ascii=False))' > "$OUT/step9-failures.json"
+  else
+    a_verdict="ADVISORY-WARN"
+  fi
 fi
 T9_1=$(now_ns); T9_MS=$(( (T9_1 - T9_0) / 1000000 ))
 SUMMARY+=("step9  $a_verdict  ${T9_MS}ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）")
