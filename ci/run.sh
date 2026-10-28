@@ -2,7 +2,7 @@
 # =============================================================================
 # AF CI 骨架（ci-skeleton 定案管道）— AF/ci/run.sh
 #
-# 十二步验收管道，全部真实执行、逐步计时、产物落 AF/ci/out/：
+# 十三步验收管道，全部真实执行、逐步计时、产物落 AF/ci/out/：
 #   1 fmt     cargo fmt --check                          硬门：非零即红
 #   2 clippy  cargo clippy + 基线门（ci/clippy_gate.py）   硬门：只拦新增警告
 #   3 test    cargo test -j4 --workspace                 硬门：非零即红
@@ -20,6 +20,9 @@
 #             （G0 逃逸加固批 A 组「对账三件套」2026-10-28 落地；step13 横切与对称/
 #              step14 覆盖与枚举属同批兄弟组落点——全批合流后为 14 step，口径见
 #              AGENT.md 硬纪律 5 勘误行与 numbers.json 的 gates.*/ci.steps_total 键）
+#  13 横切与对称批（G0-C：fix-scan 同族横切 + arm-wiring 三臂逐格 + budget-cast-lint
+#             三机制共宿槽——同域轻量检查合计 <20s、同退出码语义，「禁止堆门」纪律下
+#             并为单一 step 槽；step10/11/12/14 槽由 G0-A/D 批落，编号统稿见总对账 §二）
 #
 # 外部依赖: cargo+rustup(rustfmt/clippy 组件)、python3、unshare（sudo 可选）、
 #           AF/bin/cosign、AF/poc/poc-cue/bin/cue、AF/poc/poc-cas 真实测试资产；
@@ -400,6 +403,28 @@ step 12 "计数复算 numbers.json + {{numbers.*}} 占位符" -- \
   python3 "$CI_DIR/step12_check.py" --file "$AF_ROOT/numbers.json" \
     --repo "$AF_ROOT" --docs-root "$AF_ROOT" \
     --docs README.md --docs docs/VERSIONS.md
+
+# ---- 13. 横切与对称批（G0-C：三机制共宿槽，复盘 C9/PP4/C6 升级①/C11-4）---------------
+# 共宿依据（G0-CI批-总对账 §二）：同域轻量检查（合计 <20s）、同退出码语义
+# （1=红、2=配置自身错），「禁止堆门」纪律下并为单一 step 槽；三机制各自产物/
+# 日志落 ci/out/step13{a,b,c}.log。插入锚：step9 之后、汇总块之前（各 SPEC ②
+# diff 草案为分槽占位 13/14/15，编号以总对账 §二统稿裁定为准=step13 共宿）。
+#   13a fix-scan：族横切扫描。常规批=diff 触及 trigger_globs 的族才跑（路径过滤
+#       触发）；合流批注入 FIXSCAN_MODE=full 全族全量，产物+sha256 落
+#       redteam/scans/<batch>/（缺产物=合流 blocked 由合流门 check，见
+#       fix_scan.py --verify-artifacts）。
+#   13b arm-wiring：三臂（swev/report/graph）×10 防线逐格断言在场，删任一格即红；
+#       absent 格必须挂可解析债号（仓内债册镜像 ci/debt-register.md）。
+#   13c budget-cast-lint：预算字段 cast 直转全仓 fail（白名单共读
+#       ci/budget-cast-whitelist.json 单一正本，挂债号）+ 兜底臂 fail-loud 门。
+#       上线前置=report_unit.rs:1112/1262 先修（总对账 §四.2，G0-C 已完成）。
+echo "== step13 横切与对称（fix-scan 族横切 + arm-wiring 三臂逐格 + budget-cast-lint）"
+step 13a "fix-scan 同族横切扫描（diff 档路径过滤；合流档 FIXSCAN_MODE=full 全量）" -- \
+  bash -c "cd '$AF_ROOT' && python3 ci/fix_scan.py --validate && python3 ci/fix_scan.py --run --mode \"\${FIXSCAN_MODE:-diff}\" --diff-base \"\${FIXSCAN_DIFF_BASE:-origin/main}\""
+step 13b "arm-wiring 三臂防线逐格断言（删任一格即红；absent 格挂债号）" -- \
+  bash -c "cd '$AF_ROOT' && python3 ci/arm_wiring_check.py --validate ci/arm-wiring.yaml && python3 ci/arm_wiring_check.py --check ci/arm-wiring.yaml --report ci/out/arm-wiring-report.json"
+step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail-loud）" -- \
+  bash -c "cd '$AF_ROOT' && python3 ci/budget_cast_lint.py --root . --whitelist ci/budget-cast-whitelist.json --debt-register ci/debt-register.md"
 
 # ---- 汇总 -------------------------------------------------------------------
 echo "== 汇总"

@@ -4,8 +4,8 @@
 >
 > 当前形态（2026-10-25，第二阶段 G0-G4 已放行、G5 收官中）：**AFB DSL →
 > 编译器 → 统一执行面 → 订单门面** 全链在位，配 `af/packages/` 组件与包图
-> 登记处；CI 为十二门 + advisory（G0 逃逸加固批 2026-10-28 起；原文「九门」
-> 口径勘误后新增 step10-12 对账三件套）。版本明细见 `docs/VERSIONS.md`，AFB 语法定版
+> 登记处；CI 为十三门 + advisory（G0 逃逸加固批 2026-10-28 起；原文「九门」
+> 口径勘误后新增 step10-12 对账三件套 + step13 横切与对称）。版本明细见 `docs/VERSIONS.md`，AFB 语法定版
 > 说明见 `crates/af-dsl/SYNTAX.md`。
 
 ## 快速开始
@@ -13,7 +13,7 @@
 ```bash
 source ~/.cargo/env        # rustc/cargo 1.99.1（见 BOOTSTRAP.md）
 cargo build -j 6 && cargo test -j 6   # 全量构建与测试（当前全绿）
-bash ci/run.sh             # 十二门验收管道 + step9 FV advisory（产物落 ci/out/）
+bash ci/run.sh             # 十三门验收管道 + step9 FV advisory（产物落 ci/out/）
 ```
 
 第三方单二进制（temporal/zot/cosign/cue/crane，均已就位于 `bin/`，**不入
@@ -59,7 +59,7 @@ YAML 主干 + CEL 谓词（ADR-001），正本《DSL-语法提案-B》+ 择优�
 `ci/run.sh` step9 为非阻塞 advisory 门（Rocq coqc + Kani INV 镜像快检）。
 复现命令见 `proofs/README-形式验证.md`。
 
-## CI 十二门 + advisory（ci/run.sh）
+## CI 十三门 + advisory（ci/run.sh）
 
 | step | 门 | 形态 |
 |---|---|---|
@@ -75,11 +75,13 @@ YAML 主干 + CEL 谓词（ADR-001），正本《DSL-语法提案-B》+ 择优�
 | 10 | 承诺-交付对账（`deliverables.yaml`） | 硬门 |
 | 11 | 自述-实现对账（`doc-claims.txt`） | 硬门 |
 | 12 | 计数复算（`numbers.json` + `{{numbers.*}}`） | 硬门 |
+| 13 | 横切与对称（fix-scan 同族横切 + arm-wiring 三臂逐格 + budget-cast-lint，三机制共宿） | 硬门 |
 
-step10-12 为 G0 逃逸加固批「对账三件套」（2026-10-28 落地）：承诺-交付、自述-
-实现、计数口径三类对账门；同批 step13（横切与对称）/step14（覆盖与枚举）落地后
-为 14 step，门数口径以 `ci/run.sh` 实步数与 `numbers.json` 的 `gates.ci_steps`/
-`ci.steps_total` 键对账为准（`AGENT.md` 硬纪律 5 勘误行同口径）。
+step10-13 为 G0 逃逸加固批已合流部分（2026-10-28 落地）：step10-12「对账三件
+套」=承诺-交付、自述-实现、计数口径三类对账门；step13「横切与对称」三机制共宿
+单一 step 槽（同域轻量检查合计 <20s、同退出码语义）；同批 step14（覆盖与枚举）
+合流后为 14 step，门数口径以 `ci/run.sh` 实步数与 `numbers.json` 的
+`gates.ci_steps`/`ci.steps_total` 键对账为准（`AGENT.md` 硬纪律 5 勘误行同口径）。
 
 每跑次 SUMMARY 落 `ci/out/` 随分支入档。
 
@@ -89,7 +91,7 @@ step10-12 为 G0 逃逸加固批「对账三件套」（2026-10-28 落地）：�
 af/
 ├── crates/               # 22 个内核件（上表五件为第二阶段主线）
 ├── af/packages/          # 组件与包图登记处（两真包 + 声明集）
-├── ci/                   # 十二门+advisory 验收管道（run.sh；产物 ci/out/）
+├── ci/                   # 十三门+advisory 验收管道（run.sh；产物 ci/out/）
 ├── docs/adr/             # ADR-001..014 裁决集（011=红队修复批 W1；012/013=W2/W3 修复批；014=逃逸舱占比治理阈值）+ VERSIONS.md 版本表
 ├── poc/                  # 第一阶段 15 项 PoC（各带 RESULT.md / VERIFY*.md）
 ├── proofs/               # FV-1 第一波形式验证工件（Kani/Verus/Rocq）
