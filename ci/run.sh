@@ -2,7 +2,7 @@
 # =============================================================================
 # AF CI 骨架（ci-skeleton 定案管道）— AF/ci/run.sh
 #
-# 六步验收管道，全部真实执行、逐步计时、产物落 AF/ci/out/：
+# 十四步验收管道，全部真实执行、逐步计时、产物落 AF/ci/out/：
 #   1 fmt     cargo fmt --check                          硬门：非零即红
 #   2 clippy  cargo clippy + 基线门（ci/clippy_gate.py）   硬门：只拦新增警告
 #   3 test    cargo test -j4 --workspace                 硬门：非零即红
@@ -12,8 +12,21 @@
 #             （sudo unshare -n 优先；no_new_privs 沙箱回退 unshare -Urn，隔离语义等价）
 #   7 deny    cargo deny --offline check               硬门：licenses/bans/sources/advisories
 #   8 neutrality 删包自洽+领域词扫描+golden 登记        硬门（ci/neutrality_gate.sh）
-#   9 fv-advisory 形式验证早警报（Rocq coqc + Kani INV 镜像）advisory：FAIL 只 WARN
-#             不红（非阻塞；工具缺席同 WARN；预算 <2min；Verus 本体不装——失败史在案）
+#   9 fv-advisory 形式验证早警报（Rocq coqc + Kani INV 镜像）advisory：FAIL 不改
+#             退出码（非阻塞；工具缺席=ADVISORY-WARN、跑了且判据红=ADVISORY-FAIL
+#             落 ci/out/step9-failures.json 供 step10 消费——G0-B2 三态化；
+#             预算 <2min；Verus 本体不装——失败史在案）
+#  10 reconcile 承诺-交付对账（deliverables.yaml）   硬门：计数/证据/descope 不符即红
+#  11 doc-claims 自述-实现对账（doc-claims.txt）      硬门：断言无测试名/豁免即红
+#  12 numbers 计数复算（numbers.json+占位符）         硬门：复算值≠登记值即红
+#             （G0 逃逸加固批 A 组「对账三件套」2026-10-28 落地；step13 横切与对称/
+#              step14 覆盖与枚举属同批兄弟组落点——全批合流后为 14 step，口径见
+#              AGENT.md 硬纪律 5 勘误行与 numbers.json 的 gates.*/ci.steps_total 键；
+#              G0-B 批三机制（step3 provenance 门/9a9b 基线机算/mutations 元探针）
+#              2026-10-28 补合流——均不新增 step 槽，step3/step9 段内改写编号不变）
+#  13 横切与对称批（G0-C：fix-scan 同族横切 + arm-wiring 三臂逐格 + budget-cast-lint
+#             三机制共宿槽——同域轻量检查合计 <20s、同退出码语义，「禁止堆门」纪律下
+#             并为单一 step 槽；step10/11/12/14 槽由 G0-A/D 批落，编号统稿见总对账 §二）
 #
 # 外部依赖: cargo+rustup(rustfmt/clippy 组件)、python3、unshare（sudo 可选）、
 #           AF/bin/cosign、AF/poc/poc-cue/bin/cue、AF/poc/poc-cas 真实测试资产；
@@ -24,7 +37,8 @@
 #             登记 ci/out/step0.log（史实：/tmp usrquota 默认 TMPDIR 曾致
 #             os error 122 连锁门红，改磁盘 TMPDIR 后九门全绿）。
 # 退出码: 0=全绿；1=有硬门失败（所有步骤仍会跑完，一次拿全量诊断）；
-#         step9 advisory 失败不影响退出码（SUMMARY 标 ADVISORY-WARN）。
+#         step9 advisory 失败不影响退出码（SUMMARY 标 ADVISORY-WARN/ADVISORY-FAIL，
+#         ADVISORY-FAIL 另落 ci/out/step9-failures.json 由 step10 对账门消费）。
 # =============================================================================
 set -u -o pipefail
 
@@ -109,6 +123,16 @@ done
 if ! (cd "$AF_ROOT" && cargo metadata --no-deps --format-version 1 >/dev/null 2>>"$OUT/step0.log"); then
   PREFLIGHT+=("cargo metadata 失败：workspace manifest 已损坏（查看 ci/out/step0.log）")
 fi
+# ---- 0.x mutations 元探针完整性（G0-B3；复盘 §三 C3-② :136 / PP1） -------------
+# 探针清单（数量+每探针期望值）哈希钉 ci/baselines/mutations-registry.sha256：
+#   删/改任一探针即「探针清单漂移」红（自指防护——防护被关掉本身就是红，
+#   基线缺席同样 fail-closed）。有意变更须 mutation_runner.sh
+#   update-registry-baseline 与注册表改动同批评审提交（防悄悄改基线=逃逸）。
+#   不占新 step 编号（门数账纪律）；全量演练（should-run 判 full）挂合流入口。
+if ! bash "$CI_DIR/mutation_runner.sh" check-registry --root "$AF_ROOT" >>"$OUT/step0.log" 2>&1; then
+  echo "step0 FAIL: mutations 探针清单漂移（删/改探针未走 update-registry-baseline 同批评审）"
+  exit 1
+fi
 if [ ${#PREFLIGHT[@]} -gt 0 ]; then
   printf '预检失败:\n' ; printf '  %s\n' "${PREFLIGHT[@]}"
   exit 2
@@ -126,9 +150,31 @@ step 2 "cargo clippy + clippy_gate" -- \
   bash -c "cd '$AF_ROOT' && cargo clippy --workspace --all-targets -j4 --message-format=json > ci/out/step2-clippy.jsonl 2>/dev/null; rc=\$?; [ \$rc -ne 0 ] && exit \$rc; python3 ci/clippy_gate.py ci/out/step2-clippy.jsonl"
 
 # ---- 3. cargo test ----------------------------------------------------------
+# 【G0-B1】step3 pre-step provenance 门（红队 W3-C-25 / 复盘 §三 C8 / §五 5.1）：
+#   共享 CARGO_TARGET_DIR 跨工作树时，cargo 对 workspace 成员的 fingerprint
+#   local 表为空，freshness 退化为「输出 mtime vs 源 mtime」比较，不校验内容
+#   与路径——从本树跑 cargo test 会原样执行另一棵工作树构建的测试二进制并报
+#   exit 0（假绿）。W3-C-25 实证：共享 target 内 exec_contract-*.d 的
+#   CARGO_MANIFEST_DIR env-dep 全部指向另一棵工作树。
+#   语义：ensure 判脏即清（外来污染且清不动/拒清 → step3 直接红不跑测试）；
+#   cargo test 跑完无论成败都 record 三要素落 ci/out/step3-provenance.json
+#   （缺件或异值的「绿」不得作为结案证据，由 step10 消费）。step 编号不变
+#   （AGENT.md 硬纪律 5「九门」门数账口径）。详见 ci/provenance_check.sh 头注。
+#   合流批注记（2026-10-28 g0b 补合流）：下方通告行刻意**不带**「== stepN」门号
+#   登记行前缀——门号登记行约定「每个 step 槽一行」（numbers.json gates.ci_steps/
+#   ci_hard 与 xcheck 门数对账据此计数），pre-step 通告若沿用该前缀会把 step3
+#   槽计成两行（门数账 14→15 假漂移）；step3 槽的登记行仍是下一行「step3 cargo
+#   test」。改通告行措辞时勿再引入 `^echo "== step[0-9]+` 形态。
+echo "== provenance 门（step3 pre-step；W3-C-25：共享 target 跨工作树假绿防护——判脏即清，绿记录带三要素）"
 echo "== step3 cargo test"
-step 3 "cargo test -j4 --workspace" -- \
-  bash -c "cd '$AF_ROOT' && cargo test -j4 --workspace"
+step 3 "provenance 门 + cargo test -j4 --workspace" -- \
+  bash -c "cd '$AF_ROOT' && bash ci/provenance_check.sh ensure --root '$AF_ROOT'; pvc=\$?; \
+             [ \$pvc -ne 0 ] && exit \$pvc; \
+             cargo test -j4 --workspace; rc=\$?; \
+             bash ci/provenance_check.sh record --root '$AF_ROOT' \
+               --out '$OUT/step3-provenance.json' --test-log '$OUT/step3.log' \
+               >> '$OUT/step3-provenance-record.log' 2>&1 || true; \
+             exit \$rc"
 
 # ---- 4. CUE 配方预编译 --------------------------------------------------------
 echo "== step4 cue vet/export + 结构断言"
@@ -324,19 +370,32 @@ fv_advisory() {
       #     甚至全删」仍 exit 0（No proof harnesses found 也是 0）——解析
       #     Complete 汇总行并断言 harness 计数恰 32（INV 镜像面契约）且
       #     0 failures；缺行/计数漂移均 FAIL（证明集缩水此前零防护）。
-      #     有意变更 harness 数须同步更新本断言与 INV 镜像契约登记。
-      local complete verified_k failures_k total_k
-      complete=$(grep -E '^Complete - ' "$OUT/step9-kani.log" | tail -1)
-      if [ -z "$complete" ]; then
+      #     【G0-B2】期望值不再手写常数 32：由
+      #     ci/baselines/kani-inv-harness.manifest（baseline_calc gen-kani 从
+      #     proofs 源机算）的 count 行读入；正本缺席/漂移即 9b 红（先显式判
+      #     退出码再消费，禁裸管道吞退出码——复盘 §三 C3-③ :137）。手写常数
+      #     = 判据基准可改（C3 rootCause :131）。
+      #     有意变更 harness 数须同批再生成正本并登记依据。
+      local complete verified_k failures_k total_k exp_k
+      if ! grep -q '^Complete - ' "$OUT/step9-kani.log"; then
         echo "9b FAIL: 日志缺 Complete 汇总行（见 ci/out/step9-kani.log）"
         rc=1
       else
+        complete=$(grep -E '^Complete - ' "$OUT/step9-kani.log" | tail -1)
+        # 9b 基线对账（C3-③：manifest 机算替手写 32；正本缺席/漂移即红）
+        # 路径参数化到本工作树（root 钉死纪律）：fv_advisory 在调用方 cwd 下跑，
+        # 不用相对路径 ci/baseline_calc.sh。
+        if ! bash "$CI_DIR/baseline_calc.sh" verify-kani --root "$AF_ROOT" >>"$OUT/step9-kani.log" 2>&1; then
+          echo "9b FAIL: 基线对账不过（kani-inv-harness.manifest 缺席或漂移）——先 gen-kani 再生成正本并登记依据（见 ci/out/step9-kani.log）"
+          rc=1
+        fi
+        exp_k=$(awk -F'\t' '$1=="count"{print $2}' "$AF_ROOT/ci/baselines/kani-inv-harness.manifest")
         verified_k=$(echo "$complete" | grep -oE '[0-9]+ successfully verified harnesses' | grep -oE '^[0-9]+')
         failures_k=$(echo "$complete" | grep -oE '[0-9]+ failures' | grep -oE '^[0-9]+')
         total_k=$(echo "$complete" | grep -oE '[0-9]+ total' | grep -oE '^[0-9]+')
         echo "9b Kani INV 镜像快检: exit=0 | $complete"
-        if [ "${verified_k:-0}" -ne 32 ] || [ "${failures_k:-1}" -ne 0 ] || [ "${total_k:-0}" -ne 32 ]; then
-          echo "9b FAIL: harness 计数断言不过（期望 32 verified / 0 failures / 32 total，实得 ${verified_k:-缺}/${failures_k:-缺}/${total_k:-缺}——证明集被删减或有失败）"
+        if [ "${verified_k:-0}" -ne "${exp_k:-x}" ] || [ "${failures_k:-1}" -ne 0 ] || [ "${total_k:-0}" -ne "${exp_k:-x}" ]; then
+          echo "9b FAIL: harness 计数断言不过（基线机算期望 ${exp_k:-缺} verified / 0 failures / ${exp_k:-缺} total，实得 ${verified_k:-缺}/${failures_k:-缺}/${total_k:-缺}——证明集被删减或有失败）"
           rc=1
         fi
       fi
@@ -353,15 +412,135 @@ fv_advisory() {
   return $rc
 }
 T9_0=$(now_ns)
+# 【G0-B2】a_verdict 三态化（开发计划 §2.2：消除两态死代码；复盘 C3 rootCause
+#   :131）：ADVISORY-PASS=跑了且判据全绿 / ADVISORY-WARN=工具缺席（coqc/Kani
+#   不在，维持现状语义）/ ADVISORY-FAIL=**跑了且 9a/9b 判据红**——现状这类也落
+#   PASS/WARN 属死代码（绿灯不承载守护承诺）。退出码仍非阻塞（step9 advisory
+#   定位与「九门」门数账口径不变），但 ADVISORY-FAIL 必须落结构化产物
+#   ci/out/step9-failures.json（fail 项+日志指针），由 step10 对账门消费：
+#   存在未消化的 ADVISORY-FAIL 不得结案——把「不改退出码」从死代码变成有
+#   消费者的显式契约。
 if fv_advisory > "$OUT/step9.log" 2>&1; then
-  a_verdict="ADVISORY-PASS"          # 非阻塞：两态均不改 OVERALL（exit code 不受影响）
+  a_verdict="ADVISORY-PASS"          # 非阻塞：退出码不受影响（九门口径不变）
 else
-  a_verdict="ADVISORY-WARN"
+  if grep -qE '^(9a|9b) FAIL' "$OUT/step9.log"; then
+    a_verdict="ADVISORY-FAIL"
+    grep -E '^(9a|9b) FAIL' "$OUT/step9.log" | python3 -c 'import json,sys; print(json.dumps({"verdict":"ADVISORY-FAIL","step9_failures":sys.stdin.read().splitlines(),"log":"ci/out/step9.log"}, ensure_ascii=False))' > "$OUT/step9-failures.json"
+  else
+    a_verdict="ADVISORY-WARN"
+  fi
 fi
 T9_1=$(now_ns); T9_MS=$(( (T9_1 - T9_0) / 1000000 ))
 SUMMARY+=("step9  $a_verdict  ${T9_MS}ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）")
 printf '  [9] %s %6dms  FV advisory（Rocq coqc + Kani INV 镜像 32，非阻塞）\n' "$a_verdict" "$T9_MS"
 cat "$OUT/step9.log"
+
+# ---- 10. 承诺-交付对账（G0 逃逸加固批 A 组；红队复盘 C1；硬门） -----------------
+# deliverables.yaml（仓根）四件事：①承诺正本计数对账 ②逐项 check ③done 证据
+# sha256+发布窗口 ④descoped 必须 ADR。跨机制口径（B1/B2 产物条目字段）按
+# G0-CI 批总对账 §三.1 终稿：evidence_path 指向 ci/out/ 的产物类条目
+# （step3-provenance.json、step9-failures.json）由 B1/B2 产出、本门消费。
+echo "== step10 承诺-交付对账 deliverables.yaml"
+step 10 "承诺-交付对账 deliverables.yaml" -- \
+  python3 "$CI_DIR/step10_check.py" --file "$AF_ROOT/deliverables.yaml" \
+    --root "$AF_ROOT" --window-days 7
+
+# ---- 11. 自述-实现对账（G0 批 A 组；红队复盘 C1/C10/PP3；硬门） -----------------
+# doc-claims.txt（仓根）逐条 claim：引文核位 + 测试名或显式豁免在册 + 新鲜度档位
+# （7d/1d）。schema 口径按 G0-CI 批总对账 §三.2 终稿。
+echo "== step11 自述-实现对账 doc-claims.txt"
+step 11 "自述-实现对账 doc-claims.txt" -- \
+  python3 "$CI_DIR/step11_check.py" --file "$AF_ROOT/doc-claims.txt" \
+    --repo "$AF_ROOT" --docs-root "$AF_ROOT"
+
+# ---- 12. 计数复算（G0 批 A 组；红队复盘 C2/C3/PP4；硬门） -----------------------
+# numbers.json（仓根）：限定名键逐键跑来源命令复算比对；扫描文书 {{numbers.*}}
+# 占位符可解析性；watch 正则对手写计数对值。schema 口径按总对账 §三.3 终稿
+# （跨机制入键 fv.kani_inv_harness.* 属 B2、mutations.probes 属 B3、ci.steps_total
+# 供 D2 xcheck 消费——兄弟批落地时同批登记）。
+# --docs 取规范性文书（README.md/docs/VERSIONS.md）：ci/REPORT.md 是 CI 骨架实施批
+# 的历史记录（其「六步门」为 2026-10-25 当时事实），不属现行口径扫描面—— watch
+# 节区限定方向见 step12 SPEC §⑧.5，历史文书进扫描面会把历史记录误判为现行漂移。
+echo "== step12 计数复算 numbers.json + {{numbers.*}} 占位符"
+step 12 "计数复算 numbers.json + {{numbers.*}} 占位符" -- \
+  python3 "$CI_DIR/step12_check.py" --file "$AF_ROOT/numbers.json" \
+    --repo "$AF_ROOT" --docs-root "$AF_ROOT" \
+    --docs README.md --docs docs/VERSIONS.md
+
+# ---- 13. 横切与对称批（G0-C：三机制共宿槽，复盘 C9/PP4/C6 升级①/C11-4）---------------
+# 共宿依据（G0-CI批-总对账 §二）：同域轻量检查（合计 <20s）、同退出码语义
+# （1=红、2=配置自身错），「禁止堆门」纪律下并为单一 step 槽；三机制各自产物/
+# 日志落 ci/out/step13{a,b,c}.log。插入锚：step9 之后、汇总块之前（各 SPEC ②
+# diff 草案为分槽占位 13/14/15，编号以总对账 §二统稿裁定为准=step13 共宿）。
+#   13a fix-scan：族横切扫描。常规批=diff 触及 trigger_globs 的族才跑（路径过滤
+#       触发）；合流批注入 FIXSCAN_MODE=full 全族全量，产物+sha256 落
+#       redteam/scans/<batch>/（缺产物=合流 blocked 由合流门 check，见
+#       fix_scan.py --verify-artifacts）。
+#   13b arm-wiring：三臂（swev/report/graph）×10 防线逐格断言在场，删任一格即红；
+#       absent 格必须挂可解析债号（仓内债册镜像 ci/debt-register.md）。
+#   13c budget-cast-lint：预算字段 cast 直转全仓 fail（白名单共读
+#       ci/budget-cast-whitelist.json 单一正本，挂债号）+ 兜底臂 fail-loud 门。
+#       上线前置=report_unit.rs:1112/1262 先修（总对账 §四.2，G0-C 已完成）。
+echo "== step13 横切与对称（fix-scan 族横切 + arm-wiring 三臂逐格 + budget-cast-lint）"
+step 13a "fix-scan 同族横切扫描（diff 档路径过滤；合流档 FIXSCAN_MODE=full 全量）" -- \
+  bash -c "cd '$AF_ROOT' && python3 ci/fix_scan.py --validate && python3 ci/fix_scan.py --run --mode \"\${FIXSCAN_MODE:-diff}\" --diff-base \"\${FIXSCAN_DIFF_BASE:-origin/main}\""
+step 13b "arm-wiring 三臂防线逐格断言（删任一格即红；absent 格挂债号）" -- \
+  bash -c "cd '$AF_ROOT' && python3 ci/arm_wiring_check.py --validate ci/arm-wiring.yaml && python3 ci/arm_wiring_check.py --check ci/arm-wiring.yaml --report ci/out/arm-wiring-report.json"
+step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail-loud）" -- \
+  bash -c "cd '$AF_ROOT' && python3 ci/budget_cast_lint.py --root . --whitelist ci/budget-cast-whitelist.json --debt-register ci/debt-register.md"
+
+# ---- 14. 机读一致性批（G0-CI 机制批 2026-10-28；复盘 C2/C4/PP2 落点） ------------------
+# 三机制共宿一步（SPEC-1/2/3 同一 diff 块；遵守「禁止堆门」纪律，合计常跑 <5s）：
+#   14a branches.yaml 锚+夹具名单对账（ci/branches_check.py，SPEC-1）
+#   14b 枚举跨文书一致性（ci/xcheck.py，SPEC-2；3/4 组对账：门数/packages/词表，
+#       码位组按 SPEC ⑧ 遗留登记、每次运行显式 [LEGACY] 行）
+#   14c criteria.yaml 六要素 schema 校验+终验清单机生成（ci/criteria_check.py
+#       --emit-checklist ci/out/final-checklist.md，SPEC-3）
+# 退出码语义（各 SPEC ③）：0=全过；1=任一硬红 → 本步 FAIL 且 OVERALL=1；2=仅
+#   advisory WARN（头注漂移/G0 勘误未同步/文本降级/coverage 格式待校准）→ SUMMARY
+#   落显式 WARN 行、不改 OVERALL（与 step9 ADVISORY 同型；禁两态死代码——复盘 C3
+#   ci/run.sh:357 教训）。异常退出（非 0/2，如 python 崩溃）按硬红，不静默放行。
+# 分支级 llvm-cov 覆盖报告不在此步：nightly/diff 触发子作业（对齐 mutations/ 触发
+#   规则先例），产物 ci/out/branch-coverage.json 由 14a 在场时对账。
+# 门计数可见性：本步为 bespoke 块（退出码 2 须落 WARN 行而非 FAIL，step 助手不表达），
+#   按 step9 先例以 `echo "== step14 …"` 行向机读面登记门号（xcheck 门数对账据此计数）。
+# 路径纪律：三脚本缺省路径一律由 __file__/AF_ROOT 推导到本工作树（root 钉死，
+#   红队 P2-2）；branches_check 自跑 cargo test --workspace -- --list 时继承环境
+#   CARGO_TARGET_DIR（step3 已全域构建，秒级；W3-C-25 共享 target 教训不破）。
+echo "== step14 机读一致性批（branches 锚对账 + xcheck 3/4 组 + criteria schema）"
+machine_batch() {
+  local rc_a=0 rc_b=0 rc_c=0 rc hard=0 warn=0
+  echo "== 14a branches.yaml 分支覆盖夹具对账（SPEC-1：锚有效性+夹具名单对账；coverage nightly 面在场才判）"
+  (cd "$AF_ROOT" && python3 ci/branches_check.py); rc_a=$?
+  echo "== 14b 枚举跨文书一致性（SPEC-2：门数/packages/词表 3/4 组；码位组遗留登记）"
+  (cd "$AF_ROOT" && python3 ci/xcheck.py); rc_b=$?
+  echo "== 14c criteria.yaml 六要素 schema + 终验清单机生成（SPEC-3）"
+  (cd "$AF_ROOT" && python3 ci/criteria_check.py --emit-checklist "$OUT/final-checklist.md"); rc_c=$?
+  echo "== 14 子检查退出码：branches=$rc_a xcheck=$rc_b criteria=$rc_c（0=过 1=硬红 2=advisory WARN）"
+  for rc in "$rc_a" "$rc_b" "$rc_c"; do
+    case $rc in
+      0) ;;
+      2) warn=1 ;;
+      *) hard=1 ;;   # 1=硬红；其它=异常退出（崩溃/环境缺件），按硬红处理
+    esac
+  done
+  [ $hard -eq 1 ] && return 1
+  [ $warn -eq 1 ] && return 2
+  return 0
+}
+T14_0=$(now_ns)
+machine_batch > "$OUT/step14.log" 2>&1
+b14_rc=$?
+T14_1=$(now_ns); T14_MS=$(( (T14_1 - T14_0) / 1000000 ))
+case $b14_rc in
+  0) b14_verdict="PASS" ;;
+  2) b14_verdict="PASS-WITH-WARN" ;;
+  *) b14_verdict="FAIL" ;;
+esac
+[ "$b14_rc" -eq 1 ] && OVERALL=1
+SUMMARY+=("step14  $b14_verdict  ${T14_MS}ms  机读一致性批（branches+xcheck+criteria；advisory WARN 不改 OVERALL）")
+printf '  [14] %s %6dms  机读一致性批（branches 锚对账 + xcheck 3/4 + criteria schema）\n' "$b14_verdict" "$T14_MS"
+cat "$OUT/step14.log"
 
 # ---- 汇总 -------------------------------------------------------------------
 echo "== 汇总"

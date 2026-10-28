@@ -1,0 +1,13 @@
+OK  [DC-RUN-001] 引文@ci/run.sh:5 + cmd 复跑=14（档位 7d，复跑即新鲜）
+OK  [DC-RUN-002] 引文@ci/run.sh:19 + cmd 复跑=3（档位 7d，复跑即新鲜）
+OK  [DC-RUN-003] 引文@ci/run.sh:444 + cmd 复跑=3（档位 7d，复跑即新鲜）
+OK  [DC-README-001] 引文@README.md:17 + cmd 复跑=4（档位 7d，复跑即新鲜）
+OK  [DC-VERSIONS-001] 引文@docs/VERSIONS.md:63 + cmd 复跑=2（档位 7d，复跑即新鲜）
+OK  [DC-VERSIONS-002] 引文@docs/VERSIONS.md:64 + cmd 复跑=23（档位 7d，复跑即新鲜）
+OK  [DC-VERSIONS-003] 引文@docs/VERSIONS.md:21 + cmd 复跑=22（档位 7d，复跑即新鲜）
+OK  [DC-EXEC-001] 引文@crates/af-order/src/exec.rs:185 + 测试在场 unit_choice_parses_three_values_and_rejects_garbage（通过与否由 step3 承载；档位 7d）
+OK  [DC-TEST-001] 引文@crates/af-order/tests/unit_route.rs:34 + 测试在场 unit_choice_parses_three_values_and_rejects_garbage（通过与否由 step3 承载；档位 7d）
+OK  [DC-REPORT-001] 引文@ci/REPORT.md:10 + manual 豁免 0d ≤ 7d（owner=G0-A 批（step12 属主））
+OK  [DC-ADR-001] 引文@docs/adr/014-escape-threshold-policy.md:3 + 历史豁免（不可复跑事实，evidence=docs/adr/014-escape-threshold-policy.md 在场且哈希一致，不设年龄衰减）
+step11 自述-实现对账: claims=11 红=0
+step11 PASS: 全部 claim 有测试名或显式豁免在册

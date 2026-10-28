@@ -208,3 +208,13 @@ info: component clippy is up to date
 [tmp-guard] 2026-10-27 09:12:48 TMPDIR 原指向 /tmp（/tmp 树，可用 1628984KB < 2097152KB 阈值）——已自动改挂磁盘 TMPDIR=/home/pan-ding/af-ci-tmp（可用 19781264KB；史实：/tmp usrquota 默认 TMPDIR 曾致 os error 122 连锁门红，改磁盘 TMPDIR 后九门全绿）
 info: component rustfmt is up to date
 info: component clippy is up to date
+info: component rustfmt is up to date
+info: component clippy is up to date
+[tmp-guard] 2026-10-28 16:44:09 TMPDIR 原指向 /tmp（/tmp 树，可用 1676884KB < 2097152KB 阈值）——已自动改挂磁盘 TMPDIR=/home/pan-ding/af-ci-tmp（可用 218146856KB；史实：/tmp usrquota 默认 TMPDIR 曾致 os error 122 连锁门红，改磁盘 TMPDIR 后九门全绿）
+info: component rustfmt is up to date
+info: component clippy is up to date
+[tmp-guard] 2026-10-28 16:49:10 TMPDIR 原指向 /tmp（/tmp 树，可用 1565152KB < 2097152KB 阈值）——已自动改挂磁盘 TMPDIR=/home/pan-ding/af-ci-tmp（可用 218078444KB；史实：/tmp usrquota 默认 TMPDIR 曾致 os error 122 连锁门红，改磁盘 TMPDIR 后九门全绿）
+info: component rustfmt is up to date
+info: component clippy is up to date
+[tmp-guard] 2026-10-28 18:14:34 TMPDIR 原指向 /tmp（/tmp 树，可用 2072940KB < 2097152KB 阈值）——已自动改挂磁盘 TMPDIR=/home/pan-ding/af-ci-tmp（可用 192227216KB；史实：/tmp usrquota 默认 TMPDIR 曾致 os error 122 连锁门红，改磁盘 TMPDIR 后九门全绿）
+mutation_runner: 注册表完整: 2 探针, sha256=46b08df4ef0b…

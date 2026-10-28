@@ -1,0 +1,17 @@
+# branches 对账明细（ci/branches_check.py 机生成）
+# branches=/home/pan-ding/workspace/af-wt-g0merge/ci/branches.yaml src-root=/home/pan-ding/workspace/af-wt-g0merge
+OK  INV1-CTX-FROM-TEMPLATE             [covered] 正1/负1  锚=crates/af-dsl/src/validate/inv1.rs:193
+OK  INV1-CTX-FROM-DEFAULT-SKIP         [covered] 正1/负1  锚=crates/af-dsl/src/validate/inv1.rs:333
+OK  INV1-QUOTA-POSITIVE                [covered] 正1/负2  锚=crates/af-dsl/src/validate/inv1.rs:337
+OK  SHAPE-SERDE-ERR-CLASSIFY           [covered] 正1/负3  锚=crates/af-dsl/src/shape.rs:43
+OK  LOOP-E2002-MAX-ITER-POSITIVE       [covered] 正1/负1  锚=crates/af-dsl/src/validate/loop_guard.rs:26
+OK  LOOP-E2004-SAFETY-POINTS-NONEMPTY  [covered] 正1/负1  锚=crates/af-dsl/src/validate/loop_guard.rs:33
+OK  LOOP-E2002-CARRIED-BOUNDED         [covered] 正1/负1  锚=crates/af-dsl/src/validate/loop_guard.rs:41
+OK  M4-OVER-LIST-UNWRAP                [covered] 正1/负1  锚=crates/af-dsl/src/validate/m4.rs:263
+OK  M4-INLINE-PRIM-SYNTH               [covered] 正2/负1  锚=crates/af-dsl/src/validate/m4.rs:393
+OK  BIND-REF-PARSE-UNVERSIONED         [covered] 正1/负2  锚=crates/af-compiler/src/bind.rs:314
+
+[INFO] 判定面文件集：16 个（globs 3 条）
+[INFO] 名单来源：cargo test --workspace -- --list（/home/pan-ding/workspace/af-wt-g0merge）（测试文件段 88 个）
+[INFO] coverage 报告缺席（ci/out/branch-coverage.json）——nightly 面不判（常跑对名、nightly 对覆盖）
+== 登记 10 分支；红项 0；WARN 0

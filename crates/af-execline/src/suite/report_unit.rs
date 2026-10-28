@@ -1109,7 +1109,11 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
         };
         usage.turns += reader_report.turns;
         usage.model_calls += reader_report.model_calls;
-        ring_spent_cents += reader_report.model_calls as i64;
+        // 红队 W3-C-23 同族语义：u64→i64 **饱和**换算（与 :737 环帽同款写法）——
+        // `as i64` 直转会先把 ≥2^63 的 model_calls 回绕成负数，ring_spent_cents
+        // 累加负值即环级对账失效；装不下即饱和到 i64::MAX（巨帽≈无帽），换算
+        // 结果恒非负，负值不可能再入场（G0-C 前置修复：开发计划 §2.2）。
+        ring_spent_cents += i64::try_from(reader_report.model_calls).unwrap_or(i64::MAX);
         usage.tokens.input += reader_report.tokens.input;
         usage.tokens.output += reader_report.tokens.output;
         usage.tokens.cache_read += reader_report.tokens.cache_read;
@@ -1259,7 +1263,9 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
             };
             usage.turns += writer_report.turns;
             usage.model_calls += writer_report.model_calls;
-            ring_spent_cents += writer_report.model_calls as i64;
+            // 同 reader 轮（:1112）：W3-C-23 饱和换算，禁 `as i64` 直转
+            // （G0-C 前置修复：开发计划 §2.2）。
+            ring_spent_cents += i64::try_from(writer_report.model_calls).unwrap_or(i64::MAX);
             usage.tokens.input += writer_report.tokens.input;
             usage.tokens.output += writer_report.tokens.output;
             usage.tokens.cache_read += writer_report.tokens.cache_read;

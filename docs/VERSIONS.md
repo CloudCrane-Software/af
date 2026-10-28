@@ -7,8 +7,18 @@
 > （AFB 语义收紧五项 + golden 7 份随批再生 + 执行面/CI 收口）见
 > `docs/adr/011-redteam-w1-fixes.md`，crate 版本仍 0.1.0（阶段内修复，
 > 不进位）。
+>
+> 2026-10-28 · G0 逃逸加固批（A 组「对账三件套」）追加注记：CI 管道口径勘误
+> （原文「九门」扩列为十二门：step10 承诺-交付对账 / step11 自述-实现对账 /
+> 均为硬门），crate 版本零改动；§四 两行计数改挂 `{{numbers.*}} 单源机算占位符，
+> 并勘误中立性门红名单 22→23（详见 §四 行内注）。
+>
+> 2026-10-28 · G0 逃逸加固批合流批追加注记（af-wt-g0merge/g0merge）：g0a/g0c/g0d
+> 串行合入后 CI 管道扩列为十四门（step10-12 对账三件套/step13 横切与对称/step14
+> 覆盖与枚举）；g0b 补合流（step3 provenance 门/9a9b 基线机算/mutations 元探针，
+> 均不新增 step 槽——step3/9 段内改写编号不变）；crate 版本零改动，门数账三键随各 merge commit 同批更新（门数账自举纪律）。
 
-## 一、crate 版本（22 crate，全部 0.1.0）
+## 一、crate 版本（{{numbers.af.crates}} crate，全部 0.1.0）
 
 第二阶段主线五件（ADR-002；`af-plan` 折入 af-compiler——折入经 ADR-013
 追认裁决（2026-10-27，红队 W2-C-03 补登正式载体），独立建位列 §五开放议程
@@ -50,9 +60,13 @@ af-sandbox/af-station/af-stop/af-trace/af-workorder）均为 0.1.0，语义结�
 
 | 项 | 版本/值 | 载体 |
 |---|---|---|
-| CI 管道 | 九门 + step9 FV advisory | `ci/run.sh`；每跑次 SUMMARY 落 `ci/out/` 随分支入档 |
-| 中立性门红名单 | 22 项登记 | `ci/neutrality-expected-fail.txt`（19→21 执行器合流批 381945c9；+1 预算校准批 81ac6e6 `sop_full_v1_1_token_cap_calibrated_to_f4c_measurement`——本表初版误记 21，复核指出后按文件亲数改 22） |
+| CI 管道 | 十四门 + step9 FV advisory（G0 逃逸加固批 A 组 2026-10-28 起；原文九门口径勘误，新增 step10-12 对账三件套 + step13 横切与对称 + step14 覆盖与枚举（合流批 g0a/g0c/g0d 依序合入、g0b 2026-10-28 补合流——step3/9 段内改写不新增槽）；机算分列键 {{numbers.gates.ci_steps}} 步 = 硬门 {{numbers.gates.ci_hard}} + advisory {{numbers.gates.fv_advisory}}） | `ci/run.sh`；每跑次 SUMMARY 落 `ci/out/` 随分支入档；门数机算正本=`numbers.json` |
+| 中立性门红名单 | {{numbers.redlist.count}} 项登记 | `ci/neutrality-expected-fail.txt`（19→22 三代史：执行器合流批 381945c9 至 21、预算校准批 81ac6e6 至 22；**2026-10-28 G0 批 step12 落地时复核：文件实为 23 项，本表停记 22——C2 跨文书计数漂移活例，已按 `grep -vc '^#'` 亲数改登记占位符（单源机算，杜绝再漂）**） |
 | 形式验证 | FV-1 第一波：Kani 32+17 / Verus 29 / Rocq 陈述库 10/10 | `proofs/` + `proofs/README-形式验证.md` |
+
+> 本表 `{{numbers.*}}` 为单源机算占位符：值不在文书手写，由 `numbers.json` 的限定名键
+> 登记（来源命令可复跑）；`ci/run.sh` step12 门校验占位符可解析性与复算一致，渲染由
+> 文书生成侧承担（生成侧尚未在仓——见 G0-A 批 RESULT ⑧ 遗留项）。
 
 ## 五、开放议程（在档，非承诺）
 

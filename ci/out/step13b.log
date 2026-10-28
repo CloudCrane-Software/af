@@ -1,0 +1,35 @@
+== arm-wiring --validate: schema 通过（10 防线 × 3 臂 + 3 graph 特有 = 33 格；债册在册 50 号）
+  [OK  ] D1-fingerprint-load/swev                     present   | 锚点 swev_unit.rs:131 → 命中行 131（漂移 0）窗口内命中
+  [OK  ] D1-fingerprint-load/report                   present   | 锚点 report_unit.rs:1453 → 命中行 1453（漂移 0）窗口内命中
+  [OK  ] D1-fingerprint-load/graph                    absent   absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D2-fingerprint-verify/swev                   present   | 锚点 swev.rs:231 → 命中行 231（漂移 0）窗口内命中
+  [OK  ] D2-fingerprint-verify/report                 present   | 锚点 report_unit.rs:1618 → 命中行 1618（漂移 0）窗口内命中
+  [OK  ] D2-fingerprint-verify/graph                  absent   absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D3-truth-source-anchor/swev                  present   | 锚点 judge.rs:49 → 命中行 49（漂移 0）窗口内命中
+  [OK  ] D3-truth-source-anchor/report                variant   | 锚点 report_unit.rs:88 → 命中行 88（漂移 0）窗口内命中
+  [OK  ] D3-truth-source-anchor/graph                 absent   absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D4-judge-inject-b/swev                       present   | 锚点 judge.rs:193 → 命中行 193（漂移 0）窗口内命中
+  [OK  ] D4-judge-inject-b/report                     present   | 锚点 report_unit.rs:160 → 命中行 160（漂移 0）窗口内命中
+  [OK  ] D4-judge-inject-b/graph                      absent   absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D5-judge-inject-dontwritebytecode/swev       present   | 锚点 judge.rs:198 → 命中行 198（漂移 0）窗口内命中
+  [OK  ] D5-judge-inject-dontwritebytecode/report     present   | 锚点 report_unit.rs:161 → 命中行 161（漂移 0）窗口内命中
+  [OK  ] D5-judge-inject-dontwritebytecode/graph      absent   absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D6-pyc-shadow-guard/swev                     variant   | 锚点 judge.rs:183 → 命中行 183（漂移 0）窗口内命中
+  [OK  ] D6-pyc-shadow-guard/report                   present   | 锚点 report_unit.rs:136 → 命中行 136（漂移 0）窗口内命中
+  [OK  ] D6-pyc-shadow-guard/graph                    absent   absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D7-log-parsed/swev                           present   | 锚点 swev.rs:371 → 命中行 371（漂移 0）窗口内命中
+  [OK  ] D7-log-parsed/report                         absent   absent 格债号 D-52 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D7-log-parsed/graph                          absent   absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D8-tests-collected/swev                      present   | 锚点 swev.rs:364 → 命中行 364（漂移 0）窗口内命中
+  [OK  ] D8-tests-collected/report                    absent   absent 格债号 D-52 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D8-tests-collected/graph                     absent   absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D9-eval-sha256/swev                          present   | 锚点 swev.rs:294 → 命中行 294（漂移 0）窗口内命中
+  [OK  ] D9-eval-sha256/report                        absent   absent 格债号 D-52 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D9-eval-sha256/graph                         absent   absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）
+  [OK  ] D10-budget-gate-symmetry/swev                present   | 锚点 swev_unit.rs:63 → 命中行 63（漂移 0）窗口内命中
+  [OK  ] D10-budget-gate-symmetry/report              present   | 锚点 report_unit.rs:985 → 命中行 985（漂移 0）窗口内命中
+  [OK  ] D10-budget-gate-symmetry/graph               present   | 锚点 graph_unit.rs:375 → 命中行 375（漂移 0）窗口内命中
+  [OK  ] G1-test-command-frozen                       present   | 锚点 graph_unit.rs:606 → 命中行 606（漂移 0）窗口内命中
+  [OK  ] G2-criteria-degeneration-gate                present   | 锚点 graph_unit.rs:617 → 命中行 617（漂移 0）窗口内命中
+  [OK  ] G3-evidence-tree                             present   | 锚点 graph_unit.rs:620 → 命中行 620（漂移 0）窗口内命中
+== arm-wiring --check: 33 格 = 33 PASS / 0 WARN / 0 FAIL → 报告 ci/out/arm-wiring-report.json
