@@ -6,7 +6,7 @@
 > 编译器 → 统一执行面 → 订单门面** 全链在位，配 `af/packages/` 组件与包图
 > 登记处；CI 为十四门 + advisory（G0 逃逸加固批 2026-10-28 起；原文「九门」
 > 口径勘误后新增 step10-14 五门：step10-12 对账三件套 + step13 横切与对称 +
-> step14 覆盖与枚举；step3/9 由 G0-B 批另改，该支线未过复核未合流）。版本明细见 `docs/VERSIONS.md`，AFB 语法定版
+> step14 覆盖与枚举；step3/9 段由 G0-B 批 2026-10-28 补合流（provenance 门/9a9b 基线机算/mutations 元探针，不新增 step 槽）。版本明细见 `docs/VERSIONS.md`，AFB 语法定版
 > 说明见 `crates/af-dsl/SYNTAX.md`。
 
 ## 快速开始
@@ -66,13 +66,13 @@ YAML 主干 + CEL 谓词（ADR-001），正本《DSL-语法提案-B》+ 择优�
 |---|---|---|
 | 1 | `cargo fmt --check` + K5 判分链路径 lint | 硬门 |
 | 2 | clippy + 基线门（只拦新增警告） | 硬门 |
-| 3 | `cargo test -j4 --workspace` | 硬门 |
+| 3 | pre-step provenance 门 + `cargo test -j4 --workspace` | 硬门 |
 | 4 | CUE recipe vet+export+断言 | 硬门 |
 | 5 | parse_scrub × 7 真实日志 | 硬门 |
 | 6 | cosign 断网 verify-blob | 硬门 |
 | 7 | `cargo deny --offline check` | 硬门 |
 | 8 | 中立性门（删包自洽+领域词扫描+golden 登记） | 硬门 |
-| 9 | FV advisory（Rocq+Kani 快检） | advisory（FAIL 只 WARN 不红） |
+| 9 | FV advisory（Rocq+Kani 快检；9a/9b 基线机算） | advisory（WARN/FAIL 不改退出码；FAIL 落 step9-failures.json 供 step10 消费） |
 | 10 | 承诺-交付对账（`deliverables.yaml`） | 硬门 |
 | 11 | 自述-实现对账（`doc-claims.txt`） | 硬门 |
 | 12 | 计数复算（`numbers.json` + `{{numbers.*}}`） | 硬门 |
@@ -82,9 +82,10 @@ YAML 主干 + CEL 谓词（ADR-001），正本《DSL-语法提案-B》+ 择优�
 step10-14 为 G0 逃逸加固批合流部分（2026-10-28 落地）：step10-12「对账三件
 套」=承诺-交付、自述-实现、计数口径三类对账门；step13「横切与对称」/step14
 「覆盖与枚举」各为三机制共宿单一 step 槽（同域轻量检查合计 <20s、同退出码语
-义）；门数口径以 `ci/run.sh` 实步数与 `numbers.json` 的 `gates.ci_steps`/
-`ci.steps_total` 键对账为准（`AGENT.md` 硬纪律 5 勘误行同口径）。G0-B 批
-（step3 provenance/9a9b 基线/mutations）未过复核未合流，descope 见
+义）；G0-B 批三机制（step3 provenance 门/9a9b 基线机算/mutations 元探针）
+2026-10-28 补合流，均不新增 step 槽；门数口径以 `ci/run.sh` 实步数与
+`numbers.json` 的 `gates.ci_steps`/`ci.steps_total` 键对账为准（`AGENT.md`
+硬纪律 5 勘误行同口径）。合流台账（含 descope 史）见
 `计划/研究组/冲刺批-20261027/g0-merge-report.md`。
 
 每跑次 SUMMARY 落 `ci/out/` 随分支入档。

@@ -1,0 +1,6 @@
+== fix-scan --validate: schema 通过（2 族: sat-cast, pyc-shadow；债册在册 50 号）
+[fix-scan] mode=diff：diff 档触发 2/2 族（base=origin/main，changed=3634 文件；跳过: 无）
+[fix-scan] WL-STALE crates/af-execline/src/shadow.rs:392 白名单条目未被本族模式命中（D-50）——或由共读方 budget-cast-lint 消费（两门检测强度不同属设计），或站点已修/行号漂移请销项
+== fix-scan sat-cast: 0 白名单外命中 / 1 白名单生效 → 产物 redteam/scans/2026-10-28-9c340420/sat-cast.json (+.sha256)
+== fix-scan pyc-shadow: 0 白名单外命中 / 0 白名单生效 → 产物 redteam/scans/2026-10-28-9c340420/pyc-shadow.json (+.sha256)
+== fix-scan --run: batch=2026-10-28-9c340420 mode=diff exit=0

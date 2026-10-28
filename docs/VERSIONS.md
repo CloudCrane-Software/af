@@ -15,8 +15,8 @@
 >
 > 2026-10-28 · G0 逃逸加固批合流批追加注记（af-wt-g0merge/g0merge）：g0a/g0c/g0d
 > 串行合入后 CI 管道扩列为十四门（step10-12 对账三件套/step13 横切与对称/step14
-> 覆盖与枚举；g0b 未过复核未合流、descope 登记合流报告）；crate 版本仍零改动，
-> 门数账三键随各 merge commit 同批更新（门数账自举纪律）。
+> 覆盖与枚举）；g0b 补合流（step3 provenance 门/9a9b 基线机算/mutations 元探针，
+> 均不新增 step 槽——step3/9 段内改写编号不变）；crate 版本零改动，门数账三键随各 merge commit 同批更新（门数账自举纪律）。
 
 ## 一、crate 版本（{{numbers.af.crates}} crate，全部 0.1.0）
 
@@ -60,7 +60,7 @@ af-sandbox/af-station/af-stop/af-trace/af-workorder）均为 0.1.0，语义结�
 
 | 项 | 版本/值 | 载体 |
 |---|---|---|
-| CI 管道 | 十四门 + step9 FV advisory（G0 逃逸加固批 A 组 2026-10-28 起；原文九门口径勘误，新增 step10-12 对账三件套 + step13 横切与对称 + step14 覆盖与枚举（合流批 g0c/g0d 合入；g0b descope）；机算分列键 {{numbers.gates.ci_steps}} 步 = 硬门 {{numbers.gates.ci_hard}} + advisory {{numbers.gates.fv_advisory}}） | `ci/run.sh`；每跑次 SUMMARY 落 `ci/out/` 随分支入档；门数机算正本=`numbers.json` |
+| CI 管道 | 十四门 + step9 FV advisory（G0 逃逸加固批 A 组 2026-10-28 起；原文九门口径勘误，新增 step10-12 对账三件套 + step13 横切与对称 + step14 覆盖与枚举（合流批 g0a/g0c/g0d 依序合入、g0b 2026-10-28 补合流——step3/9 段内改写不新增槽）；机算分列键 {{numbers.gates.ci_steps}} 步 = 硬门 {{numbers.gates.ci_hard}} + advisory {{numbers.gates.fv_advisory}}） | `ci/run.sh`；每跑次 SUMMARY 落 `ci/out/` 随分支入档；门数机算正本=`numbers.json` |
 | 中立性门红名单 | {{numbers.redlist.count}} 项登记 | `ci/neutrality-expected-fail.txt`（19→22 三代史：执行器合流批 381945c9 至 21、预算校准批 81ac6e6 至 22；**2026-10-28 G0 批 step12 落地时复核：文件实为 23 项，本表停记 22——C2 跨文书计数漂移活例，已按 `grep -vc '^#'` 亲数改登记占位符（单源机算，杜绝再漂）**） |
 | 形式验证 | FV-1 第一波：Kani 32+17 / Verus 29 / Rocq 陈述库 10/10 | `proofs/` + `proofs/README-形式验证.md` |
 

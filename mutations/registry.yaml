@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "suite": "af-ci-mutations",
+  "_doc": "mutations/ 元探针注册表（复盘 C3-2/PP1；G0-CI机制批 子代理B 草案）。本文件为 JSON 子集（合法 YAML），python3 标准库可解析。每探针=一个用例，预登记期望 exit code + 期望 stderr 子串，机械判定无裁量。完整性由 ci/baselines/mutations-registry.sha256 钉住（mutation_runner.sh check-registry），删改任一探针即漂移红；有意变更须 update-registry-baseline 同批评审提交。触发规则=diff 触及 gate_inputs glob 全量跑（should-run 判 full）、否则 nightly。",
+  "gate_inputs": ["ci/**", "proofs/**"],
+  "probes": [
+    {
+      "id": "MUT-001",
+      "description": "删门脚本必须红：删 ci/k5-path-lint.py（step1 门脚本，盘上真实文件）后 step1 门命令必须非零退出——门必须失败于删除（复盘 C3-1/C3-2 元探针两件套之一）",
+      "action": "delete",
+      "target": "ci/k5-path-lint.py",
+      "mirror_of": "step1",
+      "run": "cargo fmt --check --all && python3 ci/k5-path-lint.py",
+      "timeout_sec": 120,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": "nonzero",
+        "stderr_contains": "k5-path-lint.py",
+        "_doc_expect": "run 与 ci/run.sh:121 step1 门命令逐字同串（mirror 审计强制）；脚本缺席时 python3 报 can't open file（文件名上 stderr）→ 命令链非零 → run.sh step() 判 FAIL → OVERALL=1（run.sh:50-58 统一接线）"
+      }
+    },
+    {
+      "id": "MUT-002",
+      "description": "删探针必须红（自指防护）：从注册表删任一探针条目后，注册表完整性检查必须以 exit 1 + 「探针清单漂移」红——探针被删=计数/哈希漂移（复盘 C3-2「探针清单（数量+每探针期望值）哈希…探针被删即计数漂移红」）",
+      "action": "registry-remove-probe",
+      "args": { "remove_id": "MUT-001" },
+      "run": "bash ci/mutation_runner.sh check-registry",
+      "timeout_sec": 30,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "探针清单漂移"
+      }
+    }
+  ]
+}

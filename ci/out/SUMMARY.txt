@@ -1,9 +1,16 @@
-step1  PASS  769ms  cargo fmt --check + K5 判分链路径 lint
-step2  PASS  734ms  cargo clippy + clippy_gate
-step3  PASS  32686ms  cargo test -j4 --workspace
-step4  PASS  59ms  cue recipe vet+export+断言
-step5  PASS  233ms  parse_scrub × 7 真实日志
-step6  PASS  70ms  cosign 断网 verify-blob
-step7  PASS  614ms  cargo deny --offline check
-step8  PASS  3468ms  neutrality 删包自洽+领域词扫描+golden 登记
-step9  ADVISORY-PASS  29722ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）
+step1  PASS  944ms  cargo fmt --check + K5 判分链路径 lint
+step2  PASS  74147ms  cargo clippy + clippy_gate
+step3  PASS  405601ms  cargo test -j4 --workspace
+step4  PASS  67ms  cue recipe vet+export+断言
+step5  PASS  281ms  parse_scrub × 7 真实日志
+step6  PASS  162ms  cosign 断网 verify-blob
+step7  PASS  949ms  cargo deny --offline check
+step8  PASS  22098ms  neutrality 删包自洽+领域词扫描+golden 登记
+step9  ADVISORY-PASS  37073ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）
+step10  PASS  82ms  承诺-交付对账 deliverables.yaml
+step11  PASS  74ms  自述-实现对账 doc-claims.txt
+step12  PASS  70ms  计数复算 numbers.json + {{numbers.*}} 占位符
+step13a  PASS  530ms  fix-scan 同族横切扫描（diff 档路径过滤；合流档 FIXSCAN_MODE=full 全量）
+step13b  PASS  135ms  arm-wiring 三臂防线逐格断言（删任一格即红；absent 格挂债号）
+step13c  PASS  175ms  budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail-loud）
+step14  PASS  2425ms  机读一致性批（branches+xcheck+criteria；advisory WARN 不改 OVERALL）

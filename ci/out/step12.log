@@ -1,0 +1,28 @@
+OK  [gates.ci_steps] 复算 14 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [ci.steps_total] 复算 14 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [gates.ci_hard] 复算 13 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [gates.fv_advisory] 复算 1 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [redlist.count] 复算 23 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [registry.pkgs] 复算 37 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [af.crates] 复算 22 == 登记（ls…，last_recomputed=2026-10-28）
+OK  [adr.count] 复算 14 == 登记（ls…，last_recomputed=2026-10-28）
+OK  [fv.rocq_theorems] 复算 21 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [fv.kani_inv_mirror] 复算 32 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [neutrality.wordlist] 复算 62 == 登记（grep…，last_recomputed=2026-10-28）
+OK  docs/VERSIONS.md: {{numbers.af.crates}} -> 22
+OK  docs/VERSIONS.md: {{numbers.gates.ci_steps}} -> 14
+OK  docs/VERSIONS.md: {{numbers.gates.ci_hard}} -> 13
+OK  docs/VERSIONS.md: {{numbers.gates.fv_advisory}} -> 1
+OK  docs/VERSIONS.md: {{numbers.redlist.count}} -> 23
+SKIP README.md:7 「十四门」命中勘误/历史豁免语境
+SKIP README.md:7 「九门」命中勘误/历史豁免语境
+OK  README.md:17 「十四门」== numbers.gates.ci_steps=14
+OK  README.md:63 「十四门」== numbers.gates.ci_steps=14
+OK  README.md:98 「十四门」== numbers.gates.ci_steps=14
+SKIP docs/VERSIONS.md:12 「九门」命中勘误/历史豁免语境
+SKIP docs/VERSIONS.md:12 「十二门」命中勘误/历史豁免语境
+OK  docs/VERSIONS.md:17 「十四门」== numbers.gates.ci_steps=14
+OK  docs/VERSIONS.md:63 「十四门」== numbers.gates.ci_steps=14
+SKIP docs/VERSIONS.md:63 「九门」命中勘误/历史豁免语境
+step12 计数复算: keys=11 watch=1 docs=2 红=0
+step12 PASS: 全部限定名键复算一致、占位符可解析、手写计数对值

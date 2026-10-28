@@ -1,20 +1,20 @@
 {
   "version": 1,
-  "_note": "numbers.json（G0 逃逸加固批 step12 计数复算门；2026-10-28 A 组落本仓 af-wt-g0a/g0a，合流批 af-wt-g0merge/g0merge 随 g0c/g0d 合入同批更新门数账三键）。全部 value 为本树 2026-10-28 实算值、source 命令在本树可复跑（cwd 缺省=仓根）。部署形态：run.sh step12 以 --repo=$AF_ROOT 调用，本文件与 ci/run.sh 同一提交更新（门数账自举纪律：run.sh 加 step 当批必须同改 gates.* 三键，否则 step12 自红——防「为防再发而堆门」失控，红队复盘 PP4:292）。跨机制入键口径按 G0-CI 批总对账 §三.3 终稿：fv.kani_inv_harness.count/.manifest_sha256 属 B2（9a/9b 基线机算批，g0b 未过复核未合流、键不占位）、mutations.probes 属 B3（元探针批，同上）、ci.steps_total 供 D2 xcheck 对 AGENT.md 门数消费——三键由兄弟批落地时同批登记（本树无其产物，预登记会复算红，故不占位；键名拼法照终稿原文，勿改）。retro.corpus_total（红队三波语料 168）未入本表：其正本 /tmp/af-rt-retro-corpus.json 为易失路径且违反 /tmp 分流白名单纪律（AGENT.md 硬纪律 7），step12 SPEC §⑧.3 已登记为裁决点——语料迁耐久路径后同批补键。",
+  "_note": "numbers.json（G0 逃逸加固批 step12 计数复算门；2026-10-28 A 组落本仓 af-wt-g0a/g0a，合流批 af-wt-g0merge/g0merge 随各 merge commit 同批更新门数账三键）。全部 value 为本树 2026-10-28 实算值、source 命令在本树可复跑（cwd 缺省=仓根）。部署形态：run.sh step12 以 --repo=$AF_ROOT 调用，本文件与 ci/run.sh 同一提交更新（门数账自举纪律：run.sh 加 step 当批必须同改 gates.* 三键，否则 step12 自红——防「为防再发而堆门」失控，红队复盘 PP4:292）。键集=A 组 11 键 ∪ B 组 3 键（fv.kani_inv_harness.count/.manifest_sha256 属 B2、mutations.probes 属 B3；键名拼法照总对账 §三.3 终稿原文，勿改——A 的 _note/SPEC-B2 ①.2/SPEC-B3 ①.3/总对账 §三.3 四方钉死）。B 组（g0b）2026-10-28 补合流：其 numbers.json 贡献件与本文件取并集后交 step12 跑。【合流批 schema 放宽裁决（B 报告 §七/g0b _note 预告的 add/add 冲突点，按 B 建议办、勿绕过】：终稿键名含双点域路径（fv.kani_inv_harness.count）与十六进制串值（manifest_sha256），A 的 step12 现 schema（KEY_RE 单点+value 必须 int）收不了——合流批放宽 ci/step12_check.py：KEY_RE 改 ^[a-z0-9_]+(\\.[a-z0-9_]+)+$（域路径允许多段、仍须限定名），value 按登记值类型分判（int 走原整数复算、str 走 stdout 串比对——sha256 十六进制串逐字符相等才绿）。放宽只增可表达面、不放松「逐键复算==登记值」纪律（漂移即红不变）；键名不改（改键名=制造新的跨文书漂移）。另：g0b 的 step3 pre-step 通告行原带「== stepN」前缀会与本文件 gates.* 两键的行计数碰撞（14→15 假漂移），合流批把通告行改措辞避开登记行模式（step3 槽登记行仍是「step3 cargo test」），门数账回 14/13/1。retro.corpus_total（红队三波语料 168）未入本表：其正本 /tmp/af-rt-retro-corpus.json 为易失路径且违反 /tmp 分流白名单纪律（AGENT.md 硬纪律 7），step12 SPEC §⑧.3 已登记为裁决点——语料迁耐久路径后同批补键。",
   "numbers": {
     "gates.ci_steps": {
       "value": 14,
       "source": "grep -cE '^echo \"== step[0-9]+' ci/run.sh",
       "unit": "步",
       "last_recomputed": "2026-10-28",
-      "note": "口径=step 门号登记行（每个 step 槽一行 echo \"== stepN …\"；step13 共宿三子查 13a/13b/13c 共用一个槽号、一个登记行）。G0 合流批 2026-10-28 串行合入 g0a（step10/11/12）后为 12、g0c（step13 共宿槽）后=13、g0d（step14 覆盖与枚举批）后=14（各 merge commit 同批改键，门数账自举）；原「step() 调用行+if fv_advisory」口径在 step13/14 共宿槽（13a/b/c 不走 step N 形态、step14 为 bespoke 块）下会漏计，故改按门号登记行计数——与 ci/xcheck.py count_run_sh_steps 的口径一致（bespoke 形态必须计数，g0d SPEC-2 设计在案）。AGENT.md 硬纪律 5「九门+G0 五门=14 step」勘误行对账本键；README.md/docs/VERSIONS.md 手写「十四门」由 watch 正则对值。G0-B 支线（g0b）未过复核未合流——其 step3 改写/9a9b 基线机算/mutations 三机制不新增 step 槽（step3 编号不变、9a/9b 在 step9 内、mutations 挂 step0/合流入口），descope 不改变 14 步口径。"
+      "note": "口径=step 门号登记行（每个 step 槽一行 echo \"== stepN …\"；step13 共宿三子查 13a/13b/13c 共用一个槽号、一个登记行）。G0 合流批 2026-10-28 串行合入 g0a（step10/11/12）后为 12、g0c（step13 共宿槽）后=13、g0d（step14 覆盖与枚举批）后=14（各 merge commit 同批改键，门数账自举）；g0b 2026-10-28 补合流（B 三机制不新增 step 槽：step3 编号不变/9a9b 在 step9 内/mutations 挂 step0+合流入口）后仍=14。原「step() 调用行+if fv_advisory」口径在 step13/14 共宿槽（13a/b/c 不走 step N 形态、step14 为 bespoke 块）下会漏计，故改按门号登记行计数——与 ci/xcheck.py count_run_sh_steps 的口径一致（bespoke 形态必须计数，g0d SPEC-2 设计在案；本键为行计数、xcheck 为槽位集合，两口径在 g0b 补合流时曾因 step3 pre-step 通告行撞名一瞬分歧——通告行已改措辞避开，见 run.sh step3 段合流批注记）。AGENT.md 硬纪律 5「九门+G0 五门=14 step」勘误行对账本键；README.md/docs/VERSIONS.md 手写「十四门」由 watch 正则对值。"
     },
     "ci.steps_total": {
       "value": 14,
       "source": "grep -cE '^echo \"== step[0-9]+' ci/run.sh",
       "unit": "步",
       "last_recomputed": "2026-10-28",
-      "note": "总对账 §三.3 终稿裁定的跨机制键名（供 D2 xcheck 对 AGENT.md 门数消费）。与 gates.ci_steps 同源同值同命令（A 示例原名保留，二者拼写不同但口径同一——step12 逐键复算，漂移即红）。G0 全批（A/C/D）合流后=14，由合流批随 g0d merge commit 同批兑现。"
+      "note": "总对账 §三.3 终稿裁定的跨机制键名（供 D2 xcheck 对 AGENT.md 门数消费）。与 gates.ci_steps 同源同值同命令（A 示例原名保留，二者拼写不同但口径同一——step12 逐键复算，漂移即红）。G0 全批（A/B/C/D）合流后=14，由合流批随 g0d merge commit 兑现、g0b 补合流不改（B 不新增槽）。"
     },
     "gates.ci_hard": {
       "value": 13,
@@ -28,7 +28,7 @@
       "source": "grep -c '^if fv_advisory' ci/run.sh",
       "unit": "门",
       "last_recomputed": "2026-10-28",
-      "note": "advisory 分列键（step9，非阻塞，两态均不改 OVERALL）。"
+      "note": "advisory 分列键（step9，非阻塞，FAIL 不改 OVERALL）。G0-B2 落地后 step9 判据三态化（2026-10-28 补合流）：ADVISORY-PASS=跑了且判据全绿 / ADVISORY-WARN=工具缺席 / ADVISORY-FAIL=跑了且 9a/9b 判据红——ADVISORY-FAIL 落 ci/out/step9-failures.json 由 step10 对账门消费（存在未消化 FAIL 不得结案），退出码仍非阻塞（九门口径不变）。"
     },
     "redlist.count": {
       "value": 23,
@@ -63,14 +63,14 @@
       "source": "grep -v '^#' proofs/rocq-规范库-v0/theorems-manifest.txt | awk -F'\\t' '$1 != \"statements-sha256\" && NF >= 2' | wc -l",
       "unit": "条",
       "last_recomputed": "2026-10-28",
-      "note": "定理清单条数（run.sh step9 9a-2 期望 21 条；2026-10-27 合流终验「21 条 SHA-256 一致」）。"
+      "note": "定理清单条数（run.sh step9 9a-2 期望 21 条；2026-10-27 合流终验「21 条 SHA-256 一致」）。B2 的 baseline_calc.sh verify-rocq 从同正本再生成对账（run.sh 9a 面机读绑定），与本键同源。"
     },
     "fv.kani_inv_mirror": {
       "value": 32,
       "source": "grep -c '#\\[kani::proof\\]' proofs/Kani镜像员-INV组/harness/src/mirror_inv*.rs | awk -F: '{s+=$2} END{print s}'",
       "unit": "harness",
       "last_recomputed": "2026-10-28",
-      "note": "INV 镜像套件口径=mirror_inv1-4.rs（12+8+6+6=32，与 run.sh step9 9b 断言 32 verified/0 failures/32 total 同源）；conflict_demo.rs 另有 2 处 kani::proof 属性不在本口径内（两口径差异见 step12 SPEC §⑧.7）。B2 落地 fv.kani_inv_harness.* 双键时须与本键同值或显式分列。"
+      "note": "INV 镜像套件口径=mirror_inv1-4.rs（12+8+6+6=32，与 run.sh step9 9b 断言同源——9b 期望值现由基线机算读入，见 fv.kani_inv_harness.count）；conflict_demo.rs 另有 2 处 kani::proof 属性不在本口径内（两口径差异见 step12 SPEC §⑧.7）。与 B2 的 fv.kani_inv_harness.* 双键同值 32 并录在案（g0b 2026-10-28 补合流）。"
     },
     "neutrality.wordlist": {
       "value": 62,
@@ -78,6 +78,27 @@
       "unit": "词条",
       "last_recomputed": "2026-10-28",
       "note": "领域词扫描词条数（枚举跨文书一致性机制的比对面之一：方案 §1.3 项数 vs wordlist 清点，复盘:121）。"
+    },
+    "fv.kani_inv_harness.count": {
+      "value": 32,
+      "source": "bash ci/baseline_calc.sh gen-kani | awk -F'\\t' '$1==\"count\"{print $2}'",
+      "unit": "harness",
+      "last_recomputed": "2026-10-28",
+      "note": "B2（9b 基线机算）：Kani INV 镜像 harness 数从 proofs 源机算（gen-kani 尊重 lib.rs #[cfg(feature=..)] 门控，conflict_demo 2 条默认不计），替 run.sh 9b 原手写常数 32（SPEC-B2 ①.3/⑤.4：手写常数=判据基准可改，C3 rootCause）。与 A 的 fv.kani_inv_mirror 键同值 32（mirror_inv1-4.rs 口径，两口径并录）。有意增删 harness 须同批 gen-kani 再生成 ci/baselines/kani-inv-harness.manifest 并同改本键（防悄悄改基线=逃逸）。"
+    },
+    "fv.kani_inv_harness.manifest_sha256": {
+      "value": "dd67716e557489817398753ac5c9147cf57203ff3a6b0ad7ef35609ee54c85ab",
+      "source": "sha256sum ci/baselines/kani-inv-harness.manifest | cut -d' ' -f1",
+      "unit": "sha256",
+      "last_recomputed": "2026-10-28",
+      "note": "B2：9b 正本（ci/baselines/kani-inv-harness.manifest）整文件哈希——正本被手改而本键未同步即漂移红（与 ci/baselines/mutations-registry.sha256 同一「防悄悄改基线」纪律）。值=十六进制串：step12 schema 已由合流批放宽（KEY_RE 允许多点域路径、value 允许十六进制串逐字符比对，见本文件 _note 裁决），本键按 str 类型逐键复算；sha 的运行时对账另有 baseline_calc.sh verify-kani（run.sh 9b 每次实跑）双保险。"
+    },
+    "mutations.probes": {
+      "value": 2,
+      "source": "python3 -c \"import json;print(len(json.load(open('mutations/registry.yaml', encoding='utf-8'))['probes']))\"",
+      "unit": "探针",
+      "last_recomputed": "2026-10-28",
+      "note": "B3（mutations/ 元探针框架）：探针清单条数（复盘 C3-② :136「探针清单（数量+每探针期望值）哈希入 numbers.json，删即计数漂移红」）。当前 2 探针=MUT-001（删门脚本 ci/k5-path-lint.py 后 step1 门命令必须非零退出且 stderr 含文件名）+MUT-002（删任一探针条目后 check-registry 必须 exit 1+「探针清单漂移」，自指防护）。mutations/registry.yaml 整文件 sha256 现值=46b08df4ef0b1c8a6eba97f3388aa3b9ca9a40095c9ef063f8cd9dc8ea0036b6（机读绑定在 ci/baselines/mutations-registry.sha256，run.sh step0 check-registry 每次对账；有意增删探针须同批 bash ci/mutation_runner.sh update-registry-baseline 重钉基线并同改本键）。"
     }
   },
   "watch": [

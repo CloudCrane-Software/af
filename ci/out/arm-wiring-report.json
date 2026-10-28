@@ -1,0 +1,726 @@
+{
+  "ts": "2026-10-28T08:58:13+00:00",
+  "cells": [
+    {
+      "where": "D1-fingerprint-load/swev",
+      "arm": "swev",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "swev_unit.rs",
+          "line": 131,
+          "tokens": [
+            "spec.judge.check_fingerprint()?"
+          ],
+          "matched_line": 131,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D1-fingerprint-load/report",
+      "arm": "report",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "report_unit.rs",
+          "line": 1453,
+          "tokens": [
+            "spec.judges.check_fingerprints()?"
+          ],
+          "matched_line": 1453,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D1-fingerprint-load/graph",
+      "arm": "graph",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D2-fingerprint-verify/swev",
+      "arm": "swev",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "swev.rs",
+          "line": 231,
+          "tokens": [
+            "judge.check_fingerprint()"
+          ],
+          "matched_line": 231,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D2-fingerprint-verify/report",
+      "arm": "report",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "report_unit.rs",
+          "line": 1618,
+          "tokens": [
+            "check_fingerprints()?"
+          ],
+          "matched_line": 1618,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D2-fingerprint-verify/graph",
+      "arm": "graph",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D3-truth-source-anchor/swev",
+      "arm": "swev",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "judge.rs",
+          "line": 49,
+          "tokens": [
+            "ImportAnchor"
+          ],
+          "matched_line": 49,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "judge.rs",
+          "line": 69,
+          "tokens": [
+            "import_chain"
+          ],
+          "matched_line": 69,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "judge.rs",
+          "line": 88,
+          "tokens": [
+            "ImportAnchor"
+          ],
+          "matched_line": 88,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "judge.rs",
+          "line": 146,
+          "tokens": [
+            "JudgeFingerprintMismatch"
+          ],
+          "matched_line": 150,
+          "drift": 4,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "error.rs",
+          "line": 158,
+          "tokens": [
+            "EX3002"
+          ],
+          "matched_line": 158,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D3-truth-source-anchor/report",
+      "arm": "report",
+      "status": "variant",
+      "anchors": [
+        {
+          "file": "report_unit.rs",
+          "line": 88,
+          "tokens": [
+            "check_fingerprints"
+          ],
+          "matched_line": 88,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "report_unit.rs",
+          "line": 93,
+          "tokens": [
+            "render_script"
+          ],
+          "matched_line": 93,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D3-truth-source-anchor/graph",
+      "arm": "graph",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D4-judge-inject-b/swev",
+      "arm": "swev",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "judge.rs",
+          "line": 193,
+          "tokens": [
+            ".arg(\"-B\")"
+          ],
+          "matched_line": 193,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D4-judge-inject-b/report",
+      "arm": "report",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "report_unit.rs",
+          "line": 160,
+          "tokens": [
+            ".arg(\"-B\")"
+          ],
+          "matched_line": 160,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D4-judge-inject-b/graph",
+      "arm": "graph",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D5-judge-inject-dontwritebytecode/swev",
+      "arm": "swev",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "judge.rs",
+          "line": 198,
+          "tokens": [
+            ".env(\"PYTHONDONTWRITEBYTECODE\", \"1\")"
+          ],
+          "matched_line": 198,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D5-judge-inject-dontwritebytecode/report",
+      "arm": "report",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "report_unit.rs",
+          "line": 161,
+          "tokens": [
+            ".env(\"PYTHONDONTWRITEBYTECODE\", \"1\")"
+          ],
+          "matched_line": 161,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D5-judge-inject-dontwritebytecode/graph",
+      "arm": "graph",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D6-pyc-shadow-guard/swev",
+      "arm": "swev",
+      "status": "variant",
+      "anchors": [
+        {
+          "file": "judge.rs",
+          "line": 183,
+          "tokens": [
+            "mirror"
+          ],
+          "matched_line": 183,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "judge.rs",
+          "line": 199,
+          "tokens": [
+            ".env(\"PYTHONPYCACHEPREFIX\", &mirror)"
+          ],
+          "matched_line": 199,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D6-pyc-shadow-guard/report",
+      "arm": "report",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "report_unit.rs",
+          "line": 136,
+          "tokens": [
+            "__pycache__"
+          ],
+          "matched_line": 136,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "report_unit.rs",
+          "line": 140,
+          "tokens": [
+            "判分目录不得存在字节码"
+          ],
+          "matched_line": 140,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D6-pyc-shadow-guard/graph",
+      "arm": "graph",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D7-log-parsed/swev",
+      "arm": "swev",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "swev.rs",
+          "line": 371,
+          "tokens": [
+            "log_parsed",
+            "\"[log_parsed=false] \""
+          ],
+          "matched_line": 371,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D7-log-parsed/report",
+      "arm": "report",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-52 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D7-log-parsed/graph",
+      "arm": "graph",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D8-tests-collected/swev",
+      "arm": "swev",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "swev.rs",
+          "line": 364,
+          "tokens": [
+            "zero_tests"
+          ],
+          "matched_line": 364,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D8-tests-collected/report",
+      "arm": "report",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-52 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D8-tests-collected/graph",
+      "arm": "graph",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D9-eval-sha256/swev",
+      "arm": "swev",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "swev.rs",
+          "line": 294,
+          "tokens": [
+            "let eval_sha256 = sha256_hex(&log_path);"
+          ],
+          "matched_line": 294,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D9-eval-sha256/report",
+      "arm": "report",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-52 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D9-eval-sha256/graph",
+      "arm": "graph",
+      "status": "absent",
+      "anchors": [],
+      "verdict": "PASS",
+      "note": "absent 格债号 D-51 可解析（放行；v0.2 补齐后翻 present）"
+    },
+    {
+      "where": "D10-budget-gate-symmetry/swev",
+      "arm": "swev",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "swev_unit.rs",
+          "line": 63,
+          "tokens": [
+            "max_turns"
+          ],
+          "matched_line": 63,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "swev_unit.rs",
+          "line": 69,
+          "tokens": [
+            "spend_cap_cents"
+          ],
+          "matched_line": 69,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "swev_unit.rs",
+          "line": 198,
+          "tokens": [
+            "budget_ledger_cents"
+          ],
+          "matched_line": 198,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D10-budget-gate-symmetry/report",
+      "arm": "report",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "report_unit.rs",
+          "line": 985,
+          "tokens": [
+            "ring_cap_cents"
+          ],
+          "matched_line": 985,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "report_unit.rs",
+          "line": 700,
+          "tokens": [
+            "强制集外条目一律 fail-loud"
+          ],
+          "matched_line": 700,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "report_unit.rs",
+          "line": 757,
+          "tokens": [
+            "(scope, dim) =>"
+          ],
+          "matched_line": 757,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "D10-budget-gate-symmetry/graph",
+      "arm": "graph",
+      "status": "present",
+      "anchors": [
+        {
+          "file": "graph_unit.rs",
+          "line": 375,
+          "tokens": [
+            "node_spend_cap"
+          ],
+          "matched_line": 375,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "graph_unit.rs",
+          "line": 1408,
+          "tokens": [
+            "node_spend_cap"
+          ],
+          "matched_line": 1408,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "graph_unit.rs",
+          "line": 2755,
+          "tokens": [
+            "node_spend_cap_saturates_giant_u64_caps_instead_of_wrapping_to_one_cent"
+          ],
+          "matched_line": 2755,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "G1-test-command-frozen",
+      "arm": null,
+      "status": "present",
+      "anchors": [
+        {
+          "file": "graph_unit.rs",
+          "line": 606,
+          "tokens": [
+            "test_command"
+          ],
+          "matched_line": 606,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "graph_unit.rs",
+          "line": 612,
+          "tokens": [
+            "判据命令未声明"
+          ],
+          "matched_line": 612,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "graph_unit.rs",
+          "line": 601,
+          "tokens": [
+            "verify_task_digest"
+          ],
+          "matched_line": 601,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "G2-criteria-degeneration-gate",
+      "arm": null,
+      "status": "present",
+      "anchors": [
+        {
+          "file": "graph_unit.rs",
+          "line": 617,
+          "tokens": [
+            "判据退化门"
+          ],
+          "matched_line": 617,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "graph_unit.rs",
+          "line": 687,
+          "tokens": [
+            "模型改动测试面"
+          ],
+          "matched_line": 687,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    },
+    {
+      "where": "G3-evidence-tree",
+      "arm": null,
+      "status": "present",
+      "anchors": [
+        {
+          "file": "graph_unit.rs",
+          "line": 620,
+          "tokens": [
+            "nodes/<id>"
+          ],
+          "matched_line": 620,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "graph_unit.rs",
+          "line": 621,
+          "tokens": [
+            "test-evidence.json"
+          ],
+          "matched_line": 621,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        },
+        {
+          "file": "graph_unit.rs",
+          "line": 632,
+          "tokens": [
+            "capture_diff"
+          ],
+          "matched_line": 632,
+          "drift": 0,
+          "verdict": "PASS",
+          "note": "窗口内命中"
+        }
+      ],
+      "verdict": "PASS",
+      "note": ""
+    }
+  ],
+  "summary": {
+    "total": 33,
+    "pass": 33,
+    "warn": 0,
+    "fail": 0
+  }
+}

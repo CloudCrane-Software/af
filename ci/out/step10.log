@@ -1,0 +1,31 @@
+OK  [S1] 正本计数 12 == 清单条目 12
+OK  [S2] 正本计数 3 == 清单条目 3
+OK  [G0-M01] done evidence/sha256/git 窗口 0.1d ≤ 7d
+OK  [G0-M01] check grep_present 通过
+OK  [G0-M02] done evidence/sha256/git 窗口 0.1d ≤ 7d
+OK  [G0-M02] check grep_present 通过
+OK  [G0-M03] done evidence/sha256/git 窗口 0.1d ≤ 7d
+OK  [G0-M03] check grep_present 通过
+OK  [G0-M04] open 登记完整（due=2026-10-31 未过期）
+OK  [G0-M05] open 登记完整（due=2026-10-31 未过期）
+OK  [G0-M06] open 登记完整（due=2026-10-31 未过期）
+OK  [G0-M07] done evidence/sha256/git 窗口 0.0d ≤ 7d
+OK  [G0-M07] check grep_present 通过
+OK  [G0-M08] done evidence/sha256/git 窗口 0.0d ≤ 7d
+OK  [G0-M08] check grep_present 通过
+OK  [G0-M09] done evidence/sha256/git 窗口 0.0d ≤ 7d
+OK  [G0-M09] check grep_present 通过
+OK  [G0-M10] done evidence/sha256/git 窗口 0.0d ≤ 7d
+OK  [G0-M10] check grep_present 通过
+OK  [G0-M11] done evidence/sha256/git 窗口 0.0d ≤ 7d
+OK  [G0-M11] check grep_present 通过
+OK  [G0-M12] done evidence/sha256/git 窗口 0.0d ≤ 7d
+OK  [G0-M12] check grep_present 通过
+OK  [G0-S01] done evidence/sha256/git 窗口 0.1d ≤ 7d
+OK  [G0-S01] check grep_present 通过
+OK  [G0-S02] done evidence/sha256/git 窗口 0.0d ≤ 7d
+OK  [G0-S02] check grep_present 通过
+OK  [G0-S03] done evidence/sha256/git 窗口 0.0d ≤ 7d
+OK  [G0-S03] check grep_present 通过
+step10 承诺-交付对账: items=15 done=12 open=3 descoped=0 红=0
+step10 PASS: 承诺-交付对账闭合

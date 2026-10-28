@@ -3,8 +3,11 @@
 """step12 计数复算门（红队复盘 C2:117-118/C3/PP4:292；开发计划 §2.1 表行 3）。
 
 对 numbers.json 做三件事：
-  ① 限定名键校验：每键必须 <域>.<名> 形态（裸键无法消歧——六门 vs 九门史的根治）；
-  ② 逐键跑来源命令复算，stdout 必须解析为整数且 == 登记值（漂移即红）；
+  ① 限定名键校验：每键必须 <域>.<名> 形态（裸键无法消歧——六门 vs 九门史的根治；
+     域路径允许多段如 fv.kani_inv_harness.count——2026-10-28 合流批按总对账 §三.3
+     终稿键名放宽 KEY_RE，裁决详见 numbers.json _note）；
+  ② 逐键跑来源命令复算：登记值为 int 时 stdout 须整数可解析且相等；为 str 时
+     （如 manifest sha256 十六进制串）stdout 逐字符比对（大小写不敏感）——漂移即红；
   ③ 文书扫描：
      a. {{numbers.<key>}} 占位符必须解析到在册键；
      b. watch 手写计数对值：正则命中已知度量名（含汉字数词映射）即与 numbers.json
@@ -20,7 +23,7 @@ import re
 import subprocess
 import sys
 
-KEY_RE = re.compile(r'^[a-z0-9_]+\.[a-z0-9_]+$')
+KEY_RE = re.compile(r'^[a-z0-9_]+(\.[a-z0-9_]+)+$')
 PLACEHOLDER_RE = re.compile(r'\{\{numbers\.([A-Za-z0-9_.]+)\}\}')
 
 
@@ -66,13 +69,23 @@ def main():
         r = subprocess.run(cmd, shell=True, cwd=cwd,
                            capture_output=True, text=True)
         out = r.stdout.strip()
-        try:
-            got = int(out.splitlines()[-1])
-        except (ValueError, IndexError):
-            bad(f"[{key}] 来源命令不可机数（rc={r.returncode}, out={out!r}）")
-            continue
-        if got != ent['value']:
-            bad(f"[{key}] 复算值漂移：登记={ent['value']} 复算={got}（{cmd}）"
+        want = ent['value']
+        if isinstance(want, str):
+            # 字符串登记值（G0-B 补合流放宽面：fv.kani_inv_harness.manifest_sha256
+            # 等十六进制串）——stdout 逐字符比对，大小写不敏感（十六进制大小写等价，
+            # 位数与数字仍逐位核）。放宽只增可表达面，「复算==登记」纪律不变。
+            lines = out.splitlines()
+            got = lines[-1] if lines else ''
+            same = got.lower() == want.lower()
+        else:
+            try:
+                got = int(out.splitlines()[-1])
+            except (ValueError, IndexError):
+                bad(f"[{key}] 来源命令不可机数（rc={r.returncode}, out={out!r}）")
+                continue
+            same = got == want
+        if not same:
+            bad(f"[{key}] 复算值漂移：登记={want} 复算={got}（{cmd}）"
                 f"——数字跨文书漂移活现（35vs37/六门九门同模式）")
         else:
             print(f"OK  [{key}] 复算 {got} == 登记（{cmd.split()[0]}…，"
