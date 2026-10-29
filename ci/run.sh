@@ -500,8 +500,10 @@ step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail
 #       以 python3 -B 调用——pyc-shadow 纪律：不在 ci/ 留 __pycache__）：
 #       ① schema——全库条目 YAML 逐字段（必填键/枚举闭集 tier∈{A,B}、
 #          dsl_state 三态、experiment.status 五态、三态↔字段互斥、id↔文件名）；
-#       ② A 线命名空间 index 完备性+登记值计数对账（st-C* 必须全登记；
-#          B 线 st-b-* 在飞文件由其批次自行登记，发 INFO 不判红）；
+#       ② 并集 index 完备性+登记值计数对账（磁盘每个条目必须登记——甲 A 档 11 +
+#          乙 B 档 48 共 59 条；登记 file 在场；登记 tier/dsl_state↔文件实测一致；
+#          乙线 libB 提交 243fa0f 明示 index/README/CI 归甲线合并，本检查即该
+#          合并面守护）；
 #       ③ 编译断言——compilable 条目 dsl_snippet 经既有测试装载路径
 #          `cargo test -p af-dsl --test strategy_library_test` 逐一过 af-dsl
 #          load_str+validate 零违例（step3 已全域构建，秒级复跑）。
@@ -531,7 +533,7 @@ machine_batch() {
   (cd "$AF_ROOT" && python3 ci/xcheck.py); rc_b=$?
   echo "== 14c criteria.yaml 六要素 schema + 终验清单机生成（SPEC-3）"
   (cd "$AF_ROOT" && python3 ci/criteria_check.py --emit-checklist "$OUT/final-checklist.md"); rc_c=$?
-  echo "== 14d strategies/ 策略库全量校验（libA-20261029：schema + A 线 index 完备性/计数对账 + af-dsl 装载测试编译断言）"
+  echo "== 14d strategies/ 策略库全量校验（schema + 并集 index 完备性/计数对账 + af-dsl 装载测试编译断言）"
   (cd "$AF_ROOT" && python3 -B ci/strategies_check.py); rc_d=$?
   echo "== 14 子检查退出码：branches=$rc_a xcheck=$rc_b criteria=$rc_c strategies=$rc_d（0=过 1=硬红 2=advisory WARN）"
   for rc in "$rc_a" "$rc_b" "$rc_c" "$rc_d"; do
