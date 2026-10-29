@@ -50,7 +50,11 @@ REPO = Path(__file__).resolve().parent.parent
 STRATS = REPO / "strategies"
 INDEX = STRATS / "index.yaml"
 
-TIERS = {"A", "B"}
+# 2026-10-30 v1.2 契约修订（SIL 全周期收口裁决）：tier 闭集扩 A|B|C|D——C/D 为
+# 「实验承载档」，仅当 experiment.status != none 时允许入库：自我改进循环把实验
+# 终裁自动建条目回写（实测实验主断言卡常落 tier C 单卡簇，v1 闭集导致真实裁决回写被回滚）。
+TIERS = {"A", "B", "C", "D"}
+TIERS_NEED_EXPERIMENT = {"C", "D"}
 DSL_STATES = {"compilable", "needs_syntax", "not_applicable"}
 EXP_STATUS = {"none", "inconclusive", "confirmed", "refuted", "pending"}
 ID_RE = re.compile(r"^st-(b-)?C[0-9]+$")
@@ -108,7 +112,9 @@ def check_entry_schema(path: Path) -> str | None:
     if not nonempty_str(doc.get("name")):
         err(f"R1 {rel}: name 须为非空字符串")
     if doc.get("tier") not in TIERS:
-        err(f"R1 {rel}: tier={doc.get('tier')!r} 不在闭集 {sorted(TIERS)}（工单钉死 A|B）")
+        err(f"R1 {rel}: tier={doc.get('tier')!r} 不在闭集 {sorted(TIERS)}")
+    elif doc.get("tier") in TIERS_NEED_EXPERIMENT and doc.get("experiment", {}).get("status") in (None, "none"):
+        err(f"R1 {rel}: tier={doc.get('tier')} 为实验承载档，experiment.status 不得为空/none")
     if not nonempty_str(doc.get("claim")):
         err(f"R1 {rel}: claim 须为非空字符串（策略册一句话断言）")
 
