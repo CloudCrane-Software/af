@@ -1,0 +1,13 @@
+id: st-b-C121
+name: "SWE-Skills-Bench：先证明技能本身有没有边际收益（成对开/关 skill 的受控评测）"
+tier: B
+claim: "SWE-Skills-Bench：成对开/关 skill 受控评测显示 49 个公开技能中 39 个零提升，平均仅 +1.2%，7 个有实质收益"
+claimed_value:
+  metric: "skill_marginal_gain"
+  direction: up
+  context: "同一批真实仓库任务配对 A/B：对照组不注入（或注入随机填充）技能，其余 harness 变量完全一致"
+sources: [S160, S162, S163]
+consensus: {corpora: 1, cards: 3}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "受控评测协议：策略内容是「配对 A/B + 控制模型/预算/工具集 + 同时比较 pass rate、token 消耗与回归率」的实验设计（S160 body.测试设计），目的是给技能资产定边际收益；AFB 七段描述运行时图，不描述离线对照实验的分配与统计口径，无可编译节点语义。"

@@ -1,0 +1,13 @@
+id: st-b-C073
+name: "用失败模式聚类（而非总分）驱动工具改进：把「工具使用错误」和「语法错」从其他失败里单独拆出来"
+tier: B
+claim: "失败模式聚类：把「工具使用错误」「语法错」从其他失败中拆出归因，而非只看总分，驱动工具改进优先级"
+claimed_value:
+  metric: "failure_attribution_precision"
+  direction: up
+  context: "在自研 harness 每条轨迹上跑同款失败模式判官（LLM-as-judge 带人工对齐率标注）；只看分类分布不看总分"
+sources: [S067, S141]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "离线轨迹归因规程：策略内容是「对历史轨迹跑失败模式判官、把工具使用错误/语法错单独拆类、用聚类分布排工具改进优先级」的分析方法（S067 body.测试设计），输入是已完结轨迹的集合而非运行图；AFB 无离线批处理分析语义。"

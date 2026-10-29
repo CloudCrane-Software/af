@@ -1,0 +1,13 @@
+id: st-b-C028
+name: "LLM 摘要式对话压缩（auto-compact / LLMSummarizingCondenser，含默认参数基线）"
+tier: B
+claim: "LLM 摘要式对话压缩：接近上限时把历史摘要后重启，解决率 54% vs 基线 53%，单轮 API 成本最高降 2 倍"
+claimed_value:
+  metric: "api_cost_per_turn"
+  direction: down
+  context: "同一批 SWE-bench 任务对：对照组到上下文溢出即截断/失败；实验组接近上限即 LLM 摘要重启"
+sources: [S001, S009]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "缺「上下文压缩策略段」：v0.1 的 context.sections 只有装载期视图策略（store 段 full/latest_k/retrieve/summarize/none），表达不了「接近上限时把历史摘要后重启」这一运行期触发式压缩——无阈值触发位、无摘要器组件绑定、无「保留最近比例原文」、无「摘要失败降级为截断」的降级链。\n扩展建议（示例，挂在节点 context 上）：\n  context:\n    compression:\n      trigger: { ratio: 0.85 }                 # 接近窗口上限触发\n      summarizer: pkg.ctx.llm_summarize@1      # LLM 摘要器组件（uses 同款装订）\n      keep_recent: 0.2                          # 保留最近 20% 原文\n      handoff_fields: [goal, done, next]        # 结构化交接摘要\n      on_failure: truncate                      # 摘要失败降级为截断\n簇内矛盾已登记：S001 引 S009 为负面证据（LLM 摘要压缩可能纯增成本 24–94%），扩展落地时应与「观测掩码/无损压缩」同台 A/B。"

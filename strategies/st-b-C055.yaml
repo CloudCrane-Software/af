@@ -1,0 +1,108 @@
+id: st-b-C055
+name: "中心化依赖感知 DAG 委派 + 隔离工作区异步执行（CAID）"
+tier: B
+claim: "中心化依赖感知DAG委派+隔离工作区异步执行：PaperBench较单agent提升25.6个百分点"
+claimed_value:
+  metric: "paperbench_resolved_rate"
+  direction: up
+  context: "对照组=单 agent 顺序完成同一任务；实验组=中心化依赖感知 DAG 委派 + 隔离工作区异步执行"
+sources: [S039, S113]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: caid_dag_delegation
+    graph_version: "1.0"
+    entry: orchestrator
+    input: caid_input
+    output: { ref: "list<artifact>", from: collect }
+    intent: "中心化编排器产出依赖感知任务波次；波次内 map 并行（实例间无横向边=隔离工作区），波次间经工件依赖串接"
+  types:
+    - name: caid_input
+      schema:
+        type: object
+        required: [issue, wave1]
+        properties:
+          issue: { type: string }
+          wave1: { type: array, items: { type: string } }
+    - name: task_item
+      schema:
+        type: object
+        required: [id, instruction]
+        properties:
+          id: { type: string }
+          instruction: { type: string }
+    - name: artifact
+      schema:
+        type: object
+        required: [task_id, diff_ref]
+        properties:
+          task_id: { type: string }
+          diff_ref: { type: string }
+  stores:
+    - name: results
+      type: collection
+      item: artifact
+      writer: collect                  # INV-2：汇聚节点单写（map 体不写共享槽）
+      lifecycle: run
+      retention: { max_items: 256 }
+  nodes:
+    - id: orchestrator
+      kind: task
+      uses: { model: route.main@1 }
+      emits: { wave1: "list<task_item>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.caid.orchestrator_system, quota_tokens: 500 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+    - id: wave1
+      kind: task
+      map:
+        over: orchestrator.wave1
+        body:
+          nodes:
+            - id: worker
+              kind: task
+              uses: { model: route.cheap@1, tools: [pkg.sweng.edit] }
+              emits: { artifact: artifact }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.caid.worker_system, quota_tokens: 500 }
+                  - { from: arg, name: item, fields: [instruction], policy: project, quota_tokens: 900 }
+      emits: { artifacts1: { from_body: worker.artifact } }
+    - id: wave2
+      kind: task
+      map:
+        over: wave1.artifacts1          # 依赖感知：二波任务由一波工件派生
+        body:
+          nodes:
+            - id: integrator
+              kind: task
+              uses: { model: route.cheap@1, tools: [pkg.sweng.edit] }
+              emits: { artifact: artifact }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.caid.integrator_system, quota_tokens: 500 }
+                  - { from: arg, name: item, fields: [diff_ref], policy: project, quota_tokens: 900 }
+      emits: { artifacts2: { from_body: integrator.artifact } }
+    - id: collect
+      kind: transform
+      writes: [results]
+      consumes: { artifacts1: "list<artifact>", artifacts2: "list<artifact>" }
+      ops:
+        - { op: merge, ports: [artifacts1, artifacts2], into: merged }
+      emits: { merged: "list<artifact>" }
+  edges:
+    - { from: orchestrator, output: wave1, to: wave1, input: tasks }
+    - { from: wave1, output: artifacts1, to: wave2, input: upstream }
+    - { from: wave1, output: artifacts1, to: collect, input: artifacts1 }
+    - { from: wave2, output: artifacts2, to: collect, input: artifacts2 }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 1200 }
+      - { id: wave1_cap, dimension: model_calls, scope: map:wave1, cap: 60 }
+    failures:
+      - { class: schema_invalid, retry: { max: 2, backoff_ms: 0 } }
+      - { class: budget_exhausted, terminal: true, outcome: completed }

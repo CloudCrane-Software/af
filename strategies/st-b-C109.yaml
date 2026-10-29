@@ -1,0 +1,90 @@
+id: st-b-C109
+name: "先让弱模型跑几步探索、再基于部分轨迹决定是否升级（SWE-Router）"
+tier: B
+claim: "先弱模型探索再决定升级：读部分轨迹再路由不劣化且严格更优，大幅提升SWE成本效率"
+claimed_value:
+  metric: "cost_efficiency"
+  direction: up
+  context: "A 组=弱模型全程跑到底+失败即整体升级；B 组=弱模型探索数步后按部分轨迹路由；升级时携带前序轨迹"
+sources: [S134, S136]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: weak_explore_then_upgrade
+    graph_version: "1.0"
+    entry: explorer
+    input: router_input
+    output: { ref: answer, from: report }
+    intent: "弱模型只读探索数步（turns 帽）→ 按部分轨迹质量路由：达标直接收尾，否则升级强模型并交接轨迹"
+  types:
+    - name: router_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: attempt_trace
+      schema:
+        type: object
+        required: [quality_milli, steps]
+        properties:
+          quality_milli: { type: integer }
+          steps: { type: integer }
+    - name: answer
+      schema:
+        type: object
+        required: [text, ref]
+        properties:
+          text: { type: string }
+          ref: { type: string }
+  nodes:
+    - id: explorer
+      kind: task
+      uses: { model: route.weak@1, tools: [pkg.sweng.locate, pkg.sweng.view] }   # 只读探索
+      emits: { trace: attempt_trace }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.router.explorer_system, quota_tokens: 500 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+      route:                              # 读部分轨迹再路由
+        default: fixer
+        rules:
+          - { when: "explorer.trace.quality_milli >= 800", goto: direct }
+    - id: fixer
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.sweng.edit] }     # 升级：强模型接手
+      consumes: { trace: attempt_trace }
+      emits: { answer: answer }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.coder_system, quota_tokens: 600 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+          - { from: edge, port: trace, fields: [quality_milli, steps], policy: project, quota_tokens: 800 }  # 轨迹交接税按需投影
+    - id: direct
+      kind: transform
+      consumes: { trace: attempt_trace }
+      ops:
+        - { op: project, port: trace, fields: [quality_milli, steps], into: answer }
+      emits: { answer: answer }
+    - id: report
+      kind: transform
+      consumes: { answer: answer }
+      ops:
+        - { op: project, port: answer, fields: [text, ref], into: final }
+      emits: { final: answer }
+  edges:
+    - { from: explorer, output: trace, to: fixer, input: trace }
+    - { from: explorer, output: trace, to: direct, input: trace }
+    - { from: fixer, output: answer, to: report, input: answer }
+    - { from: direct, output: answer, to: report, input: answer }
+  policies:
+    budgets:
+      - { id: explore_turns, dimension: turns, scope: node:explorer, cap: 6 }   # 只跑几步
+      - { id: explore_cents, dimension: cents, scope: node:explorer, cap: 40 }
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+    failures:
+      - { class: tool_error, route: same_node, feedback: error_observation }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

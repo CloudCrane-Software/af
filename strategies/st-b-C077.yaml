@@ -1,0 +1,83 @@
+id: st-b-C077
+name: "CRITIC：工具交互式批评（执行信号 vs 纯语言自评的直接对照）"
+tier: B
+claim: "CRITIC工具交互式批评：校验外包给工具再修正才有稳定增益，纯语言自评增益消失甚至转负"
+claimed_value:
+  metric: "resolved_rate"
+  direction: up
+  context: "三臂等预算 A/B：执行反馈修正 vs 无执行反馈纯语言自评 vs 盲重采样安慰剂；限定只改工具报错处"
+sources: [S071, S085]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: critic_tool_feedback
+    graph_version: "1.0"
+    entry: fix_loop
+    input: critic_input
+    output: { ref: patch, from: fix_loop }
+    intent: "校验外包给工具（lint/类型/测试单元）再修正：失败观察回灌生成节点，只对工具报错定点修正；纯语言自评无对应边"
+  types:
+    - name: critic_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: tool_feedback
+      schema:
+        type: object
+        required: [ok, errors]
+        properties:
+          ok: { type: boolean }
+          errors: { type: array, items: { type: string } }
+  nodes:
+    - id: fix_loop
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: coder
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              consumes: { feedback: tool_feedback }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.critic.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+                  - { from: edge, port: feedback, fields: [errors], policy: project, quota_tokens: 800, optional: true }
+            - id: tool_check
+              kind: check
+              uses: { unit: pkg.critic.tool_suite@1 }   # 执行信号源：lint/类型/测试三件
+              consumes: { patch: patch }
+              emits: { report: tool_feedback }
+              route:
+                default: exit
+                rules:
+                  - { when: "tool_check.passed == false", goto: coder }
+          edges:
+            - { from: coder, output: patch, to: tool_check, input: patch }
+            - { from: tool_check, output: report, to: coder, input: feedback }
+        max_iterations: 3
+        safety_points:
+          - { node: tool_check, kind: check }    # 每轮必须过外部工具执行信号
+        exit_when: "attempt.passed == true"
+        on_exhausted: fail
+      emits: { patch: { from_body: coder.patch } }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 500 }
+      - { id: fix_turns, dimension: turns, scope: loop:fix_loop, cap: 45 }
+    failures:
+      - { class: tool_error, route: same_node, feedback: error_observation }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

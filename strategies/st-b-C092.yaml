@@ -1,0 +1,100 @@
+id: st-b-C092
+name: "官方并行测试时计算：多路并行 + 回归测试拒绝采样 + 内部评分模型选优"
+tier: B
+claim: "并行测试时计算+回归测试拒绝采样+评分选优：SWE-bench Verified各约+7pp"
+claimed_value:
+  metric: "resolved_rate"
+  direction: up
+  context: "对照组单路 agent；实验组=多路并行 + 回归测试拒绝采样 + 内部评分模型选优"
+sources: [S092, S093]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: parallel_ttc_rejection_sampling
+    graph_version: "1.0"
+    entry: rollouts
+    input: ttc_input
+    output: { ref: ranked_patch, from: select }
+    intent: "多路并行测试时计算：回归测试拒绝采样过滤候选，内部评分模型排序，select_best 取最优"
+  types:
+    - name: ttc_input
+      schema:
+        type: object
+        required: [issue, attempt_ids]
+        properties:
+          issue: { type: string }
+          attempt_ids: { type: array, items: { type: integer } }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: patch_result
+      schema:
+        type: object
+        required: [ref, diff_ref, regression_pass_milli]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+          regression_pass_milli: { type: integer }
+    - name: ranked_patch
+      schema:
+        type: object
+        required: [ref, diff_ref, rank_milli]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+          rank_milli: { type: integer }
+  nodes:
+    - id: rollouts
+      kind: task
+      map:
+        over: input.attempt_ids
+        max_fanout: 4
+        body:
+          nodes:
+            - id: coder
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.ttc.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+      emits: { patches: { from_body: coder.patch } }
+    - id: regression
+      kind: check
+      uses: { unit: pkg.sweng.test_unit@1 }    # 回归测试拒绝采样
+      consumes: { patches: "list<patch>" }
+      emits: { results: "list<patch_result>" }
+    - id: scorer
+      kind: task
+      uses: { model: route.scorer@1 }          # 内部评分模型
+      consumes: { results: "list<patch_result>" }
+      emits: { ranking: "list<ranked_patch>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.ttc.scorer_system, quota_tokens: 400 }
+          - { from: edge, port: results, fields: [ref, regression_pass_milli], policy: project, quota_tokens: 2000 }
+    - id: select
+      kind: transform
+      consumes: { ranking: "list<ranked_patch>" }
+      ops:
+        - { op: select_best, port: ranking, by: rank_milli, prefer: max, into: winner }
+      emits: { winner: ranked_patch }
+  edges:
+    - { from: rollouts, output: patches, to: regression, input: patches }
+    - { from: regression, output: results, to: scorer, input: results }
+    - { from: scorer, output: ranking, to: select, input: ranking }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 900 }
+      - { id: fanout_cap, dimension: model_calls, scope: map:rollouts, cap: 40 }
+    failures:
+      - { class: gate_refused, route: same_node, feedback: error_observation }
+      - { class: budget_exhausted, terminal: true, outcome: completed }

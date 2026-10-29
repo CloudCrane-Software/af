@@ -1,0 +1,95 @@
+id: st-b-C048
+name: "fresh-context 终审：把评审放到完全干净的会话里做，而不是同一会话内自我复审"
+tier: B
+claim: "fresh-context 终审：评审放进无生产历史的新会话才有增益，CCR F1 28.6% vs 同会话复审 21.7%"
+claimed_value:
+  metric: "review_f1"
+  direction: up
+  context: "对照组=主 agent 同会话内自审；实验组=无生产历史的新会话评审（只给 diff+测试信号）"
+sources: [S029, S041]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: fresh_context_review
+    graph_version: "1.0"
+    entry: work
+    input: review_input
+    output: { ref: review_verdict, from: work }
+    intent: "fresh-context 终审：评审节点 context 只挂 diff 投影+评审模板，不挂 trajectory store——评审会话无生产历史"
+  types:
+    - name: review_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: review_verdict
+      schema:
+        type: object
+        required: [approved, notes, confidence_milli]
+        properties:
+          approved: { type: boolean }
+          notes: { type: array, items: { type: string } }
+          confidence_milli: { type: integer }
+  nodes:
+    - id: work
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: coder
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              consumes: { notes: review_verdict }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.review.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+                  - { from: edge, port: notes, fields: [notes], policy: project, quota_tokens: 800, optional: true }
+            - id: reviewer
+              kind: task
+              uses: { model: route.main@1 }
+              consumes: { patch: patch }
+              emits: { review: review_verdict }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.review.fresh_system, quota_tokens: 500 }
+                  - { from: edge, port: patch, fields: [ref, diff_ref], policy: project, quota_tokens: 3000 }
+                  # fresh-context：不挂 store/trajectory 段——评审会话无生产历史（对照同会话自审）
+            - id: review_gate
+              kind: gate
+              consumes: { review: review_verdict }
+              emits: { review: review_verdict }
+              assert: "inputs.review.confidence_milli >= 500"
+              route:
+                default: exit
+                rules:
+                  - { when: "review_gate.passed == false", goto: coder }
+          edges:
+            - { from: coder, output: patch, to: reviewer, input: patch }
+            - { from: reviewer, output: review, to: review_gate, input: review }
+            - { from: review_gate, output: review, to: coder, input: notes }
+        max_iterations: 3
+        safety_points:
+          - { node: review_gate, kind: gate }
+        exit_when: "attempt.passed == true"
+        on_exhausted: continue
+      emits: { review: { from_body: review_gate.review } }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 600 }
+      - { id: review_turns, dimension: turns, scope: loop:work, cap: 45 }
+    failures:
+      - { class: schema_invalid, route: same_node, feedback: format_reminder }
+      - { class: budget_exhausted, terminal: true, outcome: completed }

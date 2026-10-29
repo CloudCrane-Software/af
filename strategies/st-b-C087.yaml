@@ -1,0 +1,13 @@
+id: st-b-C087
+name: "安慰剂对照：盲重采样优于自修复（小模型代码任务，反面证据）"
+tier: B
+claim: "盲重采样优于自修复：小模型上不给失败输出的重试不劣于任何自修复条件且省2.5–5.5倍token"
+claimed_value:
+  metric: "resolved_rate"
+  direction: up
+  context: "任何「带反馈重试」A/B 必须加安慰剂臂：同 token 预算下盲重采样 vs 带反馈自修复"
+sources: [S086, S097]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "实验设计纪律：策略内容是「带反馈重试的 A/B 必须配同预算盲重采样安慰剂臂」的对照设计要求（S086 body.测试设计）；AFB 表达单次运行图，不表达多臂实验分配与等预算控制。"

@@ -1,0 +1,88 @@
+id: st-b-C095
+name: "并行多尝试 + LLM chooser 选优（oracle pass@k 与裁判选优两层）"
+tier: B
+claim: "并行多尝试+LLM chooser选优：pass@1 17.94%升到pass@6 32.67%"
+claimed_value:
+  metric: "pass@1"
+  direction: up
+  context: "同一实例固定 n 个并行 worker（n=4 与 n=8 两档）；oracle pass@k 是上限、chooser 选优是可达层"
+sources: [S098, S156]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: parallel_attempts_chooser
+    graph_version: "1.0"
+    entry: rollouts
+    input: chooser_input
+    output: { ref: patch, from: select }
+    intent: "并行多尝试（fanout 帽=pass@k 的 k）+ LLM chooser 排序选优；预算熔断即取当前最优"
+  types:
+    - name: chooser_input
+      schema:
+        type: object
+        required: [issue, attempt_ids]
+        properties:
+          issue: { type: string }
+          attempt_ids: { type: array, items: { type: integer } }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: ranked_patch
+      schema:
+        type: object
+        required: [ref, diff_ref, rank_milli]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+          rank_milli: { type: integer }
+  nodes:
+    - id: rollouts
+      kind: task
+      map:
+        over: input.attempt_ids
+        max_fanout: 6                  # k=6（pass@6 口径）
+        body:
+          nodes:
+            - id: coder
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.ttc.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+      emits: { patches: { from_body: coder.patch } }
+    - id: chooser
+      kind: task
+      uses: { model: route.chooser@1 }      # LLM 裁判（非 oracle 上限）
+      consumes: { patches: "list<patch>" }
+      emits: { ranking: "list<ranked_patch>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.ttc.chooser_system, quota_tokens: 500 }
+          - { from: edge, port: patches, fields: [ref, diff_ref], policy: project, quota_tokens: 3000 }
+    - id: select
+      kind: transform
+      consumes: { ranking: "list<ranked_patch>" }
+      ops:
+        - { op: select_best, port: ranking, by: rank_milli, prefer: max, into: winner }
+      emits: { winner: patch }
+  edges:
+    - { from: rollouts, output: patches, to: chooser, input: patches }
+    - { from: chooser, output: ranking, to: select, input: ranking }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 800 }
+      - { id: fanout_cap, dimension: model_calls, scope: map:rollouts, cap: 60 }
+    stop:
+      - { when: "budget.cents_spent >= budget.cents_cap * 9 / 10", outcome: completed }
+    failures:
+      - { class: schema_invalid, retry: { max: 2, backoff_ms: 0 } }
+      - { class: budget_exhausted, terminal: true, outcome: completed }

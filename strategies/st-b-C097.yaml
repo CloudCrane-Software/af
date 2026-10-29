@@ -1,0 +1,111 @@
+id: st-b-C097
+name: "Otter / TDD-Bench-Verified：从 issue 生成 fail-to-pass 复现测试并过…"
+tier: B
+claim: "Otter 从 issue 生成 fail-to-pass 复现测试：过滤榜单系统补丁精确率提至 65%–92%"
+claimed_value:
+  metric: "patch_filtering_precision"
+  direction: up
+  context: "对照组=按官方 FAIL_TO_PASS 固定测试集判定；实验组=issue 生成 fail-to-pass 复现测试"
+sources: [S101, S102, S104]
+consensus: {corpora: 1, cards: 3}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: otter_repro_filter
+    graph_version: "1.0"
+    entry: gen_tests
+    input: otter_input
+    output: { ref: verdict, from: verify }
+    intent: "issue→fail-to-pass 复现测试生成；补丁须过复现测试闸，不过则回灌失败详情重试（受控循环+安全点）"
+  types:
+    - name: otter_input
+      schema:
+        type: object
+        required: [issue, repo_ref]
+        properties:
+          issue: { type: string }
+          repo_ref: { type: string }
+    - name: repro_test
+      schema:
+        type: object
+        required: [test_ref, fails_on_base]
+        properties:
+          test_ref: { type: string }
+          fails_on_base: { type: boolean }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: verdict
+      schema:
+        type: object
+        required: [passed, failures]
+        properties:
+          passed: { type: boolean }
+          failures: { type: array, items: { type: string } }
+  stores:
+    - name: repro_tests
+      type: collection
+      item: repro_test
+      writer: gen_tests               # INV-2：复现测试由生成节点单写
+      lifecycle: run
+      retention: { max_items: 64 }
+  nodes:
+    - id: gen_tests
+      kind: task
+      uses: { model: route.main@1 }
+      writes: [repro_tests]
+      emits: { tests: "list<repro_test>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.otter.testgen_system, quota_tokens: 600 }
+          - { from: input, fields: [issue, repo_ref], policy: project, quota_tokens: 900 }
+    - id: verify
+      kind: task
+      consumes: { tests: "list<repro_test>" }
+      loop:
+        body:
+          nodes:
+            - id: patch_source
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              consumes: { feedback: verdict }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+                  - { from: edge, port: feedback, fields: [failures], policy: project, quota_tokens: 600, optional: true }
+            - id: run_repro
+              kind: check
+              uses: { unit: pkg.otter.repro_runner@1 }   # fail-to-pass 复现测试执行器
+              reads: [repro_tests]
+              consumes: { patch: patch }
+              emits: { report: verdict }
+              route:
+                default: exit
+                rules:
+                  - { when: "run_repro.passed == false", goto: patch_source }
+          edges:
+            - { from: patch_source, output: patch, to: run_repro, input: patch }
+            - { from: run_repro, output: report, to: patch_source, input: feedback }
+        max_iterations: 3
+        safety_points:
+          - { node: run_repro, kind: check }    # 每轮必须过外部复现测试
+        exit_when: "attempt.passed == true"
+        on_exhausted: fail
+      emits: { report: { from_body: run_repro.report } }
+  edges:
+    - { from: gen_tests, output: tests, to: verify, input: tests }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 600 }
+      - { id: fix_turns, dimension: turns, scope: loop:verify, cap: 60 }
+    failures:
+      - { class: schema_invalid, retry: { max: 2, backoff_ms: 0 } }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

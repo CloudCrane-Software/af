@@ -1,0 +1,13 @@
+id: st-b-C105
+name: "harness 组件级可拆解消融：上下文管理/规划/动作空间（按模型分档）"
+tier: B
+claim: "harness 组件级消融：上下文管理价值随窗口收紧放大（32k 差距 35.7pp、128k 仅 2.7pp）；强模型 bash-only 更省"
+claimed_value:
+  metric: "component_ablation_delta"
+  direction: up
+  context: "保持主循环不动，只替换 context-management 策略（T0/T1/T2/T3…）；按模型分档、按窗口收紧分档"
+sources: [S118, S129]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "消融实验方法：策略内容是「逐组件替换做可拆解消融、按模型/窗口分档读差距」的实验设计（S129 body.测试设计）；AFB 单图无法表达「同图多组件配置矩阵」的消融调度，其 policies 也不承载组件级消融报表。"

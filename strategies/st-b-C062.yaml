@@ -1,0 +1,13 @@
+id: st-b-C062
+name: "渐进披露 vs 扁平单文件：只有当支撑资源可执行时才赚"
+tier: B
+claim: "渐进披露vs扁平单文件：受控对比通过trial增4.1%，收益依赖agent真去读支撑资源"
+claimed_value:
+  metric: "pass_trial_rate"
+  direction: up
+  context: "同一批仓库任务、同一技能内容；渐进披露（入口摘要+按需展开支撑资源）vs 扁平单文件"
+sources: [S048, S050]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "缺「技能/资源渐进披露声明段」：v0.1 的 context.sections 只有 template/input/arg/edge/store 五来源，无法声明「技能入口摘要常驻 + 支撑资源按需展开」的两级装载，也没有「agent 是否真去读了支撑资源」的可观测装订面。\n扩展建议（示例，新增 skills 段或 context.section 增 from: skill）：\n  skills:\n    - name: pkg.skill.db_migration\n      entry: { ref: summary.md, policy: full, quota_tokens: 400 }     # 入口摘要常驻\n      resources:                                                       # 按需展开\n        - { ref: scripts/migrate.py, load: on_demand, executable: true }\n        - { ref: tests/fixtures.sql, load: on_demand }\n  # 观测面：resource_reads 进 steps 词表，供 stop/route 判「真去读了没有」\n簇内边界已登记：收益依赖支撑资源可执行且真被读取（S050 限定条件），不可执行资源的渐进披露不赚。"

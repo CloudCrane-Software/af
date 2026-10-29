@@ -1,0 +1,101 @@
+id: st-b-C056
+name: "显式计划 + 周期性计划提醒（plan reminder）抑制计划违背"
+tier: B
+claim: "显式计划+周期性提醒：标准计划提升解决率、提醒减少计划违背；次优计划比没计划更糟"
+claimed_value:
+  metric: "plan_adherence_rate"
+  direction: up
+  context: "对照组=无计划；实验组三档=标准计划 / 标准计划+每 N 步提醒（N 取 5/10/20）；次优计划比没计划更糟"
+sources: [S040, S109]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: explicit_plan_reminder
+    graph_version: "1.0"
+    entry: planner
+    input: plan_input
+    output: { ref: step_progress, from: work }
+    intent: "显式计划入 store 常驻上下文（=持续计划提醒）；每步进度须挂到计划步骤，违背即回灌重挂"
+  types:
+    - name: plan_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: work_plan
+      schema:
+        type: object
+        required: [goal, steps]
+        properties:
+          goal: { type: string }
+          steps: { type: array, items: { type: string } }
+    - name: step_progress
+      schema:
+        type: object
+        required: [plan_step_ref, done]
+        properties:
+          plan_step_ref: { type: string }
+          done: { type: boolean }
+  stores:
+    - name: plan_store
+      type: document
+      writer: planner                  # INV-2：计划由规划节点单写
+      lifecycle: run
+      retention: { max_bytes: 65536 }
+  nodes:
+    - id: planner
+      kind: task
+      uses: { model: route.main@1 }
+      writes: [plan_store]
+      emits: { plan: work_plan }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.plan.planner_system, quota_tokens: 500 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+    - id: work
+      kind: task
+      consumes: { plan: work_plan }
+      loop:
+        body:
+          nodes:
+            - id: worker
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              consumes: { reminder: step_progress }
+              emits: { progress: step_progress }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.plan.worker_system, quota_tokens: 500 }
+                  - { from: store, store: plan_store, policy: full, quota_tokens: 1500 }   # 计划常驻=持续提醒
+                  - { from: edge, port: reminder, fields: [plan_step_ref], policy: project, quota_tokens: 300, optional: true }
+            - id: adherence_gate
+              kind: gate
+              consumes: { progress: step_progress }
+              emits: { progress: step_progress }
+              assert: "inputs.progress.plan_step_ref != ''"    # 计划违背可判：进度须挂到计划步骤
+              route:
+                default: exit
+                rules:
+                  - { when: "adherence_gate.passed == false", goto: worker }
+          edges:
+            - { from: worker, output: progress, to: adherence_gate, input: progress }
+            - { from: adherence_gate, output: progress, to: worker, input: reminder }
+        max_iterations: 12
+        safety_points:
+          - { node: adherence_gate, kind: gate }
+        exit_when: "worker.progress.done == true"
+        on_exhausted: continue
+      emits: { progress: { from_body: adherence_gate.progress } }
+  edges:
+    - { from: planner, output: plan, to: work, input: plan }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 800 }
+      - { id: work_turns, dimension: turns, scope: loop:work, cap: 120 }
+    failures:
+      - { class: schema_invalid, route: same_node, feedback: format_reminder }
+      - { class: budget_exhausted, terminal: true, outcome: completed }

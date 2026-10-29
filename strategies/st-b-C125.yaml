@@ -1,0 +1,13 @@
+id: st-b-C125
+name: "合并冲突归因遥测与自消解率门禁（谁产生、谁解决、用什么策略）"
+tier: B
+claim: "合并冲突归因遥测与自消解率门禁：96.1%冲突由人类解决，agent自消解率厂商差近60倍"
+claimed_value:
+  metric: "merge_conflict_self_resolution_rate"
+  direction: up
+  context: "harness 内置冲突归因器（制造者/解决者/策略类型 V1/V2/新码/组合）；A/B 合并策略看自消解率、消解正确性、人工介入率"
+sources: [S171, S172]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "缺「遥测计数器作为一等策略维度」与「按类直取计数」两处语法：\n① budgets.dimension 八词表（turns/model_calls/tokens_*/tool_calls/cents/clock_ms）全是资源维度，无遥测维度；policies.stop[].when 与 loop.exit_when 的 CEL 作用域（全局五根 steps/budget/last_tool/last_message/input + 节点端口）不可见 store 内累计值——「自消解率门禁」无处挂载。\n② tally 算子只产出 answers/top_count/top_share_milli（tally_result），无法直取某个策略类的计数再算比率。\n扩展建议（示例）：\n  policies:\n    stop:\n      - { when: \"telemetry.merge.self_resolve_rate < 500\", outcome: escalated_human }   # 遥测根 + 毫分比率\n  # 或 ops 增类计数直取：\n  ops:\n    - { op: tally, port: conflicts, by: strategy, into: stats, class_counts: { self_resolved: true } }\n落地前，合并冲突的归因与门禁只能写在 harness 外挂遥测里，AFB 图内不可表达。"
