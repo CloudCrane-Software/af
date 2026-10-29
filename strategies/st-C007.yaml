@@ -1,0 +1,166 @@
+id: st-C007
+name: 用「同模型、不同 harness」的公开榜单做 harness 杠杆量化：harness 选择的分差与一代模型差距同量级
+tier: A
+claim: harness 杠杆量化：固定同模型只换 harness，SWE-bench Verified resolved 率差可达 9.6–29.8 个百分点
+claimed_value:
+  metric: resolved_rate
+  direction: up
+  context: 评测方法论；自研 harness 在同一批大型仓库任务上与 2–3 个公开 harness（mini-SWE-agent、OpenHands、自研简化版）做同模型配对跑，报告 resolved 率、token/题、成本三列并与榜单同款口径对齐（S125 测试设计口径）
+sources: [MA-rank9, S125, S126, S127]
+consensus: { corpora: 2, cards: 4 }
+experiment:
+  status: inconclusive
+  exp_id: EXP-1
+  note: "EXP-1（报告产线规则极性 A/B，主对比 A1−A2）2026-10-29 按预注册判据终裁 inconclusive：配对差 +0.00pp（b=1,c=1,s=2），McNemar 精确单侧 p=0.75 落入 s≤4 灰区，TOST CP90 [−8.26pp,+8.26pp] 未严格含于 ±5pp 等效域（exp1-结果判读-v1.md:10/:151）。EXP-1 的配对同模型 A/B 方法即本策略的实例化，但其声称值（harness 分差 9.6–29.8pp）本身未被 EXP-1 直接检验，故不记 confirmed/refuted。"
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: harness_leverage_ab
+    graph_version: "1.0"
+    entry: loader
+    input: bench_input
+    output: { ref: leverage_report, from: report }
+    intent: "同模型配对 A/B/C：map 跑各 harness 臂（模型档固定、只变 harness 工具面/循环面）→ 记分板单写者落账 → 外部评估器算 resolved → 臂间差汇总；榜单参考数据经 eval_input 只对评估器可读（INV-4）"
+  types:
+    - name: bench_input
+      schema:
+        type: object
+        required: [question, tasks, arms]
+        properties:
+          question: { type: string }
+          tasks: { type: array, items: { type: string } }
+          arms:
+            type: array
+            items:
+              type: object
+              required: [arm_id, harness_ref]
+              properties:
+                arm_id: { type: string }
+                harness_ref: { type: string }
+    - name: task_result
+      schema:
+        type: object
+        required: [arm_id, task_id, resolved, tokens, cents]
+        properties:
+          arm_id: { type: string }
+          task_id: { type: string }
+          resolved: { type: boolean }
+          tokens: { type: integer }
+          cents: { type: integer }
+    - name: arm_summary
+      schema:
+        type: object
+        required: [arm_id, resolved_rate_milli, tokens_mean, cents_mean]
+        properties:
+          arm_id: { type: string }
+          resolved_rate_milli: { type: integer }
+          tokens_mean: { type: integer }
+          cents_mean: { type: integer }
+    - name: tally_result
+      schema:
+        type: object
+        required: [answers, top_count, top_share_milli]
+        properties:
+          answers: { type: integer }
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+    - name: leverage_report
+      schema:
+        type: object
+        required: [best_arm, worst_arm, max_delta_pp, arms]
+        properties:
+          best_arm: { type: string }
+          worst_arm: { type: string }
+          max_delta_pp: { type: integer }
+          arms: { type: integer }
+  stores:
+    - name: results_board
+      type: collection
+      item: task_result
+      writer: ledger
+      lifecycle: run
+      retention: { max_items: 512 }
+    - name: leaderboard_ref
+      type: collection
+      item: arm_summary
+      writer: loader
+      lifecycle: run
+      retention: { max_items: 64 }
+      eval_input: true
+  nodes:
+    - id: loader
+      kind: task
+      uses: { tool: pkg.bench.leaderboard@1 }
+      writes: [leaderboard_ref]
+      emits: { done: signal }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.bench.leaderboard_system, quota_tokens: 300 }
+    - id: sweep
+      kind: task
+      map:
+        over: input.arms
+        body:
+          nodes:
+            - id: runner
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.harness.shell@1, pkg.harness.edit@1, pkg.harness.lint@1] }
+              emits: { result: task_result }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.harness.arm_system, vars: { harness: arg.item.harness_ref }, quota_tokens: 400 }
+                  - { from: input, fields: [question, tasks], policy: project, quota_tokens: 600 }
+          edges: []
+      emits: { results: { from_body: runner.result } }
+    - id: ledger
+      kind: transform
+      consumes: { results: "list<task_result>" }
+      writes: [results_board]
+      ops:
+        - { op: project, port: results, into: results_board }
+        - { op: project, port: results, into: ledgered }
+      emits: { ledgered: "list<task_result>" }
+    - id: assess
+      kind: check
+      uses: { unit: pkg.bench.resolved@1 }
+      reads: [leaderboard_ref]
+      consumes: { ledgered: "list<task_result>" }
+      emits: { summaries: "list<arm_summary>" }
+    - id: delta
+      kind: transform
+      consumes: { summaries: "list<arm_summary>" }
+      ops:
+        - { op: tally, port: summaries, by: arm_id, into: stats }
+        - { op: select_best, port: summaries, by: resolved_rate_milli, prefer: max, into: best }
+      emits:
+        stats: tally_result
+        best: arm_summary
+    - id: report
+      kind: task
+      uses: { model: route.cheap@1 }
+      consumes: { stats: tally_result, best: arm_summary }
+      emits: { report: leverage_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.bench.delta_system, quota_tokens: 400 }
+          - { from: edge, port: stats, policy: project, quota_tokens: 300 }
+          - { from: edge, port: best, fields: [arm_id, resolved_rate_milli], policy: project, quota_tokens: 300 }
+  edges:
+    - { from: loader, output: done, to: sweep, input: done }
+    - { from: sweep, output: results, to: ledger, input: results }
+    - { from: ledger, output: ledgered, to: assess, input: ledgered }
+    - { from: assess, output: summaries, to: delta, input: summaries }
+    - { from: delta, output: stats, to: report, input: stats }
+    - { from: delta, output: best, to: report, input: best }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 4000 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 4000000 }
+    failures:
+      - class: tool_error
+        route: same_node
+        feedback: error_observation
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed

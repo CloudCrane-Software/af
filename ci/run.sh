@@ -496,6 +496,21 @@ step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail
 #       码位组按 SPEC ⑧ 遗留登记、每次运行显式 [LEGACY] 行）
 #   14c criteria.yaml 六要素 schema 校验+终验清单机生成（ci/criteria_check.py
 #       --emit-checklist ci/out/final-checklist.md，SPEC-3）
+#   14d strategies/ 共识策略库全量校验（libA-20261029；ci/strategies_check.py，
+#       以 python3 -B 调用——pyc-shadow 纪律：不在 ci/ 留 __pycache__）：
+#       ① schema——全库条目 YAML 逐字段（必填键/枚举闭集 tier∈{A,B}、
+#          dsl_state 三态、experiment.status 五态、三态↔字段互斥、id↔文件名）；
+#       ② A 线命名空间 index 完备性+登记值计数对账（st-C* 必须全登记；
+#          B 线 st-b-* 在飞文件由其批次自行登记，发 INFO 不判红）；
+#       ③ 编译断言——compilable 条目 dsl_snippet 经既有测试装载路径
+#          `cargo test -p af-dsl --test strategy_library_test` 逐一过 af-dsl
+#          load_str+validate 零违例（step3 已全域构建，秒级复跑）。
+#    并入本步段尾而非新开 step15 的理由（门数账纪律）：本检查属同域机读一致性
+#       （数据文件 schema+登记计数+编译断言，合计秒级、同 0/1 退出码语义），
+#       新开槽须同批联动 numbers.json 三键（gates.ci_steps/ci.steps_total
+#       14→15、gates.ci_hard 13→14）、AGENT.md 勘误行与 README/VERSIONS「十四门」
+#       多文书——「禁止堆门」纪律下共宿本步；门号登记行仍只 step14 一行
+#       （14a/14b/14c/14d 共宿同槽，xcheck 门数对账与 step12 计数复算零改动）。
 # 退出码语义（各 SPEC ③）：0=全过；1=任一硬红 → 本步 FAIL 且 OVERALL=1；2=仅
 #   advisory WARN（头注漂移/G0 勘误未同步/文本降级/coverage 格式待校准）→ SUMMARY
 #   落显式 WARN 行、不改 OVERALL（与 step9 ADVISORY 同型；禁两态死代码——复盘 C3
@@ -507,17 +522,19 @@ step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail
 # 路径纪律：三脚本缺省路径一律由 __file__/AF_ROOT 推导到本工作树（root 钉死，
 #   红队 P2-2）；branches_check 自跑 cargo test --workspace -- --list 时继承环境
 #   CARGO_TARGET_DIR（step3 已全域构建，秒级；W3-C-25 共享 target 教训不破）。
-echo "== step14 机读一致性批（branches 锚对账 + xcheck 3/4 组 + criteria schema）"
+echo "== step14 机读一致性批（branches 锚对账 + xcheck 3/4 组 + criteria schema + strategies 策略库）"
 machine_batch() {
-  local rc_a=0 rc_b=0 rc_c=0 rc hard=0 warn=0
+  local rc_a=0 rc_b=0 rc_c=0 rc_d=0 rc hard=0 warn=0
   echo "== 14a branches.yaml 分支覆盖夹具对账（SPEC-1：锚有效性+夹具名单对账；coverage nightly 面在场才判）"
   (cd "$AF_ROOT" && python3 ci/branches_check.py); rc_a=$?
   echo "== 14b 枚举跨文书一致性（SPEC-2：门数/packages/词表 3/4 组；码位组遗留登记）"
   (cd "$AF_ROOT" && python3 ci/xcheck.py); rc_b=$?
   echo "== 14c criteria.yaml 六要素 schema + 终验清单机生成（SPEC-3）"
   (cd "$AF_ROOT" && python3 ci/criteria_check.py --emit-checklist "$OUT/final-checklist.md"); rc_c=$?
-  echo "== 14 子检查退出码：branches=$rc_a xcheck=$rc_b criteria=$rc_c（0=过 1=硬红 2=advisory WARN）"
-  for rc in "$rc_a" "$rc_b" "$rc_c"; do
+  echo "== 14d strategies/ 策略库全量校验（libA-20261029：schema + A 线 index 完备性/计数对账 + af-dsl 装载测试编译断言）"
+  (cd "$AF_ROOT" && python3 -B ci/strategies_check.py); rc_d=$?
+  echo "== 14 子检查退出码：branches=$rc_a xcheck=$rc_b criteria=$rc_c strategies=$rc_d（0=过 1=硬红 2=advisory WARN）"
+  for rc in "$rc_a" "$rc_b" "$rc_c" "$rc_d"; do
     case $rc in
       0) ;;
       2) warn=1 ;;
@@ -538,8 +555,8 @@ case $b14_rc in
   *) b14_verdict="FAIL" ;;
 esac
 [ "$b14_rc" -eq 1 ] && OVERALL=1
-SUMMARY+=("step14  $b14_verdict  ${T14_MS}ms  机读一致性批（branches+xcheck+criteria；advisory WARN 不改 OVERALL）")
-printf '  [14] %s %6dms  机读一致性批（branches 锚对账 + xcheck 3/4 + criteria schema）\n' "$b14_verdict" "$T14_MS"
+SUMMARY+=("step14  $b14_verdict  ${T14_MS}ms  机读一致性批（branches+xcheck+criteria+strategies；advisory WARN 不改 OVERALL）")
+printf '  [14] %s %6dms  机读一致性批（branches 锚对账 + xcheck 3/4 + criteria schema + strategies 策略库）\n' "$b14_verdict" "$T14_MS"
 cat "$OUT/step14.log"
 
 # ---- 汇总 -------------------------------------------------------------------
