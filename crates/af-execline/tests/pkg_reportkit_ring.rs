@@ -1141,6 +1141,62 @@ fn ring_writer_accepts_mavis_item_wrapped_arrays() {
 }
 
 #[test]
+fn ring_writer_accepts_mavis_numeric_string_fields() {
+    // 取证到的第二种形态（anolis MMC2-report-mavis-m31f-adversary-2610-35624
+    // 实录）：writer 把 citations[].n 写成**数字串** "1"，而计划类型声明
+    // n 是 integer → envelope 拒「类型应为 integer，实为 "1"」。
+    // 归一：按计划 types 的类型声明强转（数字串能精确解析才转）。
+    let mut report = mavis_wrapped_report();
+    report["citations"]["item"][0]["n"] = json!("1");
+    let runner = Arc::new(FakeRingRunner {
+        notes: good_notes(),
+        writer_reports: vec![report],
+        launches: Mutex::new(Vec::new()),
+    });
+    let (base, task_dir, unit) = ring_unit("mavis-num", runner);
+    let out = drive(&unit, &base, &task_dir);
+    assert_eq!(
+        out.verdict,
+        Some(true),
+        "数字串形态应被归一接受并走完双判分：{}",
+        out.note
+    );
+
+    let draft = std::fs::read_to_string(base.join("run-a1/ring/draft-i1.json")).unwrap();
+    let draft: Value = serde_json::from_str(&draft).unwrap();
+    assert_eq!(
+        draft["citations"][0]["n"], 1,
+        "落盘草稿的 n 应为整数：{draft}"
+    );
+    assert!(
+        draft["citations"][0]["n"].is_i64(),
+        "n 的类型已按声明归一：{draft}"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+#[test]
+fn ring_writer_rejects_non_numeric_integer_field() {
+    // 数字串解析不出来 → 不猜、不强转，原样交 envelope 如实报错。
+    let mut report = writer_report(good_quote());
+    report["citations"][0]["n"] = json!("一号");
+    let runner = Arc::new(FakeRingRunner {
+        notes: good_notes(),
+        writer_reports: vec![report],
+        launches: Mutex::new(Vec::new()),
+    });
+    let (base, task_dir, unit) = ring_unit("mavis-badnum", runner);
+    let err = drive_err(&unit, &base, &task_dir);
+    let text = err.to_string();
+    assert!(
+        text.contains("research_report"),
+        "错形仍点名计划类型：{text}"
+    );
+    assert!(text.contains("integer"), "错形仍点名字段类型：{text}");
+    std::fs::remove_dir_all(&base).ok();
+}
+
+#[test]
 fn ring_reader_rejects_notes_wrapper_with_non_array_value() {
     // 单键但值非数组 → 不猜、不解包（否则真错形被吞，纪律同 unwrap_payload）。
     let runner = Arc::new(FakeRingRunner {

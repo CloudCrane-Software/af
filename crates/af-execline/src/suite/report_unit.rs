@@ -929,30 +929,69 @@ fn unwrap_array_wrapper(value: &Value) -> Option<Value> {
     }
 }
 
-/// 按计划 types 的字段声明归一数组型字段（解「异名单键包裹」一层）。
+/// 按计划 types 的声明归一载荷（形态适配两层，均由**类型声明**驱动）。
 ///
-/// 驱动源是**计划 types 表正本**（`type: "array"` 的字段），不内置第二套
-/// 字段名清单——writer 产出的 `research_report` 里有几个数组字段由计划决定。
-/// 非数组字段与非对象载荷原样返回（不猜、不改）。
-fn normalize_array_fields(schema: &Value, payload: &Value) -> Value {
-    let Some(props) = schema.get("properties").and_then(Value::as_object) else {
+/// 驱动源是**计划 types 表正本**（不内置第二套字段名清单）：
+///  a) 声明为 `array` 的字段，值却是单键对象裹着数组（{"item":[...]}）→ 解一层；
+///  b) 声明为 `integer`/`number` 的字段，值是数字串（{"n":"1"}）→ 强转。
+///
+/// 两处都是**无歧义的形态适配**（不是数据捏造）：b 只在字符串能精确解析成
+/// 该类型时强转，解析不出来原样留着、交 envelope 如实报错。实测形态见
+/// OUT/mm-报告.md §一（mavis 系把数组裹进单键对象、且把整数写成数字串）。
+fn normalize_against_schema(schema: &Value, payload: &Value) -> Value {
+    let Some(want) = schema.get("type").and_then(Value::as_str) else {
         return payload.clone();
     };
-    let Some(map) = payload.as_object() else {
-        return payload.clone();
-    };
-    let mut out = map.clone();
-    for (name, sub) in props {
-        if sub.get("type").and_then(Value::as_str) != Some("array") {
-            continue;
+    match want {
+        "array" => {
+            // 异名单键包裹 → 解一层（声明是数组而载荷是「单键对象裹数组」）。
+            let inner = unwrap_array_wrapper(payload).unwrap_or_else(|| payload.clone());
+            let Some(items) = schema.get("items") else {
+                return inner;
+            };
+            let Some(list) = inner.as_array() else {
+                return inner;
+            };
+            Value::Array(
+                list.iter()
+                    .map(|item| normalize_against_schema(items, item))
+                    .collect(),
+            )
         }
-        if let Some(value) = map.get(name) {
-            if let Some(unwrapped) = unwrap_array_wrapper(value) {
-                out.insert(name.clone(), unwrapped);
+        "object" => {
+            let Some(props) = schema.get("properties").and_then(Value::as_object) else {
+                return payload.clone();
+            };
+            let Some(map) = payload.as_object() else {
+                return payload.clone();
+            };
+            let mut out = map.clone();
+            for (name, sub) in props {
+                if let Some(value) = map.get(name) {
+                    out.insert(name.clone(), normalize_against_schema(sub, value));
+                }
             }
+            Value::Object(out)
         }
+        "integer" => match payload {
+            Value::String(raw) => raw
+                .trim()
+                .parse::<i64>()
+                .map(|n| json!(n))
+                .unwrap_or_else(|_| payload.clone()),
+            _ => payload.clone(),
+        },
+        "number" => match payload {
+            Value::String(raw) => raw
+                .trim()
+                .parse::<i64>()
+                .map(|n| json!(n))
+                .or_else(|_| raw.trim().parse::<f64>().map(|n| json!(n)))
+                .unwrap_or_else(|_| payload.clone()),
+            _ => payload.clone(),
+        },
+        _ => payload.clone(),
     }
-    Value::Object(out)
 }
 
 /// 真实模型环（F-第五单兑现 G4 裁决17 的铺单批项）：
@@ -1350,11 +1389,11 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                 .unwrap_or_else(|e| e.into_inner())
                 .clone()
                 .ok_or_else(|| format!("writer 未经 submit_report 提交报告（第 {round} 轮）"))?;
-            // mavis 系模型把数组型字段裹成 {"item": [...]}（取证见
-            // OUT/mm-报告.md §一）——按计划 types 的数组字段声明解一层，
-            // 再进 envelope 校验（否则必吃 "类型应为 array，实为 {...}" 拒绝）。
+            // mavis 系模型把数组型字段裹成 {"item": [...]}、整数写成数字串
+            // （取证见 OUT/mm-报告.md §一）——按计划 types 的类型声明做形态
+            // 归一，再进 envelope 校验（否则必吃 "类型应为 array/integer" 拒绝）。
             let report_value =
-                normalize_array_fields(&input.plan_types.research_report, &report_value);
+                normalize_against_schema(&input.plan_types.research_report, &report_value);
             validate_envelope(&input.plan_types.research_report, &report_value)
                 .map_err(|err| format!("writer 产出（research_report）envelope 拒绝: {err}"))?;
 
