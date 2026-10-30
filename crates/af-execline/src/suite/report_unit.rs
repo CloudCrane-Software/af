@@ -846,16 +846,29 @@ snapshot; returns {ok,url,title,text,snapshot_ref,sha256}."
 
 /// submit 类工具声明（参数单字段；effect pure——本地记账）。`payload_hint`
 /// 进参数 description（点名载荷形状，防模型双重包裹）。
-fn submit_decl(name: &str, what: &str, payload_hint: &str) -> af_harness::ToolDecl {
+///
+/// `payload_schema` 是载荷的**真身 schema**（该参数的 JSON Schema 片段）：
+/// 声明必须与 handler 接受的形态一致。reader 侧的载荷是**数组**（`list<note_item>`），
+/// 此前声明成 `type: object`——模型为满足该声明把数组裹进单键对象
+/// （mavis 系实测 `{"notes": {"item": [...]}}`），而归一层不含该形即被拒
+/// （取证链见 OUT/mm-报告.md §一）。故 reader 侧传数组 schema（`items` 取
+/// 计划 types 表的 note_item 正本，不内置第二套 schema），writer 侧传
+/// `{"type": "object"}`（research_report 本身即对象）。
+fn submit_decl(
+    name: &str,
+    what: &str,
+    payload_schema: Value,
+    payload_hint: &str,
+) -> af_harness::ToolDecl {
+    let mut property = payload_schema.as_object().cloned().unwrap_or_default();
+    property.insert("description".into(), json!(payload_hint));
     af_harness::ToolDecl {
         name: name.into(),
         description: format!("Submit the final {what}; this is the only completion path."),
         parameters: json!({
             "type": "object",
             "required": [what],
-            "properties": {
-                what: { "type": "object", "description": payload_hint }
-            }
+            "properties": { what: Value::Object(property) }
         }),
         effect: af_harness::EffectClass::Pure,
     }
@@ -872,9 +885,10 @@ fn unwrap_payload(args: &Value, field: &str) -> Option<Value> {
     }
 }
 
-/// notes 载荷三形归一（真模型实测变体）：数组（正形）/ 同名包裹
+/// notes 载荷四形归一（真模型实测变体）：数组（正形）/ 同名包裹
 /// （{"notes":[...]}）/ 单条对象（{"point","anchor"}——仅一条笔记时模型
-/// 直接给对象）。其余错形不猜，交上层报错。
+/// 直接给对象）/ **异名单键包裹**（{"item":[...]}、{"items":[...]}——mavis 系
+/// 模型实测形态，见 [`unwrap_array_wrapper`]）。其余错形不猜，交上层报错。
 fn normalize_notes(raw: &Value) -> Option<Value> {
     if raw.is_array() {
         return Some(raw.clone());
@@ -887,7 +901,58 @@ fn normalize_notes(raw: &Value) -> Option<Value> {
     if raw.get("point").is_some() && raw.get("anchor").is_some() {
         return Some(json!([raw]));
     }
-    None
+    unwrap_array_wrapper(raw)
+}
+
+/// 数组载荷的「异名单键包裹」解一层（mavis 系模型实测形态）。
+///
+/// 取证（report 单 reader/writer 全量扫描，见 OUT/mm-报告.md §一）：MiniMax-M3
+/// 把**所有**数组型载荷塞进单键对象再交工具——reader 侧
+/// `submit_notes({"notes": {"item": [...]}})`，writer 侧
+/// `submit_report({"report": {…, "sections": {"item": [...]},
+/// "citations": {"item": [...]}}})`。af 侧只认裸数组/同名包裹，故这类调用
+/// 逐个吃 E_TOOL 或 envelope 拒绝。
+///
+/// 规则：值恰为**单键对象**且其值是数组时解一层（`{"item":[...]}` /
+/// `{"items":[...]}` 皆可）；至多一层，不递归（递归会掩盖真错形——与
+/// [`unwrap_payload`] 同纪律）。单键但值非数组者不猜，保持原样交上层报错。
+fn unwrap_array_wrapper(value: &Value) -> Option<Value> {
+    let obj = value.as_object()?;
+    if obj.len() != 1 {
+        return None;
+    }
+    let inner = obj.values().next()?;
+    if inner.is_array() {
+        Some(inner.clone())
+    } else {
+        None
+    }
+}
+
+/// 按计划 types 的字段声明归一数组型字段（解「异名单键包裹」一层）。
+///
+/// 驱动源是**计划 types 表正本**（`type: "array"` 的字段），不内置第二套
+/// 字段名清单——writer 产出的 `research_report` 里有几个数组字段由计划决定。
+/// 非数组字段与非对象载荷原样返回（不猜、不改）。
+fn normalize_array_fields(schema: &Value, payload: &Value) -> Value {
+    let Some(props) = schema.get("properties").and_then(Value::as_object) else {
+        return payload.clone();
+    };
+    let Some(map) = payload.as_object() else {
+        return payload.clone();
+    };
+    let mut out = map.clone();
+    for (name, sub) in props {
+        if sub.get("type").and_then(Value::as_str) != Some("array") {
+            continue;
+        }
+        if let Some(value) = map.get(name) {
+            if let Some(unwrapped) = unwrap_array_wrapper(value) {
+                out.insert(name.clone(), unwrapped);
+            }
+        }
+    }
+    Value::Object(out)
 }
 
 /// 真实模型环（F-第五单兑现 G4 裁决17 的铺单批项）：
@@ -1062,6 +1127,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                     submit_decl(
                         "submit_notes",
                         "notes",
+                        json!({ "type": "array", "items": input.plan_types.note_item }),
                         "The notes array itself: [{\"point\": string, \"anchor\": string}, ...] — \
                          pass the array as this parameter's value, do not wrap it again",
                     ),
@@ -1223,6 +1289,7 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                     toolset: vec![submit_decl(
                         "submit_report",
                         "report",
+                        json!({ "type": "object" }),
                         "The research_report JSON object itself: {paper, sections, citations} — \
                          pass the object as this parameter's value, do not wrap it again",
                     )],
@@ -1283,6 +1350,11 @@ pub fn draft_fn_real_ring(runner: Arc<dyn AgentRunner>, spec: ReportUnitSpec) ->
                 .unwrap_or_else(|e| e.into_inner())
                 .clone()
                 .ok_or_else(|| format!("writer 未经 submit_report 提交报告（第 {round} 轮）"))?;
+            // mavis 系模型把数组型字段裹成 {"item": [...]}（取证见
+            // OUT/mm-报告.md §一）——按计划 types 的数组字段声明解一层，
+            // 再进 envelope 校验（否则必吃 "类型应为 array，实为 {...}" 拒绝）。
+            let report_value =
+                normalize_array_fields(&input.plan_types.research_report, &report_value);
             validate_envelope(&input.plan_types.research_report, &report_value)
                 .map_err(|err| format!("writer 产出（research_report）envelope 拒绝: {err}"))?;
 

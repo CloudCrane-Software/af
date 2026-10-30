@@ -161,6 +161,8 @@ struct CapturedRingLaunch {
     user_message: String,
     system: String,
     tool_names: Vec<String>,
+    /// 每个工具的 JSON Schema（按 tool_names 同序）——声明面断言用。
+    tool_params: Vec<Value>,
     extra_tool_names: Vec<String>,
     completion_signals: Vec<String>,
     max_turns: u32,
@@ -318,6 +320,12 @@ impl AgentRunner for FakeRingRunner {
             user_message: launch.user_message.clone(),
             system: launch.spec.context_template.system.clone(),
             tool_names: names,
+            tool_params: launch
+                .spec
+                .toolset
+                .iter()
+                .map(|t| t.parameters.clone())
+                .collect(),
             extra_tool_names: extra,
             completion_signals: launch.spec.policy.stop.completion_signals.clone(),
             max_turns: launch.spec.policy.max_turns,
@@ -1027,4 +1035,178 @@ fn ring_plan_giant_cost_cap_saturates_and_reader_does_not_melt_early() {
         );
         std::fs::remove_dir_all(&base).ok();
     }
+}
+
+// ============================================================
+// ④ mavis 系载荷形态兼容（取证批 mm-兼容批）
+//
+// 取证链（anolis /data/bench/af-p3-state/orders 全量扫描，见
+// OUT/mm-报告.md §一）：MiniMax-M3（mavis-m3/m31f，Anthropic 协议端点）
+// 把**所有**数组型载荷裹进单键对象再交工具——reader 侧
+// `submit_notes({"notes": {"item": [...]}})`，writer 侧
+// `submit_report({"report": {…, "sections": {"item": [...]},
+// "citations": {"item": [...]}}})`。af 侧归一层只认裸数组/同名包裹，
+// 故 reader 连吃 3 次 E_TOOL（af-stop 指纹 submit_notes/E_TOOL ×3 →
+// NoInfluence 停机），writer 吃 envelope「类型应为 array，实为 {...}」拒绝。
+//
+// 本节锁两件事：
+//   a) 取证到的错误形态**被接受**（归一层解「异名单键包裹」一层）；
+//   b) 归一**不放松到猜**——单键但值非数组者仍拒（防真错形被吞）。
+// ============================================================
+
+/// 取证到的 reader 形态：笔记数组裹进单键对象 {"item": [...]}。
+fn mavis_wrapped_notes() -> Value {
+    json!({ "item": good_notes().as_array().unwrap().clone() })
+}
+
+/// 取证到的 writer 形态：report 的数组字段（sections/citations）各裹进
+/// 单键对象 {"item": [...]}。
+fn mavis_wrapped_report() -> Value {
+    let mut report = writer_report(good_quote());
+    let sections = report["sections"].take();
+    let citations = report["citations"].take();
+    report["sections"] = json!({ "item": sections });
+    report["citations"] = json!({ "item": citations });
+    report
+}
+
+#[test]
+fn ring_reader_accepts_mavis_item_wrapped_notes() {
+    let runner = Arc::new(FakeRingRunner {
+        notes: mavis_wrapped_notes(),
+        writer_reports: vec![writer_report(good_quote())],
+        launches: Mutex::new(Vec::new()),
+    });
+    let (base, task_dir, unit) = ring_unit("mavis-notes", runner.clone());
+    let out = drive(&unit, &base, &task_dir);
+    assert_eq!(
+        out.verdict,
+        Some(true),
+        "取证形态（notes 裹成 {{\"item\":[...]}}）应被归一接受并走完双判分：{}",
+        out.note
+    );
+
+    // 归一后的笔记落到 writer 上下文（notes 边）——证明不是被吞掉而是解包了。
+    let launches = runner.captured();
+    let writer = launches
+        .iter()
+        .find(|l| !l.is_reader())
+        .expect("writer launch");
+    assert!(
+        writer.user_message.contains("护栏在 145 个 run"),
+        "归一后的笔记进 writer 上下文：{}",
+        writer.user_message
+    );
+    assert!(
+        !writer.user_message.contains("\"item\""),
+        "writer 上下文不得残留包裹层：{}",
+        writer.user_message
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+#[test]
+fn ring_writer_accepts_mavis_item_wrapped_arrays() {
+    let runner = Arc::new(FakeRingRunner {
+        notes: good_notes(),
+        writer_reports: vec![mavis_wrapped_report()],
+        launches: Mutex::new(Vec::new()),
+    });
+    let (base, task_dir, unit) = ring_unit("mavis-report", runner);
+    let out = drive(&unit, &base, &task_dir);
+    assert_eq!(
+        out.verdict,
+        Some(true),
+        "取证形态（sections/citations 裹成 {{\"item\":[...]}}）应被归一接受：{}",
+        out.note
+    );
+
+    // 落盘的草稿是**解包后**的形态（判分面吃的是草稿文件）。
+    let draft = std::fs::read_to_string(base.join("run-a1/ring/draft-i1.json")).unwrap();
+    let draft: Value = serde_json::from_str(&draft).unwrap();
+    assert!(
+        draft["sections"].is_array(),
+        "草稿 sections 应为数组：{draft}"
+    );
+    assert!(
+        draft["citations"].is_array(),
+        "草稿 citations 应为数组：{draft}"
+    );
+    assert_eq!(
+        draft["citations"].as_array().unwrap().len(),
+        1,
+        "解包后条目数不变：{draft}"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+#[test]
+fn ring_reader_rejects_notes_wrapper_with_non_array_value() {
+    // 单键但值非数组 → 不猜、不解包（否则真错形被吞，纪律同 unwrap_payload）。
+    let runner = Arc::new(FakeRingRunner {
+        notes: json!({ "item": "not-an-array" }),
+        writer_reports: vec![writer_report(good_quote())],
+        launches: Mutex::new(Vec::new()),
+    });
+    let (base, task_dir, unit) = ring_unit("mavis-bad", runner);
+    let err = drive_err(&unit, &base, &task_dir);
+    let text = err.to_string();
+    assert!(text.contains("submit_notes"), "错形仍点名工具：{text}");
+    assert!(
+        text.contains("载荷应是笔记数组"),
+        "错形仍给载荷形状提示：{text}"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+#[test]
+fn ring_reader_rejects_notes_scalars() {
+    // 标量载荷（{"notes": 42}）不属任何已知形态 → 拒。
+    let runner = Arc::new(FakeRingRunner {
+        notes: json!(42),
+        writer_reports: vec![writer_report(good_quote())],
+        launches: Mutex::new(Vec::new()),
+    });
+    let (base, task_dir, unit) = ring_unit("mavis-scalar", runner);
+    let err = drive_err(&unit, &base, &task_dir);
+    let text = err.to_string();
+    assert!(
+        text.contains("载荷应是笔记数组"),
+        "标量载荷仍拒且给形状提示：{text}"
+    );
+    std::fs::remove_dir_all(&base).ok();
+}
+
+#[test]
+fn ring_notes_tool_declares_array_payload() {
+    // 根因锁：af 自报的 notes 参数 schema 必须与 handler 接受的形态一致
+    // （此前声明 type=object，模型为满足声明把数组裹成单键对象）。
+    let runner = FakeRingRunner::happy();
+    let (base, task_dir, unit) = ring_unit("decl", runner.clone());
+    drive(&unit, &base, &task_dir);
+    let launches = runner.captured();
+    let reader = launches
+        .iter()
+        .find(|l| l.is_reader())
+        .expect("reader launch");
+    let idx = reader
+        .tool_names
+        .iter()
+        .position(|t| t == "submit_notes")
+        .expect("reader 携 submit_notes");
+    let params = &reader.tool_params[idx];
+    assert_eq!(
+        params["properties"]["notes"]["type"], "array",
+        "notes 参数声明为数组（与 handler 接受的形态一致）：{params}"
+    );
+    assert!(
+        params["properties"]["notes"]["items"].is_object(),
+        "notes 数组项 schema 在场（计划 note_item 正本）：{params}"
+    );
+    assert_eq!(
+        params["required"],
+        json!(["notes"]),
+        "required 不变：{params}"
+    );
+    std::fs::remove_dir_all(&base).ok();
 }
