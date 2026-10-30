@@ -542,12 +542,26 @@ fn parse_anthropic_json(value: &Value) -> Result<ModelMessage> {
         .and_then(Value::as_array)
         .ok_or_else(|| Error::Protocol("anthropic 响应缺少 content 数组".into()))?;
     let mut text = String::new();
+    let mut thinking = String::new();
     let mut tool_calls = Vec::new();
     for block in blocks {
         match block.get("type").and_then(Value::as_str) {
             Some("text") => {
                 if let Some(piece) = block.get("text").and_then(Value::as_str) {
                     text.push_str(piece);
+                }
+            }
+            // Anthropic 风格的 thinking 块（mavis 系 MiniMax-M3.1-Flash-Preview
+            // 实测返回 `{"type":"thinking","thinking":"…"}`）。此前本解析器
+            // **静默丢弃**该块（`_ => {}`）——模型的推理文本不进 transcript，
+            // 下一轮模型看不到自己上一轮的结论，行为退化为无推理的纯工具连击
+            // （实测：报告环 reader 连续 web_fetch 直到止损停机，从不
+            // submit_notes；取证链见 OUT/mm-报告.md §三）。协议适配：thinking
+            // 文本并入助手文本（下一轮作为 text 块回送，模型得以承接自己的
+            // 结论——端点返回序即 thinking→text）。
+            Some("thinking") => {
+                if let Some(piece) = block.get("thinking").and_then(Value::as_str) {
+                    thinking.push_str(piece);
                 }
             }
             Some("tool_use") => {
@@ -585,15 +599,28 @@ fn parse_anthropic_json(value: &Value) -> Result<ModelMessage> {
             .unwrap_or(0),
     });
     Ok(ModelMessage {
-        text,
+        text: merge_thinking(thinking, text),
         tool_calls,
         finish,
         usage,
     })
 }
 
+/// thinking 块文本与正文文本合并（thinking 在正文之前——端点返回序即
+/// thinking→text；任一为空则不加分隔符）。
+fn merge_thinking(thinking: String, text: String) -> String {
+    if thinking.is_empty() {
+        return text;
+    }
+    if text.is_empty() {
+        return thinking;
+    }
+    format!("{thinking}\n\n{text}")
+}
+
 fn parse_anthropic_sse(body: &str) -> Result<ModelMessage> {
     let mut text = String::new();
+    let mut thinking = String::new();
     let mut calls: Vec<CallAcc> = Vec::new();
     let mut finish = String::from("end_turn");
     let mut event_name = String::new();
@@ -646,6 +673,13 @@ fn parse_anthropic_sse(body: &str) -> Result<ModelMessage> {
             let Some(block) = value.get("content_block") else {
                 continue;
             };
+            // thinking 块（协议适配同 parse_anthropic_json：thinking 文本不得
+            // 静默丢弃——丢了模型就看不到自己上一轮的推理，退化为纯工具连击）。
+            if block.get("type").and_then(Value::as_str) == Some("thinking") {
+                if let Some(piece) = block.get("thinking").and_then(Value::as_str) {
+                    thinking.push_str(piece);
+                }
+            }
             if block.get("type").and_then(Value::as_str) == Some("tool_use") {
                 if calls.len() <= index {
                     calls.resize(index + 1, CallAcc::default());
@@ -673,6 +707,11 @@ fn parse_anthropic_sse(body: &str) -> Result<ModelMessage> {
                         text.push_str(piece);
                     }
                 }
+                Some("thinking_delta") => {
+                    if let Some(piece) = delta.get("thinking").and_then(Value::as_str) {
+                        thinking.push_str(piece);
+                    }
+                }
                 Some("input_json_delta") => {
                     if calls.len() <= index {
                         calls.resize(index + 1, CallAcc::default());
@@ -687,7 +726,7 @@ fn parse_anthropic_sse(body: &str) -> Result<ModelMessage> {
     }
     let tool_calls = finish_calls(&calls)?;
     Ok(ModelMessage {
-        text,
+        text: merge_thinking(thinking, text),
         tool_calls,
         finish,
         usage,
@@ -849,6 +888,82 @@ mod tests {
     }
 
     #[test]
+    fn anthropic_thinking_block_is_kept_in_the_assistant_text() {
+        // mavis 系实测形态（MiniMax-M3.1-Flash-Preview，2026-10-30 实录）：
+        // content 数组首块是 `{"type":"thinking","thinking":"…"}`，其后才是
+        // text / tool_use。此前本解析器静默丢弃 thinking 块 → 模型的推理不进
+        // transcript → 下一轮看不到自己的结论 → 退化为无推理的纯工具连击
+        // （实测报告环 reader 连击 web_fetch 至止损停机，从不 submit_notes）。
+        let body = r#"{"stop_reason":"tool_use","content":[{"type":"thinking","thinking":"Need the full text; try the PDF path.","signature":"sig-1"},{"type":"tool_use","id":"toolu_1","name":"web_fetch","input":{"url":"https://arxiv.org/pdf/2610.1"}}]}"#;
+        let message = parse_json(Protocol::AnthropicMessages, body).unwrap();
+        assert_eq!(
+            message.text, "Need the full text; try the PDF path.",
+            "thinking 文本必须保留（否则推理丢失）"
+        );
+        assert_eq!(message.tool_calls.len(), 1);
+        assert_eq!(message.tool_calls[0].name, "web_fetch");
+
+        // thinking + 正文并存：thinking 在前（端点返回序），空分隔不加分隔符。
+        let body = r#"{"stop_reason":"end_turn","content":[{"type":"thinking","thinking":"想清楚了。"},{"type":"text","text":"结论在这。"}]}"#;
+        let message = parse_json(Protocol::AnthropicMessages, body).unwrap();
+        assert_eq!(message.text, "想清楚了。\n\n结论在这。");
+
+        // SSE 面同款：thinking_delta 不得丢。
+        let sse = concat!(
+            "event: content_block_start\n",
+            "data: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"thinking\",\"thinking\":\"\",\"signature\":\"s\"}}\n\n",
+            "event: content_block_delta\n",
+            "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"thinking_delta\",\"thinking\":\"先取快照。\"}}\n\n",
+            "event: content_block_delta\n",
+            "data: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"text_delta\",\"text\":\"好。\"}}\n\n",
+        );
+        let streamed = parse_stream(Protocol::AnthropicMessages, sse).unwrap();
+        assert_eq!(streamed.text, "先取快照。\n\n好。");
+    }
+
+    #[test]
+    fn anthropic_thinking_survives_the_round_trip_back_to_the_endpoint() {
+        // 解析保住了 thinking 还不够——下一轮必须把它送回去，模型才能承接
+        // 自己上一轮的结论（anthropic_messages 把助手文本作 text 块回送）。
+        let transcript = vec![
+            TranscriptItem::System { text: "sys".into() },
+            TranscriptItem::User { text: "go".into() },
+            TranscriptItem::Assistant {
+                text: "先取快照。".into(),
+                tool_calls: vec![ParsedToolCall {
+                    id: "toolu_1".into(),
+                    name: "web_fetch".into(),
+                    arguments: json!({"url": "https://arxiv.org/html/2610.1"}),
+                }],
+                usage: None,
+            },
+        ];
+        let body = anthropic_body(
+            &EndpointSpec {
+                protocol: Protocol::AnthropicMessages,
+                base_url: "https://example.invalid".into(),
+                model: "MiniMax-M3.1-Flash-Preview".into(),
+                key_ref: "mcode-oauth".into(),
+                reasoning_tier: ReasoningTier::Off,
+                stream: false,
+                auth: None,
+                max_tokens: None,
+                temperature_milli: None,
+                top_p_milli: None,
+            },
+            &transcript,
+            &[],
+        );
+        let messages = body["messages"].as_array().unwrap();
+        let assistant = &messages[1]["content"].as_array().unwrap();
+        assert_eq!(assistant[0]["type"], "text");
+        assert_eq!(
+            assistant[0]["text"], "先取快照。",
+            "助手文本（thinking 已在其中）必须回送"
+        );
+    }
+
+    #[test]
     fn stub_sees_openai_and_anthropic_shapes_without_logging_the_key() {
         let stub = StubServer::spawn().unwrap();
         let client = UreqClient::new();
@@ -949,7 +1064,10 @@ mod tests {
         ));
         let transcript = vec![TranscriptItem::User { text: "go".into() }];
         let message = complete_once(&client, &spec.endpoint, &key(), &transcript, &[]).unwrap();
-        assert_eq!(message.text, "好");
+        // thinking 块不再静默丢弃（协议适配：mavis 系实测返回 thinking 块，
+        // 丢了模型推理 → 退化为无推理的纯工具连击——见
+        // anthropic_thinking_block_is_kept_in_the_assistant_text）。
+        assert_eq!(message.text, "...\n\n好");
         let usage = message.usage.expect("anthropic usage 应被捕获");
         assert_eq!(usage.input_tokens, 51);
         assert_eq!(usage.output_tokens, 300);
