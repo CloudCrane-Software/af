@@ -1,5 +1,11 @@
 //! af-bench — bench 任务经自研 harness 的运行器。
 //!
+//! **退役状态（2026-10-31 文件归档批 OBS-D6，runbook §三-3）**：本 crate 的
+//! 「独立 CLI 直跑形态」已退役——旧 bench 链（ADR-008）退役归档后，F 线订单
+//! 一律经 af-order 单一入口，本 CLI 不再是任何生产调用路径的入口（判据复核
+//! 见工作区 参考/legacy/bench-infra-retired-20261029/退役报告.md）。入口 fn run()
+//! 已标 #[deprecated]；crate 保留在树上仅为历史证据链与对照参考，勿新增调用。
+//!
 //! 用法:
 //!   af-bench --suite injecagent --data-root <InjecAgent 目录> \
 //!     --profile mavis-m31f|glm-cp [--case-file test_cases_dh_base.json] \
@@ -34,6 +40,9 @@ use std::time::Instant;
 mod swev;
 mod tb;
 
+// 内部入口调用已标 deprecated 的 run()：退役标记对外生效、对内不产噪声
+// （CI clippy 门 ci/clippy_gate.py 只拦新增警告；此处不是放宽断言，是抑制自调用告警）。
+#[allow(deprecated)]
 fn main() {
     if let Err(err) = run() {
         eprintln!("af-bench failed: {err}");
@@ -609,7 +618,13 @@ fn next_attempt_index(runs_root: &Path, task_id: &str, profile: &str) -> u32 {
     max + 1
 }
 
+/// 退役标记（2026-10-31 文件归档批 OBS-D6，旧bench退役归档-runbook §三-3）：
+/// 独立 CLI 直跑形态退役，仅保留历史证据链用途；生产订单一律经 af-order 单一入口。
 #[allow(clippy::too_many_lines)]
+#[deprecated(
+    since = "0.1.0",
+    note = "af-bench 独立 CLI 直跑形态已随旧 bench 链退役（ADR-008，2026-10-31 OBS-D6 归档批）；生产调用一律经 af-order，勿新增直跑"
+)]
 fn run() -> Result<(), String> {
     let args = Args::parse()?;
     match args.suite.as_str() {
