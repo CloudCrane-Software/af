@@ -79,11 +79,41 @@ def load_branches(path, text_mode):
 
 
 # ---------------------------------------------------------------- cargo 名单
+def provenance_ensure():
+    """自跑 cargo 前的本树 provenance 门（2026-11-01 step14 跨工作树假绿实证
+    修复）：本命令继承环境 CARGO_TARGET_DIR，共享 target 残留他树测试二进制时
+    cargo freshness 退化为 mtime 比较，原样执行外来产物——名单「绿」属于别的
+    树（红队终局轮实测：已删树 af-wt-upd 的二进制被本检查执行）。复用 step3
+    同门 ci/provenance_check.sh ensure（判脏即清+盖章，语义与 run.sh:171 一致）；
+    TARGET 缺省由该脚本取环境 CARGO_TARGET_DIR，与紧随其后的 cargo 调用同一
+    定位。返回 None=过；非 None=诊断串（调用方拒绝跑 cargo 走既有「名单为空」
+    硬红路径——fail-closed）。"""
+    script = REPO / "ci" / "provenance_check.sh"
+    if not script.is_file():
+        return f"provenance 门脚本缺席：{script}"
+    try:
+        proc = subprocess.run(
+            ["bash", str(script), "ensure", "--root", str(REPO)],
+            cwd=str(REPO), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=600,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"provenance 门 ensure 调用失败：{e}"
+    if proc.returncode != 0:
+        tail = "\n".join((proc.stdout or "").strip().splitlines()[-10:])
+        return (f"provenance 门 ensure 红（exit={proc.returncode}；判脏即清失败，"
+                f"带脏 target 不跑 cargo）：\n{tail}")
+    return None
+
+
 def get_test_list(src_root, list_file):
     """返回 ({target: set(test 名)}, note)。target = tests/x.rs / src/lib.rs 等。"""
     if list_file:
         return parse_test_list(Path(list_file).read_text(encoding="utf-8")), \
             f"名单来源：--test-list-file {list_file}"
+    pv = provenance_ensure()
+    if pv is not None:
+        return {}, f"provenance 门红，cargo 名单采集拒绝执行——{pv}"
     cmd = ["cargo", "test", "--workspace", "--", "--list"]
     try:
         # 注意：`Running <target> (path)` 段头走 stderr、`name: test` 行走 stdout

@@ -274,9 +274,40 @@ def check_index(disk_states: dict[str, str], disk_tiers: dict[str, str]) -> None
 
 
 # ---------------------------------------------------------------- R4 编译断言
+def provenance_ensure() -> "str | None":
+    """R4 二次 cargo 调用前的本树 provenance 门（2026-11-01 step14 跨工作树假绿
+    实证修复）：共享 CARGO_TARGET_DIR 残留他树测试二进制时，cargo freshness
+    退化为 mtime 比较，原样执行外来产物即报 exit 0——假绿（红队终局轮实测：
+    已删树 af-wt-upd 的 strategy_library_test 二进制被本检查执行，本树坏
+    dsl_snippet 零验证）。复用 step3 同门 ci/provenance_check.sh ensure
+    （判脏即清+盖章，语义与 run.sh:171 完全一致）；TARGET 缺省由该脚本取
+    环境 CARGO_TARGET_DIR，与紧随其后的 cargo 调用同一定位。返回 None=过；
+    非 None=诊断串（调用方转硬红——绝不带脏 target 跑 cargo）。"""
+    script = REPO / "ci" / "provenance_check.sh"
+    if not script.is_file():
+        return f"provenance 门脚本缺席：{script}"
+    try:
+        proc = subprocess.run(
+            ["bash", str(script), "ensure", "--root", str(REPO)],
+            cwd=str(REPO), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            text=True, timeout=600,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"provenance 门 ensure 调用失败：{e}"
+    if proc.returncode != 0:
+        tail = "\n".join((proc.stdout or "").strip().splitlines()[-10:])
+        return (f"provenance 门 ensure 红（exit={proc.returncode}；判脏即清失败，"
+                f"带脏 target 不跑 cargo）：\n{tail}")
+    return None
+
+
 def check_compile() -> None:
     if shutil.which("cargo") is None:
         err("R4 cargo 不在 PATH——编译断言无法执行（fail-loud，不静默跳过）")
+        return
+    pv = provenance_ensure()
+    if pv is not None:
+        err(f"R4 编译断言前 provenance 门红——{pv}")
         return
     cmd = ["cargo", "test", "-p", "af-dsl", "--test", "strategy_library_test"]
     try:

@@ -128,10 +128,43 @@ fi
 #   删/改任一探针即「探针清单漂移」红（自指防护——防护被关掉本身就是红，
 #   基线缺席同样 fail-closed）。有意变更须 mutation_runner.sh
 #   update-registry-baseline 与注册表改动同批评审提交（防悄悄改基线=逃逸）。
-#   不占新 step 编号（门数账纪律）；全量演练（should-run 判 full）挂合流入口。
+#   不占新 step 编号（门数账纪律）；should-run 判 full 时本管道当场跑全量演练（下块）。
 if ! bash "$CI_DIR/mutation_runner.sh" check-registry --root "$AF_ROOT" >>"$OUT/step0.log" 2>&1; then
   echo "step0 FAIL: mutations 探针清单漂移（删/改探针未走 update-registry-baseline 同批评审）"
   exit 1
+fi
+# ---- 0.x mutations 全量演练接线（2026-11-01：should-run 判定从无消费点改为有消费者） ----
+# 修复史实：此前头注写「全量演练挂合流入口」，但仓内 0 个消费点（grep *.sh/*.py 亲证）
+#   ——312e6db 改 ci/strategies_check.py（触及 gate_inputs ci/**）后零演练留痕，
+#   MUT-001/002 元探针未在最新门代码面上复验；且 check-registry 只核注册表哈希/计数，
+#   run.sh 门命令被篡改时照绿（探针 mirror 对账只在演练时执行）。
+# 语义：should-run 判 full（diff/新增未跟踪文件触及 ci//proofs//gate_inputs，或非 git
+#   fail-safe）→ 当场全量演练（full 模式自动跳过 nightly-only 探针；预算见 g0b-report
+#   §八 +10~20s），全文落 ci/out/step0-mutations-full.log——该文件在 .gitignore 排除，
+#   防「演练日志本身成 untracked ci/ 文件 → should-run 恒判 full」的自激回路（决策/
+#   结论留痕走 step0.log，随批入库）；判 nightly-only → 登记决策留痕后跳过。演练红=
+#   被测门未失败于删除/弱化（门失效/探针或 mirror 漂移——含 run.sh 门命令被改），
+#   step0 FAIL exit 1，与上方注册表漂移同语义（复盘 C3：mutation 不过不得合流）。
+#   基点缺省 HEAD~1；基点不可解析时 fail-safe 判 full；合流批跨批基点用
+#   MUTATIONS_DIFF_BASE 覆盖（对齐 step13a FIXSCAN_DIFF_BASE 先例）。
+MUT_BASE="${MUTATIONS_DIFF_BASE:-HEAD~1}"
+if git -C "$AF_ROOT" rev-parse --verify --quiet "${MUT_BASE}^{commit}" >/dev/null 2>&1; then
+  MUT_DECISION=$(bash "$CI_DIR/mutation_runner.sh" should-run --root "$AF_ROOT" --base "$MUT_BASE" 2>>"$OUT/step0.log")
+else
+  MUT_DECISION=""
+  printf '[mutations] %s 基点不可解析: %s → fail-safe 判 full\n' "$(date '+%F %T')" "$MUT_BASE" >> "$OUT/step0.log"
+fi
+printf '[mutations] %s should-run(base=%s) 判定: %s\n' "$(date '+%F %T')" "$MUT_BASE" "${MUT_DECISION:-full（fail-safe）}" >> "$OUT/step0.log"
+if [ "$MUT_DECISION" = "nightly-only" ]; then
+  printf '  [0] mutations 全量演练跳过（should-run=nightly-only，base=%s 未触及 gate_inputs）\n' "$MUT_BASE"
+else
+  if bash "$CI_DIR/mutation_runner.sh" run --root "$AF_ROOT" --mode full >> "$OUT/step0-mutations-full.log" 2>&1; then
+    printf '  [0] mutations 全量演练 PASS（should-run=full，base=%s；留痕 ci/out/step0-mutations-full.log）\n' "$MUT_BASE"
+  else
+    echo "step0 FAIL: mutations 全量演练红（被测门未失败于删除/弱化=门失效/探针或 mirror 漂移；日志: ci/out/step0-mutations-full.log）"
+    tail -15 "$OUT/step0-mutations-full.log" | sed 's/^/      | /'
+    exit 1
+  fi
 fi
 if [ ${#PREFLIGHT[@]} -gt 0 ]; then
   printf '预检失败:\n' ; printf '  %s\n' "${PREFLIGHT[@]}"
@@ -522,8 +555,11 @@ step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail
 # 门计数可见性：本步为 bespoke 块（退出码 2 须落 WARN 行而非 FAIL，step 助手不表达），
 #   按 step9 先例以 `echo "== step14 …"` 行向机读面登记门号（xcheck 门数对账据此计数）。
 # 路径纪律：三脚本缺省路径一律由 __file__/AF_ROOT 推导到本工作树（root 钉死，
-#   红队 P2-2）；branches_check 自跑 cargo test --workspace -- --list 时继承环境
-#   CARGO_TARGET_DIR（step3 已全域构建，秒级；W3-C-25 共享 target 教训不破）。
+#   红队 P2-2）；branches_check/strategies_check 自跑 cargo 前先过本树 provenance
+#   门（ci/provenance_check.sh ensure，与 step3 同门同语义——2026-11-01 step14
+#   跨工作树假绿实证：step3 的 ensure 只护本管道入口，两门单跑/被其它编排复跑时
+#   二次 cargo 调用继承环境 CARGO_TARGET_DIR，可原样执行他树（含已删树）残留
+#   测试二进制报绿，故两门自带 ensure：判脏即清后由本树重编，独立单跑同样受护）。
 echo "== step14 机读一致性批（branches 锚对账 + xcheck 3/4 组 + criteria schema + strategies 策略库）"
 machine_batch() {
   local rc_a=0 rc_b=0 rc_c=0 rc_d=0 rc hard=0 warn=0

@@ -28,3 +28,8 @@ ci/advisory-db/
 # ── FV 收编批（2026-10-25）：step9 advisory 门的大体积 solver 全文日志不入档
 #    （裁决行 10/10 + Complete-32 已存 ci/out/step9.log 与 SUMMARY.txt；重跑 step9 即再生）
 ci/out/step9-kani.log
+
+# ── mutations 演练接线（2026-11-01）：step0 全量演练全文日志不入档——防「演练日志
+#    本身成 untracked ci/ 文件 → should-run 恒判 full」的自激回路；决策/结论留痕走
+#    ci/out/step0.log（随批入库）。排除先例：上行 ci/out/step9-kani.log 同款。
+ci/out/step0-mutations-full.log
