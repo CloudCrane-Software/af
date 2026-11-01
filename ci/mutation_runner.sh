@@ -21,9 +21,9 @@
 #   mutation_runner.sh run [--root DIR] [--probe ID]... [--mode full|nightly]
 #                         [--scratch-dir DIR] [--keep]
 #       逐探针演练：整仓复制到 scratch（排除 .git/target/ci/out，硬链接优先），
-#       施加变异（删文件/删注册表条目），跑探针声明的门命令（mirror_of stepN
-#       时先对账 run.sh 命令未漂移），比对期望 exit/stderr，删 scratch。
-#       绝不动真树。
+#       施加变异（删文件/删注册表条目/按正则删 run.sh 执行调用行），跑探针声明的
+#       门命令（mirror_of stepN 时先对账 run.sh 命令未漂移），比对期望 exit/stderr，
+#       删 scratch。绝不动真树。
 #   mutation_runner.sh should-run [--root DIR] [--base REF]
 #       触发规则判定：diff（--base，缺省 HEAD~1）触及 ci//proofs//gate_inputs
 #       glob → 输出 full；否则 nightly-only。非 git 环境 → full（fail-safe）。
@@ -76,7 +76,7 @@ json.dump(data, sys.stdout, ensure_ascii=False)
 }
 
 probe_tsv() { # 探针行（ASCII 单元分隔符 \x1f 连接——tab 属 IFS 空白类会吞空字段）:
-  # id \x1f trigger \x1f action \x1f target \x1f remove_id \x1f run \x1f timeout \x1f exit \x1f stderr_contains \x1f mirror_of
+  # id \x1f trigger \x1f action \x1f target \x1f remove_id \x1f run \x1f timeout \x1f exit \x1f stderr_contains \x1f mirror_of \x1f args_json
   reg_json | python3 -c '
 import json, sys
 reg = json.load(sys.stdin)
@@ -85,7 +85,8 @@ for p in reg.get("probes", []):
     cols = [p.get("id",""), p.get("trigger","on-diff"), p.get("action",""),
             p.get("target",""), (p.get("args") or {}).get("remove_id",""),
             p.get("run",""), str(p.get("timeout_sec",120)),
-            str(e.get("exit","")), e.get("stderr_contains",""), p.get("mirror_of","")]
+            str(e.get("exit","")), e.get("stderr_contains",""), p.get("mirror_of",""),
+            json.dumps(p.get("args") or {}, ensure_ascii=False)]
     print("\x1f".join(c.replace("\x1f"," ") for c in cols))
 '
 }
@@ -133,12 +134,45 @@ make_scratch() { # $1 = 目标目录
   fi
 }
 
-apply_mutation() { # $1=scratch/repo $2..=探针字段
-  local repo=$1 action=$2 target=$3 remove_id=$4
+apply_mutation() { # $1=scratch/repo $2..=探针字段（末位=args_json，edit-drop-lines 用）
+  local repo=$1 action=$2 target=$3 remove_id=$4 args_json=${10}
   case "$action" in
     delete)
       rm -f "$repo/$target" || { echo "$PROG: 变异失败: rm $target" >&2; return 2; }
       echo "$PROG: 已施加变异: delete $target" >&2 ;;
+    edit-drop-lines)
+      # 按正则逐行删除目标文件中的执行调用行（红队 2026-10-31「摘门保牌」回归面）：
+      # fail-closed——drop_patterns 任一条零命中即报错（探针与正本漂移必须显式红，
+      # 不静默放过；同 xcheck_probe.sh 的 sed 自检纪律）。新 inode 落盘，不惊动硬链接正本。
+      python3 - "$repo/$target" "$args_json" <<'PYEOF' \
+        || { echo "$PROG: 变异施加失败: edit-drop-lines $target" >&2; return 2; }
+import json, os, re, sys
+path = sys.argv[1]
+pats = [re.compile(p) for p in json.loads(sys.argv[2]).get("drop_patterns", [])]
+if not pats:
+    print("edit-drop-lines: drop_patterns 缺席", file=sys.stderr); sys.exit(2)
+with open(path, encoding="utf-8") as f:
+    lines = f.readlines()
+kept, hits = [], [0] * len(pats)
+for ln in lines:
+    hit = any(p.search(ln) for p in pats)
+    for i, p in enumerate(pats):
+        if p.search(ln):
+            hits[i] += 1
+    if not hit:
+        kept.append(ln)
+dropped = len(lines) - len(kept)
+if min(hits) < 1:
+    miss = [p.pattern for p, h in zip(pats, hits) if h == 0]
+    print(f"edit-drop-lines: drop_patterns 零命中 {miss}（正本漂移，探针源失效）", file=sys.stderr)
+    sys.exit(2)
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    f.writelines(kept)
+os.replace(tmp, path)
+print(f"edit-drop-lines: 删除 {dropped} 行（每条 pattern 命中 {hits}）", file=sys.stderr)
+PYEOF
+      echo "$PROG: 已施加变异: edit-drop-lines $target" >&2 ;;
     registry-remove-probe)
       # 极小修正（2026-10-27 补完代理）：原版 python3 失败（如 remove_id 不在注册表
       # 的 AssertionError）被随后的 echo 吞掉退出码、误报「已施加变异」——afmut-bPuyoN
@@ -164,9 +198,9 @@ PYEOF
   esac
 }
 
-run_probe() { # 参数 10 个字段；返回 0=探针过 1=探针红 2=环境错
+run_probe() { # 参数 11 个字段（末位 args_json，仅 edit-drop-lines 消费）；0=过 1=红 2=环境错
   local id=$1 trigger=$2 action=$3 target=$4 remove_id=$5 run=$6 timeout=$7 \
-        xexit=$8 xstderr=$9 mirror_of=${10}
+        xexit=$8 xstderr=$9 mirror_of=${10} args_json=${11}
   # 触发过滤：full 模式跳过 nightly-only；nightly 模式全跑
   if [ "$MODE" = full ] && [ "$trigger" = nightly-only ]; then
     echo "  [probe $id] SKIP（nightly-only，本次 full 模式）"; return 0
@@ -191,7 +225,7 @@ run_probe() { # 参数 10 个字段；返回 0=探针过 1=探针红 2=环境错
   scratch=$(cd "$scratch" && pwd)
   local rc=0 got_rc=0
   make_scratch "$scratch" || { rm -rf "$scratch"; echo "  [probe $id] FAIL: scratch 复制失败" >&2; return 2; }
-  if ! apply_mutation "$scratch/repo" "$action" "$target" "$remove_id" 2>>"$scratch/mutate.log"; then
+  if ! apply_mutation "$scratch/repo" "$action" "$target" "$remove_id" "" "" "" "" "" "$args_json" 2>>"$scratch/mutate.log"; then
     rm -rf "$scratch"; echo "  [probe $id] FAIL: 变异施加失败（见 $scratch）" >&2; return 2
   fi
   if ( cd "$scratch/repo" && timeout "${timeout:-120}" bash -c "$run" \
@@ -229,9 +263,9 @@ run_probe() { # 参数 10 个字段；返回 0=探针过 1=探针红 2=环境错
 do_run() {
   do_check_registry || return 1
   local overall=0
-  while IFS=$'\037' read -r id trigger action target remove_id run timeout xexit xstderr mirror_of; do
+  while IFS=$'\037' read -r id trigger action target remove_id run timeout xexit xstderr mirror_of args_json; do
     [ -n "$id" ] || continue
-    run_probe "$id" "$trigger" "$action" "$target" "$remove_id" "$run" "$timeout" "$xexit" "$xstderr" "$mirror_of" || overall=1
+    run_probe "$id" "$trigger" "$action" "$target" "$remove_id" "$run" "$timeout" "$xexit" "$xstderr" "$mirror_of" "$args_json" || overall=1
   done < <(probe_tsv)
   if [ $overall -eq 0 ]; then
     echo "$PROG: 全探针 PASS（模式=$MODE）"

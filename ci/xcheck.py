@@ -60,32 +60,52 @@ def read_or_none(p):
 
 
 # ---------------------------------------------------------------- ① 门数对账
+# 执行事实行形态（红队 2026-10-31「摘门保牌」发现修复：门数对账数**执行事实**，
+# 不数 `echo "== stepN"` 登记行——登记行是纯文本横幅，删掉执行调用、留着登记行，
+# 旧口径下 step12 复算与 xcheck 门数对账全绿（五子门静默摘除复现在案）。
+#   ① step 助手调用行 `step N "…"`；共宿槽子门 `step 13a|13b|13c "…"` 槽号取数字前缀；
+#   ② 执行重定向行 `… > "$OUT/stepN.log"`——bespoke 块的唯一执行调用形态（step9
+#      fv_advisory / step14 machine_batch）；用单 `>` 锚定：`>>` 追加、读日志行、
+#      助手内部的 `"$OUT/step${id}.log"`（变量）都不算执行。
+# `echo "== stepN"` 登记行降级为对照面：不再喂计数，由 gates-exec-binding 双向绑定
+# 硬核（登记在册而执行缺席=摘门保牌；执行在跑而登记缺席=登记漂移，均硬红）。
+STEP_HELPER_RE = re.compile(r'^step\s+(\d+)[a-z]?\s+"', re.M)
+# 执行重定向行只认命令位（行首非 #）：注释/文书里引用的执行样例串不算执行——
+# 本修复批自己的 run.sh 注记曾把 `machine_batch > "$OUT/step14.log"` 写进注释、
+# 未排注释时被当执行事实、绑定对账对真删调用照样绿（回归探针 MUT-003 抓到后收紧）。
+STEP_EXEC_REDIR_RE = re.compile(r'^[ \t]*(?!\#).*?(?<!>)>[ \t]*"\$OUT/step(\d+)\.log"', re.M)
+STEP_REGISTR_RE = re.compile(r'^echo\s+"==\s*step(\d+)\b', re.M)
+STEP_ADVISORY_ECHO_RE = re.compile(
+    r'^echo\s+"==\s*step(\d+)\b[^\n]*advisory(?![\w-])', re.M)
+
+
 def count_run_sh_steps(run_sh_text):
-    """门计数。硬门 = `^step N "..."` 助手行（step1-8/10-13 形）或 `^echo "== stepN …"`
-    bespoke 块行（step9/14 形）中**非 advisory** 者——bespoke 形态必须计数：退出码 2
-    要落 WARN 行不改 OVERALL 的 step（如 step14 机读一致性批）用 bespoke 块表达，
-    只数助手行会让新门对账眼盲（本机制自身的逃逸形态）。
-    advisory 门 = echo 行带 advisory 字样（step9 FV）或 fv_advisory() 探测。
-    返回 (hard_ids, advisory_n)。"""
-    step_nums = set()
-    for m in re.finditer(r'^step\s+(\d+)\s+"', run_sh_text, re.M):
-        step_nums.add(int(m.group(1)))
-    for m in re.finditer(r'^echo\s+"==\s*step(\d+)\b', run_sh_text, re.M):
-        step_nums.add(int(m.group(1)))
+    """门计数（执行事实口径）。硬门槽 = 有执行事实行（助手调用行或执行重定向行）的
+    槽中**非 advisory** 者——bespoke 形态必须计数：退出码 2 要落 WARN 行不改 OVERALL
+    的 step（如 step14 机读一致性批）用 bespoke 块表达，只数助手行会让新门对账眼盲。
+    advisory 门 = 登记行带 advisory 字样（step9 FV）或 fv_advisory() 探测。
+    返回 (hard_ids, advisory_n, registered_ids, executed_ids)——后两者供
+    gates-exec-binding 登记↔执行双向绑定对账。"""
+    executed = set()
+    for m in STEP_HELPER_RE.finditer(run_sh_text):
+        executed.add(int(m.group(1)))
+    for m in STEP_EXEC_REDIR_RE.finditer(run_sh_text):
+        executed.add(int(m.group(1)))
+    registered = {int(m.group(1)) for m in STEP_REGISTR_RE.finditer(run_sh_text)}
     advisory_nums = set()
     # advisory 判定须排除连字符复合词（step7 的「advisory-db」是 cargo-deny 漏洞库，
     # 不是 advisory 门——误分类会把硬门算成 advisory、门数账失真）。
-    for m in re.finditer(r'^echo\s+"==\s*step(\d+)\b[^\n]*advisory(?![\w-])', run_sh_text, re.M):
+    for m in STEP_ADVISORY_ECHO_RE.finditer(run_sh_text):
         advisory_nums.add(int(m.group(1)))
     if "fv_advisory()" in run_sh_text:
         advisory_nums.add(9)
-    return sorted(step_nums - advisory_nums), len(advisory_nums)
+    return sorted(executed - advisory_nums), len(advisory_nums), sorted(registered), sorted(executed)
 
 
 def check_gates(agent_md, run_sh):
     a = read(agent_md)
     r = read(run_sh)
-    hard_ids, advisory = count_run_sh_steps(r)
+    hard_ids, advisory, registered, executed_slots = count_run_sh_steps(r)
     # AGENT.md 硬纪律 5 行：取「N门」主张 + stepA-B 区间主张
     m = re.search(r"([一二三四五六七八九十])门\*{0,2}（step(\d+)-(\d+)\s*硬门", a)
     if not m:
@@ -105,6 +125,23 @@ def check_gates(agent_md, run_sh):
     if not ok:
         d.append(f"红：门数漂移（{claimed} vs {len(base_hard) + advisory}）或硬门区间不连续（step{lo}-{hi} vs 实测 {base_hard}）——复盘 C2 六门/九门史复发形态")
     rec("gates", ok, d)
+
+    # ---- 登记↔执行双向绑定（红队 2026-10-31「摘门保牌」发现的硬核面，硬项） ----
+    # 登记行（echo "== stepN"）只是对照面：每个登记槽必须 ≥1 条执行事实行（step 助手
+    # 调用 / 执行重定向），反之执行槽必须有登记——两侧任一缺席即硬红。修复前对账只数
+    # 登记行，静默删除 step13b/13c 调用与 step14 machine_batch 执行调用后门数账照绿。
+    d3 = [f"登记槽 step{registered}；执行事实槽 step{executed_slots}（step 助手调用行 + "
+          f'执行重定向行 `> "$OUT/stepN.log"`）']
+    ok3 = set(registered) == set(executed_slots)
+    if not ok3:
+        lost = sorted(set(registered) - set(executed_slots))
+        unreg = sorted(set(executed_slots) - set(registered))
+        if lost:
+            d3.append(f"红：登记在册而执行缺席 step{lost}——摘门保牌（删执行调用、留登记行，"
+                      "门数账照绿）形态，须恢复执行或走同批评审摘槽")
+        if unreg:
+            d3.append(f"红：执行在跑而登记缺席 step{unreg}——机读面登记漂移形态")
+    rec("gates-exec-binding", ok3, d3)
 
     # ---- G0 批 ↔ AGENT.md 勘误行对账（合流演进面） ----
     if not g0_hard:
@@ -224,7 +261,7 @@ def check_obs_dates(docs):
 # ------------------------------------- ⑤ advisory：run.sh 头注「N 步」活漂移探针
 def check_runsh_header(run_sh):
     r = read(run_sh)
-    hard_ids, advisory = count_run_sh_steps(r)
+    hard_ids, advisory, _registered, _executed = count_run_sh_steps(r)
     total = len(hard_ids) + advisory
     m = re.search(r"^#\s*([一二三四五六七八九十]|\d+)步验收管道", r, re.M)
     if not m:

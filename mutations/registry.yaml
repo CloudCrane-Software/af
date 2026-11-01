@@ -31,6 +31,54 @@
         "exit": 1,
         "stderr_contains": "探针清单漂移"
       }
+    },
+    {
+      "id": "MUT-003",
+      "description": "摘门保牌必须红·xcheck 臂（红队 2026-10-31 发现回归探针）：从 ci/run.sh 静默删除 step13b/13c 调用与 step14 machine_batch 执行调用、保留全部 echo 登记行后，xcheck 门数对账必须以 exit 1 + gates-exec-binding 红——登记在册而执行缺席（修复前该变异 xcheck 全绿复现在案；2026-10-31 修复批起门数对账数执行事实、登记行走双向绑定）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^step 13b \"",
+          "arm_wiring_check\\.py --check",
+          "^step 13c \"",
+          "budget_cast_lint\\.py --root",
+          "^machine_batch > \"\\$OUT/step14\\.log"
+        ],
+        "_doc_args": "五条正则=13b 调用行+其续行/13c 调用行+其续行/step14 执行调用行；任一零命中=正本漂移、探针源失效即红（fail-closed）"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "run.sh 缺 step14 执行事实行后 registered(14)≠executed(1..13)，gates-exec-binding 硬红（gates/gates-g0-erratum 走 advisory 软红不影响 exit 判定确定性=1）"
+      }
+    },
+    {
+      "id": "MUT-004",
+      "description": "摘门保牌必须红·step12 臂（红队 2026-10-31 发现回归探针）：同 MUT-003 变异（删 step13b/13c 调用与 step14 machine_batch 执行调用、保留登记行）后，step12 计数复算必须以 exit 1 红——gates.ci_steps/ci.steps_total 执行事实槽位 14→13、gates.ci_hard 13→12、gates.ci_step13_subgates 3→1 逐键漂移（修复前该变异 step12 全绿复现在案；source 已由登记行计数改执行事实口径）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^step 13b \"",
+          "arm_wiring_check\\.py --check",
+          "^step 13c \"",
+          "budget_cast_lint\\.py --root",
+          "^machine_batch > \"\\$OUT/step14\\.log"
+        ],
+        "_doc_args": "同 MUT-003"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "四个门数键复算漂移 → step12 硬红 exit 1（infra 错为 exit 2、全绿为 0，均不满足期望=探针红）"
+      }
     }
   ]
 }

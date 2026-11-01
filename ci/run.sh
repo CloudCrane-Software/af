@@ -193,11 +193,14 @@ step 2 "cargo clippy + clippy_gate" -- \
 #   cargo test 跑完无论成败都 record 三要素落 ci/out/step3-provenance.json
 #   （缺件或异值的「绿」不得作为结案证据，由 step10 消费）。step 编号不变
 #   （AGENT.md 硬纪律 5「九门」门数账口径）。详见 ci/provenance_check.sh 头注。
-#   合流批注记（2026-10-28 g0b 补合流）：下方通告行刻意**不带**「== stepN」门号
-#   登记行前缀——门号登记行约定「每个 step 槽一行」（numbers.json gates.ci_steps/
-#   ci_hard 与 xcheck 门数对账据此计数），pre-step 通告若沿用该前缀会把 step3
-#   槽计成两行（门数账 14→15 假漂移）；step3 槽的登记行仍是下一行「step3 cargo
-#   test」。改通告行措辞时勿再引入 `^echo "== step[0-9]+` 形态。
+#   合流批注记（2026-10-28 g0b 补合流；2026-10-31 按「摘门保牌」修复批更新口径）：
+#   下方通告行刻意**不带**「== stepN」门号登记行前缀——登记行（echo "== stepN"）是
+#   机读面对照面，约定「每个 step 槽一行」且**必须与执行事实一一对应**（2026-10-31
+#   修复批起门数对账数执行事实——step 助手调用行与执行重定向行 `> "$OUT/stepN.log"`
+#   ——不再数登记行；登记行与执行由 ci/xcheck.py gates-exec-binding 双向绑定硬核：
+#   凭空多登记行=登记漂移红、有登记无执行=摘门保牌红）。pre-step 通告若沿用登记行
+#   前缀会造出一个无执行事实的「step3 第二登记行」，绑定对账即红；step3 槽的登记行
+#   仍是下一行「step3 cargo test」。改通告行措辞时勿引入 `^echo "== step[0-9]+` 形态。
 echo "== provenance 门（step3 pre-step；W3-C-25：共享 target 跨工作树假绿防护——判脏即清，绿记录带三要素）"
 echo "== step3 cargo test"
 step 3 "provenance 门 + cargo test -j4 --workspace" -- \
@@ -553,7 +556,10 @@ step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail
 # 分支级 llvm-cov 覆盖报告不在此步：nightly/diff 触发子作业（对齐 mutations/ 触发
 #   规则先例），产物 ci/out/branch-coverage.json 由 14a 在场时对账。
 # 门计数可见性：本步为 bespoke 块（退出码 2 须落 WARN 行而非 FAIL，step 助手不表达），
-#   按 step9 先例以 `echo "== step14 …"` 行向机读面登记门号（xcheck 门数对账据此计数）。
+#   按 step9 先例以 `echo "== step14 …"` 行向机读面登记门号【2026-10-31「摘门保牌」
+#   修复批口径更新：登记行只是对照面，门数对账数执行事实——本步的执行事实=下方
+#   `machine_batch > "$OUT/step14.log"` 执行重定向行；登记行与执行由 xcheck
+#   gates-exec-binding 双向绑定硬核，删执行调用留登记行即红（摘门保牌形态）】。
 # 路径纪律：三脚本缺省路径一律由 __file__/AF_ROOT 推导到本工作树（root 钉死，
 #   红队 P2-2）；branches_check/strategies_check 自跑 cargo 前先过本树 provenance
 #   门（ci/provenance_check.sh ensure，与 step3 同门同语义——2026-11-01 step14
