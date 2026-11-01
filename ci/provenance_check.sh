@@ -234,8 +234,13 @@ do_ensure() {
   if [ "$rrc" -ne 0 ]; then exit 2; fi
   if do_check; then write_stamp; return 0; fi
   echo "$PROG: ensure: 判脏 → 清理 target 构建产物（等价 cargo clean）……" >&2
+  # 守卫章随清（2026-11-02 修复）：章在 target 内，cargo clean 本就一并清除；
+  # 旧实现只清 debug/release，异树章存活→复检恒红→ensure 永不收敛（实证：
+  # SIL 回写腿 checker 每 ~600s 判脏→清→复检仍脏，rollbacks 42→50 无界增长，
+  # 真脏面仅此异树章+ci/out 遗留件）。check 语义不变；ci/out 归属门仍 fail-closed。
   rm -rf "$TARGET"/debug "$TARGET"/release \
-         "$TARGET"/.rustc_info.json "$TARGET"/.cargo-lock 2>/dev/null || true
+         "$TARGET"/.rustc_info.json "$TARGET"/.cargo-lock \
+         "$(stamp_path)" 2>/dev/null || true
   if ! do_check; then
     echo "$PROG: ensure FAIL: 清理后复检仍脏（文件系统异常？）" >&2
     return 1
