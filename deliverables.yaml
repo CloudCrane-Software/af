@@ -10,6 +10,12 @@
 #   2026-10-28 由合流批补合流入本线。descoped 必须 ADR（复盘:102）。
 # 证据 sha 同批维护（2026-10-31 红队「摘门保牌」修复批）：ci/mutation_runner.sh（G0-M06，edit-drop-lines 动作）/
 #   ci/xcheck.py（G0-M11，执行事实口径+gates-exec-binding）/numbers.json（G0-S03，执行事实口径+两钉键+探针 4）三件同批改版，sha256 随批更新。
+# 证据 sha 同批维护（2026-11-01 红队「整槽连摘」修复批）：ci/xcheck.py（G0-M11，批未齐分支消费
+#   numbers.json ci.steps_total 硬核）/numbers.json（G0-S03，mutations.probes 探针 4→6、ci.steps_total
+#   消费注记）两件同批改版，sha256 随批更新；同批 mutations/registry.yaml +2 探针（MUT-005/006）、
+#   ci/baselines/mutations-registry.sha256 重钉 46330532b2f2…、run.sh step0 判据正本哈希钉接线（RT-E6，
+#   不占 step 槽）+gate_inputs_check.sh/gate-inputs.sha256 两新件随批入库；doc-claims.txt（G0-S02 证据
+#   自指件，DC-RUN-003 引文核位 477→494 同批更新）随批重钉。
 # 合流批生命周期（2026-10-28）：g0a 合入（G0-M01/02/03 done）；g0c 合入同批将 G0-M07/08/09
 #   改判 done 并补 sha256/git 窗口（C 批三机制+report_unit.rs 前置修复已进主线）；g0d 合入同批
 #   改判 G0-M10/11/12；g0b 补合同批改判 G0-M04/05/06——G0 批 12 机制全 done。兄弟批落地时同批
@@ -162,7 +168,7 @@ items:
     status: done
     source: S1
     evidence_path: ci/xcheck.py
-    evidence_sha256: 73b33cc6da4705b114c0d461b232bc212f770ada066f48e624b7fd9ba0f45d7b
+    evidence_sha256: 628027cb21cb0e2b629742bd386b5968378c18cbe64bdf93aca335ba6ac6d9c4
     window_kind: git
     check:
       kind: grep_present
@@ -198,7 +204,7 @@ items:
     status: done
     source: S2
     evidence_path: doc-claims.txt
-    evidence_sha256: 8e4b113c61d9ac1060200c3e606137a096fe187d7277f2a473b010f05e8291bd
+    evidence_sha256: b037dffe733081b8af81d5d6ae746e10a08848f1d6d4640899713c1f5c27b990
     window_kind: git
     check:
       kind: grep_present
@@ -210,7 +216,7 @@ items:
     status: done
     source: S2
     evidence_path: numbers.json
-    evidence_sha256: 9558b97c1f5b3d68765eb611df6a8b57559771285b187ec3451ca06d3c84beac
+    evidence_sha256: 85a2f87c5ea356614cdbf226d851ee8226e1c9a44622d0dc0a9f8a5c685f9fd7
     window_kind: git
     check:
       kind: grep_present

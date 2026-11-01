@@ -133,6 +133,20 @@ if ! bash "$CI_DIR/mutation_runner.sh" check-registry --root "$AF_ROOT" >>"$OUT/
   echo "step0 FAIL: mutations 探针清单漂移（删/改探针未走 update-registry-baseline 同批评审）"
   exit 1
 fi
+# ---- 0.x 判据正本哈希钉（红队终局轮 RT-E6；钉扎此前是逐件决定而非族纪律） --------
+# 门判据正本（clippy-baseline.txt/arm-wiring.yaml/branches.yaml/criteria.yaml/
+# fix-scan.yaml/budget-cast-whitelist.json）此前无外部哈希钉——改判据正本即改门
+# （clippy 基线可预注册未来签名洗白、arm-wiring 可删格、cast 白名单可放行违规）。
+# 复用 mutations-registry.sha256 同款机制：逐件 sha256 钉
+# ci/baselines/gate-inputs.sha256（门输入全集清单正本=ci/gate_inputs_check.sh 的
+# GATE_INPUTS；update 机生成、禁手改），漂移/缺件/摘钉/钉外多行一律红（fail-closed：
+# 防护被关掉本身就是红）。有意变更判据（clippy_gate --update 收紧基线、arm-wiring
+# 摘格换债号、白名单放行调整等）须同批 `bash ci/gate_inputs_check.sh update`
+# 重钉提交（防悄悄改基线=逃逸，与 update-registry-baseline 同一纪律）。
+if ! bash "$CI_DIR/gate_inputs_check.sh" check --root "$AF_ROOT" >>"$OUT/step0.log" 2>&1; then
+  echo "step0 FAIL: 判据正本漂移（判据/基线/白名单改动未走 gate_inputs_check.sh update 同批评审）"
+  exit 1
+fi
 # ---- 0.x mutations 全量演练接线（2026-11-01：should-run 判定从无消费点改为有消费者） ----
 # 修复史实：此前头注写「全量演练挂合流入口」，但仓内 0 个消费点（grep *.sh/*.py 亲证）
 #   ——312e6db 改 ci/strategies_check.py（触及 gate_inputs ci/**）后零演练留痕，

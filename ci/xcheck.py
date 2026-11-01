@@ -18,6 +18,10 @@
 G0 批对账（合流演进）：run.sh 出现 step10-14（机制批槽位）时，基础「九门」口径照常
 硬对账；AGENT.md 勘误行（G0-A 合流清单项：「九门+G0 五门=14 step」，照 W1-C53 先例
 不改历史行）在场则硬核其算术，缺席只发 advisory WARN（合流前不误红、合流后不失守）。
+批未齐（len(g0_hard)<5）不再无条件软 PASS（红队 2026-10-31「整槽连摘」发现：整槽摘除
+step10/11/12 使对账机检随槽清零后 xcheck 照绿）：以 numbers.json ci.steps_total 登记
+执行事实槽位数硬核本函数独立重算值（漂移=硬红；登记正本缺席=fail-closed 红）——
+分组合流树按自举纪律同批登记本树实数即不误红（2026-11-01 整槽连摘修复批）。
 
 退出码：0=硬项全过且 advisory 全过；1=任一硬项红（门数/计数/名单/日期漂移）；
         2=仅 advisory 红（头注漂移/G0 勘误未同步/句式漂移提示）——由调用方定义
@@ -56,6 +60,22 @@ def read_or_none(p):
     try:
         return read(p)
     except OSError:
+        return None
+
+
+def read_steps_total_registered():
+    """numbers.json ci.steps_total 登记值（执行事实槽位数机算正本；键注记明文
+    「供 D2 xcheck 消费」——gates.ci_steps 同源同值同命令）。缺席/不可解析/类型
+    不符一律返回 None，调用方 fail-closed 红（同 ci/baselines/mutations-registry
+    .sha256「基线缺席=红」纪律：防护的对照面缺席=防护失效，不得当绿）。"""
+    data = read_or_none(REPO / "numbers.json")
+    if data is None:
+        return None
+    try:
+        entry = json.loads(data).get("numbers", {}).get("ci.steps_total")
+        value = entry.get("value") if isinstance(entry, dict) else None
+        return value if isinstance(value, int) and not isinstance(value, bool) else None
+    except (ValueError, AttributeError):
         return None
 
 
@@ -162,9 +182,22 @@ def check_gates(agent_md, run_sh):
         if not ok2:
             d2.append(f"红：G0 批勘误口径与 run.sh 实数不符（{claimed_total} vs {total_now}）——合流批门数账失真")
     else:
-        ok2 = True
-        d2.append(f"advisory：G0 批未齐（{len(g0_hard)}/{G0_BATCH_SIZE}，分组合流中），勘误口径为合流后目标值 {claimed_total}——合流齐后硬核")
-        rec("gates-g0-erratum", ok2, d2, soft=True)
+        # 红队 2026-10-31「整槽连摘」发现修复（2026-11-01 落地）：批未齐不再无条件软 PASS。
+        # 「未齐」有两种成因——分组合流中（合法过渡态）vs 整槽连摘（把 step10/11/12 三对账
+        # 硬门槽位「登记行+执行行」一并删，对账机检随槽清零，probe5 复现 xcheck exit 0 全绿）。
+        # 区分锚=numbers.json ci.steps_total 登记值（执行事实槽位数，门数账自举纪律：与
+        # run.sh 同批同值更新）：本函数对 run.sh 独立重算的 total_now 漂出登记值即硬红。
+        reg_total = read_steps_total_registered()
+        ok2 = reg_total is not None and reg_total == total_now
+        if ok2:
+            d2.append(f"advisory：G0 批未齐（{len(g0_hard)}/{G0_BATCH_SIZE}，分组合流中），勘误口径为合流后目标值 {claimed_total}——合流齐后硬核")
+            d2.append(f"锚：numbers.json ci.steps_total 登记 {reg_total} step == run.sh 执行事实重算 {total_now} step（整槽连摘防护在场）")
+        else:
+            d2.append(f"锚：numbers.json ci.steps_total 登记 {reg_total if reg_total is not None else '缺席/不可解析'} step ≠ run.sh 执行事实重算 {total_now} step")
+            d2.append(f"红：G0 批未齐但执行事实槽位数与登记值漂移——整槽连摘形态（登记+执行一并摘槽、"
+                      "对账机检随槽清零后 xcheck 照绿，2026-10-31 红队复现在案）；摘槽须恢复执行，"
+                      "或走同批评审并同批改 numbers.json ci.steps_total/gates.ci_steps（门数账自举纪律）")
+        rec("gates-g0-erratum", ok2, d2, soft=ok2)
         return
     rec("gates-g0-erratum", ok2, d2)
 
