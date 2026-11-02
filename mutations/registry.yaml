@@ -135,6 +135,26 @@
         "stderr_contains": "",
         "_doc_expect": "门数键复算漂移（14→11/13→10）→ step12 硬红 exit 1（infra 错为 exit 2、全绿为 0，均不满足期望=探针红）"
       }
+    },
+    {
+      "id": "MUT-007",
+      "description": "判分链登记表收缩必须红（红队 RT-E6/E51 发现回归探针）：从 ci/scorechain-manifest.txt 删掉 judge.rs 登记行（判分链门本体 crates/af-execline/src/judge.rs 脱离哈希锚保护面）后，k5 判分链 lint 必须以 exit 1 + 「判分链登记表被收缩」红——修复前该变异 lint 全绿（PASS「3 件」：登记表 4→3 件、在册行仍逐位对锚，故 judge.rs 可任意改写而 step1 硬门不红）复现在案；修复后由「判分链必需成员下界」对账（ci/k5-path-lint.py REQUIRED_MEMBERS）与「门输入全集钉」（ci/gate_inputs_check.sh GATE_INPUTS 含 ci/scorechain-manifest.txt）双臂拦截",
+      "action": "edit-drop-lines",
+      "target": "ci/scorechain-manifest.txt",
+      "args": {
+        "drop_patterns": [
+          "^crates/af-execline/src/judge\\.rs"
+        ],
+        "_doc_args": "一条正则=判分链门本体 judge.rs 的登记表行（登记表 4→3 件＝收缩）；零命中=正本漂移、探针源失效即红（fail-closed）"
+      },
+      "run": "python3 -I ci/k5-path-lint.py",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "判分链登记表被收缩",
+        "_doc_expect": "登记表收缩后 k5-path-lint 的「判分链必需成员下界」对账缺 crates/af-execline/src/judge.rs → sys.exit(1)、stderr 含「判分链登记表被收缩」（修复前该变异 lint PASS「3 件」exit 0）"
+      }
     }
   ]
 }

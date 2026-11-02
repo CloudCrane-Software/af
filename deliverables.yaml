@@ -204,7 +204,7 @@ items:
     status: done
     source: S2
     evidence_path: doc-claims.txt
-    evidence_sha256: b037dffe733081b8af81d5d6ae746e10a08848f1d6d4640899713c1f5c27b990
+    evidence_sha256: 172146a76eb296496aa5871fb3c69b21a9eab744b90a77ce5db12961d9e9c600
     window_kind: git
     check:
       kind: grep_present
@@ -216,7 +216,7 @@ items:
     status: done
     source: S2
     evidence_path: numbers.json
-    evidence_sha256: 85a2f87c5ea356614cdbf226d851ee8226e1c9a44622d0dc0a9f8a5c685f9fd7
+    evidence_sha256: e5f206e8bdf025a331648c4ac07d9910829235b4ad833e7b6c930056ba8f7966
     window_kind: git
     check:
       kind: grep_present

@@ -134,8 +134,11 @@ if ! bash "$CI_DIR/mutation_runner.sh" check-registry --root "$AF_ROOT" >>"$OUT/
   exit 1
 fi
 # ---- 0.x 判据正本哈希钉（红队终局轮 RT-E6；钉扎此前是逐件决定而非族纪律） --------
-# 门判据正本（clippy-baseline.txt/arm-wiring.yaml/branches.yaml/criteria.yaml/
-# fix-scan.yaml/budget-cast-whitelist.json）此前无外部哈希钉——改判据正本即改门
+# 门输入全集（11 件判据正本；全集清单正本=ci/gate_inputs_check.sh 的 GATE_INPUTS）：
+# clippy-baseline.txt/arm-wiring.yaml/branches.yaml/criteria.yaml/fix-scan.yaml/
+# budget-cast-whitelist.json + neutrality-expected-fail.txt/neutrality-wordlist.txt/
+# neutrality-golden-registry.tsv/scorechain-manifest.txt/debt-register.md——此前
+# 无外部哈希钉（RT-E6/E51：首版只钉 6 件、另 5 件漏钉）——改判据正本即改门。
 # （clippy 基线可预注册未来签名洗白、arm-wiring 可删格、cast 白名单可放行违规）。
 # 复用 mutations-registry.sha256 同款机制：逐件 sha256 钉
 # ci/baselines/gate-inputs.sha256（门输入全集清单正本=ci/gate_inputs_check.sh 的
