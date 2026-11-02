@@ -91,6 +91,7 @@ GATE_DIR = "ci"
 # 对账排除面（逐树天然不同、且非门本体/判据正本）：
 #   ci/out/ = 门运行产物（内含 worktree_root / commit / 时间戳，逐树本应不同）；
 #   *.bak   = 历史快照（各树在各自时点留痕，本应不同）。
+# 排除按**文件种类**判定、不按目录（任何位置的 .bak 快照都不是正本）。
 GATE_EXCLUDE_PREFIXES = ("ci/out/",)
 GATE_EXCLUDE_SUFFIXES = (".bak",)
 # 判据/证据自指正本（仓根；step10/11/12 与 xcheck 消费）——随门族一起单源对账
@@ -189,6 +190,24 @@ def surface_maps(repo, ref):
     return ci, crit, data
 
 
+def collect_surface(ci, crit, data):
+    """三段提交树 → 门族对账面 {路径: blob oid}（排除面统一过滤）。
+
+    排除面按**文件种类**（历史快照 *.bak / 运行证据 ci/out/）判定，不按目录——
+    与目录无关：任何位置的 .bak 快照都不是正本，不参与单源对账。"""
+    surf = {}
+    for path, oid in ci.items():
+        if not surface_excluded(path):
+            surf[path] = oid
+    for path, oid in crit.items():
+        if not surface_excluded(path):
+            surf[path] = oid
+    for path, oid in data.items():
+        if not surface_excluded(path):
+            surf[path] = oid
+    return surf
+
+
 def canonical_surface(repo, base_ref):
     """主干基线 ref 上的门族正本面 = {路径: blob oid}（排除面已滤除）。
 
@@ -197,13 +216,7 @@ def canonical_surface(repo, base_ref):
     if maps is None:
         return None
     ci, crit, data = maps
-    surf = {}
-    for path, oid in ci.items():
-        if not surface_excluded(path):
-            surf[path] = oid
-    surf.update(crit)
-    surf.update(data)
-    return surf
+    return collect_surface(ci, crit, data)
 
 
 def blob_sha256(repo, spec, cache):
@@ -232,12 +245,7 @@ def check_tree_surface(repo, base_ref, tree_path, tree_head, label, surface, sha
                 "无法判定不等于一致，红" % (label, tree_head[:12]))
         return False
     ci, crit, data = maps
-    tree_surface = {}
-    for path, oid in ci.items():
-        if not surface_excluded(path):
-            tree_surface[path] = oid
-    tree_surface.update(crit)
-    tree_surface.update(data)
+    tree_surface = collect_surface(ci, crit, data)
 
     # ①提交面：逐件对账
     for path in sorted(surface):
@@ -287,7 +295,9 @@ def check_tree_surface(repo, base_ref, tree_path, tree_head, label, surface, sha
         if os.path.isdir(root):
             for p in Path(root).rglob("*"):
                 if p.is_file():
-                    on_disk.add(p.relative_to(tree_path).as_posix())
+                    rel = p.relative_to(tree_path).as_posix()
+                    if not surface_excluded(rel):
+                        on_disk.add(rel)
         base_set = {p for p in surface if p.startswith(d + "/")}
         for path in sorted(on_disk - base_set):
             ok = False
