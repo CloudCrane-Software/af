@@ -17,6 +17,7 @@
 
 pub mod bind;
 pub mod components;
+pub mod construction;
 pub mod decode;
 pub mod ir;
 pub mod lower;
@@ -30,6 +31,10 @@ pub use bind::{
 pub use components::{
     ComponentClass, ComponentDecl, ComponentRegistry, ComponentRegistryError, ComponentsFile,
     EndpointSpec,
+};
+pub use construction::{
+    assemble_construction_package, compile_construction_plan, output_contract_block, task_book,
+    task_json, ConstructionSpec, CONSTRUCTION_GRAPH_YAML, PROTOCOL_TEACHING,
 };
 pub use decode::{decode_ir, IrParseError};
 pub use ir::{IrProgram, IR_VERSION};

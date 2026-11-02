@@ -221,3 +221,45 @@ fn dryrun_flag_parse_is_strict() {
     );
     let _ = fs::remove_dir_all(&fx.root);
 }
+
+/// E1 缺口④端到端：编译器组包（任务书内嵌 declare/envelope 协议教学段 +
+/// 内容 hash 留档）→ 提交干跑一跳——带教学任务书的通用建设任务包照过
+/// 提交前链，checks 点名 package_manifest（缺口②）与 planbind_preflight。
+#[test]
+fn compiler_assembled_teaching_package_passes_dryrun_one_hop() {
+    let fx = Fixture::new();
+    // 用编译器组包正本覆盖夹具手装包（教学任务书 + manifest 一并落盘）。
+    let spec = af_compiler::ConstructionSpec {
+        task_id: "E2G-demo".into(),
+        statement: "建设 tools/factory-stat.py：读 quota.json 与 kb.db 汇总一行 JSON。".into(),
+        acceptance: "unittest 全过（夹具数据）+ README 段。".into(),
+        image: None,
+        test_command: None,
+        registry_root: repo_packages_root(),
+    };
+    af_compiler::assemble_construction_package(&fx.task_dir, &spec).unwrap();
+
+    let out = af_order::cli::run(&fx.dryrun_args()).unwrap_or_else(|e| panic!("干跑应成功：{e}"));
+    let evidence: Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(evidence["dry_run"], serde_json::json!(true));
+    let checks = evidence["checks"].as_array().unwrap();
+    for needle in [
+        "package_manifest",
+        "planbind_preflight",
+        "profile_resolvable",
+    ] {
+        assert!(checks.iter().any(|c| c == needle), "checks 应含 {needle}");
+    }
+    // 教学任务书确实在包里（缺口④语义随包进提交链）。
+    let task: Value =
+        serde_json::from_str(&fs::read_to_string(fx.task_dir.join("task.json")).unwrap()).unwrap();
+    assert!(
+        task["task_book"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(af_compiler::PROTOCOL_TEACHING),
+        "组包任务书应内嵌协议教学段"
+    );
+    assert_eq!(Fixture::residue_count(&fx.state), 0, "干跑零残留");
+    let _ = fs::remove_dir_all(&fx.root);
+}
