@@ -249,10 +249,22 @@ fn trace_config(dir: &Path) -> TraceConfig {
         critical_consume_delay_us: 0,
         normal_consume_delay_us: 0,
         dir: dir.to_path_buf(),
-        otel_endpoint: None,
+        otel_endpoint: otel_endpoint_from_env(),
         otel_batch_size: 512,
         anchor: af_trace::AnchorSettings::default(),
     }
+}
+
+/// O1 接线（OTel 视图设计批 otlp-model §5 D-2）：`AF_OTEL_ENDPOINT` 注入 OTLP 端点，
+/// 原样交给 `TraceConfig.otel_endpoint`（完整 URL，含路径；例 http://127.0.0.1:4318/v1/traces）。
+/// 未设置或空白 → `None`：缺省关闭，非关键 lane 离线只计数，零行为变化
+/// （af-trace prepare 对 None/建不起 exporter 都走 offline fail-open）。
+/// 注入形态对齐 crate 内 `AF_HARNESS_HTTP_TIMEOUT_SEC`（http.rs UreqClient::new）。
+fn otel_endpoint_from_env() -> Option<String> {
+    std::env::var("AF_OTEL_ENDPOINT")
+        .ok()
+        .map(|raw| raw.trim().to_string())
+        .filter(|endpoint| !endpoint.is_empty())
 }
 
 fn status_matches(store: OpenStatus, trace: OpenOutcome) -> bool {
