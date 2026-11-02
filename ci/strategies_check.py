@@ -370,8 +370,16 @@ def main() -> int:
         print(f"== strategies_check: 红 {len(errors)} 项（schema/index 计数/编译断言）")
         return 1
     n_compile = sum(1 for s in disk_states.values() if s == "compilable")
-    print(f"== strategies_check: 全绿——磁盘条目 {len(disk_states)}（compilable={n_compile}），"
-          f"index 计数对账一致，编译断言经 af-dsl 装载测试")
+    # 诚实化（红队终局轮 RT-E81 修复批，2026-11-02）：--skip-compile 形态下**不得**再
+    # 宣称「编译断言经 af-dsl 装载测试」——R4 编译断言面未跑就是未跑，无条件宣称即
+    # 假陈述（该假陈述与 run.sh 接线弱化同型：门输出自称覆盖了实际没覆盖面）。
+    if args.skip_compile:
+        print(f"== strategies_check: 全绿（schema/index 面）——磁盘条目 {len(disk_states)}"
+              f"（compilable={n_compile}），index 计数对账一致；"
+              f"R4 af-dsl 编译断言本形态**未执行**（--skip-compile 跳过，非 CI 常跑形态）")
+    else:
+        print(f"== strategies_check: 全绿——磁盘条目 {len(disk_states)}（compilable={n_compile}），"
+              f"index 计数对账一致，编译断言经 af-dsl 装载测试")
     return 0
 
 

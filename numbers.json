@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_note": "numbers.json（G0 逃逸加固批 step12 计数复算门；2026-10-28 A 组落本仓 af-wt-g0a/g0a，合流批 af-wt-g0merge/g0merge 随各 merge commit 同批更新门数账三键）。全部 value 为本树实算值、source 命令在本树可复跑（cwd 缺省=仓根）。部署形态：run.sh step12 以 --repo=$AF_ROOT 调用，本文件与 ci/run.sh 同一提交更新（门数账自举纪律：run.sh 加 step 当批必须同改 gates.* 键，否则 step12 自红——防「为防再发而堆门」失控，红队复盘 PP4:292）。【2026-10-31 修复批（红队「摘门保牌」发现：静默删 step13b/13c 调用与 step14 machine_batch 执行调用、保留 echo 登记行，step12 复算与 xcheck 门数对账全绿）】gates.ci_steps/ci.steps_total/gates.ci_hard 三键 source 由登记行计数改执行事实口径（step 助手调用行 + 执行重定向行 `> \"$OUT/stepN.log\"`，槽位集合去重；值 14/14/13 不变），新增 gates.ci_step13_subgates=3/gates.ci_step14_subgates=3 两钉键补槽位集合口径看不见的共宿槽子门摘除面；登记行降级为对照面、由 ci/xcheck.py gates-exec-binding 双向绑定硬核。键集=A 组 11 键 ∪ B 组 3 键 ∪ 本批 2 键=16 键。B 组（g0b）2026-10-28 补合流：其 numbers.json 贡献件与本文件取并集后交 step12 跑。【合流批 schema 放宽裁决（B 报告 §七/g0b _note 预告的 add/add 冲突点，按 B 建议办、勿绕过】：终稿键名含双点域路径（fv.kani_inv_harness.count）与十六进制串值（manifest_sha256），A 的 step12 现 schema（KEY_RE 单点+value 必须 int）收不了——合流批放宽 ci/step12_check.py：KEY_RE 改 ^[a-z0-9_]+(\\.[a-z0-9_]+)+$（域路径允许多段、仍须限定名），value 按登记值类型分判（int 走原整数复算、str 走 stdout 串比对——sha256 十六进制串逐字符相等才绿）。放宽只增可表达面、不放松「逐键复算==登记值」纪律（漂移即红不变）；键名不改（改键名=制造新的跨文书漂移）。另：g0b 的 step3 pre-step 通告行原带「== stepN」前缀曾与登记行计数碰撞（14→15 假漂移），合流批把通告行改措辞避开登记行模式；2026-10-31 起门数账数执行事实、登记行走 xcheck 双向绑定（凭空多登记行同样红），该类碰撞面由绑定硬核兜底。retro.corpus_total（红队三波语料 168）未入本表：其正本 /tmp/af-rt-retro-corpus.json 为易失路径且违反 /tmp 分流白名单纪律（AGENT.md 硬纪律 7），step12 SPEC §⑧.3 已登记为裁决点——语料迁耐久路径后同批补键。",
+  "_note": "numbers.json（G0 逃逸加固批 step12 计数复算门；2026-10-28 A 组落本仓 af-wt-g0a/g0a，合流批 af-wt-g0merge/g0merge 随各 merge commit 同批更新门数账三键）。全部 value 为本树实算值、source 命令在本树可复跑（cwd 缺省=仓根）。部署形态：run.sh step12 以 --repo=$AF_ROOT 调用，本文件与 ci/run.sh 同一提交更新（门数账自举纪律：run.sh 加 step 当批必须同改 gates.* 键，否则 step12 自红——防「为防再发而堆门」失控，红队复盘 PP4:292）。【2026-10-31 修复批（红队「摘门保牌」发现：静默删 step13b/13c 调用与 step14 machine_batch 执行调用、保留 echo 登记行，step12 复算与 xcheck 门数对账全绿）】gates.ci_steps/ci.steps_total/gates.ci_hard 三键 source 由登记行计数改执行事实口径（step 助手调用行 + 执行重定向行 `> \"$OUT/stepN.log\"`，槽位集合去重；值 14/14/13 不变），新增 gates.ci_step13_subgates=3/gates.ci_step14_subgates=3 两钉键补槽位集合口径看不见的共宿槽子门摘除面；登记行降级为对照面、由 ci/xcheck.py gates-exec-binding 双向绑定硬核。键集=A 组 11 键 ∪ B 组 3 键 ∪ 本批 2 键=16 键。B 组（g0b）2026-10-28 补合流：其 numbers.json 贡献件与本文件取并集后交 step12 跑。【合流批 schema 放宽裁决（B 报告 §七/g0b _note 预告的 add/add 冲突点，按 B 建议办、勿绕过】：终稿键名含双点域路径（fv.kani_inv_harness.count）与十六进制串值（manifest_sha256），A 的 step12 现 schema（KEY_RE 单点+value 必须 int）收不了——合流批放宽 ci/step12_check.py：KEY_RE 改 ^[a-z0-9_]+(\\.[a-z0-9_]+)+$（域路径允许多段、仍须限定名），value 按登记值类型分判（int 走原整数复算、str 走 stdout 串比对——sha256 十六进制串逐字符相等才绿）。放宽只增可表达面、不放松「逐键复算==登记值」纪律（漂移即红不变）；键名不改（改键名=制造新的跨文书漂移）。另：g0b 的 step3 pre-step 通告行原带「== stepN」前缀曾与登记行计数碰撞（14→15 假漂移），合流批把通告行改措辞避开登记行模式；2026-10-31 起门数账数执行事实、登记行走 xcheck 双向绑定（凭空多登记行同样红），该类碰撞面由绑定硬核兜底。retro.corpus_total（红队三波语料 168）未入本表：其正本 /tmp/af-rt-retro-corpus.json 为易失路径且违反 /tmp 分流白名单纪律（AGENT.md 硬纪律 7），step12 SPEC §⑧.3 已登记为裁决点——语料迁耐久路径后同批补键。【2026-11-02 RT-E81 修复批（红队终局轮 RT-E81「修复只补了正则枚举、没做名册绑定」）：step14 子门钉键三臂化——gates.ci_step14_subgates 改由单点名册 ci/subgates.list 生成（名册逐件在场数）+ 新增 gates.ci_step14_subgates_regex（正则计数对照臂）与 gates.ci_step14_subgates_roster（名册计数）；ci/step12_check.py 第④节断言三者一致 + 名册集合==run.sh step14 槽接线集合（双向）+ 接线行不带弱化标志（--skip-compile/--text-mode），ci/xcheck.py 增子门级在场断言（跨锚），ci/subgates.list 入 ci/baselines/gate-inputs.sha256 钉（名册不可静默增删），mutations/registry.yaml 补 MUT-008..011 四条负向回归探针（同名替换/--skip-compile 弱化 × step12 臂/xcheck 臂）。键集 16→18 键。】",
   "numbers": {
     "gates.ci_steps": {
       "value": 14,
@@ -39,10 +39,24 @@
     },
     "gates.ci_step14_subgates": {
       "value": 4,
+      "source": "for n in $(grep -E '^[A-Za-z0-9_]+[[:space:]]*$' ci/subgates.list); do grep -vE '^[[:space:]]*#' ci/run.sh | grep -cE \"python3( -B)? ci/$n\\.py\"; done | awk '{s+=($1>0?1:0)} END{print s+0}'",
+      "unit": "子检查",
+      "last_recomputed": "2026-11-02",
+      "note": "step14 共宿槽子检查接线数钉键（红队 2026-10-31「摘门保牌」发现修复新增；2026-11-02 RT-E81 修复批改版）：本键 source **由单点名册 ci/subgates.list 生成**（名册逐件在场数——名册每件在 ci/run.sh 有非评论接线行即计 1）。14a branches_check / 14b xcheck / 14c criteria_check / 14d strategies_check 四件。【RT-E81 修复史实】初版 source 是手写正则枚举：「同名替换」攻击把 14d 的 `ci/strategies_check.py` 调用行换成 `ci/xcheck.py` 时枚举内仍 4 行匹配、复算值不变、step12 与 xcheck gates-exec-binding 全链照绿——14d 子门（策略库 schema+并集 index 完备性/计数对账+af-dsl 编译断言）实际静默消失（假绿复现在案）。本键改由名册生成后，摘门/同名替换即名册逐件在场数 4→3 漂移红；名册本体不可静默收缩由 ci/gate_inputs_check.sh 的 sha256 钉承担（ci/subgates.list 已入 GATE_INPUTS 清单）。三臂（名册计数/正则计数/名册逐件在场数）由 ci/step12_check.py 第④节断言三者一致；名册集合==ci/run.sh step14 槽实际接线集合（双向）与接线行不带弱化标志（--skip-compile/--text-mode）由 step12 与 ci/xcheck.py 互为跨锚硬核。增删子检查须同批改本键+两辅助键+名册+钉文件（门数账自举纪律）。"
+    },
+    "gates.ci_step14_subgates_regex": {
+      "value": 4,
       "source": "grep -cE '^  \\(cd \"\\$AF_ROOT\" && python3( -B)? ci/(branches_check|xcheck|criteria_check|strategies_check)' ci/run.sh",
       "unit": "子检查",
       "last_recomputed": "2026-11-02",
-      "note": "step14 共宿槽子检查接线数钉键（红队 2026-10-31「摘门保牌」发现修复新增）：14a branches_check / 14b xcheck / 14c criteria_check / 14d strategies_check 四条 `(cd \"$AF_ROOT\" && python3 … ci/…)` 机数（14d 带 -B 标志，正则 python3( -B)? 容纳）。【2026-11-02 修复：初版正则漏枚举 strategies_check——初版枚举仅 14a/b/c 三件，整门摘除 14d 行后复算仍 3==登记 3，step12+xcheck gates-exec-binding 全链照绿（该假绿复现在案）；补枚举后删任一子检查行即 4→3 红】step14 执行调用本身（`machine_batch > \"$OUT/step14.log\"`）由 gates.ci_steps 槽位口径+xcheck gates-exec-binding 绑定钉死（删调用即槽 14 执行缺席红）；本键钉函数体内子检查接线（deliverables.yaml G0-M10/11/12 的 grep_present 只能验「字样在场」、验不了逐条接线数，与本键互补）。增删子检查须同批改本键。"
+      "note": "step14 子门正则计数**对照臂**（RT-E81 修复批新增）：手写正则枚举 branches_check|xcheck|criteria_check|strategies_check 的接线行计数——与 gates.ci_step14_subgates（名册生成臂）、gates.ci_step14_subgates_roster（名册计数臂）三者由 ci/step12_check.py 第④节断言一致。对照臂的作用：名册漏枚举（新增子门只改名册未改正则）即 名册计数≠正则计数 红；名册外的接线行（名册外多件）由 step12/xcheck 的集合双向对账另行硬红。"
+    },
+    "gates.ci_step14_subgates_roster": {
+      "value": 4,
+      "source": "grep -cE '^[A-Za-z0-9_]+[[:space:]]*$' ci/subgates.list",
+      "unit": "子检查",
+      "last_recomputed": "2026-11-02",
+      "note": "step14 子门单点名册计数（RT-E81 修复批新增）：ci/subgates.list 的条目数——名册是 step14 子门全集的**唯一正本**（与 gates.ci_step14_subgates 的名册生成臂、gates.ci_step14_subgates_regex 的对照臂三者一致；名册文件本体由 ci/baselines/gate-inputs.sha256 钉住，静默增删即漂移红）。"
     },
     "redlist.count": {
       "value": 23,
@@ -108,7 +122,7 @@
       "note": "B2：9b 正本（ci/baselines/kani-inv-harness.manifest）整文件哈希——正本被手改而本键未同步即漂移红（与 ci/baselines/mutations-registry.sha256 同一「防悄悄改基线」纪律）。值=十六进制串：step12 schema 已由合流批放宽（KEY_RE 允许多点域路径、value 允许十六进制串逐字符比对，见本文件 _note 裁决），本键按 str 类型逐键复算；sha 的运行时对账另有 baseline_calc.sh verify-kani（run.sh 9b 每次实跑）双保险。"
     },
     "mutations.probes": {
-      "value": 7,
+      "value": 11,
       "source": "python3 -c \"import json;print(len(json.load(open('mutations/registry.yaml', encoding='utf-8'))['probes']))\"",
       "unit": "探针",
       "last_recomputed": "2026-11-02",

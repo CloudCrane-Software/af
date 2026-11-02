@@ -28,6 +28,7 @@
 #   其消费契约由 step10 的 evidence 机制承载（登记即对账、缺席/篡改即红），靶验证实见合流报告自检①。
 # 已知自指限制：本清单无法给自身记 sha256（deliverables.yaml 是证据件亦是清单件）——G0-S01 的
 #   证据改挂 schema 的强制载体 ci/step10_check.py；本文件完整性由 git 提交面 + step10 解析复算承载。
+# 证据 sha 同批维护（2026-11-02 红队终局轮 RT-E81 修复批）：ci/subgates.list（step14 子门单点名册，新增件，随批入库）+ci/step12_check.py（G0-M03，第④节名册绑定：三者一致+名册集合双向对账+接线行弱化标志硬核）+ci/xcheck.py（G0-M11，subgates-roster-binding 子门级在场断言）+ci/mutation_runner.sh（G0-M06，新增 edit-replace-lines 变异动作：同名替换/接线弱化两类逃逸形态的回归探针可机械化施加）+numbers.json（G0-S03，step14 子门钉键三臂化：gates.ci_step14_subgates 改由名册生成 + gates.ci_step14_subgates_regex 正则对照臂 + gates.ci_step14_subgates_roster 名册计数；mutations.probes 7→11）五件同批改版，sha256 随批更新；同批 mutations/registry.yaml +4 探针（MUT-008..011）、ci/baselines/mutations-registry.sha256 与 ci/baselines/gate-inputs.sha256 重钉。
 version: 1
 window_days: 7
 sources:
@@ -72,7 +73,7 @@ items:
     status: done
     source: S1
     evidence_path: ci/step12_check.py
-    evidence_sha256: 958e8188c431f07f442cec690b96d43967e9fec2883307c00bc7a069fc5fcaad
+    evidence_sha256: 06c26fd3867084871f2e77c6edfd504a3bc85417110feb43897316a9e1d25d86
     window_kind: git
     check:
       kind: grep_present
@@ -108,7 +109,7 @@ items:
     status: done
     source: S1
     evidence_path: ci/mutation_runner.sh
-    evidence_sha256: 5ac61431fa70776ccc8b62bff94fdf3d532b426251bc93d9ecb25a805acec150
+    evidence_sha256: df0c1bc56e93d2527b76844d64d0b77f0ad4b3fb33f9faeef4863a6a75f73e1b
     window_kind: git
     check:
       kind: grep_present
@@ -168,7 +169,7 @@ items:
     status: done
     source: S1
     evidence_path: ci/xcheck.py
-    evidence_sha256: 628027cb21cb0e2b629742bd386b5968378c18cbe64bdf93aca335ba6ac6d9c4
+    evidence_sha256: ce3f60c205ec6e8f111b4d9ba323d504e81f32a348fe56d16661d4c7749c9a82
     window_kind: git
     check:
       kind: grep_present
@@ -216,7 +217,7 @@ items:
     status: done
     source: S2
     evidence_path: numbers.json
-    evidence_sha256: e5f206e8bdf025a331648c4ac07d9910829235b4ad833e7b6c930056ba8f7966
+    evidence_sha256: 33c23c63dc8ba60be479eb5ce398c61d9e194ded423d933ec473c14a827439ed
     window_kind: git
     check:
       kind: grep_present

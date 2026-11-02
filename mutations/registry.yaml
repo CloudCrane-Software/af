@@ -155,6 +155,98 @@
         "stderr_contains": "判分链登记表被收缩",
         "_doc_expect": "登记表收缩后 k5-path-lint 的「判分链必需成员下界」对账缺 crates/af-execline/src/judge.rs → sys.exit(1)、stderr 含「判分链登记表被收缩」（修复前该变异 lint PASS「3 件」exit 0）"
       }
+    },
+    {
+      "id": "MUT-008",
+      "description": "同名替换摘门必须红·step12 臂（红队终局轮 RT-E81 发现回归探针，2026-11-02 修复批入册）：把 ci/run.sh 中 14d 的 `(cd \"$AF_ROOT\" && python3 -B ci/strategies_check.py); rc_d=$?` 换成 `(cd \"$AF_ROOT\" && python3 -B ci/xcheck.py); rc_d=$?`（14d 策略库门被 xcheck 顶替——子门数不变、钉键手写正则枚举仍数到 4、策略库 schema+index 完备性+计数对账+af-dsl 编译断言门实际静默消失）后，step12 计数复算必须以 exit 1 红——单点名册 ci/subgates.list 的 strategies_check 件在 ci/run.sh 无非评论接线行（名册逐件在场数 4→3），且三者一致断言（名册计数==正则计数==名册逐件在场数）不成立（修复前该变异 step12 全绿复现在案）",
+      "action": "edit-replace-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "replace_patterns": [
+          {
+            "pattern": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/strategies_check\\.py\\); rc_d=\\$\\?$",
+            "replace": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/xcheck\\.py\\); rc_d=\\$\\?$"
+          }
+        ],
+        "_doc_args": "一条正则=14d 策略库调用行；替换为同名 xcheck 调用行（子门数不变、正则枚举仍数到 4）。任一零命中=正本漂移、探针源失效即红（fail-closed）"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "名册逐件在场数 4→3 与登记 4 漂移（gates.ci_step14_subgates 名册生成 source）+ 三者一致断言红 → step12 硬红 exit 1（全绿为 0，不满足期望=探针红）"
+      }
+    },
+    {
+      "id": "MUT-009",
+      "description": "同名替换摘门必须红·xcheck 臂（红队终局轮 RT-E81 发现回归探针，2026-11-02 修复批入册）：同 MUT-008 变异（14d 策略库调用行被同名 xcheck 调用行顶替）后，xcheck 必须以 exit 1 + subgates-roster-binding 硬红——单点名册 ci/subgates.list 的 strategies_check 件在 ci/run.sh 无非评论接线行（名册逐件在场面）；修复前该变异 xcheck 硬项全绿复现在案",
+      "action": "edit-replace-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "replace_patterns": [
+          {
+            "pattern": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/strategies_check\\.py\\); rc_d=\\$\\?$",
+            "replace": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/xcheck\\.py\\); rc_d=\\$\\?$"
+          }
+        ],
+        "_doc_args": "同 MUT-008"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "subgates-roster-binding 硬红（名册件 strategies_check 缺席）→ exit 1"
+      }
+    },
+    {
+      "id": "MUT-010",
+      "description": "接线弱化必须红·step12 臂（红队终局轮 RT-E81 发现回归探针，2026-11-02 修复批入册）：把 ci/run.sh 中 14d 的调用行改为 `(cd \"$AF_ROOT\" && python3 -B ci/strategies_check.py --skip-compile); rc_d=$?`（R4 af-dsl 编译断言面被静默关闭、子门数与钉键计数不变）后，step12 计数复算必须以 exit 1 红——名册件的接线行带弱化标志 --skip-compile 即红（修复前该变异 step12 全绿、且门自身仍宣称「编译断言经 af-dsl 装载测试」复现在案）",
+      "action": "edit-replace-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "replace_patterns": [
+          {
+            "pattern": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/strategies_check\\.py\\); rc_d=\\$\\?$",
+            "replace": "  (cd \"$AF_ROOT\" && python3 -B ci/strategies_check.py --skip-compile); rc_d=$?"
+          }
+        ],
+        "_doc_args": "一条正则=14d 策略库调用行；替换为带 --skip-compile 的同款调用行"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "名册件接线行带弱化标志 --skip-compile → step12 硬红 exit 1"
+      }
+    },
+    {
+      "id": "MUT-011",
+      "description": "接线弱化必须红·xcheck 臂（红队终局轮 RT-E81 发现回归探针，2026-11-02 修复批入册）：同 MUT-010 变异（14d 调用行加 --skip-compile 关闭 R4 af-dsl 编译断言面）后，xcheck 必须以 exit 1 + subgates-roster-binding 硬红——名册件的接线行带弱化标志即红",
+      "action": "edit-replace-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "replace_patterns": [
+          {
+            "pattern": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/strategies_check\\.py\\); rc_d=\\$\\?$",
+            "replace": "  (cd \"$AF_ROOT\" && python3 -B ci/strategies_check.py --skip-compile); rc_d=$?"
+          }
+        ],
+        "_doc_args": "同 MUT-010"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "subgates-roster-binding 硬红（接线行带 --skip-compile）→ exit 1"
+      }
     }
   ]
 }

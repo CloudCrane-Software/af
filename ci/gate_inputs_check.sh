@@ -56,6 +56,8 @@ GATE_INPUTS=(
   "ci/budget-cast-whitelist.json"      # budget_cast_lint.py:196
   # —— 债务登记册镜像（ci/arm_wiring_check.py:42 / ci/budget_cast_lint.py 消费）——
   "ci/debt-register.md"
+  # —— step14 子门单点名册（红队终局轮 RT-E81 修复批，2026-11-02）——
+  "ci/subgates.list"                    # step14 子门全集正本（step12 名册绑定 + xcheck 子门级断言消费）
 )
 # 全集自动守卫的显式例外（逐件登记，脚本 diff 即评审面；不得静默漏钉）
 GATE_INPUT_EXCLUSIONS=(

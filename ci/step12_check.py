@@ -13,6 +13,12 @@
      b. watch 手写计数对值：正则命中已知度量名（含汉字数词映射）即与 numbers.json
         对值，不符即红；skip_pattern 命中处豁免（勘误/历史行——AGENT.md:27/87 实测：
         同一行既含现行「九门」又含勘误注记「六门」，须窗口级豁免而非行级）。
+  ④ step14 子门名册绑定（红队终局轮 RT-E81 修复批，2026-11-02）：子门全集以单点
+     名册 ci/subgates.list 为唯一正本（钉键 source 由名册生成）——断言
+     「名册计数 == 正则计数 == 名册逐件在场数」三者一致，且名册集合 == ci/run.sh
+     step14 槽实际接线集合（双向：名册外多件/名册内缺件均红），且名册每件的接线行
+     不带弱化标志（--skip-compile/--text-mode）。修前钉键是手写正则枚举，「同名替换」
+     攻击（14d 的 ci/strategies_check.py 调用行换成 ci/xcheck.py）复算值不变、全链照绿。
 退出码：0=全过；1=计数红；2=基础设施缺件。
 """
 import argparse
@@ -25,6 +31,22 @@ import sys
 
 KEY_RE = re.compile(r'^[a-z0-9_]+(\.[a-z0-9_]+)+$')
 PLACEHOLDER_RE = re.compile(r'\{\{numbers\.([A-Za-z0-9_.]+)\}\}')
+
+# ---- ④ step14 子门名册绑定（RT-E81 修复批）常量 ----
+# 名册正本（相对仓根）：每行一个子检查脚本名（不含 .py），# 起始为注释行。
+ROSTER_REL = os.path.join('ci', 'subgates.list')
+# 名册条目字面口径（与 numbers.json gates.ci_step14_subgates_roster 的 source
+# 「grep -cE '^[A-Za-z0-9_]+[[:space:]]*$'」逐字一致——两边口径不同即红）。
+ROSTER_ENTRY_RE = re.compile(r'^[A-Za-z0-9_]+$')
+# step14 槽接线抽取：`(cd "$AF_ROOT" && python3 [-B] ci/<name>.py …)` 形态。
+# 该形态在 ci/run.sh 中**仅**出现在 step14 machine_batch 块（step10/11/12 走
+# `step N "…" -- bash -c "cd '…' && python3 …"` 续行形态，不命中本式）——故本式
+# 即「step14 子门实际接线集合」的全量动态枚举（不依赖手写子门名单）。
+SUBGATE_WIRE_RE = re.compile(
+    r'^[ \t]*\(?cd "\$AF_ROOT" && python3(?:\s+-\S+)*\s+ci/(?P<name>[A-Za-z0-9_]+)\.py')
+# 接线行弱化标志（出现即红）：--skip-compile=关掉 strategies_check 的 R4 af-dsl
+# 编译断言面；--text-mode=门判据降级为文本模式（yaml 库缺席时的宽松路径）。
+WEAKEN_FLAGS = ('--skip-compile', '--text-mode')
 
 
 def main():
@@ -51,6 +73,7 @@ def main():
         return 2
 
     red = []
+    recomputed = {}          # 键 -> 本次复算值（int 键；第④节名册三臂对账消费）
 
     def bad(msg):
         red.append(msg)
@@ -83,6 +106,7 @@ def main():
             except (ValueError, IndexError):
                 bad(f"[{key}] 来源命令不可机数（rc={r.returncode}, out={out!r}）")
                 continue
+            recomputed[key] = got
             same = got == want
         if not same:
             bad(f"[{key}] 复算值漂移：登记={want} 复算={got}（{cmd}）"
@@ -139,12 +163,108 @@ def main():
                     else:
                         print(f"OK  {d}:{ln} 「{m.group(0)}」== numbers.{key}={want}")
 
+    # ④ step14 子门名册绑定（红队终局轮 RT-E81 修复批，2026-11-02）
+    #   钉键三臂：gates.ci_step14_subgates_roster（名册计数，source 由名册生成）/
+    #   gates.ci_step14_subgates（名册逐件在场数，source 由名册生成）/
+    #   gates.ci_step14_subgates_regex（正则计数，手写枚举对照臂）——三者必须一致；
+    #   且名册集合 == ci/run.sh step14 槽实际接线集合（双向）；且接线行不带弱化标志。
+    #   fail-closed：名册/接线对照面缺席一律红（防护的对照面缺席=防护失效，不得当绿）。
+    roster_path = os.path.join(args.repo, ROSTER_REL)
+    run_sh_path = os.path.join(args.repo, 'ci', 'run.sh')
+    roster = []
+    roster_err = []
+    if not os.path.isfile(roster_path):
+        roster_err.append(f"名册缺席：{ROSTER_REL}——子门全集无正本可比对，fail-closed 红")
+    else:
+        for ln, raw in enumerate(
+                open(roster_path, encoding='utf-8', errors='replace'), 1):
+            s = raw.strip()
+            if not s or s.startswith('#'):
+                continue
+            if not ROSTER_ENTRY_RE.match(s):
+                roster_err.append(f"{ROSTER_REL}:{ln} 名册条目非法：{s!r}"
+                                  f"（只允许 [A-Za-z0-9_]+ 子门名）")
+                continue
+            roster.append(s)
+        if not roster and not roster_err:
+            roster_err.append(f"名册为空：{ROSTER_REL}——子门全集无正本可比对，fail-closed 红")
+        dup = sorted({n for n in roster if roster.count(n) > 1})
+        if dup:
+            roster_err.append(f"名册重复条目：{dup}——重名会稀释逐件在场判定")
+    for m in roster_err:
+        bad(f"[ci/subgates.list] {m}")
+
+    # 名册逐件在场：名册每件在 ci/run.sh 有非注释接线行（评论行不算接线——修前 run.sh
+    # 头注里残留 `ci/strategies_check.py` 字样，naive grep 会把「只剩注释」误判为在场）。
+    wired = {}          # 子门名 -> [(行号, 行文本)]
+    if not os.path.isfile(run_sh_path):
+        bad(f"[ci/subgates.list] ci/run.sh 缺席：{run_sh_path}——名册逐件在场无对照面，"
+            f"fail-closed 红")
+    else:
+        for ln, line in enumerate(
+                open(run_sh_path, encoding='utf-8', errors='replace'), 1):
+            if line.lstrip().startswith('#'):
+                continue
+            m = SUBGATE_WIRE_RE.match(line)
+            if m:
+                wired.setdefault(m.group('name'), []).append((ln, line))
+        if not wired:
+            bad("[ci/subgates.list] ci/run.sh 中零条 step14 子门接线行——接线抽取口径失效，"
+                "fail-closed 红（对照面缺席=防护失效）")
+        for name in roster:
+            if name not in wired:
+                bad(f"[ci/subgates.list] 名册件缺席：{name}（ci/run.sh 无其非注释接线行）"
+                    f"——摘门/改名形态（策略库 14d 门同型：调用行被替换或删除即红）")
+            for ln, line in wired.get(name, []):
+                for flag in WEAKEN_FLAGS:
+                    if flag in line:
+                        bad(f"[ci/subgates.list] 名册件 {name} 的接线行带弱化标志 {flag}"
+                            f"（ci/run.sh:{ln}）——弱化即静默关门，禁（"
+                            f"--skip-compile 关 R4 af-dsl 编译断言面；--text-mode 判据降级）")
+        extra = sorted(set(wired) - set(roster))
+        if extra:
+            bad(f"[ci/subgates.list] 名册外多件：{extra}（ci/run.sh step14 槽接线了名册未登记的"
+                f"子检查）——子门全集漏造册，须同批补名册+钉键+钉文件")
+
+    # 三者一致：名册计数 == 正则计数 == 名册逐件在场数（复算值口径，非登记值口径——
+    # 登记值一律由上面逐键复算段核对过，此处对账的是三臂彼此相等）。
+    arms = (('gates.ci_step14_subgates_roster', '名册计数'),
+            ('gates.ci_step14_subgates_regex', '正则计数'),
+            ('gates.ci_step14_subgates', '名册逐件在场数'))
+    arm_vals = []
+    for key, label in arms:
+        if key not in numbers:
+            bad(f"[ci/subgates.list] 钉键缺席：{key}（{label}）——三臂对账缺臂，fail-closed 红")
+            arm_vals.append(None)
+            continue
+        v = recomputed.get(key)
+        if v is None:
+            bad(f"[ci/subgates.list] 钉键 {key}（{label}）本轮无可用复算值——三臂对账缺臂，"
+                f"fail-closed 红")
+            arm_vals.append(None)
+            continue
+        arm_vals.append(v)
+    if all(v is not None for v in arm_vals):
+        if len(set(arm_vals)) != 1:
+            bad(f"[ci/subgates.list] 三者不一致：名册计数={arm_vals[0]} 正则计数={arm_vals[1]} "
+                f"名册逐件在场数={arm_vals[2]}——名册/正则枚举/逐件在场三者任一不等即红")
+        else:
+            print(f"OK  [ci/subgates.list] 三者一致：名册计数==正则计数==名册逐件在场数"
+                  f"=={arm_vals[0]}")
+    if roster and set(wired) == set(roster):
+        print(f"OK  [ci/subgates.list] 名册集合 == ci/run.sh step14 槽接线集合："
+              f"{sorted(roster)}")
+    elif roster:
+        bad(f"[ci/subgates.list] 名册集合 != ci/run.sh step14 槽接线集合："
+            f"名册={sorted(set(roster))} 接线={sorted(set(wired))}——双向差集即红")
+
     print(f"step12 计数复算: keys={len(numbers)} watch={len(doc.get('watch', []))} "
           f"docs={len(args.docs)} 红={len(red)}")
     if red:
         print("step12 FAIL: 计数口径漂移（逐条 RED 见上）")
         return 1
-    print("step12 PASS: 全部限定名键复算一致、占位符可解析、手写计数对值")
+    print("step12 PASS: 全部限定名键复算一致、占位符可解析、手写计数对值、"
+          "step14 子门名册绑定三者一致")
     return 0
 
 

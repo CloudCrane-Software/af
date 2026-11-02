@@ -202,6 +202,83 @@ def check_gates(agent_md, run_sh):
     rec("gates-g0-erratum", ok2, d2)
 
 
+# ---- step14 子门名册绑定（红队终局轮 RT-E81 修复批，2026-11-02） ----
+# 名册正本=ci/subgates.list（step14 子门全集，sha256 钉于 ci/baselines/gate-inputs.sha256
+# ——名册被静默增删即钉漂移红）。与 ci/step12_check.py 第④节互为跨锚：step12 断
+# 「名册计数==正则计数==名册逐件在场数」三者一致，本门断「名册每件在 run.sh 有非注释
+# 接线行 + 名册集合==接线集合（双向）+ 接线行不带弱化标志」。
+SUBGATE_WIRE_RE = re.compile(
+    r'^[ \t]*\(?cd "\$AF_ROOT" && python3(?:\s+-\S+)*\s+ci/(?P<name>[A-Za-z0-9_]+)\.py')
+ROSTER_ENTRY_RE = re.compile(r'^[A-Za-z0-9_]+$')
+WEAKEN_FLAGS = ('--skip-compile', '--text-mode')
+
+
+def check_subgates_roster(run_sh_path):
+    """step14 子门名册绑定（硬项）。fail-closed：名册/接线对照面缺席一律红
+    （防护的对照面缺席=防护失效，不得当绿）。"""
+    run_sh = Path(run_sh_path)
+    roster_path = run_sh.parent / "subgates.list"
+    d = []
+    ok = True
+    if not roster_path.is_file():
+        rec("subgates-roster-binding", False,
+            [f"名册缺席：{roster_path}——子门全集无正本可比对，fail-closed 红"
+             f"（防护的对照面缺席=防护失效，不得当绿）"])
+        return
+    roster = []
+    for ln, raw in enumerate(
+            roster_path.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+        s = raw.strip()
+        if not s or s.startswith("#"):
+            continue
+        if not ROSTER_ENTRY_RE.match(s):
+            d.append(f"红：{roster_path.name}:{ln} 名册条目非法 {s!r}"
+                     f"（只允许 [A-Za-z0-9_]+ 子门名）")
+            ok = False
+            continue
+        roster.append(s)
+    if not roster:
+        d.append(f"红：名册为空（{roster_path.name}）——子门全集无正本可比对，fail-closed 红")
+        ok = False
+    dup = sorted({n for n in roster if roster.count(n) > 1})
+    if dup:
+        d.append(f"红：名册重复条目 {dup}——重名稀释逐件在场判定")
+        ok = False
+    wired = {}
+    if not run_sh.is_file():
+        d.append(f"红：ci/run.sh 缺席（{run_sh}）——名册逐件在场无对照面，fail-closed 红")
+        ok = False
+    else:
+        for ln, line in enumerate(
+                run_sh.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            if line.lstrip().startswith("#"):
+                continue
+            m = SUBGATE_WIRE_RE.match(line)
+            if m:
+                wired.setdefault(m.group("name"), []).append((ln, line))
+        if not wired:
+            d.append("红：ci/run.sh 零条 step14 子门接线行——接线抽取口径失效，fail-closed 红")
+            ok = False
+        for name in roster:
+            if name not in wired:
+                d.append(f"红：名册件缺席：{name}（ci/run.sh 无其非注释接线行）"
+                         f"——摘门/同名替换形态（14d 策略库门同型）")
+                ok = False
+            for ln, line in wired.get(name, []):
+                for flag in WEAKEN_FLAGS:
+                    if flag in line:
+                        d.append(f"红：名册件 {name} 的接线行带弱化标志 {flag}"
+                                 f"（ci/run.sh:{ln}）——弱化即静默关门，禁")
+                        ok = False
+        extra = sorted(set(wired) - set(roster))
+        if extra:
+            d.append(f"红：名册外多件 {extra}（step14 槽接线了名册未登记的子检查）"
+                     f"——子门全集漏造册，须同批补名册+钉键+钉文件")
+            ok = False
+    d.append(f"名册 {roster_path.name} = {roster}；ci/run.sh step14 槽接线集合 = {sorted(wired)}")
+    rec("subgates-roster-binding", ok, d)
+
+
 # ------------------------------------------------------- ② packages 计数对账
 def check_packages(readme, components_json):
     rm = read(readme)
@@ -334,6 +411,17 @@ def main():
     args = ap.parse_args()
 
     check_gates(args.agent_md, args.run_sh)
+    # 子门级在场断言（RT-E81 修复批）：独立于 check_gates 的早退分支调用——名册绑定
+    # 是 fail-closed 硬项，不得因 AGENT.md 句式漂移分支的早退而被跳过。
+    # 名册正本=ci/subgates.list（step14 子门全集）；gates-exec-binding 只看**槽**
+    # （step14 一个槽），看不见槽内子门；修前钉键是手写正则枚举——「同名替换」攻击把
+    # 14d 的 `(cd "$AF_ROOT" && python3 -B ci/strategies_check.py)` 换成
+    # `… ci/xcheck.py` 时枚举内仍 4 行匹配、计数不变，本门与 step12 全链照绿，
+    # 14d 子门（策略库 schema+index 完备性/计数对账+af-dsl 编译断言）静默消失。
+    # 本臂：名册每件在 ci/run.sh 有**非注释**接线行（缺件=摘门/同名替换即红）、
+    # 名册集合==step14 槽实际接线集合（双向：名册外多件=漏造册亦红）、
+    # 接线行不带弱化标志（--skip-compile 关 R4 编译断言面；--text-mode 判据降级）。
+    check_subgates_roster(args.run_sh)
     check_packages(args.readme, args.components)
     check_redlist(args.plan_doc, args.expected_fail)
     check_obs_dates({"README": args.doc_readme, "00-总纲": args.doc_zong,
