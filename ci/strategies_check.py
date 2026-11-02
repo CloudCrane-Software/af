@@ -7,6 +7,11 @@ numbers.json gates.ci_steps/ci.steps_total=14、gates.ci_hard=13 与 xcheck 门�
 均不因此改动，符合「禁止堆门」与 G0 批共宿槽先例）。
 
 校验面（对应工单「schema+compilable 条目逐一编译断言+计数与 index 一致」）：
+  R0 入库对账（2026-11-02 耐久性断口修复批新增）：被测对象（strategies/ 全库
+     + af-dsl 编译断言测试件 crates/af-dsl/tests/strategy_library_test.rs）必须
+     在 git 跟踪面内——未跟踪工作树文件=任何 checkout/clean/reset 即静默灭失，
+     干净 checkout 跑已提交的门直接红而本树工作树面照绿（绿灯掩盖，RT-E48/E83
+     同型）。非 git 树形态（导出 tarball/拷贝树）如实 INFO 跳过。
   R1 schema：strategies/ 下每个条目 YAML（st-*.yaml，index.yaml 除外）逐字段
      校验——必填键、枚举闭集（tier∈{A,B}；dsl_state 三态；experiment.status
      五态）、三态↔字段互斥规则（compilable⇒dsl_snippet；needs_syntax⇒
@@ -80,6 +85,98 @@ def nonempty_str(v) -> bool:
 def dash_or_empty(v) -> bool:
     """互斥字段合规形态：缺席、None、或 "-"/空白。"""
     return v is None or (isinstance(v, str) and v.strip() in ("", "-"))
+
+
+# ---------------------------------------------------------------- R0 入库对账
+GIT_TEST_REL = "crates/af-dsl/tests/strategy_library_test.rs"
+
+
+def _git_tracked(rel_paths: set[str]) -> tuple[set[str] | None, str | None]:
+    """返回 (跟踪面内的路径集合, 诊断串)。诊断串非 None = 无法判定（fail-closed）。"""
+    if shutil.which("git") is None:
+        return None, "git 不在 PATH——非 git 树形态（导出 tarball/拷贝树），跳过 R0"
+    try:
+        probe = subprocess.run(
+            ["git", "-C", str(REPO), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, f"git 调用失败：{e}——非 git 树形态，跳过 R0"
+    if probe.returncode != 0 or probe.stdout.strip() != "true":
+        return None, "非 git 工作树（导出 tarball/拷贝树）——跳过 R0"
+    try:
+        ls = subprocess.run(
+            ["git", "-C", str(REPO), "ls-files", "-z", "--", "strategies", GIT_TEST_REL],
+            capture_output=True, text=True, timeout=120,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, f"git ls-files 调用失败：{e}"
+    if ls.returncode != 0:
+        return None, f"git ls-files 失败（exit={ls.returncode}）——无法确认被测对象入库状态"
+    return {p for p in ls.stdout.split("\0") if p}, None
+
+
+def check_durability() -> None:
+    """R0 被测对象入库对账（2026-11-02 耐久性断口修复批）。
+
+    逃逸形态（本门自身复现的实测断口）：门脚本 ci/strategies_check.py 已随批
+    入库，而被它检查的 strategies/ 全库与 af-dsl 编译断言测试件仍是**未跟踪
+    工作树文件**——任何 checkout/clean/reset 即静默灭失，干净 checkout 跑已
+    提交的门直接红（实测：git archive HEAD 的树内 strategies/ 缺席 →
+    「[FAIL] strategies/ 目录不存在」→ GATE_RC=1），而本树工作树面照绿：
+    绿灯掩盖（RT-E48/E83 同型，本域新面）。
+
+    本检查把「被测对象必须被 git 跟踪」变成门内硬红：在场却未跟踪 = 门在假
+    工作树上绿、在任何真实 checkout 上红（静默灭失通道当场显形）。
+
+    严重度分档（避免与提交动作循环）：
+      · 未跟踪（不在 git 跟踪面）→ 硬红：git clean/checkout 即灭失。
+      · 已暂存未提交 → INFO：checkout/clean 不灭失，但 CI 以提交态 checkout
+        复跑，仍须随批提交（提交态缺件由 R1「strategies/ 缺席」当场红）。
+      · 非 git 树（导出 tarball/拷贝树、无 git 可执行文件）→ INFO 跳过：
+        R1-R4 判定语义不变（本门在非 git 形态下仍可用）。
+    """
+    tracked, diag = _git_tracked(set())
+    if tracked is None:
+        info(f"R0 入库对账跳过：{diag}（不改变 R1-R4 判定）")
+        return
+
+    # 盘面集合：strategies/ 下全部文件 + af-dsl 编译断言测试件
+    on_disk = {p.relative_to(REPO).as_posix() for p in STRATS.rglob("*") if p.is_file()}
+    test_path = REPO / GIT_TEST_REL
+    if test_path.is_file():
+        on_disk.add(GIT_TEST_REL)
+    else:
+        err(f"R0 af-dsl 编译断言测试件缺席：{GIT_TEST_REL}——"
+            f"cargo test --test strategy_library_test 无此靶（编译断言面失效）")
+
+    untracked = sorted(rel for rel in on_disk if rel not in tracked)
+    for rel in untracked:
+        err(f"R0 被测对象未入库（未跟踪工作树文件）：{rel}——门脚本已入库而数据未入库="
+            f"任何 checkout/clean/reset 即静默灭失，干净 checkout 跑已提交的门直接红"
+            f"（RT-E48/E83 同型）；修法=git add 后随批提交")
+    if not untracked:
+        info(f"R0 入库对账 OK：被测对象 {len(on_disk)} 件全部在 git 跟踪面内"
+             f"（strategies/ 全库 + {GIT_TEST_REL}）")
+    head = _head_files()
+    staged_only = sorted(rel for rel in on_disk if rel in tracked and rel not in head)
+    if staged_only:
+        info(f"R0 提醒：{len(staged_only)} 件被测对象已暂存未提交（{staged_only[:3]}…）"
+             f"——随批提交后方入 CI 提交态 checkout")
+
+
+def _head_files() -> set[str]:
+    """HEAD 提交树内的路径集合（失败时返回空集——只影响 INFO 提醒，不影响判定）。"""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(REPO), "ls-tree", "-r", "--name-only", "HEAD"],
+            capture_output=True, text=True, timeout=120,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return set()
+    if proc.returncode != 0:
+        return set()
+    return {p for p in proc.stdout.splitlines() if p}
 
 
 # ---------------------------------------------------------------- R1 schema
@@ -342,6 +439,8 @@ def main() -> int:
     files = sorted(p for p in STRATS.glob("st-*.yaml") if p.is_file())
     if not files:
         err("strategies/ 无条目 YAML——库为空（空库=覆盖面缩水）")
+
+    check_durability()
 
     disk_states: dict[str, str] = {}
     disk_tiers: dict[str, str] = {}

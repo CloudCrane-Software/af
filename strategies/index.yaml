@@ -63,7 +63,9 @@ entries:
   - { id: st-b-C057, file: st-b-C057.yaml, tier: B, topic: 工具与接口, dsl_state: compilable, rank: 57 }
   - { id: st-b-C056, file: st-b-C056.yaml, tier: B, topic: 规划与分解, dsl_state: compilable, rank: 58 }
   - { id: st-b-C079, file: st-b-C079.yaml, tier: B, topic: 执行与沙箱, dsl_state: needs_syntax, rank: 59 }
+  - { id: st-C122, file: st-C122.yaml, tier: C, topic: "记忆", dsl_state: needs_syntax, rank: 70 }
+  - { id: st-C103, file: st-C103.yaml, tier: C, topic: "多agent协同", dsl_state: needs_syntax, rank: 81 }
 counts:
-  total: 59
-  tiers: { A: 11, B: 48 }
-  dsl_states: { compilable: 32, needs_syntax: 10, not_applicable: 17 }
+  total: 61
+  tiers: { A: 11, B: 48, C: 2 }
+  dsl_states: { compilable: 32, needs_syntax: 12, not_applicable: 17 }

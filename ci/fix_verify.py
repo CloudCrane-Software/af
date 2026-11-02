@@ -19,9 +19,20 @@
     2026-10-31 原样攻击同形），跑该树自己的 ci/xcheck.py → 必须 exit=1 且
     [FAIL] gates-g0-erratum（全红才判该树带修复）；对照臂（未篡改 run.sh）必须
     不红（exit≠1）。篡改件只落临时目录，仓内正本零改动。
-  机制③ 单源对账：ci/xcheck.py 以**主干基线 ref**（--base-ref，缺省 phase2）为
-    正本，各在役树 ci/xcheck.py 逐件 sha256 对账，分叉即红；非在役（存档/并行）
+  机制③ 单源对账（门族全集，2026-11-03 扩）：门族面以**主干基线 ref**
+    （--base-ref，缺省 phase2）为正本——门码面(ci/ 全集，排除运行证据面 ci/out/
+    与历史快照面 *.bak) + 判据/证据自指正本(numbers.json / deliverables.yaml /
+    doc-claims.txt) + 策略正本数据面(strategies/ 全库 + af-dsl 编译断言测试件)，
+    各在役树**逐件**双核对账（提交面 git blob oid + 工作树面 sha256），
+    分叉/缺件/多余件一律硬红；正本面派生自基线 ref 本身（不手填清单——手填
+    清单会随门族增删而陈年化，退化为 RT-E6/E51「只钉 6 件」的同型漏钉）；
+    关键门本体缺席=基线删件/改名→对账范围静默缩水→红。非在役（存档/并行）
     树若带门码，其 sha256 必须在名册显式钉住（钉值漂移=静默改门即红）。
+    【扩面缘由】原实现只对账 ci/xcheck.py 一个门码文件——CI 门族另外 3 个本体
+    （ci/strategies_check.py / ci/provenance_check.sh / ci/branches_check.py）
+    与 strategies/ 正本在基线与在役树之间双向分叉时本门照绿（假绿：门判
+    「绿 19 / 红 0」exit=0），而 2026-11-02「耐久性断口」修复只在 g0merge
+    一棵树（基线与在役活跃树皆无）。
   机制② 落库收口：修复本体（门码 + 本收口门本体）必须在主干基线 ref 上在场
     ——内容级判定（跨树 cherry-pick 后 commit 拓扑不同、内容同，拓扑判定会误红）：
     基线含修复 ⇒ SIL 回写树按 wb_base 重建时必带修复 ⇒ 回滚不再灭失。
@@ -57,6 +68,45 @@ ANCHOR_RED = "整槽连摘"
 SLOTS = (10, 11, 12)
 # 篡改后必须硬红的门名（ci/xcheck.py 的硬项名）
 MUST_RED = "gates-g0-erratum"
+
+# ==========================================================================
+# 门族全集（机制③扩）——本门对账面的定义
+# ==========================================================================
+# 【本节为何存在（红队确证：跨树收口门 fix_verify.py 只对账 1 个门码文件）】
+# 本门原实现的机制③只对账 ci/xcheck.py 一个门码文件、机制②只锚 ci/xcheck.py 的
+# 两个字符串 + numbers.json 的 ci.steps_total 键。而 CI 门族另外 3 个本体
+# （ci/strategies_check.py / ci/provenance_check.sh / ci/branches_check.py）
+# 与策略正本数据面（strategies/ 全库）在「主干基线 phase2」与在役树之间**双向
+# 分叉**时，本门照绿——假绿：
+#   · 2026-11-02「耐久性断口」修复（R0 入库对账 + strategies/ 全库入库）只在
+#     g0merge 一棵树（主干基线与在役活跃树皆无）——而 SIL 守护的重建基线就是
+#     phase2（tools/self-improve-loop.py:262 "wb_base": _env("SIL_WB_BASE",
+#     "phase2")），重建即重建出无该修复的树；
+#   · 反向亦成立：phase2 的 provenance 归属门（check_out_ownership）+ branches
+#     的 provenance_ensure 在 g0merge 缺席；
+#   · 门仍判「绿 19 / 红 0」exit=0，all-gates L3 拿此绿当「修复耐久性已跨树
+#     收口」的机器证据。
+# 本节把对账面从「1 个门码文件」扩到「门族全集」：分叉 / 缺件 / 多余件一律硬红。
+GATE_DIR = "ci"
+# 对账排除面（逐树天然不同、且非门本体/判据正本）：
+#   ci/out/ = 门运行产物（内含 worktree_root / commit / 时间戳，逐树本应不同）；
+#   *.bak   = 历史快照（各树在各自时点留痕，本应不同）。
+GATE_EXCLUDE_PREFIXES = ("ci/out/",)
+GATE_EXCLUDE_SUFFIXES = (".bak",)
+# 判据/证据自指正本（仓根；step10/11/12 与 xcheck 消费）——随门族一起单源对账
+CRITERIA_FILES = ("numbers.json", "deliverables.yaml", "doc-claims.txt")
+# 策略正本数据面（目录）+ 随批数据面（文件：af-dsl 编译断言测试件）
+DATA_DIRS = ("strategies",)
+DATA_FILES = ("crates/af-dsl/tests/strategy_library_test.rs",)
+# 关键门本体 / 判据正本：任何情况下不得被排除面吞掉（防「把门本体塞进排除面」
+# 缩对账范围旁路——与名册「缩名册即旁路」同型）
+CRITICAL_SURFACE = frozenset(
+    {"ci/xcheck.py", "ci/strategies_check.py", "ci/provenance_check.sh",
+     "ci/branches_check.py", "ci/run.sh", "ci/fix_verify.py",
+     "ci/fix-verify.duty", "ci/gate_inputs_check.sh", "ci/mutation_runner.sh",
+     "ci/step10_check.py", "ci/step11_check.py", "ci/step12_check.py",
+     "ci/subgates.list"}
+    | set(CRITERIA_FILES) | set(DATA_FILES))
 
 RED = []
 GREEN = []
@@ -100,6 +150,158 @@ def sha256_file(p):
 
 def sha256_bytes(b):
     return hashlib.sha256(b).hexdigest()
+
+
+# ---------- 门族全集（机制③扩） ----------
+def git_ls_oids(repo, ref, paths):
+    """ref 提交树内已跟踪文件 → {路径: blob oid}。
+
+    同仓内 oid 相等 ⇔ blob 字节相等（git 对象名即内容哈希）——用于提交面逐件
+    对账。失败返回 None（fail-closed：无法判定 ≠ 一致）。"""
+    p = subprocess.run(["git", "-C", repo, "ls-tree", "-r", ref, "--"] + list(paths),
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    if p.returncode != 0:
+        return None
+    out = {}
+    for ln in p.stdout.splitlines():
+        if "\t" not in ln:
+            continue
+        meta, path = ln.split("\t", 1)
+        parts = meta.split()
+        if len(parts) >= 3 and parts[1] == "blob":
+            out[path] = parts[2]
+    return out
+
+
+def surface_excluded(path):
+    """是否落在排除面（运行证据面 ci/out/ + 历史快照面 *.bak）。"""
+    return (path.startswith(GATE_EXCLUDE_PREFIXES)
+            or path.endswith(GATE_EXCLUDE_SUFFIXES))
+
+
+def surface_maps(repo, ref):
+    """ref 提交树上的门族面三段：门码面(ci/) + 判据面(仓根) + 数据面。"""
+    ci = git_ls_oids(repo, ref, [GATE_DIR])
+    crit = git_ls_oids(repo, ref, list(CRITERIA_FILES))
+    data = git_ls_oids(repo, ref, list(DATA_DIRS) + list(DATA_FILES))
+    if ci is None or crit is None or data is None:
+        return None
+    return ci, crit, data
+
+
+def canonical_surface(repo, base_ref):
+    """主干基线 ref 上的门族正本面 = {路径: blob oid}（排除面已滤除）。
+
+    失败返回 None。"""
+    maps = surface_maps(repo, base_ref)
+    if maps is None:
+        return None
+    ci, crit, data = maps
+    surf = {}
+    for path, oid in ci.items():
+        if not surface_excluded(path):
+            surf[path] = oid
+    surf.update(crit)
+    surf.update(data)
+    return surf
+
+
+def blob_sha256(repo, spec, cache):
+    """<ref>:<path> blob 的字节级 sha256（带缓存）。缺件/不可读返回 None。"""
+    if spec in cache:
+        return cache[spec]
+    b = git_show_bytes(repo, spec)
+    val = sha256_bytes(b) if b is not None else None
+    cache[spec] = val
+    return val
+
+
+def check_tree_surface(repo, base_ref, tree_path, tree_head, label, surface, sha_cache):
+    """门族全集单源对账（机制③扩）：在役树逐件与主干基线正本对账。
+
+    双核：
+      ①提交面——该树 HEAD 提交树内的件是否即正本（灭失/分叉即红；这是「重建/
+        回滚即回到无 fix 态」的机器面）；
+      ②工作树面——该树当下实际跑的门码字节是否即正本（未提交编辑/异树遗留即红）。
+    分叉 / 缺件 / 多余件一律硬红（不降级 advisory）。返回 True=全绿。
+    """
+    ok = True
+    maps = surface_maps(repo, tree_head)
+    if maps is None:
+        rec_red("[%s] 门族对账失败：无法读取该树 HEAD(%s) 的提交树——"
+                "无法判定不等于一致，红" % (label, tree_head[:12]))
+        return False
+    ci, crit, data = maps
+    tree_surface = {}
+    for path, oid in ci.items():
+        if not surface_excluded(path):
+            tree_surface[path] = oid
+    tree_surface.update(crit)
+    tree_surface.update(data)
+
+    # ①提交面：逐件对账
+    for path in sorted(surface):
+        tree_oid = tree_surface.get(path)
+        if tree_oid is None:
+            ok = False
+            rec_red("[%s] 门族缺件（提交面）：%s 不在该树 HEAD(%s) 的提交树内——"
+                    "门族件灭失即红（重建/回滚即回到无 fix 态）"
+                    % (label, path, tree_head[:12]))
+        elif tree_oid != surface[path]:
+            ok = False
+            base_sha = blob_sha256(repo, "%s:%s" % (base_ref, path), sha_cache)
+            tree_sha = blob_sha256(repo, "%s:%s" % (tree_head, path), sha_cache)
+            rec_red("[%s] 门族分叉（提交面）：%s sha256=%s… ≠ 主干基线 %s 正本 %s…"
+                    "——分叉即红（机制③扩）"
+                    % (label, path, (tree_sha or "缺件")[:12], base_ref,
+                       (base_sha or "?")[:12]))
+    # ①b提交面：正本面外多件（该树多出不在基线正本面内的件）
+    for path in sorted(tree_surface):
+        if path not in surface:
+            ok = False
+            rec_red("[%s] 门族多余件（提交面）：%s 在该树在场但不在主干基线 %s 正本面内"
+                    "——单源面外多件即红" % (label, path, base_ref))
+    # ②工作树面：逐件 sha256 对账
+    for path in sorted(surface):
+        base_sha = blob_sha256(repo, "%s:%s" % (base_ref, path), sha_cache)
+        if base_sha is None:
+            ok = False
+            rec_red("[%s] 门族正本缺件：主干基线 %s:%s 不可读——无法对账，红"
+                    % (label, base_ref, path))
+            continue
+        fp = os.path.join(tree_path, path)
+        if not os.path.isfile(fp):
+            ok = False
+            rec_red("[%s] 门族缺件（工作树面）：%s 不在该树工作树内——红" % (label, path))
+            continue
+        got = sha256_file(fp)
+        if got != base_sha:
+            ok = False
+            rec_red("[%s] 门族分叉（工作树面）：%s sha256=%s… ≠ 主干基线正本 %s…"
+                    "——该树当下跑的门码非正本，红"
+                    % (label, path, got[:12], base_sha[:12]))
+    # ③数据面盘面：strategies/ 全库在盘文件集须与正本面一致（多件即旁路面）
+    for d in DATA_DIRS:
+        root = os.path.join(tree_path, d)
+        on_disk = set()
+        if os.path.isdir(root):
+            for p in Path(root).rglob("*"):
+                if p.is_file():
+                    on_disk.add(p.relative_to(tree_path).as_posix())
+        base_set = {p for p in surface if p.startswith(d + "/")}
+        for path in sorted(on_disk - base_set):
+            ok = False
+            rec_red("[%s] 门族多余件（工作树面）：%s 在盘但不在主干基线 %s 正本面内"
+                    "——未入库/未登记的件即红" % (label, path, base_ref))
+    if ok:
+        n_ci = sum(1 for p in surface if p.startswith(GATE_DIR + "/"))
+        n_data = sum(1 for p in surface
+                     if p.startswith("/".join(DATA_DIRS) + "/")
+                     or p in DATA_FILES)
+        rec_green("[%s] 门族全集单源：%d 件（门码面 %d + 判据/证据正本 %d + 策略正本"
+                  "数据面 %d）逐件一致（提交面 oid + 工作树面 sha256 双核）"
+                  % (label, len(surface), n_ci, len(CRITERIA_FILES), n_data))
+    return ok
 
 
 # ---------- 名册 ----------
@@ -319,6 +521,32 @@ def main():
         else:
             rec_green("机制② 收口门本体已落主干基线 %s（sha256 与本门同源）" % args.base_ref)
 
+    # ---------- 门族全集正本面（机制③扩） ----------
+    # 对账面 = 主干基线 ref 上的门族全集：门码面(ci/，排除运行证据面 ci/out/ 与
+    # 历史快照面 *.bak) + 判据/证据自指正本(numbers.json / deliverables.yaml /
+    # doc-claims.txt) + 策略正本数据面(strategies/ 全库 + af-dsl 编译断言测试件)。
+    # 正本面派生自基线 ref 本身（不手填清单——手填清单会随门族增删而陈年化，
+    # 退化为「只钉 6 件」的 RT-E6/E51 同型漏钉）；关键门本体缺席=基线删件/
+    # 改名 → 对账范围静默缩水 → 红。
+    surface = canonical_surface(repo, args.base_ref)
+    sha_cache = {}
+    if surface is None:
+        rec_red("主干基线 ref %s 的门族面不可读（git ls-tree 失败）——无法对账，"
+                "无法判定不等于一致，红" % args.base_ref)
+        surface = {}
+    else:
+        miss = sorted(p for p in CRITICAL_SURFACE if p not in surface)
+        if miss:
+            rec_red("主干基线 ref %s 的门族面缺关键门本体/判据正本：%s——对账范围被"
+                    "静默缩水（基线删件/改名即红），红"
+                    % (args.base_ref, "、".join(miss)))
+        n_ci = sum(1 for p in surface if p.startswith(GATE_DIR + "/"))
+        n_data = sum(1 for p in surface
+                     if p.startswith("/".join(DATA_DIRS) + "/") or p in DATA_FILES)
+        rec_green("机制③扩 主干基线 %s 的门族正本面：%d 件（门码面 %d + 判据/证据正本"
+                  "%d + 策略正本数据面 %d）——各在役树逐件对账，分叉/缺件/多余件即红"
+                  % (args.base_ref, len(surface), n_ci, len(CRITERIA_FILES), n_data))
+
     # ---------- 在役树回放 + 单源对账 ----------
     tmpdir = tempfile.mkdtemp(prefix="fix-verify-")
     try:
@@ -333,15 +561,16 @@ def main():
             label = br
             xcheck = os.path.join(tree, "ci", "xcheck.py")
             if ent["class"] == "duty":
-                # 机制③：门码单源（以主干基线为正本）
-                if os.path.isfile(xcheck):
-                    got = sha256_file(xcheck)
-                    if canonical_sha and got != canonical_sha:
-                        rec_red("[%s] 门码分叉：ci/xcheck.py sha256=%s… ≠ 主干基线正本 %s…"
-                                "——分叉即红（机制③）" % (label, got[:12], canonical_sha[:12]))
-                    else:
-                        rec_green("[%s] 门码单源：ci/xcheck.py sha256=%s…（与主干基线正本一致）"
-                                  % (label, got[:12]))
+                # 机制③扩：门族全集单源对账（含 ci/xcheck.py）——以主干基线 ref
+                # 为正本，提交面（oid）+ 工作树面（sha256）双核；分叉/缺件/多余件
+                # 一律硬红。原实现只对账 ci/xcheck.py 一个门码文件（门族另外 3 个
+                # 本体 + 策略正本数据面分叉时照绿=假绿），本处已扩到门族全集。
+                head = t.get("head")
+                if not head:
+                    rec_red("[%s] 工作树 HEAD 缺席——门族对账无版本面正本，红" % label)
+                else:
+                    check_tree_surface(repo, args.base_ref, tree, head, label,
+                                       surface, sha_cache)
                 # 机制①：跨树回放
                 probe_tree(tree, tmpdir, label)
             else:

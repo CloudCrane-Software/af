@@ -85,7 +85,7 @@ items:
     status: done
     source: S1
     evidence_path: ci/provenance_check.sh
-    evidence_sha256: 1f202d52b07854ae62a8472ce1443c85aed8b7072edc1ce23bdaead301120506
+    evidence_sha256: 2bdd5197d47c404b378c23a78f393ec61c7845d521923853d7e03ec784b0e84b
     window_kind: git
     check:
       kind: grep_present
@@ -157,7 +157,7 @@ items:
     status: done
     source: S1
     evidence_path: ci/branches_check.py
-    evidence_sha256: 08011203351fcff37dfb17dd5b48d050473a23236020ecc15f51165d4594f001
+    evidence_sha256: 236a145aeb6950b9178d381dd9b33512e7238fa127e2906434f97a1126adc2b3
     window_kind: git
     check:
       kind: grep_present
