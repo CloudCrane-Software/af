@@ -9,6 +9,9 @@ description = "下单门面 CLI 骨架：submit/list/show 一命令直驱订单�
 # af-execline；签名复用 af-workorder 的 ed25519。不新增任何外部依赖
 # （AGENT.md 硬纪律 6：默认拒绝新依赖）。
 [dependencies]
+# E1 缺口②：任务包 manifest 一致性核对的正本在 af-compiler（编译链组包侧
+# 同 crate 写入留档）——门面只做调用，不复刻第二套 hash 口径。
+af-compiler = { path = "../af-compiler" }
 af-execline = { path = "../af-execline" }
 af-workorder = { path = "../af-workorder" }
 serde = { workspace = true }

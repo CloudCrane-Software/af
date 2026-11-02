@@ -20,6 +20,7 @@ pub mod components;
 pub mod decode;
 pub mod ir;
 pub mod lower;
+pub mod package;
 pub mod plan;
 
 pub use bind::{
@@ -33,6 +34,10 @@ pub use components::{
 pub use decode::{decode_ir, IrParseError};
 pub use ir::{IrProgram, IR_VERSION};
 pub use lower::{lower, LowerError};
+pub use package::{
+    build_package_manifest, verify_package_manifest, write_package_manifest, PackageError,
+    TaskPackageManifest, PACKAGE_MANIFEST_FILE, PACKAGE_MANIFEST_VERSION,
+};
 pub use plan::{
     decode_plan, generate_plan, plan_json, plan_json_pretty, ExecutablePlan, PlanError,
     PlanParseError, PLAN_VERSION,

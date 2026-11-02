@@ -278,6 +278,11 @@ fn run_submit(
     let plan_digest = pin_plan_digest(&selected, exec);
     let plan_graph_version = read_plan_graph_version(&selected, exec)
         .unwrap_or_else(|| DEFAULT_GRAPH_VERSION.to_string());
+    // E1 缺口②：任务包内容 hash 一致性（W2-C55 防重放语义内置提交链）——
+    // 任务包 manifest（编译链组包时留档 task.json/plan.json 内容 sha256）在场
+    // 即重算核对，不符拒于一切副作用之前（清态换号重提指令在 af-compiler
+    // verify 正本文案面）；manifest 缺席 = 不核对（旧任务包同口径）。
+    let package_manifest = preflight_package_manifest(&selected, exec)?;
     // W1-C64：stub 冒烟档 MES line_id 加 stub: 前缀——冒烟单与真单此前在
     // MES 账面逐字段不可区分（同 kind/quantity/station/line），下游
     // mes_line_hour_mv 按线聚合会把冒烟产量计入产线；前缀即判别量，
@@ -293,7 +298,8 @@ fn run_submit(
     spec.line = line_binding.clone();
 
     // E1 缺口①：干跑档——提交前链（至此已完成 spec 解析/单元路由/摘要钉死/
-    // 图版本读取）在此留证返回，零副作用：不落状态目录、不签凭证、不起引擎。
+    // 图版本读取/任务包 manifest 一致性）在此留证返回，零副作用：不落状态
+    // 目录、不签凭证、不起引擎。
     if opts.dry_run {
         return run_submit_dryrun(
             &spec,
@@ -302,6 +308,7 @@ fn run_submit(
             &task_digest,
             &plan_digest,
             &plan_graph_version,
+            &package_manifest,
         );
     }
 
@@ -477,8 +484,9 @@ fn run_submit(
 ///    ——run_submit 前段已执行，本函数直接消费其结果；
 /// ② graph 臂：任务包材料面装配（`graph_unit_for`：task.json/plan.json 布
 ///    局 + registry_root 解析 + 生产判分锚接线）；
-/// ③ 计划装订预检（`planbind_bind` 全四核对：信封 decode/E9004 注册表
-///    digest/一致性/模板清单——E1 缺口②的任务包 manifest 校验也将挂进此链）；
+/// ③ 任务包 manifest 一致性（E1 缺口②：编译链留档的内容 sha256 重算核对，
+///    不符即拒——清态换号重提）+ 计划装订预检（`planbind_bind` 全四核对：
+///    信封 decode/E9004 注册表 digest/一致性/模板清单）；
 /// ④ 基座档案可解析（装载期同款门）。
 ///
 /// 零副作用承诺：不建状态目录、不签凭证、不定位/构建引擎、不驱动订单——
@@ -490,6 +498,7 @@ fn run_submit_dryrun(
     task_digest: &Option<String>,
     plan_digest: &Option<String>,
     plan_graph_version: &str,
+    package_manifest: &Option<af_compiler::TaskPackageManifest>,
 ) -> Result<String, OrderError> {
     let mut checks: Vec<&str> = vec![
         "parse_spec",
@@ -498,6 +507,9 @@ fn run_submit_dryrun(
         "pin_plan_digest",
         "read_plan_graph_version",
     ];
+    if package_manifest.is_some() {
+        checks.push("package_manifest");
+    }
     let unit_detail = match selected {
         SelectedUnit::Graph => {
             let exec = exec.expect("resolve 已保证 Graph 携三件套");
@@ -560,6 +572,7 @@ fn run_submit_dryrun(
         "task_sha256": task_digest,
         "plan_sha256": plan_digest,
         "graph_version": plan_graph_version,
+        "package_manifest": package_manifest,
         "checks": checks,
         "note": "干跑档：零副作用（无状态目录/凭证/引擎），编译→提交一跳预检留证，不真下单",
     });
@@ -893,6 +906,30 @@ mod tests {
 }
 
 // ---------- 红队批（W1）辅助：判据面摘要钉死 + 计划图版本读取 ----------
+
+/// E1 缺口②：提交前任务包 manifest 一致性核对（W2-C55 防重放语义内置
+/// 提交链的编译链侧补齐）。任务包 `package_manifest.json`（编译链组包时由
+/// af-compiler 写入，留档 task.json/plan.json 内容 sha256）在场即重算核对——
+/// 任一文件与留档不符 = 内容被改（E2G2 实证：预算帽全在 plan.json，换计划面
+/// = 放宽预算），拒于一切副作用之前，文案点名「清态换号重提」。manifest
+/// 缺席 = 不核对（与 W1-C59/W2-C55「文件缺席 = None」既定语义同口径）。
+/// 正式 submit 与 --dry-run 两路同点调用（本函数在干跑分支之前）。
+fn preflight_package_manifest(
+    selected: &SelectedUnit,
+    exec: Option<&RealExec>,
+) -> Result<Option<af_compiler::TaskPackageManifest>, OrderError> {
+    let Some(exec) = exec else {
+        return Ok(None);
+    };
+    if !matches!(selected, SelectedUnit::Graph | SelectedUnit::Report) {
+        return Ok(None);
+    }
+    af_compiler::verify_package_manifest(&exec.data_root.join(&exec.task)).map_err(|err| {
+        OrderError::Usage {
+            detail: format!("OR1001: {err}"),
+        }
+    })
+}
 
 /// W2-C55：任务包计划面 sha256（graph/report 档 = `<data_root>/<task>/plan.json`）
 /// ——提交时钉死、凭证面留档（重放对账）、执行前由单元复核。graph/report 两臂
