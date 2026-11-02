@@ -2477,17 +2477,20 @@ fn terminal_verdict_reads_declared_resolved_field_not_pass_default() {
 }
 
 #[test]
-fn image_missing_error_attributes_executor_setup_not_schema_gate() {
-    // 红队 W1-C39 归属钉：schema 门与解析门各归其位——input schema 不要求
-    // image（in_t required=[q]，validate_schema 放行），执行器容器 setup 仍
-    // 硬性必填。缺 image 的拒绝必须如实归属执行器自加要求（「执行器容器
-    // setup 硬性必填」「非 swe_task_input schema 必填项」），不得再说成
-    // schema 面要求（W1-C39 前的旧文案「（swe_task_input 面）」）；解析门
-    // 前零 launch、零容器调用。
-    let root = temp_root("w1-c39");
+fn image_missing_falls_back_to_default_construction_image() {
+    // 语义变迁登记（E1 缺口③，2026-11-03 批——规格正本：计划/研究组/
+    // 回头批-20261029/e1-报告.md 缺口③）：非 SWE 建设任务不再被要求手填
+    // 镜像——执行器容器 setup 的硬性要求由缺省镜像
+    // DEFAULT_CONSTRUCTION_IMAGE 直接补齐（通用容器组件）。本测试原属红队
+    // W1-C39 归属钉（缺 image = 执行器容器 setup 拒，非 schema 面拒）——
+    // 变迁后「拒」被「缺省补齐」取代：schema 门仍不要求 image（in_t
+    // required=[q]，validate_schema 放行），容器 setup 的镜像名由执行器
+    // 缺省满足（W1-C39 的归属纪律在缺省路径同样成立——补名是执行器自加
+    // 要求的自足，不是说 schema 要求了 image）。
+    let root = temp_root("e1-gap3-imgdefault");
     let src = single_node_graph_src("  budgets: []\n  stop: []\n  failures: []\n");
     let data_root = probe_task_package(&root, &compile_plan(&src));
-    // 抹去 image：schema 门照放行，解析门按容器 setup 要求拒。
+    // 抹去 image：schema 门照放行，容器 setup 拿到缺省镜像继续起容器。
     let task_path = data_root.join(TASK).join("task.json");
     let mut task: Value =
         serde_json::from_str(&std::fs::read_to_string(&task_path).unwrap()).unwrap();
@@ -2496,25 +2499,24 @@ fn image_missing_error_attributes_executor_setup_not_schema_gate() {
 
     let runner = Arc::new(GraphFakeRunner::new(payload_resolved_true));
     let (unit, bridge, attempt, out) = graph_unit(&root, runner.clone());
-    let err = drive(&unit, &data_root, &attempt, &out)
-        .expect_err("schema 门放行的缺 image 输入应由解析门如实拒收");
-    assert_eq!(err.code(), ErrorCode::UnitFailed, "{err}");
-    assert!(err.to_string().starts_with("EX3001:"), "{err}");
-    let msg = err.to_string();
+    let output = drive(&unit, &data_root, &attempt, &out)
+        .expect("缺 image 应由缺省镜像补齐，全链走通（E1 缺口③）");
+    assert_eq!(output.verdict, Some(true));
+    // 容器 setup 实际拿到的是缺省镜像（起容器脚本含镜像名）。
+    let calls = bridge.calls();
+    let run_calls: Vec<&String> = calls
+        .iter()
+        .filter(|c| c.starts_with("docker run"))
+        .collect();
+    assert_eq!(run_calls.len(), 1, "恰好一次起容器：{calls:?}");
     assert!(
-        msg.contains("执行器容器 setup 硬性必填"),
-        "归属须为执行器容器 setup：{msg}"
+        run_calls[0].contains(af_execline::graph_unit::DEFAULT_CONSTRUCTION_IMAGE),
+        "起容器脚本应含缺省镜像 {}：{}",
+        af_execline::graph_unit::DEFAULT_CONSTRUCTION_IMAGE,
+        run_calls[0]
     );
-    assert!(
-        msg.contains("非 swe_task_input schema 必填项"),
-        "须声明 schema 非穷尽边界（image 非 schema 必填项）：{msg}"
-    );
-    assert!(
-        !msg.contains("（swe_task_input 面）"),
-        "不得把缺 image 归为 schema 面要求（W1-C39 前的旧文案）：{msg}"
-    );
-    assert!(runner.launches().is_empty(), "解析门前零模型 launch");
-    assert!(bridge.calls().is_empty(), "解析门前零容器调用");
+    // 解析门不再拒（原 W1-C39 拒形已按 E1 缺口③废止）：有 launch 有容器调用。
+    assert_eq!(runner.launches().len(), 1, "缺省补齐后节点正常 launch");
     let _ = std::fs::remove_dir_all(&root);
 }
 

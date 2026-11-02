@@ -895,7 +895,9 @@ impl GraphExecuteUnit {
         }
 
         // ---- setup 相③：任务材料 + 容器（swev 环模式复用）----
-        let task = GraphTask::parse(&input)?;
+        // E1 缺口③：容器面通用等价物（task_id/镜像缺省/任务书文本）在此装配
+        // ——非 SWE 建设任务不再被要求手填 SWE 字段。
+        let task = GraphTask::parse(&input, ctx.task_id)?;
         let attempt_dir = ctx.attempt_dir;
         std::fs::create_dir_all(attempt_dir)
             .map_err(|err| self.fail(format!("建 run 目录失败: {err}")))?;
@@ -1127,7 +1129,25 @@ impl GraphExecuteUnit {
 // 图输入任务包
 // ============================================================
 
-/// 图输入工件（swe_task_input 面 + check 节点 test_command 声明位）。
+/// 通用容器面缺省镜像（E1 缺口③）：非 SWE 语义建设任务不手填镜像时由执行器
+/// 补默认——取 `python:3.12-slim`（tb 套件在同基建上生产使用的镜像线，
+/// tb.rs 卷清理容器同款；docker.io 不可达本机走镜像源，该线已实证可拉）。
+pub const DEFAULT_CONSTRUCTION_IMAGE: &str = "python:3.12-slim";
+
+/// 图输入工件（容器面 + check 节点 test_command 声明位）。
+///
+/// 容器面来源两类字段（E1 缺口③，通用容器组件）：
+/// - **SWE 语义原名**：`instance_id`/`repo`/`problem_statement`/`image`
+///   （swe_task_input 面，SWE 图任务包继续原样工作）；
+/// - **通用等价物**：`task_id`（→instance_id）、`task_book`（→
+///   problem_statement 的任务书文本）、镜像缺省
+///   [`DEFAULT_CONSTRUCTION_IMAGE`]——非 SWE 建设任务不再被要求手填 SWE
+///   字段（E2G3/E2G4 缺口：纯建设任务此前被容器面硬字段拒载）。
+///
+/// 必填面裁定：容器 setup 真正消费的只有 instance_id（容器命名）与
+/// image（docker run 镜像名）——两者都有确定缺省（instance_id 缺省回退
+/// 订单 task_id），故 parse 不再 fail-loud；输入形状的真值门是
+/// `types[interface.input_type]` schema 校验（setup 相②，先于本解析）。
 #[derive(Debug, Clone)]
 struct GraphTask {
     instance_id: String,
@@ -1140,28 +1160,33 @@ struct GraphTask {
 }
 
 impl GraphTask {
-    fn parse(input: &Value) -> Result<Self, ExeclineError> {
-        // 红队 W1-C39：image 的硬性必填系**执行器容器 setup 的要求**（起
-        // 容器要镜像名），非 swe_task_input schema 面要求（schema 里 image
-        // 非必填、validate_schema 放行）——文案如实区分两门，不再把执行器
-        // 自加的要求说成 schema 面的要求。
-        let str_field = |name: &str| {
-            input
-                .get(name)
-                .and_then(Value::as_str)
-                .map(str::to_string)
-                .ok_or_else(|| ExeclineError::UnitFailed {
-                    detail: format!(
-                        "图输入缺 {name} 字段（执行器容器 setup 硬性必填——起容器需要镜像名；\
-                         非 swe_task_input schema 必填项）"
-                    ),
-                })
+    /// `input` = 过 schema 校验的图输入；`task_id_fallback` = 订单 task_id
+    /// （instance_id/task_id 双缺时的容器命名回退——drive_task_node 的
+    /// run_id 同款回退口径，graph_unit.rs 原 instance_id 回退语义内置）。
+    fn parse(input: &Value, task_id_fallback: &str) -> Result<Self, ExeclineError> {
+        let str_or = |names: &[&str]| -> Option<String> {
+            names
+                .iter()
+                .find_map(|name| input.get(*name).and_then(Value::as_str).map(str::to_string))
         };
+        // instance_id：SWE 原名 → 通用 task_id → 订单 task_id 回退。
+        let instance_id =
+            str_or(&["instance_id", "task_id"]).unwrap_or_else(|| task_id_fallback.to_string());
+        if instance_id.is_empty() {
+            // 唯一拒形：显式给了空串（调用方语义错误，非缺省路径）。
+            return Err(ExeclineError::UnitFailed {
+                detail: "图输入 instance_id/task_id 为空串（容器命名不可为空）".into(),
+            });
+        }
         Ok(Self {
-            instance_id: str_field("instance_id")?,
-            repo: str_field("repo")?,
-            problem_statement: str_field("problem_statement")?,
-            image: str_field("image")?,
+            instance_id,
+            // repo/problem_statement：setup 不消费，通用任务缺省空串；
+            // SWE 任务包携带时原样透传（as_swev_task 判分面字段语义不变）。
+            repo: str_or(&["repo"]).unwrap_or_default(),
+            problem_statement: str_or(&["problem_statement", "task_book"]).unwrap_or_default(),
+            // image：SWE 原名 → 通用容器面缺省镜像（红队 W1-C39 的硬性必填
+            // 由缺省补齐——执行器容器 setup 要求镜像名，缺省即给名）。
+            image: str_or(&["image"]).unwrap_or_else(|| DEFAULT_CONSTRUCTION_IMAGE.to_string()),
             test_command: input
                 .get("test_command")
                 .and_then(Value::as_str)
@@ -2794,5 +2819,94 @@ mod tests {
         assert_eq!(budget(Some(600)).node_spend_cap(300, 700), 0);
         // plan 未声明 cost_cap：spec 缺省帽原样。
         assert_eq!(budget(None).node_spend_cap(300, 42), 300);
+    }
+}
+
+// ============================================================
+// E1 缺口③：通用容器面（非 SWE 建设任务自动补容器面硬字段）
+// ============================================================
+
+#[cfg(test)]
+mod construction_surface_tests {
+    use super::*;
+
+    /// SWE 语义原名包：四字段原样透传，行为与缺口前零漂移。
+    #[test]
+    fn swe_fields_pass_through_unchanged() {
+        let input = serde_json::json!({
+            "instance_id": "inst-1",
+            "repo": "r",
+            "problem_statement": "p",
+            "image": "img:x",
+            "test_command": "pytest -q",
+        });
+        let task = GraphTask::parse(&input, "fallback-id").unwrap();
+        assert_eq!(task.instance_id, "inst-1");
+        assert_eq!(task.repo, "r");
+        assert_eq!(task.problem_statement, "p");
+        assert_eq!(task.image, "img:x");
+        assert_eq!(task.test_command.as_deref(), Some("pytest -q"));
+    }
+
+    /// 通用建设包（E2G 实证面）：只带 task_id/task_book——容器面由
+    /// 通用等价物自动补齐（task_id→instance_id、任务书文本→
+    /// problem_statement、镜像缺省 python:3.12-slim），不再要求手填
+    /// SWE 字段（E2G3/E2G4 缺口销项）。
+    #[test]
+    fn generic_construction_package_gets_container_surface_filled() {
+        let input = serde_json::json!({
+            "task_id": "E2G-demo",
+            "task_book": "建设 tools/factory-stat.py……",
+        });
+        let task = GraphTask::parse(&input, "fallback-id").unwrap();
+        assert_eq!(task.instance_id, "E2G-demo", "task_id → instance_id");
+        assert_eq!(
+            task.problem_statement, "建设 tools/factory-stat.py……",
+            "task_book → problem_statement（任务书文本）"
+        );
+        assert_eq!(
+            task.image, DEFAULT_CONSTRUCTION_IMAGE,
+            "镜像缺省 = 通用容器组件默认镜像"
+        );
+        assert_eq!(task.repo, "", "repo setup 不消费，缺省空串");
+        assert_eq!(task.test_command, None);
+        // setup 材料面：容器命名与镜像都有确定值（起容器两硬字段齐备）。
+        let swev_task = task.as_swev_task();
+        assert_eq!(swev_task.instance_id, "E2G-demo");
+        assert_eq!(swev_task.image, DEFAULT_CONSTRUCTION_IMAGE);
+    }
+
+    /// 双缺回退：instance_id/task_id 都不给时回退订单 task_id（与原
+    /// drive_task_node run_id 回退口径同源）。
+    #[test]
+    fn instance_id_falls_back_to_order_task_id() {
+        let input = serde_json::json!({"task_book": "x"});
+        let task = GraphTask::parse(&input, "E2G-fallback").unwrap();
+        assert_eq!(task.instance_id, "E2G-fallback");
+        assert_eq!(task.image, DEFAULT_CONSTRUCTION_IMAGE);
+    }
+
+    /// SWE 名与通用名同场：SWE 名优先（向后兼容面不破）。
+    #[test]
+    fn swe_name_wins_over_generic_equivalent() {
+        let input = serde_json::json!({
+            "instance_id": "swe-1",
+            "task_id": "generic-9",
+            "problem_statement": "p",
+            "task_book": "b",
+            "image": "img:y",
+        });
+        let task = GraphTask::parse(&input, "f").unwrap();
+        assert_eq!(task.instance_id, "swe-1");
+        assert_eq!(task.problem_statement, "p");
+        assert_eq!(task.image, "img:y");
+    }
+
+    /// 唯一拒形：显式空串 instance_id（容器命名不可为空）——fail-loud。
+    #[test]
+    fn empty_instance_id_is_rejected() {
+        let input = serde_json::json!({"instance_id": ""});
+        let err = GraphTask::parse(&input, "f").unwrap_err();
+        assert!(err.to_string().contains("为空串"), "空串应拒：{err}");
     }
 }
