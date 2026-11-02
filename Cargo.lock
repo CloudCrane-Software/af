@@ -180,6 +180,8 @@ dependencies = [
 name = "af-order"
 version = "0.1.0"
 dependencies = [
+ "af-compiler",
+ "af-dsl",
  "af-execline",
  "af-mes",
  "af-workorder",

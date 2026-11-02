@@ -1,0 +1,54 @@
+version: 1
+meta:
+  name: factory_construction_build
+  graph_version: "1.0"
+  entry: build
+  input: construction_task_input
+  output: { ref: deliverable, from: build }
+  intent: "工厂建设任务通用形（E1 缺口①锚点）：build 单节点（LLM+bash 工具面）直出 deliverable 类型——非 SWE 语义，图输入走通用字段（task_id/任务书文本，镜像可缺省），不手填 SWE 字段；budgets/stops/failures 全链随包"
+
+types:
+  - name: construction_task_input
+    schema:
+      type: object
+      required: [task_id, task_book]
+      properties:
+        task_id: { type: string }
+        task_book: { type: string }
+        image: { type: string }
+        test_command: { type: string }
+  - name: deliverable
+    schema:
+      type: object
+      required: [files, tests_passed]
+      properties:
+        files: { type: array, items: { type: string } }
+        tests_passed: { type: boolean }
+
+nodes:
+  - id: build                        # 建设节点：LLM + bash 工具面；迭代环在节点运行时内
+    kind: task
+    uses:
+      model: route.main@1
+      tools: [pkg.sweagent.env@1]
+    emits: { deliverable: deliverable }
+    context:
+      sections:
+        - { from: input, fields: [task_id, task_book], policy: project, quota_tokens: 2400 }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 300 }
+    - { id: turn_cap, dimension: turns, scope: node:build, cap: 60 }
+  stop:
+    - { when: "last_tool.first_line in ['TASK_COMPLETE']", outcome: completed }
+    - { when: "steps.tool_free >= 3", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

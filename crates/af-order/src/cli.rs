@@ -50,6 +50,10 @@ pub enum Command {
         unit: UnitChoice,
         /// MES CH 目标（"auto" 或显式 URL；None = 只落文件正本）。
         mes_ch: Option<String>,
+        /// E1 缺口①：干跑档——提交前链全走（路由/摘要钉死/任务包材料面/计划
+        /// 装订预检），零副作用（不落状态目录、不签凭证、不起引擎），stdout
+        /// 留证即返回。std 解析器只收 `--flag value` 形，故取 true|false 显式值。
+        dry_run: bool,
     },
     /// 列出全部订单及终态。
     List { state: PathBuf },
@@ -68,14 +72,18 @@ pub fn run(args: &[String]) -> Result<String, OrderError> {
             exec,
             unit,
             mes_ch,
+            dry_run,
         } => run_submit(
             &spec,
             &state,
             workspace.as_deref(),
             target_dir.as_deref(),
             exec.as_ref(),
-            unit,
-            mes_ch.as_deref(),
+            &SubmitOpts {
+                unit,
+                mes_ch,
+                dry_run,
+            },
         ),
         Command::List { state } => run_list(&state),
         Command::Show { order_id, state } => run_show(&order_id, &state),
@@ -95,11 +103,23 @@ pub fn parse_args(args: &[String]) -> Result<Command, OrderError> {
             allowed.extend_from_slice(EXEC_FLAGS);
             allowed.push("--unit"); // 裁决7 单元路由（缺省现行为）
             allowed.push("--mes-ch");
+            allowed.push("--dry-run"); // E1 缺口①：干跑档（true|false）
             let (flags, positional) = split_flags(rest, &allowed)?;
             forbid_positional(&positional, "submit")?;
             // 执行面三件套规则与缺省见 crate::exec（B① 正式契约）；
-            // --mes-ch 是记账声明（与执行面正交），原样透传驱动缝。
+            // --mes-ch 是记账声明（与执行面正交），原样透传驱动缝；
+            // --dry-run 是布尔档（std 解析器只收 `--flag value` 形，显式 true|false）。
             let exec = parse_exec_flags(&flags)?;
+            let dry_run = match flag_value(&flags, "--dry-run") {
+                None => false,
+                Some("true") => true,
+                Some("false") => false,
+                Some(other) => {
+                    return Err(OrderError::Usage {
+                        detail: format!("--dry-run 只接受 true|false（收到 {other:?}）"),
+                    })
+                }
+            };
             Ok(Command::Submit {
                 spec: PathBuf::from(require_flag(&flags, "--spec")?),
                 state: PathBuf::from(require_flag(&flags, "--state")?),
@@ -111,6 +131,7 @@ pub fn parse_args(args: &[String]) -> Result<Command, OrderError> {
                     None => UnitChoice::Auto,
                 },
                 mes_ch: flag_value(&flags, "--mes-ch").map(str::to_string),
+                dry_run,
             })
         }
         "list" => {
@@ -224,14 +245,24 @@ fn forbid_positional(positional: &[&str], sub: &str) -> Result<(), OrderError> {
 
 // ---------- submit ----------
 
+/// submit 的路由/记账/干跑档面（参数面三聚一，避 clippy::too_many_arguments；
+/// 字段语义各自独立不变）。
+struct SubmitOpts {
+    /// 单元路由（裁决7：swev|report|stub；Auto=缺省现行为）。
+    unit: UnitChoice,
+    /// MES CH 目标（"auto" 或显式 URL；None = 只落文件正本）。
+    mes_ch: Option<String>,
+    /// E1 缺口①：干跑档——提交前链全走、零副作用留证（true|false 显式值）。
+    dry_run: bool,
+}
+
 fn run_submit(
     spec_path: &Path,
     state_root: &Path,
     workspace: Option<&Path>,
     target_dir: Option<&Path>,
     exec: Option<&RealExec>,
-    unit: UnitChoice,
-    mes_ch: Option<&str>,
+    opts: &SubmitOpts,
 ) -> Result<String, OrderError> {
     let text = fs::read_to_string(spec_path).map_err(|err| OrderError::SpecRead {
         path: spec_path.display().to_string(),
@@ -242,7 +273,7 @@ fn run_submit(
     // 红队批（W1）三件先行计算（均在凭证签发前——凭证/订单/MES 三面同值）：
     // ① 单元路由（stub 判别）；② 任务包判据面 sha256（W1-C59）；③ 计划
     //    graph_version（W1-C32：门面按计划图版本取值，统一值域）。
-    let selected = resolve_unit(unit, exec)?;
+    let selected = resolve_unit(opts.unit, exec)?;
     let task_digest = pin_task_digest(&selected, exec);
     let plan_digest = pin_plan_digest(&selected, exec);
     let plan_graph_version = read_plan_graph_version(&selected, exec)
@@ -260,6 +291,19 @@ fn run_submit(
     };
     // 凭证面 line 钉死（W1-C41）与 MES/订单面用同一值：冒烟档即 stub: 前缀。
     spec.line = line_binding.clone();
+
+    // E1 缺口①：干跑档——提交前链（至此已完成 spec 解析/单元路由/摘要钉死/
+    // 图版本读取）在此留证返回，零副作用：不落状态目录、不签凭证、不起引擎。
+    if opts.dry_run {
+        return run_submit_dryrun(
+            &spec,
+            &selected,
+            exec,
+            &task_digest,
+            &plan_digest,
+            &plan_graph_version,
+        );
+    }
 
     // 状态目录与订单目录（order_id 已过路径安全校验）
     let state = StateDir::new(state_root);
@@ -302,7 +346,7 @@ fn run_submit(
         profile: exec
             .map(|e| e.profile.clone())
             .unwrap_or_else(|| "stub".into()),
-        attempt_layout: match unit {
+        attempt_layout: match opts.unit {
             // 图执行器：graph- 前缀 D-20 递增布局（套件面区分）。
             UnitChoice::Graph => AttemptLayout::GraphIncrement,
             _ => AttemptLayout::SwevIncrement,
@@ -310,7 +354,7 @@ fn run_submit(
     };
     // MES 写缝（B②③）：--mes-ch 只是目标声明（与执行面正交），写侧
     // （含读侧对账）全在 af-execline 的 MesChSink；不声明 = 文件正本。
-    let mes_ch_target = mes_ch.map(MesChTarget::parse).transpose()?;
+    let mes_ch_target = opts.mes_ch.as_deref().map(MesChTarget::parse).transpose()?;
     let mut driver = match &mes_ch_target {
         Some(target) => {
             let sink = MesChSink::open(target, &order_dir).map_err(OrderError::from)?;
@@ -424,6 +468,102 @@ fn run_submit(
         "engine_bin": driver.engine_bin().display().to_string(),
     });
     to_pretty_json(&summary)
+}
+
+/// E1 缺口①：submit 干跑档——提交前链全走、零副作用留证。
+///
+/// 走完的真实链（与正式 submit 同源同序，绝不复刻简化）：
+/// ① spec 解析 + 单元路由 + 摘要钉死（task/plan sha256）+ 计划图版本读取
+///    ——run_submit 前段已执行，本函数直接消费其结果；
+/// ② graph 臂：任务包材料面装配（`graph_unit_for`：task.json/plan.json 布
+///    局 + registry_root 解析 + 生产判分锚接线）；
+/// ③ 计划装订预检（`planbind_bind` 全四核对：信封 decode/E9004 注册表
+///    digest/一致性/模板清单——E1 缺口②的任务包 manifest 校验也将挂进此链）；
+/// ④ 基座档案可解析（装载期同款门）。
+///
+/// 零副作用承诺：不建状态目录、不签凭证、不定位/构建引擎、不驱动订单——
+/// 干跑失败同样零残留（W3-C24 纪律对干跑档同样成立）。
+fn run_submit_dryrun(
+    spec: &crate::spec::OrderSpec,
+    selected: &SelectedUnit,
+    exec: Option<&RealExec>,
+    task_digest: &Option<String>,
+    plan_digest: &Option<String>,
+    plan_graph_version: &str,
+) -> Result<String, OrderError> {
+    let mut checks: Vec<&str> = vec![
+        "parse_spec",
+        "resolve_unit",
+        "pin_task_digest",
+        "pin_plan_digest",
+        "read_plan_graph_version",
+    ];
+    let unit_detail = match selected {
+        SelectedUnit::Graph => {
+            let exec = exec.expect("resolve 已保证 Graph 携三件套");
+            // ② 任务包材料面（与正式 submit 同一装配函数）。
+            let unit_spec = graph_unit_for(exec)?;
+            checks.push("graph_task_package_layout");
+            // ③ 计划装订预检：与图执行器 setup 相①同一份 planbind 正本。
+            let plan_path = exec.data_root.join(&exec.task).join("plan.json");
+            let plan_src = fs::read_to_string(&plan_path).map_err(|err| OrderError::Usage {
+                detail: format!("OR1001: 干跑读计划失败（{}）: {err}", plan_path.display()),
+            })?;
+            let bound = af_execline::planbind_bind(
+                &plan_src,
+                &unit_spec.registry_root,
+                &[],
+                &af_execline::BindExpectations {
+                    graph_version: Some(plan_graph_version.to_string()),
+                    // 与驱动层 bind_line 后送达执行面的期待同源（计划编译期
+                    // line 常 None，此期待仅在计划携带 line_id 时触发核对）。
+                    line_id: Some(spec.line.line_id.clone()),
+                },
+            )
+            .map_err(|err| OrderError::Usage {
+                detail: format!("OR1001: 干跑计划装订预检未过: {err}"),
+            })?;
+            checks.push("planbind_preflight");
+            // ④ 基座档案可解析（GraphExecuteUnit::new 装载期同款门）。
+            af_execline::profile::profile(&unit_spec.profile).map_err(|err| OrderError::Usage {
+                detail: format!("OR1001: 干跑档案预检未过: {err}"),
+            })?;
+            checks.push("profile_resolvable");
+            json!({
+                "unit": "graph-unit",
+                "plan_id": bound.plan.body.plan_id,
+                "input_type": bound.plan.body.interface.input_type,
+                "output_type": bound.plan.body.interface.output_type,
+                "registry_root": unit_spec.registry_root.display().to_string(),
+                "judge_wired": unit_spec.judge.is_some(),
+            })
+        }
+        other => {
+            // 非 graph 臂：本批（E1 建设任务链）只把 graph 臂的材料面+装订
+            // 预检接线到干跑档；其余臂如实标注未接线，不复刻简化预检冒充全链。
+            json!({
+                "unit": match other {
+                    SelectedUnit::Swev => "swev-unit",
+                    SelectedUnit::Report => "report-unit",
+                    SelectedUnit::Stub => "stub-unit",
+                    SelectedUnit::Graph => unreachable!("graph 臂已收"),
+                },
+                "materials_preflight": "not_wired_in_dryrun_v1",
+            })
+        }
+    };
+    let out = json!({
+        "dry_run": true,
+        "order_id": spec.order_id,
+        "budget": spec.budget,
+        "unit_detail": unit_detail,
+        "task_sha256": task_digest,
+        "plan_sha256": plan_digest,
+        "graph_version": plan_graph_version,
+        "checks": checks,
+        "note": "干跑档：零副作用（无状态目录/凭证/引擎），编译→提交一跳预检留证，不真下单",
+    });
+    to_pretty_json(&out)
 }
 
 /// 解析 workspace 根与构建目录（优先级：显式参数 > 环境变量 > 默认）。
@@ -609,6 +749,8 @@ mod tests {
                 exec: None,
                 unit: UnitChoice::Auto,
                 mes_ch: None,
+                // E1 缺口①：干跑档缺省 false（不给旗标 = 正式提交，行为零漂移）。
+                dry_run: false,
             }
         );
         let Command::Submit {
