@@ -62,6 +62,9 @@ pub enum ErrorCode {
     /// 计划消费-图形态超 v1 线性链范围（图执行器）：loop/map 构造节点或环
     /// 拓扑——登记后续版本，v1 拒驱动。
     GraphShapeUnsupported,
+    /// 计划消费-节点运行时挂起超 wall-clock 帽（图执行器看门狗，E1 缺口⑤）：
+    /// 节点运行时环被监督线程封顶，超帽判死 + 回收进程链 + 失败行 timeout 分类。
+    NodeWallClockTimeout,
 }
 
 impl ErrorCode {
@@ -88,6 +91,7 @@ impl ErrorCode {
             Self::EnvelopeMismatch => "EX4006",
             Self::BudgetCapExceeded => "EX4007",
             Self::GraphShapeUnsupported => "EX4008",
+            Self::NodeWallClockTimeout => "EX4009",
         }
     }
 
@@ -114,6 +118,7 @@ impl ErrorCode {
             Self::EnvelopeMismatch => "ENVELOPE_MISMATCH",
             Self::BudgetCapExceeded => "BUDGET_CAP_EXCEEDED",
             Self::GraphShapeUnsupported => "GRAPH_SHAPE_UNSUPPORTED",
+            Self::NodeWallClockTimeout => "NODE_WALL_CLOCK_TIMEOUT",
         }
     }
 }
@@ -190,6 +195,18 @@ pub enum ExeclineError {
     /// EX4008：图形态超 v1 线性链范围（loop/map/环拓扑；登记后续）。
     #[error("EX4008: 计划消费-图形态超 v1 线性链范围: {detail}")]
     GraphShapeUnsupported { detail: String },
+    /// EX4009：节点运行时挂起超 wall-clock 帽（E1 缺口⑤节点监督：e1-报告.md
+    /// E2G6 实证 turn 42 declare 成功后运行时挂起 2h+、容器消失、进程僵死、
+    /// 无看门狗）。执行器判死：回收节点运行时进程链（SIGKILL 本进程后代）+
+    /// 失败行落 EX4009（status=run_failed 的 timeout 分类终态）。
+    #[error(
+        "EX4009: 计划消费-节点运行时超时: 节点 {node} 挂起超 wall-clock 帽 {cap_ms}ms（E1 缺口⑤看门狗判死；已回收进程链 SIGKILL {killed} 个后代进程）"
+    )]
+    NodeWallClockTimeout {
+        node: String,
+        cap_ms: u64,
+        killed: usize,
+    },
 }
 
 impl ExeclineError {
@@ -216,6 +233,7 @@ impl ExeclineError {
             Self::EnvelopeMismatch { .. } => ErrorCode::EnvelopeMismatch,
             Self::BudgetCapExceeded { .. } => ErrorCode::BudgetCapExceeded,
             Self::GraphShapeUnsupported { .. } => ErrorCode::GraphShapeUnsupported,
+            Self::NodeWallClockTimeout { .. } => ErrorCode::NodeWallClockTimeout,
         }
     }
 }

@@ -36,6 +36,16 @@
 //! llm_cents_policy`] 的 per_turn 记账面），节点完成后累账，超限即熔断
 //! 拒起下一节点；单节点 launch 的 spend_cap 同步收敛到剩余额度。
 //!
+//! 节点监督（EX4009，E1 缺口⑤）：task 节点运行时环挂 `wall-clock` 帽看门狗
+//! （e1-报告.md E2G6 实证：turn 42 declare 成功后运行时挂起 2h+、容器消失、
+//! 进程僵死、零干预环境无看门狗）——帽源 `node_exec[].budget` 的 `clock_ms`
+//! 条目，未声明取 spec 缺省（30min）；模型环整体在监督线程上跑，主线程
+//! `recv_timeout` 封顶，超帽即判死：回收本进程后代进程链（SIGKILL，基线
+//! 差集——只杀本节点运行时期拉起者）+ 失败行落 EX4009（run_failed 的
+//! timeout 分类终态）。配套「产物先落盘」：declare 采纳前把各端口载荷
+//! 同步写 `<attempt>/artifacts/<node>.<port>.json` 并回读校验在场，写不进
+//! 即拒 declare（fail-loud 文案指路工件目录）——declare 成功而产物不在盘
+//! 的 E2G6 形态不再有。
 //! 订单生命周期零改动（约束 e）：bind/voucher/release/start 在订单面
 //! （`OrderLifecycleDriver`），本单元只在 `execute()` 内驱动图。
 //!
@@ -43,9 +53,10 @@
 //! 边守卫（CEL）、stop 条件求值、stores 读写运行时、节点级 retry、
 //! 非 builtin 的 unit impl_ref、多 attempt 图内重试。
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
+use std::time::Duration;
 
 use af_compiler::ir::{BudgetDimension, SectionSpec};
 use af_compiler::{ComponentRegistry, ExecutablePlan};
@@ -72,6 +83,10 @@ pub const COMPLETION_SIGNAL: &str = "TASK_COMPLETE";
 pub const TOOL_FREE_TURN_LIMIT: u32 = 3;
 /// 单节点 launch 缺省成本硬顶（美分；plan cost_cap 在场时收敛到剩余额度）。
 pub const DEFAULT_NODE_SPEND_CAP_CENTS: i64 = 300;
+/// 节点 wall-clock 帽缺省（E1 缺口⑤）：节点未声明 `clock_ms` 预算时取 30min
+/// ——E2G6 实证挂起 2h+ 无看门狗，30min 高于 sop_full 各节点实测墙钟峰值、
+/// 远低于僵死损失。spec 级 `default_node_wall_clock` 可被运营覆写。
+pub const DEFAULT_NODE_WALL_CLOCK: Duration = Duration::from_secs(30 * 60);
 /// 失败行分类相（红队 W2-C34）：setup = 供给面（装载/装订/预算/容器前），
 /// run = 驱动相起（节点/envelope/预算熔断/判分）。
 const SETUP_PHASE: &str = "setup";
@@ -91,6 +106,9 @@ pub struct GraphUnitSpec {
     pub profile: String,
     /// 节点未声明 turns 帽的缺省。
     pub default_node_turns: u32,
+    /// 节点 wall-clock 帽缺省（E1 缺口⑤）：节点 budget 未声明 `clock_ms`
+    /// 条目时的兜底——缺省 30min（[`DEFAULT_NODE_WALL_CLOCK`]）。
+    pub default_node_wall_clock: Duration,
     /// 单节点 launch 成本硬顶缺省。
     pub spend_cap_cents: i64,
     /// 订单级总预算帽（红队 W2-C54：门面 `--spend-cap-cents` 的 graph 臂接线
@@ -114,6 +132,7 @@ impl GraphUnitSpec {
             registry_root: registry_root.into(),
             profile: profile.into(),
             default_node_turns: DEFAULT_NODE_TURNS,
+            default_node_wall_clock: DEFAULT_NODE_WALL_CLOCK,
             spend_cap_cents: DEFAULT_NODE_SPEND_CAP_CENTS,
             order_spend_cap_cents: None,
             tool_spend_cents: 1,
@@ -363,88 +382,130 @@ impl GraphExecuteUnit {
         let user = format!("{contract}\n\n[task]\n{user}");
         // declare 工具（环组装面）：声明落共享单元 + 返回完成信号——按端口
         // 可推导性选面（permissive 旧形零动 / strict schema 注入 + 校验门）。
+        // E1 缺口⑤「产物先落盘」：两面均持工件面（artifacts 目录，setup 相③
+        // 已建）——键控声明被采纳前各端口载荷必须已写入
+        // `<attempt>/artifacts/<node>.<port>.json` 并回读在场；写不进 = 拒收
+        // （fail-loud 指路），declare 成功而产物不在盘的 E2G6 形态不再有。
+        let artifacts_dir = ctx.attempt_dir.join("artifacts");
         let (declare_decl, declare_fn, declaration) = if bare_derivable {
-            declare_tool(&ports)
+            declare_tool(&node.node_id, &ports, artifacts_dir.clone())
         } else {
             declare_tool_strict(
                 &node.node_id,
                 &port_contracts,
                 Arc::new(plan.body.types.clone()),
+                artifacts_dir.clone(),
             )
         };
         let spend_cap = budget.node_spend_cap(self.spec.spend_cap_cents, stage.cents_used);
         let node_dir = ctx.attempt_dir.join("nodes").join(&node.node_id);
         std::fs::create_dir_all(&node_dir)
             .map_err(|err| self.fail(format!("建节点目录失败: {err}")))?;
-        let launch = AgentLaunch {
-            attempt_dir: &node_dir,
-            run_id: format!(
-                "{}-{}",
-                input["instance_id"].as_str().unwrap_or(ctx.task_id),
-                node.node_id
-            ),
-            user_message: user,
-            spec: AgentSpec {
-                endpoint,
-                context_template: ContextTemplate {
-                    // 环组装面附加声明纪律（模板正文不动字节——包资产是正本，
-                    // 环拥有的装配段另起一段）。declare 契约面（2026-10-25）：
-                    // 形状信号三处同源——declare 工具定义（parameters 内联
-                    // schema + worked example）、用户消息契约段、本协议段。
-                    system: format!(
-                        "{system}\n\n[artifact protocol] Your finished work is delivered by \
-                         calling the `declare` tool with one JSON object keyed by artifact port \
-                         name(s); that call also ends the run. The `declare` tool definition \
-                         (parameters schema and worked example) and the user message carry the \
-                         exact keys and schemas. Malformed declarations are rejected with \
-                         feedback — fix the payload and call `declare` again."
-                    ),
-                    slots: Vec::new(),
-                },
-                toolset: {
-                    let mut set = toolset;
-                    set.push(declare_decl);
-                    set
-                },
-                policy: crate::agent::llm_cents_policy(
-                    max_turns,
-                    COMPLETION_SIGNAL,
-                    TOOL_FREE_TURN_LIMIT,
-                ),
-            },
-            bash,
-            extra_tools: {
-                let mut set = tools;
-                set.push(ToolBinding {
-                    name: "declare".to_string(),
-                    handler: declare_fn,
-                });
-                set
-            },
-            key_cmd,
-            spend_cap_cents: spend_cap,
-            tool_spend_cents: self.spec.tool_spend_cents,
-            budget_ledger_cents: spend_cap,
-        };
-        let report = match self.runner.run(launch) {
+        // E1 缺口⑤：节点 wall-clock 帽看门狗——帽源 = node budget `clock_ms`
+        // 条目，未声明取 spec 缺省（v1 30min，E2G6 实证挂起 2h+ 无看门狗）。
+        // 模型环整体在监督线程上跑，主线程 recv_timeout 封顶：超帽判死 +
+        // 回收进程链（本进程后代的基线差集 SIGKILL——只杀本节点运行时期
+        // 拉起者，不碰驱动既有子进程）+ 失败行落 EX4009（run_failed 的
+        // timeout 分类终态）。挂起线程自身进程内不可杀，随驱动进程退出而
+        // 清——判死后节点/订单面已终态，泄漏有界（每超帽事件至多一个）。
+        let wall_cap = node_wall_clock_cap(node, &self.spec);
+        let proc_baseline = descendant_pids(std::process::id());
+        let (tx, rx) = mpsc::channel();
+        let runner = self.runner.clone();
+        let node_dir_thread = node_dir.clone();
+        // 线程外预计算：借用面（input/ctx/self）不可进 'static 闭包。
+        let run_id = format!(
+            "{}-{}",
+            input["instance_id"].as_str().unwrap_or(ctx.task_id),
+            node.node_id
+        );
+        let tool_spend_cents = self.spec.tool_spend_cents;
+        let _worker = std::thread::Builder::new()
+            .name(format!("graph-node-{}", node.node_id))
+            .spawn(move || {
+                let launch = AgentLaunch {
+                    attempt_dir: &node_dir_thread,
+                    run_id,
+                    user_message: user,
+                    spec: AgentSpec {
+                        endpoint,
+                        context_template: ContextTemplate {
+                            // 环组装面附加声明纪律（模板正文不动字节——包资产是正本，
+                            // 环拥有的装配段另起一段）。declare 契约面（2026-10-25）：
+                            // 形状信号三处同源——declare 工具定义（parameters 内联
+                            // schema + worked example）、用户消息契约段、本协议段。
+                            system: format!(
+                                "{system}\n\n[artifact protocol] Your finished work is delivered by \
+                                 calling the `declare` tool with one JSON object keyed by artifact \
+                                 port name(s); that call also ends the run. The `declare` tool \
+                                 definition (parameters schema and worked example) and the user \
+                                 message carry the exact keys and schemas. Malformed declarations \
+                                 are rejected with feedback — fix the payload and call `declare` \
+                                 again."
+                            ),
+                            slots: Vec::new(),
+                        },
+                        toolset: {
+                            let mut set = toolset;
+                            set.push(declare_decl);
+                            set
+                        },
+                        policy: crate::agent::llm_cents_policy(
+                            max_turns,
+                            COMPLETION_SIGNAL,
+                            TOOL_FREE_TURN_LIMIT,
+                        ),
+                    },
+                    bash,
+                    extra_tools: {
+                        let mut set = tools;
+                        set.push(ToolBinding {
+                            name: "declare".to_string(),
+                            handler: declare_fn,
+                        });
+                        set
+                    },
+                    key_cmd,
+                    spend_cap_cents: spend_cap,
+                    tool_spend_cents,
+                    budget_ledger_cents: spend_cap,
+                };
+                let _ = tx.send(runner.run(launch));
+            })
+            .map_err(|err| self.fail(format!("节点 {} 监督线程拉起失败: {err}", node.node_id)))?;
+        let report = match rx.recv_timeout(wall_cap) {
             // 红队 W2-C33：http_retries 两路径均累加入账（此前 Ok 路径随
             // `..` 丢弃、Drive 无此字段、facts 硬编码 0——401 重取等供给面
             // 重试在 graph 行不可见；swev/tb/report 环都记，唯 graph 遗漏）。
-            Ok(AgentRunOutcome {
+            Ok(Ok(AgentRunOutcome {
                 report,
                 http_retries,
-            }) => {
+            })) => {
                 stage.http_retries += http_retries;
                 report
             }
-            Err(AgentRunFailure {
+            Ok(Err(AgentRunFailure {
                 message,
                 http_retries,
-            }) => {
+            })) => {
                 stage.http_retries += http_retries;
                 return Err(self.fail(format!(
                     "节点 {} 模型环失败（http_retries={}）: {message}",
                     node.node_id, http_retries
+                )));
+            }
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                let killed = kill_process_chain(&proc_baseline);
+                return Err(ExeclineError::NodeWallClockTimeout {
+                    node: node.node_id.clone(),
+                    cap_ms: u64::try_from(wall_cap.as_millis()).unwrap_or(u64::MAX),
+                    killed,
+                });
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(self.fail(format!(
+                    "节点 {} 监督线程异常断开（模型环 panic）",
+                    node.node_id
                 )));
             }
         };
@@ -1588,12 +1649,24 @@ type DeclarationCell = Arc<std::sync::Mutex<Option<Value>>>;
 ///   注入（parameters.required=端口集 + properties=物化 schema——模型在
 ///   工具定义里直接看见要交的形状）+ 闭环内校验门（畸形载荷 = 可重试的
 ///   工具错误反馈，不再等到跑后 EX4006 致死）。
-fn declare_tool(ports: &[&str]) -> (ToolDecl, ToolFn, DeclarationCell) {
+fn declare_tool(
+    node_id: &str,
+    ports: &[&str],
+    artifacts_dir: PathBuf,
+) -> (ToolDecl, ToolFn, DeclarationCell) {
     let cell: DeclarationCell = Arc::new(std::sync::Mutex::new(None));
     let sink = cell.clone();
+    let node = node_id.to_string();
     // A 席合流迁移：签名随主线 ToolFn 缝（&Value→Result）——参数对象原样
     // 入共享单元（harness 已保证对象形状，不再二次 parse）。
+    // E1 缺口⑤「产物先落盘」：键控声明采纳前先把各端口载荷写入工件面并
+    // 回读校验在场；写不进 = 拒收（fail-loud 指路）——declare 成功而产物
+    // 不在盘的 E2G6 形态（随后运行时挂起 → 容器回收 → 产物不可达）不再有。
     let on_call: ToolFn = Arc::new(move |args: &Value| {
+        let bare = args.as_object().is_some_and(|obj| obj.is_empty());
+        if !bare {
+            persist_declaration_artifacts(&node, args, &artifacts_dir)?;
+        }
         *sink.lock().unwrap_or_else(|e| e.into_inner()) = Some(args.clone());
         Ok(Value::String("TASK_COMPLETE".to_string()))
     });
@@ -1636,6 +1709,7 @@ fn declare_tool_strict(
     node_id: &str,
     contracts: &[(String, Option<String>, Option<Value>)],
     types: Arc<BTreeMap<String, Value>>,
+    artifacts_dir: PathBuf,
 ) -> (ToolDecl, ToolFn, DeclarationCell) {
     let cell: DeclarationCell = Arc::new(std::sync::Mutex::new(None));
     let sink = cell.clone();
@@ -1717,10 +1791,153 @@ fn declare_tool_strict(
                     .map_err(|err| format!("declare 拒收（EX4006 同源）：{err}；{shape_hint}"))?;
             }
         }
+        // E1 缺口⑤「产物先落盘」：形状校验通过后、采纳前——各端口载荷同步
+        // 落工件面并回读校验在场；写不进 = 拒收（fail-loud 指路，不存储、
+        // 不发完成信号，与畸形拒收同一闭环纪律）。
+        persist_declaration_artifacts(&node, args, &artifacts_dir)?;
         *sink.lock().unwrap_or_else(|e| e.into_inner()) = Some(args.clone());
         Ok(Value::String("TASK_COMPLETE".to_string()))
     });
     (decl, on_call, cell)
+}
+
+/// E1 缺口⑤：节点 wall-clock 帽解析——`node_exec[].budget` 的 `clock_ms`
+/// 条目（ms）优先（budgets 面正典维度词表同源），未声明取 spec 缺省
+/// （v1 = [`DEFAULT_NODE_WALL_CLOCK`] 30min；stops 条件求值属 EX4008 登记
+/// 面，stop 表达式挂 wall-clock 待该面落地后并入）。cap=0 = 立即判死——
+/// 与 turns 帽同口径：声明值即强制值，不二次裁量。
+fn node_wall_clock_cap(node: &af_compiler::plan::PlanNodeExec, spec: &GraphUnitSpec) -> Duration {
+    node.budget
+        .iter()
+        .find(|b| b.dimension == BudgetDimension::ClockMs)
+        .map(|b| Duration::from_millis(b.cap))
+        .unwrap_or(spec.default_node_wall_clock)
+}
+
+/// E1 缺口⑤「产物先落盘」：把键控声明的各端口载荷同步写入工件面
+/// `<artifacts_dir>/<node>.<port>.json`（envelope-v1 包装，与 commit 相
+/// [`Drive::commit`] 同构造——回读字节一致，commit 覆写幂等），并回读
+/// 校验在场。任一端口写不进/不在盘 → Err（fail-loud：点名文件、给工件
+/// 目录路径、指路修正后重调）——declare 拒收，不存储、不发完成信号。
+fn persist_declaration_artifacts(
+    node: &str,
+    args: &Value,
+    artifacts_dir: &Path,
+) -> Result<(), String> {
+    let obj = args.as_object().ok_or_else(|| {
+        format!("declare 拒收：节点 {node} 参数不是 JSON 对象（产物先落盘面无从落盘）")
+    })?;
+    for (port, payload) in obj {
+        let file = artifacts_dir.join(format!("{node}.{port}.json"));
+        let envelope = serde_json::json!({
+            "envelope": "v1",
+            "from": node,
+            "port": port,
+            "payload": payload,
+        });
+        std::fs::write(&file, envelope.to_string()).map_err(|err| {
+            format!(
+                "declare 拒收（产物先落盘，E1 缺口⑤）：工件 {} 写不进工件目录 {}（{err}）——\
+                 declare 前产物必须已落盘；请修正磁盘/权限问题后重调 declare",
+                file.display(),
+                artifacts_dir.display(),
+            )
+        })?;
+        if std::fs::metadata(&file).is_err() {
+            return Err(format!(
+                "declare 拒收（产物先落盘，E1 缺口⑤）：工件 {} 回读不在盘——declare 前产物必须\
+                 已落盘（工件目录 {}）；修正后重调 declare",
+                file.display(),
+                artifacts_dir.display(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// E1 缺口⑤：进程链回收——`/proc` 扫描取全部后代进程（Linux 目标平台；
+/// anolis ssh 分支/本机 docker 面同 Linux 族）。`baseline` 为节点起动前
+/// 的后代快照，只杀差集（本节点运行时期拉起者）——驱动既有子进程（前
+/// 序订单残留的合法后台者）不误杀。重挂载/权限不足导致的扫描失败如实
+/// 计 0（不编造回收数）。
+///
+/// 送达方式 = `kill -9 <pid>` 子进程（workspace `-F unsafe-code` 禁
+/// libc::kill 裸 unsafe；kill(1) 为 POSIX 宿主基建，驱动宿主必备）——
+/// 进程可能已自然退出，kill 非零退出无碍，计数只含实际发起者。
+#[cfg(target_os = "linux")]
+fn kill_process_chain(baseline: &[u32]) -> usize {
+    let live = descendant_pids(std::process::id());
+    let mut killed = 0usize;
+    for pid in live {
+        if baseline.contains(&pid) || pid <= 1 {
+            continue;
+        }
+        let sent = std::process::Command::new("kill")
+            .arg("-9")
+            .arg(pid.to_string())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false);
+        if sent {
+            killed += 1;
+        }
+    }
+    killed
+}
+
+#[cfg(not(target_os = "linux"))]
+fn kill_process_chain(_baseline: &[u32]) -> usize {
+    0
+}
+
+/// `/proc` 后代进程枚举：解析每进程的 ppid（stat 形 `pid (comm) state
+/// ppid …`，comm 可含空格/括号——取最后一个 `)` 之后第 2 个空白分隔
+/// token），自 `root` BFS 收集全部后代（不含 root 自身）。
+#[cfg(target_os = "linux")]
+fn descendant_pids(root: u32) -> Vec<u32> {
+    let entries = match std::fs::read_dir("/proc") {
+        Ok(entries) => entries,
+        Err(_) => return Vec::new(),
+    };
+    let mut ppid_of: HashMap<u32, u32> = HashMap::new();
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let Some(name) = name.to_str() else { continue };
+        let Ok(pid) = name.parse::<u32>() else {
+            continue;
+        };
+        let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
+            continue;
+        };
+        let Some(rparen) = stat.rfind(')') else {
+            continue;
+        };
+        let mut tokens = stat[rparen + 1..].split_whitespace();
+        let _state = tokens.next();
+        let Some(Ok(ppid)) = tokens.next().map(str::parse::<u32>) else {
+            continue;
+        };
+        ppid_of.insert(pid, ppid);
+    }
+    let mut seen: HashSet<u32> = HashSet::from([root]);
+    let mut queue = vec![root];
+    let mut out = Vec::new();
+    while let Some(parent) = queue.pop() {
+        for (&pid, &ppid) in &ppid_of {
+            if ppid == parent && seen.insert(pid) {
+                queue.push(pid);
+                out.push(pid);
+            }
+        }
+    }
+    out
+}
+
+#[cfg(not(target_os = "linux"))]
+fn descendant_pids(_root: u32) -> Vec<u32> {
+    Vec::new()
 }
 
 /// 类型表达式 → 自含 JSON Schema（API 面/提示词面/示例面共用）：
