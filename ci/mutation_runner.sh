@@ -22,7 +22,7 @@
 #                         [--scratch-dir DIR] [--keep]
 #       逐探针演练：整仓复制到 scratch（排除 .git/target/ci/out，硬链接优先），
 #       施加变异（删文件/删注册表条目/按正则删 run.sh 执行调用行/按正则替换 run.sh 执行
-#       调用行），跑探针声明的
+#       调用行/整槽摘除并同批收缩 numbers.json 门数账），跑探针声明的
 #       门命令（mirror_of stepN 时先对账 run.sh 命令未漂移），比对期望 exit/stderr，
 #       删 scratch。绝不动真树。
 #   mutation_runner.sh should-run [--root DIR] [--base REF]
@@ -209,6 +209,68 @@ os.replace(tmp, path)
 print(f"edit-replace-lines: 替换 {sum(hits)} 行（每条 pattern 命中 {hits}）", file=sys.stderr)
 PYEOF
       echo "$PROG: 已施加变异: edit-replace-lines $target" >&2 ;;
+    edit-consistent-shrink)
+      # 按正则整槽摘除目标文件执行行+登记行**并同批收缩 numbers.json 门数账**（红队
+      # 2026-11-03「一致化收缩」回归面，RT-E49 变体②）：整槽连摘 step10/11/12 后把
+      # ci.steps_total/gates.* 登记值一并 -delta（「登记=重算」一致化改账——登记锚
+      # 与逐键复算 source 均自指重数 run.sh，被守物与锚同源同灭，单键改账即自证吸收；
+      # 修前该变体 xcheck exit 0 硬项全过，沙盒复现在案）。fail-closed 双检：
+      # drop_patterns 任一条零命中、rebook 键缺席/登记非 int，一律 rc=2 红（探针与
+      # 正本漂移必须显式红，不静默放过）。两文件均以新 inode 落盘（承 edit-drop-lines
+      # 纪律——scratch 系硬链接复制，原位截断会惊动正本）。
+      python3 - "$repo" "$target" "$args_json" <<'PYEOF' \
+        || { echo "$PROG: 变异施加失败: edit-consistent-shrink $target" >&2; return 2; }
+import json, os, re, sys
+repo, target, spec = sys.argv[1], sys.argv[2], json.loads(sys.argv[3])
+pats = [re.compile(p) for p in spec.get("drop_patterns", [])]
+if not pats:
+    print("edit-consistent-shrink: drop_patterns 缺席", file=sys.stderr); sys.exit(2)
+path = os.path.join(repo, target)
+with open(path, encoding="utf-8") as f:
+    lines = f.readlines()
+hits = [0] * len(pats)
+kept = []
+for ln in lines:
+    if any(p.search(ln) for p in pats):
+        for i, p in enumerate(pats):
+            if p.search(ln):
+                hits[i] += 1
+        continue
+    kept.append(ln)
+if min(hits) < 1:
+    miss = [p.pattern for p, h in zip(pats, hits) if h == 0]
+    print(f"edit-consistent-shrink: drop_patterns 零命中 {miss}（正本漂移，探针源失效）", file=sys.stderr)
+    sys.exit(2)
+tmp = path + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    f.writelines(kept)
+os.replace(tmp, path)
+rebook = spec.get("rebook") or {}
+deltas = rebook.get("deltas") or {}
+if not deltas:
+    print("edit-consistent-shrink: rebook.deltas 缺席", file=sys.stderr); sys.exit(2)
+npath = os.path.join(repo, rebook.get("file", "numbers.json"))
+with open(npath, encoding="utf-8") as f:
+    data = json.load(f)
+nums = data.get("numbers")
+if not isinstance(nums, dict):
+    print(f"edit-consistent-shrink: {rebook.get('file', 'numbers.json')} 缺 numbers 对象", file=sys.stderr)
+    sys.exit(2)
+for key, delta in deltas.items():
+    ent = nums.get(key)
+    val = ent.get("value") if isinstance(ent, dict) else None
+    if not isinstance(val, int) or isinstance(val, bool):
+        print(f"edit-consistent-shrink: rebook 键漂移 {key}（缺席或登记非 int）——探针源失效", file=sys.stderr)
+        sys.exit(2)
+    ent["value"] = val + delta
+tmp = npath + ".tmp"
+with open(tmp, "w", encoding="utf-8") as f:
+    json.dump(data, f, ensure_ascii=False, indent=1); f.write("\n")
+os.replace(tmp, npath)
+print(f"edit-consistent-shrink: {target} 删 {len(lines)-len(kept)} 行（每条 pattern 命中 {hits}）"
+      f"+ 门数账同批收缩 {deltas}", file=sys.stderr)
+PYEOF
+      echo "$PROG: 已施加变异: edit-consistent-shrink $target" >&2 ;;
     registry-remove-probe)
       # 极小修正（2026-10-27 补完代理）：原版 python3 失败（如 remove_id 不在注册表
       # 的 AssertionError）被随后的 echo 吞掉退出码、误报「已施加变异」——afmut-bPuyoN

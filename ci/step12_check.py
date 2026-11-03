@@ -19,6 +19,11 @@
      step14 槽实际接线集合（双向：名册外多件/名册内缺件均红），且名册每件的接线行
      不带弱化标志（--skip-compile/--text-mode）。修前钉键是手写正则枚举，「同名替换」
      攻击（14d 的 ci/strategies_check.py 调用行换成 ci/xcheck.py）复算值不变、全链照绿。
+  ⑤ 三对账门槽位下限（整槽连摘「一致化收缩」防护，2026-11-03）：step10/11/12 三对账
+     门脚本（盘上真件）必须在 ci/run.sh 有执行事实行——「整槽摘除+同批改账」（把
+     ci.steps_total/gates.* 一并收缩为摘槽后实数）使逐键复算「登记==复算」全绿
+     （source 自指重数 run.sh，锚与被守物同源同灭），本节与 numbers.json 任何键无关、
+     改账不可吸收（与 ci/xcheck.py accountability-slot-floor 臂同口径互为跨锚）。
 退出码：0=全过；1=计数红；2=基础设施缺件。
 """
 import argparse
@@ -47,6 +52,19 @@ SUBGATE_WIRE_RE = re.compile(
 # 接线行弱化标志（出现即红）：--skip-compile=关掉 strategies_check 的 R4 af-dsl
 # 编译断言面；--text-mode=门判据降级为文本模式（yaml 库缺席时的宽松路径）。
 WEAKEN_FLAGS = ('--skip-compile', '--text-mode')
+
+# ---- ⑤ 三对账门槽位下限（2026-11-03 一致化收缩防护）常量 ----
+# 变体（红队 2026-11-03 确证逃逸复现在案）：整槽摘除 step10/11/12 后**同批**把门数账键
+# （ci.steps_total/gates.ci_steps/gates.ci_hard）一并收缩为摘槽后实数——逐键复算
+# 「登记==复算」全绿（source 自指重数 run.sh，锚与被守物同源同灭），三对账硬门静默
+# 蒸发而管线全绿。本节=独立于逐键复算的下限锚（与 ci/xcheck.py
+# accountability-slot-floor 臂同口径互为跨锚）。
+FLOOR_SLOTS = ((10, 'step10_check.py'), (11, 'step11_check.py'), (12, 'step12_check.py'))
+# 执行事实口径与 ci/xcheck.py count_run_sh_steps 逐字一致（step 助手调用行 +
+# 执行重定向行；登记行/注释引用不算）——两臂口径不同即跨锚形同虚设。
+FLOOR_HELPER_RE = re.compile(r'^step\s+(\d+)[a-z]?\s+"', re.M)
+FLOOR_EXEC_REDIR_RE = re.compile(
+    r'^[ \t]*(?!\#).*?(?<!>)>[ \t]*"\$OUT/step(\d+)\.log"', re.M)
 
 
 def main():
@@ -258,13 +276,40 @@ def main():
         bad(f"[ci/subgates.list] 名册集合 != ci/run.sh step14 槽接线集合："
             f"名册={sorted(set(roster))} 接线={sorted(set(wired))}——双向差集即红")
 
+    # ⑤ 三对账门槽位下限（2026-11-03 一致化收缩防护，硬项）：三对账门脚本（盘上
+    #    真件）必须在 ci/run.sh 有执行事实行（FLOOR_HELPER_RE/FLOOR_EXEC_REDIR_RE，
+    #    与 ci/xcheck.py count_run_sh_steps 同口径）——与 numbers.json 任何键无关
+    #    （「整槽摘除+同批改账」一致化收缩不可吸收本臂）。fail-closed：run.sh/脚本
+    #    缺席一律红（防护的对照面缺席=防护失效，不得当绿）。
+    floor_executed = set()
+    if not os.path.isfile(run_sh_path):
+        bad(f"[accountability-slot-floor] ci/run.sh 缺席：{run_sh_path}——三对账门槽位"
+            "下限无对照面，fail-closed 红")
+    else:
+        floor_text = open(run_sh_path, encoding='utf-8', errors='replace').read()
+        for m in FLOOR_HELPER_RE.finditer(floor_text):
+            floor_executed.add(int(m.group(1)))
+        for m in FLOOR_EXEC_REDIR_RE.finditer(floor_text):
+            floor_executed.add(int(m.group(1)))
+        for slot, script in FLOOR_SLOTS:
+            if not os.path.isfile(os.path.join(args.repo, 'ci', script)):
+                bad(f"[accountability-slot-floor] 三对账门脚本缺席 ci/{script}"
+                    f"（step{slot}）——门本体被删=对账机检蒸发，fail-closed 红")
+            elif slot not in floor_executed:
+                bad(f"[accountability-slot-floor] 三对账门槽位 step{slot}（ci/{script}）"
+                    "无执行事实行——整槽连摘形态（登记+执行一并摘槽、对账机检随槽清零）；"
+                    "本臂与 numbers.json 门数账无关，摘槽+同批改账一致化收缩不可吸收")
+            else:
+                print(f"OK  [accountability-slot-floor] step{slot}（ci/{script}）"
+                      "执行事实行在场（独立锚：不消费 numbers.json）")
+
     print(f"step12 计数复算: keys={len(numbers)} watch={len(doc.get('watch', []))} "
           f"docs={len(args.docs)} 红={len(red)}")
     if red:
         print("step12 FAIL: 计数口径漂移（逐条 RED 见上）")
         return 1
     print("step12 PASS: 全部限定名键复算一致、占位符可解析、手写计数对值、"
-          "step14 子门名册绑定三者一致")
+          "step14 子门名册绑定三者一致、三对账门槽位下限在场")
     return 0
 
 

@@ -23,6 +23,14 @@ step10/11/12 使对账机检随槽清零后 xcheck 照绿）：以 numbers.json 
 执行事实槽位数硬核本函数独立重算值（漂移=硬红；登记正本缺席=fail-closed 红）——
 分组合流树按自举纪律同批登记本树实数即不误红（2026-11-01 整槽连摘修复批）。
 
+登记锚可自证吸收（2026-11-03 一致化收缩变体修复批）：ci.steps_total 的 source 自指
+重数 run.sh——锚与被守物同在攻击者可写面，「整槽摘除 step10/11/12 + 同批改账
+（登记 14→11）」即「登记=重算=11」全绿，三对账硬门静默蒸发而本函数照绿（沙盒副本
+亲测 exit=0 硬项全过，逃逸复现在案）。故另设**独立锚臂** accountability-slot-floor
+（check_accountability_floor，main 直调不进 check_gates 早退分支）：三对账门脚本
+（盘上真件）必须在 run.sh 有执行事实行——与 numbers.json 任何键无关，同批改账不可
+吸收（台账 RT-E49 拦截机制②「下限门独立于槽位存活」的执行事实版）。
+
 退出码：0=硬项全过且 advisory 全过；1=任一硬项红（门数/计数/名单/日期漂移）；
         2=仅 advisory 红（头注漂移/G0 勘误未同步/句式漂移提示）——由调用方定义
         是否改 OVERALL（run.sh step14 落 SUMMARY WARN 行不改 OVERALL）。
@@ -191,12 +199,16 @@ def check_gates(agent_md, run_sh):
         ok2 = reg_total is not None and reg_total == total_now
         if ok2:
             d2.append(f"advisory：G0 批未齐（{len(g0_hard)}/{G0_BATCH_SIZE}，分组合流中），勘误口径为合流后目标值 {claimed_total}——合流齐后硬核")
-            d2.append(f"锚：numbers.json ci.steps_total 登记 {reg_total} step == run.sh 执行事实重算 {total_now} step（整槽连摘防护在场）")
+            d2.append(f"锚：numbers.json ci.steps_total 登记 {reg_total} step == run.sh 执行事实重算 {total_now} step"
+                      "（登记锚一致；该锚可被「摘槽+同批改账」自证吸收，独立拦截见 accountability-slot-floor 臂）")
         else:
             d2.append(f"锚：numbers.json ci.steps_total 登记 {reg_total if reg_total is not None else '缺席/不可解析'} step ≠ run.sh 执行事实重算 {total_now} step")
             d2.append(f"红：G0 批未齐但执行事实槽位数与登记值漂移——整槽连摘形态（登记+执行一并摘槽、"
-                      "对账机检随槽清零后 xcheck 照绿，2026-10-31 红队复现在案）；摘槽须恢复执行，"
-                      "或走同批评审并同批改 numbers.json ci.steps_total/gates.ci_steps（门数账自举纪律）")
+                      "对账机检随槽清零后 xcheck 照绿，2026-10-31 红队复现在案）；摘槽须恢复执行——"
+                      "同批改账（numbers.json ci.steps_total/gates.ci_steps）只能吸收本登记锚、"
+                      "accountability-slot-floor 独立锚臂仍红（2026-11-03 一致化收缩变体修复）；"
+                      "槽位迁址/更名须同批评审同步 ACCOUNTABILITY_SLOTS（本文件）与 "
+                      "FLOOR_SLOTS（ci/step12_check.py 第⑤节）")
         rec("gates-g0-erratum", ok2, d2, soft=ok2)
         return
     rec("gates-g0-erratum", ok2, d2)
@@ -277,6 +289,54 @@ def check_subgates_roster(run_sh_path):
             ok = False
     d.append(f"名册 {roster_path.name} = {roster}；ci/run.sh step14 槽接线集合 = {sorted(wired)}")
     rec("subgates-roster-binding", ok, d)
+
+
+# ---- 三对账门槽位下限（整槽连摘「一致化收缩」变体的独立锚，2026-11-03 修复批） ----
+# 变体（红队 2026-11-03 确证）：整槽摘除 step10/11/12（登记行+执行行一并删）后**同批**
+# 把 numbers.json ci.steps_total 14→11——批未齐分支的登记锚与本函数对 run.sh 的重算
+# 同源（登记键 source 自指重数 run.sh），锚与被守物同在攻击者可写面，单键同改即
+# 「登记=重算=11」自证吸收：gates-g0-erratum 照绿、三对账硬门静默蒸发而管线全绿
+# （沙盒副本亲测 exit=0 硬项全过，逃逸复现在案）。本臂=与门数账无关的槽位下限：
+# 三对账门脚本（盘上真件）必须在 run.sh 有执行事实行（与 count_run_sh_steps 同口径
+# ——step 助手调用/执行重定向；登记行/注释引用不算），脚本缺席或执行缺席即硬红，
+# numbers.json 同批改成任何值都吸收不掉（台账 RT-E49 拦截机制②「下限门独立于槽位
+# 存活」的执行事实版；与 ci/step12_check.py 第⑤节同口径互为跨锚）。
+ACCOUNTABILITY_SLOTS = (
+    (10, "step10_check.py", "承诺-交付对账 deliverables.yaml"),
+    (11, "step11_check.py", "自述-实现对账 doc-claims.txt"),
+    (12, "step12_check.py", "计数复算 numbers.json"),
+)
+
+
+def check_accountability_floor(run_sh_path):
+    """三对账门槽位下限（硬项，fail-closed）：run.sh 缺席、门脚本缺席、槽位无执行
+    事实行一律红（防护的对照面缺席=防护失效，不得当绿）。作为 main 独立臂调用，
+    不进 check_gates——避其 AGENT.md 句式漂移/批齐分支早退（承
+    check_subgates_roster 同款纪律：fail-closed 硬项不得被分支早退跳过）。"""
+    run_sh = Path(run_sh_path)
+    d = []
+    ok = True
+    if not run_sh.is_file():
+        rec("accountability-slot-floor", False,
+            [f"红：ci/run.sh 缺席（{run_sh}）——三对账门槽位下限无对照面，fail-closed 红"
+             "（防护的对照面缺席=防护失效，不得当绿）"])
+        return
+    executed = count_run_sh_steps(read(run_sh))[3]
+    for slot, script, label in ACCOUNTABILITY_SLOTS:
+        if not (REPO / "ci" / script).is_file():
+            d.append(f"红：三对账门脚本缺席 ci/{script}（step{slot} {label}）——门本体被删"
+                     "=对账机检蒸发，fail-closed 红")
+            ok = False
+        if slot not in executed:
+            d.append(f"红：三对账门槽位 step{slot}（ci/{script}，{label}）无执行事实行"
+                     "——整槽连摘形态（登记+执行一并摘槽、对账机检随槽清零）；本臂与 "
+                     "numbers.json 门数账无关，摘槽+同批改账一致化收缩不可吸收")
+            ok = False
+        else:
+            d.append(f"step{slot}（ci/{script}，{label}）执行事实行在场")
+    d.append("独立锚口径：本臂只看 run.sh 执行事实与门脚本盘面真件，不消费 numbers.json "
+             "任何键——ci.steps_total 登记锚可被「摘槽+同批改账」自证吸收，本臂不可")
+    rec("accountability-slot-floor", ok, d)
 
 
 # ------------------------------------------------------- ② packages 计数对账
@@ -422,6 +482,11 @@ def main():
     # 名册集合==step14 槽实际接线集合（双向：名册外多件=漏造册亦红）、
     # 接线行不带弱化标志（--skip-compile 关 R4 编译断言面；--text-mode 判据降级）。
     check_subgates_roster(args.run_sh)
+    # 三对账门槽位下限（2026-11-03 一致化收缩防护）：承 check_subgates_roster 同款
+    # 纪律作 main 独立臂直调——不进 check_gates（避 AGENT.md 句式漂移/批齐分支早退）。
+    # 与 ci.steps_total 登记锚互补：登记锚可被「整槽摘除+同批改账」自证吸收（锚与
+    # 被守物同源），本臂只看 run.sh 执行事实与门脚本盘面真件、不消费 numbers.json。
+    check_accountability_floor(args.run_sh)
     check_packages(args.readme, args.components)
     check_redlist(args.plan_doc, args.expected_fail)
     check_obs_dates({"README": args.doc_readme, "00-总纲": args.doc_zong,

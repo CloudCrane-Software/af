@@ -247,6 +247,70 @@
         "stderr_contains": "",
         "_doc_expect": "subgates-roster-binding 硬红（接线行带 --skip-compile）→ exit 1"
       }
+    },
+    {
+      "id": "MUT-012",
+      "description": "整槽连摘一致化收缩必须红·xcheck 臂（红队 2026-11-03 确证逃逸变体回归探针）：同 MUT-005 整槽摘除 step10/11/12（登记行+执行行一并删）后**同批**把 numbers.json 门数账收缩（ci.steps_total/gates.ci_steps/gates.ci_hard 各 -3——「登记=重算」一致化改账；登记锚 ci.steps_total 的 source 自指重数 run.sh，锚与被守物同源同灭，批未齐分支登记锚与逐键复算全数自证吸收）后，xcheck 必须以 exit 1 + accountability-slot-floor 硬红——独立锚=三对账门槽位下限（三对账门脚本必须在 run.sh 有执行事实行，与 numbers.json 任何键无关；修前该变体 xcheck exit 0 硬项全过、三对账硬门静默蒸发，沙盒复现在案）",
+      "action": "edit-consistent-shrink",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^echo \"== step10 ",
+          "^step 10 \"",
+          "step10_check\\.py",
+          "^echo \"== step11 ",
+          "^step 11 \"",
+          "step11_check\\.py",
+          "^echo \"== step12 ",
+          "^step 12 \"",
+          "step12_check\\.py"
+        ],
+        "rebook": {
+          "file": "numbers.json",
+          "deltas": { "ci.steps_total": -3, "gates.ci_steps": -3, "gates.ci_hard": -3 }
+        },
+        "_doc_args": "九条 drop 正则同 MUT-005（整槽连摘：登记+执行一并删，每条恰命中 1 行）；rebook.deltas=攻击者的同批改账步（登记值随摘槽 -3——修前变体只改 ci.steps_total 单键即可吸收登记锚，本探针取全键一致化收缩=攻击者不漏键的最强形态，登记锚/逐键复算全绿，只有独立锚能红）。任一 drop 零命中或 rebook 键缺席/非 int=正本漂移、探针源失效即红（fail-closed）"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "gates-g0-erratum 批未齐分支登记锚 11==重算 11（被一致化改账吸收照绿）、gates/gates-exec-binding 过 → 独立锚 accountability-slot-floor 红（step10/11/12 无执行事实行）→ exit 判定确定性=1"
+      }
+    },
+    {
+      "id": "MUT-013",
+      "description": "整槽连摘一致化收缩必须红·step12 臂（红队 2026-11-03 确证逃逸变体回归探针）：同 MUT-012 变异（整槽摘除 step10/11/12+门数账全键同批收缩）后，step12 计数复算必须以 exit 1 红——逐键复算「登记==复算」全绿（改账已吸收复算面），唯一拦截=第⑤节三对账门槽位下限（step10/11/12 门脚本在 run.sh 无执行事实行；与 ci/xcheck.py accountability-slot-floor 臂同口径互为跨锚，单修任一臂仍红）",
+      "action": "edit-consistent-shrink",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^echo \"== step10 ",
+          "^step 10 \"",
+          "step10_check\\.py",
+          "^echo \"== step11 ",
+          "^step 11 \"",
+          "step11_check\\.py",
+          "^echo \"== step12 ",
+          "^step 12 \"",
+          "step12_check\\.py"
+        ],
+        "rebook": {
+          "file": "numbers.json",
+          "deltas": { "ci.steps_total": -3, "gates.ci_steps": -3, "gates.ci_hard": -3 }
+        },
+        "_doc_args": "同 MUT-012"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "门数键逐键复算一致（改账吸收）→ 第⑤节 accountability-slot-floor 红（三对账槽位无执行事实行）→ step12 硬红 exit 1（infra 错为 exit 2、全绿为 0，均不满足期望=探针红）"
+      }
     }
   ]
 }
