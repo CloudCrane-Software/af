@@ -189,11 +189,12 @@ fn order_from(data: &[u8], id: &str) -> WorkOrder {
         let _ = order.complete();
     }
     if phase == 4 {
-        let _ = order.attach_artifact(WorkArtifact {
-            artifact_id: "fa".into(),
-            is_final: true,
-            qualified: true,
-        });
+        let _ = order.attach_artifact(WorkArtifact::from_bytes(
+            "fa",
+            true,
+            true,
+            b"fuzz final artifact",
+        ));
         let _ = order.close();
     }
     if phase == 5 {
@@ -222,11 +223,12 @@ fn finish_or_cancel(order: &mut WorkOrder, data: &[u8]) {
         return;
     }
     let _ = order.complete();
-    let _ = order.attach_artifact(WorkArtifact {
-        artifact_id: "fa".into(),
-        is_final: true,
-        qualified: true,
-    });
+    let _ = order.attach_artifact(WorkArtifact::from_bytes(
+        "fa",
+        true,
+        true,
+        b"fuzz finish artifact",
+    ));
     let _ = order.close();
 }
 

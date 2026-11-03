@@ -9,7 +9,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
-use af_workorder::{migrate_legacy_artifact_digests, sha256_hex, WorkOrder};
+use af_workorder::{migrate_legacy_artifact_digests, WorkOrder};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ExeclineError;
@@ -41,10 +41,10 @@ pub struct LedgerRecord {
     pub order_after: Option<WorkOrder>,
 }
 
-/// 旧账本工件摘要迁移器。stub 旧单可直接从 `artifacts/<id>.json` 重算；
-/// 其他旧单元必须由运营者从实际旧字节生成 `artifact-digests.json` 映射。
-/// 两条来源都缺失即拒绝，不猜空 hash，也不信任旧账本自报值。
-fn legacy_artifact_digest(order_dir: &Path, artifact_id: &str) -> Result<String, String> {
+/// 旧账本工件摘要迁移器。stub 旧单直接读 `artifacts/<id>.json`；其他旧单元
+/// 必须由运营者把实际旧字节放到 `artifact-bytes/<id>`。核心迁移器收到字节后
+/// 自行计算 SHA-256；两条来源都缺失即拒绝，不猜空 hash，也不接受自报摘要。
+fn legacy_artifact_bytes(order_dir: &Path, artifact_id: &str) -> Result<Vec<u8>, String> {
     let safe_id = !artifact_id.is_empty()
         && artifact_id != "."
         && artifact_id != ".."
@@ -52,31 +52,21 @@ fn legacy_artifact_digest(order_dir: &Path, artifact_id: &str) -> Result<String,
             byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
         });
     if safe_id {
-        let artifact_path = order_dir
-            .join("artifacts")
-            .join(format!("{artifact_id}.json"));
-        if artifact_path.is_file() {
-            let bytes = fs::read(&artifact_path)
-                .map_err(|err| format!("读取旧工件 {} 失败: {err}", artifact_path.display()))?;
-            return Ok(sha256_hex(&bytes));
+        for path in [
+            order_dir
+                .join("artifacts")
+                .join(format!("{artifact_id}.json")),
+            order_dir.join("artifact-bytes").join(artifact_id),
+        ] {
+            if path.is_file() {
+                return fs::read(&path)
+                    .map_err(|err| format!("读取旧工件 {} 失败: {err}", path.display()));
+            }
         }
-    }
-    let map_path = order_dir.join("artifact-digests.json");
-    if map_path.is_file() {
-        let text = fs::read_to_string(&map_path)
-            .map_err(|err| format!("读取旧摘要映射 {} 失败: {err}", map_path.display()))?;
-        let map: std::collections::BTreeMap<String, String> = serde_json::from_str(&text)
-            .map_err(|err| format!("旧摘要映射 {} 不是合法 JSON: {err}", map_path.display()))?;
-        return map.get(artifact_id).cloned().ok_or_else(|| {
-            format!(
-                "旧工件 {artifact_id} 无实际字节且 {} 无对应摘要",
-                map_path.display()
-            )
-        });
     }
     Err(format!(
         "旧工件 {artifact_id} 的实际字节不可定位；stub 应有 artifacts/<id>.json，其他单元须备 {}",
-        map_path.display()
+        order_dir.join("artifact-bytes").join(artifact_id).display()
     ))
 }
 
@@ -137,7 +127,7 @@ impl OrderLedger {
             {
                 let order_dir = path.parent().unwrap_or_else(|| Path::new("."));
                 migrate_legacy_artifact_digests(order_after, |artifact_id| {
-                    legacy_artifact_digest(order_dir, artifact_id)
+                    legacy_artifact_bytes(order_dir, artifact_id)
                 })
                 .map_err(|err| ExeclineError::LedgerCorrupt {
                     detail: format!("第 {} 行旧单摘要迁移失败: {err}", index + 1),
@@ -244,6 +234,7 @@ impl OrderLedger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use af_workorder::sha256_hex;
 
     fn record(seq: u64, op: &str) -> LedgerRecord {
         LedgerRecord {
@@ -327,22 +318,43 @@ mod tests {
                 "fa-old", true, true, b"new placeholder",
             ))
             .unwrap();
+        order
+            .attach_artifact(af_workorder::WorkArtifact::from_bytes(
+                "swev-old", true, true, b"another placeholder",
+            ))
+            .unwrap();
         let mut row = record(1, "attach_artifact");
         row.order_after = Some(order);
         let mut value = serde_json::to_value(row).unwrap();
-        value["order_after"]["artifacts"][0]
-            .as_object_mut()
+        for artifact in value["order_after"]["artifacts"]
+            .as_array_mut()
             .unwrap()
-            .remove("content_sha256")
-            .unwrap();
+        {
+            artifact
+                .as_object_mut()
+                .unwrap()
+                .remove("content_sha256")
+                .unwrap();
+        }
         fs::write(&path, format!("{value}\n")).unwrap();
         fs::write(dir.join("artifacts/fa-old.json"), b"actual legacy bytes").unwrap();
+        fs::create_dir_all(dir.join("artifact-bytes")).unwrap();
+        fs::write(
+            dir.join("artifact-bytes/swev-old"),
+            b"actual swev legacy bytes",
+        )
+        .unwrap();
 
         let loaded = OrderLedger::load(&path).unwrap();
-        let digest = loaded[0].order_after.as_ref().unwrap().artifacts()[0]
-            .content_sha256()
-            .to_string();
-        assert_eq!(digest, sha256_hex(b"actual legacy bytes"));
+        let artifacts = &loaded[0].order_after.as_ref().unwrap().artifacts();
+        assert_eq!(
+            artifacts[0].content_sha256(),
+            sha256_hex(b"actual legacy bytes")
+        );
+        assert_eq!(
+            artifacts[1].content_sha256(),
+            sha256_hex(b"actual swev legacy bytes")
+        );
 
         fs::remove_file(dir.join("artifacts/fa-old.json")).unwrap();
         let err = OrderLedger::load(&path).unwrap_err();

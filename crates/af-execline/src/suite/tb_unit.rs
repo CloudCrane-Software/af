@@ -222,6 +222,7 @@ impl ExecuteUnit for TbExecuteUnit {
         };
         let row = crate::record::tb_legacy_row(&facts);
         crate::record::append_legacy_row(ctx, &row)?;
+        let artifact_bytes = row.to_string().into_bytes();
         Ok(ExecOutput {
             // reward=Some(true) → 合格终态工件（引擎 close 门材料）；infra
             // （None）不是错误——行照落、工件不合格，订单侧自然进不了 close 门。
@@ -229,8 +230,9 @@ impl ExecuteUnit for TbExecuteUnit {
                 format!("tb-{}", task.task_id),
                 true,
                 reward == Some(true),
-                row.to_string().as_bytes(),
+                &artifact_bytes,
             )],
+            artifact_contents: vec![artifact_bytes],
             // TB 无本地三件套（判分在远端容器链/卷里）——不虚列证据。
             outputs: Vec::new(),
             note: facts.verifier_note.chars().take(300).collect(),

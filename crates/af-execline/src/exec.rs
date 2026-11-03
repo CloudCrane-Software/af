@@ -111,6 +111,9 @@ pub fn verify_task_digest(path: &Path, expected: Option<&str>) -> Result<(), Exe
 #[derive(Debug, Clone)]
 pub struct ExecOutput {
     pub artifacts: Vec<WorkArtifact>,
+    /// 与 `artifacts` 同序的实际内容字节。驱动把这些字节交给引擎重算摘要，
+    /// 不把 WorkArtifact 中已有的 digest 当作写入证明。
+    pub artifact_contents: Vec<Vec<u8>>,
     pub outputs: Vec<PathBuf>,
     pub note: String,
     /// 判定（resolved）；None = 无判定（供给面失败/未跑完）。
@@ -183,6 +186,7 @@ impl ExecuteUnit for StubExecuteUnit {
                 self.qualified,
                 bytes.as_bytes(),
             )],
+            artifact_contents: vec![bytes.into_bytes()],
             outputs: vec![artifact_path],
             note: format!("stub 单元产出工件 {}", self.artifact_id),
             verdict: None,
