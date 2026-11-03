@@ -29,13 +29,13 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 放行：
 
 ```json
-{"ok":true,"order":{},"engine_version":"0.1.0"}
+{"ok":true,"order":{},"engine_version":"0.2.0"}
 ```
 
 拒绝：
 
 ```json
-{"ok":false,"error":{},"engine_version":"0.1.0"}
+{"ok":false,"error":{},"engine_version":"0.2.0"}
 ```
 
 `order` 与 `error` 不同时出现。任何响应都有 `engine_version`，包括版本门拒绝。
@@ -76,11 +76,12 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 |---|---|---|---|
 | `release` | `WorkOrder::release` | 无 | 已绑定产线版本，且预算凭证存在并 `signed` |
 | `close` | `WorkOrder::close` | 无 | 存在 `is_final && qualified` 的工件 |
-| `approve_decision` | `DecisionArtifact::validate_against` | `artifact`（`DecisionArtifact`）、`payload`（字符串） | 先核对 payload 等于订单现算值，再做四层校验 |
+| `approve_decision` | `DecisionArtifact::validate_against` | `artifact`（`DecisionArtifact`）、`payload`（字符串）、`actor_registry`（受信注册表）、`validated_at`（RFC3339 时刻） | 先核对 payload 等于订单现算值，再做四层校验 |
+| `admit_decision` | `DecisionArtifact::validate_against` | 同上 | 使用绑定稳定身份、graph_version 与 `adjudication/v1` 域的入场 payload，再做同样的四层校验 |
 
 `approve_decision` 的 payload 由本进程从订单现算，不采用调用方另指的字符串。算法是 `WorkOrder::decision_payload`，subject 为这张订单的 `graph_version`。域分离格式因此同时绑住 `stable_id` 与 `graph_version`。`run_id` 不进入被签字符串，换 run 不改变哈希。
 
-请求里的 `payload` 仍然必填。它必须与现算结果逐字相同。不一致是 `BadRequest`（message 含「payload 与订单现算的 decision_payload 不一致」），不会拿调用方的字符串去做哈希。一致之后才对这份现算 payload 做四层校验：payload 哈希、角色权限上限、决策所需权限、占位签名。因此一份对订单 A 成立的工件，配上订单 B（另一个 `stable_id` 或另一个 `graph_version`）会被拒绝，哪怕工件和自带 payload 彼此哈希一致。
+请求里的 `payload` 仍然必填。它必须与现算结果逐字相同。不一致是 `BadRequest`（message 含「payload 与订单现算的 decision_payload 不一致」），不会拿调用方的字符串去做哈希。一致之后才对这份现算 payload 做四层校验：payload 哈希、角色权限上限、决策所需权限、受信注册表中的 ed25519 公钥真验签。工件只带 `key_id`，公钥与角色以编排提供的注册表为准；`validated_at` 也由编排注入，过期或未知 key 均结构化拒绝。因此一份对订单 A 成立的工件，配上订单 B（另一个 `stable_id` 或另一个 `graph_version`）会被拒绝，哪怕工件和自带 payload 彼此哈希一致。
 
 `approve_decision` 不修改订单。工单类型上没有决策字段，`release` 的门控也不读决策。校验通过时，响应里的 `order` 与请求快照相同。校验接受库所接受的任何 `Decision`（包括 `Reject` / `Revise` / `Arbitrate`），本进程不另加「必须是 Approve」的规则。
 
@@ -95,9 +96,11 @@ stdin 一行 JSON，stdout 一行 JSON。只读第一行。
 | `bind_line` | `WorkOrder::bind_line` | `line`（`LineBinding`） | 仅 `Created` |
 | `attach_voucher` | `WorkOrder::attach_budget_voucher` | `voucher`（`BudgetVoucher`） | 仅 `Created`。未签名凭证可以登记，`release` 时才被点名 |
 | `start` | `WorkOrder::start` | 无 | `Released` → `InProgress` |
-| `attach_artifact` | `WorkOrder::attach_artifact` | `artifact`（`WorkArtifact`） | `InProgress` 或 `Completed` |
+| `attach_artifact` | `WorkOrder::attach_artifact` | `artifact`：`{artifact_id, is_final, qualified, content}`（`content` = 实际内容字节数组，摘要由本进程计算） | `InProgress` 或 `Completed` |
 | `complete` | `WorkOrder::complete` | 无 | `InProgress` → `Completed` |
-| `cancel` | `WorkOrder::cancel` | 无 | `Created` / `Released` / `InProgress` → `Cancelled` |
+| `cancel` | `WorkOrder::cancel` | 无 | `Created` / `Released` / `InProgress` / `Completed` → `Cancelled`；`Closed` / `Cancelled` 仍拒绝 |
+
+`attach_artifact` 不信任调用方自报的 `content_sha256`——写入口根本不接受这个字段。引擎对请求里的 `content` 字节现算 SHA-256 再入单；响应里的工件摘要因此总是本进程算出的值。订单快照（`order` 字段）里的既有工件仍按 `af-workorder` 的严格线格式读入，缺 `content_sha256` 的旧快照由编排显式迁移（取得实际旧字节重算）后再送引擎，本进程不做隐式补默认值。
 
 本地执行表示允许跳过本 bin。规则的权威实现仍是 `af-workorder`。之后再把快照送进 `release` 或 `close` 时，引擎只按快照里的事实做门控。
 

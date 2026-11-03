@@ -26,7 +26,7 @@ use af_workorder::{
     LineBinding, OrderDecodeError, TrustedActorRegistry, WorkArtifact, WorkOrder,
 };
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 /// 编译进二进制的包版本。cargo 在编译时注入 `CARGO_PKG_VERSION`。
@@ -70,6 +70,18 @@ enum Op {
     Cancel,
     ApproveDecision,
     AdmitDecision,
+}
+
+/// attach_artifact 的写入口：必须给实际内容字节，摘要只能由本进程计算。
+/// 不接受 WorkArtifact 的 content_sha256 自报字段；订单快照中的既有工件仍走
+/// af-workorder 的严格线格式反序列化。
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ArtifactWrite {
+    artifact_id: String,
+    is_final: bool,
+    qualified: bool,
+    content: Vec<u8>,
 }
 
 fn bad(message: impl Into<String>) -> WireError {
@@ -235,7 +247,13 @@ fn dispatch(op: Op, order: &mut WorkOrder, obj: &Map<String, Value>) -> Result<(
         Op::Release => order.release().map(|_| ()).map_err(gate),
         Op::Start => order.start().map(|_| ()).map_err(gate),
         Op::AttachArtifact => {
-            let artifact: WorkArtifact = parse_field(obj, "artifact")?;
+            let write: ArtifactWrite = parse_field(obj, "artifact")?;
+            let artifact = WorkArtifact::from_bytes(
+                write.artifact_id,
+                write.is_final,
+                write.qualified,
+                &write.content,
+            );
             order.attach_artifact(artifact).map_err(gate)
         }
         Op::Complete => order.complete().map(|_| ()).map_err(gate),

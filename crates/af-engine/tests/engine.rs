@@ -99,6 +99,15 @@ fn artifact(id: &str, is_final: bool, qualified: bool) -> WorkArtifact {
     WorkArtifact::from_bytes(id, is_final, qualified, id.as_bytes())
 }
 
+fn artifact_write(id: &str, is_final: bool, qualified: bool) -> Value {
+    json!({
+        "artifact_id": id,
+        "is_final": is_final,
+        "qualified": qualified,
+        "content": id.as_bytes(),
+    })
+}
+
 fn bound() -> WorkOrder {
     let mut wo = created();
     wo.bind_line(line()).expect("Created 可绑产线");
@@ -441,7 +450,7 @@ fn attach_artifact_accepts_in_progress_and_rejects_created() {
     let got = call(
         "attach_artifact",
         &wo,
-        json!({"artifact": artifact("ia-1", false, true)}),
+        json!({"artifact": artifact_write("ia-1", false, true)}),
     );
     assert_same_order(&got, &next);
 
@@ -453,13 +462,54 @@ fn attach_artifact_accepts_in_progress_and_rejects_created() {
     let got = call(
         "attach_artifact",
         &wo,
-        json!({"artifact": artifact("fa-1", true, true)}),
+        json!({"artifact": artifact_write("fa-1", true, true)}),
     );
     assert_gate(&got, &err);
     assert_eq!(
         got["error"]["gate"]["MutationForbidden"]["op"],
         "attach_artifact"
     );
+}
+
+#[test]
+fn attach_artifact_hashes_actual_bytes_and_rejects_self_reported_digest() {
+    let wo = in_progress();
+    let mut write = artifact_write("ia-1", false, true);
+    write["content"] = json!(b"actual artifact bytes".to_vec());
+    let mut expected = wo.clone();
+    expected
+        .attach_artifact(WorkArtifact::from_bytes(
+            "ia-1",
+            false,
+            true,
+            b"actual artifact bytes",
+        ))
+        .unwrap();
+    let got = call("attach_artifact", &wo, json!({"artifact": write}));
+    assert_same_order(&got, &expected);
+    assert_eq!(
+        got["order"]["artifacts"][0]["content_sha256"],
+        af_workorder::sha256_hex(b"actual artifact bytes")
+    );
+
+    // 只给自报摘要而不给内容，或同时塞入 content_sha256，都必须拒绝。
+    let self_reported = json!({
+        "artifact_id": "ia-1",
+        "is_final": false,
+        "qualified": true,
+        "content_sha256": "0".repeat(64),
+    });
+    let got = call(
+        "attach_artifact",
+        &wo,
+        json!({"artifact": self_reported}),
+    );
+    assert_bad(&got, "字段 artifact 类型错误");
+
+    let mut smuggled = artifact_write("ia-1", false, true);
+    smuggled["content_sha256"] = json!("0".repeat(64));
+    let got = call("attach_artifact", &wo, json!({"artifact": smuggled}));
+    assert_bad(&got, "unknown field `content_sha256`");
 }
 
 #[test]
@@ -519,6 +569,11 @@ fn cancel_accepts_created_and_completed_but_rejects_terminal_states() {
     cancelled.cancel().unwrap();
     assert_same_order(&call("cancel", &wo, json!({})), &cancelled);
     assert_eq!(cancelled.state(), OrderState::Cancelled);
+
+    let mut closed = ready_to_close();
+    closed.close().unwrap();
+    let err = closed.clone().cancel().unwrap_err();
+    assert_gate(&call("cancel", &closed, json!({})), &err);
 }
 
 #[test]
@@ -801,7 +856,7 @@ fn lifecycle_is_stateless_across_processes() {
         call(
             "attach_artifact",
             &local,
-            json!({"artifact": artifact("ia-1", false, true)}),
+            json!({"artifact": artifact_write("ia-1", false, true)}),
         )["order"]
             .clone(),
     )
@@ -826,7 +881,7 @@ fn lifecycle_is_stateless_across_processes() {
         call(
             "attach_artifact",
             &local,
-            json!({"artifact": artifact("fa-1", true, true)}),
+            json!({"artifact": artifact_write("fa-1", true, true)}),
         )["order"]
             .clone(),
     )
@@ -864,12 +919,12 @@ fn engine_version_ignores_runtime_env() {
     let value: Value = serde_json::from_str(stdout.trim_end()).unwrap();
     assert_eq!(value["engine_version"], env!("CARGO_PKG_VERSION"));
     assert_ne!(value["engine_version"], "9.9.9");
-    assert_eq!(value["engine_version"], "0.1.0");
+    assert_eq!(value["engine_version"], "0.2.0");
 }
 
 #[test]
 fn engine_version_min_accepts_current_lower_and_prerelease() {
-    assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
+    assert_eq!(env!("CARGO_PKG_VERSION"), "0.2.0");
     let wo = bound();
     let mut next = wo.clone();
     next.release().unwrap();
@@ -898,12 +953,12 @@ fn engine_version_min_accepts_current_lower_and_prerelease() {
 
 #[test]
 fn engine_version_min_rejects_when_engine_is_older_or_min_is_unusable() {
-    assert_eq!(env!("CARGO_PKG_VERSION"), "0.1.0");
+    assert_eq!(env!("CARGO_PKG_VERSION"), "0.2.0");
     let wo = bound();
     let mut would_release = wo.clone();
     would_release.release().unwrap();
 
-    for min in ["0.1.1", "0.2.0", "1.0.0", "99.0.0"] {
+    for min in ["0.2.1", "0.3.0", "1.0.0", "99.0.0"] {
         let got = call("release", &wo, json!({"engine_version_min": min}));
         assert_upgrade(&got, min);
     }
@@ -1050,7 +1105,7 @@ fn samples() -> Vec<(&'static str, String)> {
             request_line(
                 "attach_artifact",
                 &in_progress(),
-                json!({"artifact": artifact("ia-1", false, true)}),
+                json!({"artifact": artifact_write("ia-1", false, true)}),
             ),
         ),
         (
@@ -1058,7 +1113,7 @@ fn samples() -> Vec<(&'static str, String)> {
             request_line(
                 "attach_artifact",
                 &created(),
-                json!({"artifact": artifact("fa-1", true, true)}),
+                json!({"artifact": artifact_write("fa-1", true, true)}),
             ),
         ),
         (
@@ -1084,7 +1139,15 @@ fn samples() -> Vec<(&'static str, String)> {
         ("cancel_ok", request_line("cancel", &created(), json!({}))),
         (
             "cancel_illegal",
-            request_line("cancel", &completed_bare(), json!({})),
+            request_line(
+                "cancel",
+                &{
+                    let mut wo = ready_to_close();
+                    wo.close().unwrap();
+                    wo
+                },
+                json!({}),
+            ),
         ),
         (
             "approve_decision_ok",
@@ -1129,14 +1192,26 @@ fn samples() -> Vec<(&'static str, String)> {
     ]
 }
 
+/// 契约样例再生开关：`AF_ENGINE_UPDATE_CONTRACT=1 cargo test -p af-engine` 时，
+/// 用代码内 `samples()` 构造的请求与本二进制实跑响应覆盖磁盘 fixtures。
+/// 与 INSTA_UPDATE 同性质：线格式变更的人工固化操作，diff 随提交评审。
+fn contract_update_enabled() -> bool {
+    std::env::var_os("AF_ENGINE_UPDATE_CONTRACT").is_some()
+}
+
 #[test]
 fn contract_samples_match_engine() {
     let dir = contract_dir();
     let samples = samples();
+    let update = contract_update_enabled();
     let mut seen_ops = Vec::new();
     for (name, request) in &samples {
         let req_path = dir.join(format!("{name}.request.json"));
         let resp_path = dir.join(format!("{name}.response.json"));
+        if update {
+            fs::write(&req_path, format!("{request}\n"))
+                .unwrap_or_else(|e| panic!("写 {}：{e}", req_path.display()));
+        }
         let on_disk = fs::read_to_string(&req_path)
             .unwrap_or_else(|e| panic!("读取 {}：{e}", req_path.display()));
         assert!(
@@ -1150,13 +1225,17 @@ fn contract_samples_match_engine() {
         let built_req: serde_json::Value = serde_json::from_str(request)
             .unwrap_or_else(|e| panic!("{name} 构造串不是合法 JSON: {e}"));
         assert_eq!(disk_req, built_req, "{name} 请求样例与构造不一致");
+        let actual = invoke_line(request);
+        if update {
+            fs::write(&resp_path, &actual)
+                .unwrap_or_else(|e| panic!("写 {}：{e}", resp_path.display()));
+        }
         let expected = fs::read_to_string(&resp_path)
             .unwrap_or_else(|e| panic!("读取 {}：{e}", resp_path.display()));
         assert!(
             !expected.trim().contains('\n'),
             "{name}.response.json 必须是单行，与 stdout 一致"
         );
-        let actual = invoke_line(request);
         let actual_v: serde_json::Value = serde_json::from_str(actual.trim())
             .unwrap_or_else(|e| panic!("{name} stdout 不是合法 JSON: {e}"));
         let expected_v: serde_json::Value = serde_json::from_str(expected.trim())
