@@ -6,8 +6,9 @@
 //! 3. `decision` 所需权限必须在 `permissions` 中；
 //! 4. 用**外部受信 actor 注册表**里的 ed25519 公钥做真验签。
 //!
-//! v2 把 `decision_seq` / `basis` / `next_orders_digest` / `expires_at`
-//! 纳入被签字节。工件只带 `key_id`，绝不携带公钥；actor、角色、公钥与
+//! v2 把 actor、角色、权限、决策结论以及 `decision_seq` / `basis` /
+//! `next_orders_digest` / `expires_at` 全部纳入被签字节，不能只签 payload 后
+//! 允许调用方改写“签的是什么决定”。工件只带 `key_id`，绝不携带公钥；actor、角色、公钥与
 //! key 有效期均来自注册表。调用方注入 `validated_at`，避免用工件自带时间
 //! 给自己的过期 key 续命。
 
@@ -228,12 +229,16 @@ impl TrustedActorRegistry {
 }
 
 /// v2 决策签名域。域标签与长度明确的 JSON 字段共同防止和 change-order /
-/// voucher 签名串用；四个扩展字段与业务 payload 在同一份被签字节里。
+/// voucher 签名串用；身份、权限、结论、四个扩展字段与业务 payload 在同一份被签字节里。
 pub const DECISION_SIGNING_DOMAIN: &str = "af-workorder/decision/v2";
 
 #[derive(Serialize)]
 struct DecisionSigningPayload<'a> {
     domain: &'static str,
+    actor_id: &'a str,
+    role: Role,
+    permissions: &'a [Permission],
+    decision: Decision,
     payload: &'a str,
     decision_seq: u64,
     basis: &'a [String],
@@ -242,11 +247,19 @@ struct DecisionSigningPayload<'a> {
 }
 
 fn signing_bytes(
+    actor_id: &str,
+    role: Role,
+    permissions: &[Permission],
+    decision: Decision,
     payload: &str,
     attributes: &DecisionAttributes,
 ) -> Result<Vec<u8>, DecisionError> {
     serde_json::to_vec(&DecisionSigningPayload {
         domain: DECISION_SIGNING_DOMAIN,
+        actor_id,
+        role,
+        permissions,
+        decision,
         payload,
         decision_seq: attributes.decision_seq,
         basis: &attributes.basis,
@@ -286,11 +299,20 @@ impl DecisionArtifact {
         keypair: &Ed25519Keypair,
         attributes: DecisionAttributes,
     ) -> Self {
-        let bytes = signing_bytes(payload, &attributes)
-            .expect("DecisionSigningPayload 只含可序列化字段");
+        let actor_id = actor_id.into();
+        let permissions = role.default_permissions();
+        let bytes = signing_bytes(
+            &actor_id,
+            role,
+            &permissions,
+            decision,
+            payload,
+            &attributes,
+        )
+        .expect("DecisionSigningPayload 只含可序列化字段");
         Self {
-            actor_id: actor_id.into(),
-            permissions: role.default_permissions(),
+            actor_id,
+            permissions,
             role,
             decision,
             payload_hash: sha256_hex(payload.as_bytes()),
@@ -371,7 +393,14 @@ impl DecisionArtifact {
                 validated_at,
             });
         }
-        let message = signing_bytes(payload, &self.attributes())?;
+        let message = signing_bytes(
+            &self.actor_id,
+            self.role,
+            &self.permissions,
+            self.decision,
+            payload,
+            &self.attributes(),
+        )?;
         actor
             .public_key()?
             .verify(&message, &self.signature)
@@ -561,6 +590,16 @@ mod tests {
         );
 
         for tampered in [
+            {
+                let mut art = art.clone();
+                art.decision = Decision::Reject;
+                art
+            },
+            {
+                let mut art = art.clone();
+                art.permissions.reverse();
+                art
+            },
             {
                 let mut art = art.clone();
                 art.decision_seq += 1;

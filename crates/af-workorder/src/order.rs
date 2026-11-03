@@ -125,14 +125,14 @@ fn is_sha256_hex(text: &str) -> bool {
 }
 
 /// 显式迁移旧 WorkOrder JSON：逐个为缺 `content_sha256` 的工件向调用方索取
-/// **从旧工件实际字节重算**的摘要。resolver 无法找到字节时整单拒绝，绝不填
-/// 空哈希/零哈希。返回是否补过摘要；当前格式不做任何改写。
+/// **旧工件实际字节**，并由本函数计算摘要。resolver 无法找到字节时整单拒绝，
+/// 绝不接受调用方自报摘要，也不填空哈希/零哈希。返回是否补过摘要；当前格式不做任何改写。
 pub fn migrate_legacy_artifact_digests<F>(
     value: &mut serde_json::Value,
-    mut digest_for: F,
+    mut bytes_for: F,
 ) -> Result<bool, OrderDecodeError>
 where
-    F: FnMut(&str) -> Result<String, String>,
+    F: FnMut(&str) -> Result<Vec<u8>, String>,
 {
     let Some(object) = value.as_object_mut() else {
         return Ok(false);
@@ -157,18 +157,13 @@ where
         else {
             continue;
         };
-        let digest = digest_for(artifact_id).map_err(|reason| {
+        let content = bytes_for(artifact_id).map_err(|reason| {
             OrderDecodeError::ArtifactDigestMigration {
                 artifact_id: artifact_id.to_string(),
                 reason,
             }
         })?;
-        if !is_sha256_hex(&digest) {
-            return Err(OrderDecodeError::ArtifactDigestMigration {
-                artifact_id: artifact_id.to_string(),
-                reason: "迁移器返回的不是 64 位小写 SHA-256 hex".into(),
-            });
-        }
+        let digest = crate::hash::sha256_hex(&content);
         artifact_object.insert(
             "content_sha256".into(),
             serde_json::Value::String(digest),
@@ -928,7 +923,7 @@ mod tests {
         let expected = crate::hash::sha256_hex(b"actual old bytes");
         let migrated = migrate_legacy_artifact_digests(&mut value, |id| {
             assert_eq!(id, "fa-old");
-            Ok(expected.clone())
+            Ok(b"actual old bytes".to_vec())
         })
         .unwrap();
         assert!(migrated);
