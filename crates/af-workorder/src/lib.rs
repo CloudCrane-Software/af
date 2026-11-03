@@ -17,7 +17,7 @@
 //! 变更单签名是真 ed25519([`sign`]):在本 crate 内签发与验签,不经过 af-credential。
 //! SLA 截止已接 af-calendar,不再是字符串占位。
 
-pub mod admit;
+pub mod gate_admit;
 pub mod change;
 pub mod decision;
 pub mod error;
@@ -28,7 +28,7 @@ pub mod sign;
 pub mod sla;
 pub mod state;
 
-pub use admit::{
+pub use gate_admit::{
     validate_required_gate_inputs, GateAdmitRejection, ProvidedGateInput, RequiredGateInput,
 };
 pub use af_calendar::{Calendar, CalendarError};

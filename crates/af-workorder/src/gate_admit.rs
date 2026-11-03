@@ -1,4 +1,4 @@
-//! admit 层的前级门工件两查（PoC-F 纯函数，不在 release 状态机硬塞载体）。
+//! gate_admit 层的前级门工件两查（PoC-F 纯函数，不在 release 状态机硬塞载体）。
 //!
 //! **主代理串行合入交接（PoC-A）**：待 PoC-A 的 admit 骨架收卷后，在创建
 //! downstream WorkOrder 之前调用 [`validate_required_gate_inputs`]。调用方负责
@@ -6,6 +6,10 @@
 //! `af.gate_result.v1`，把其 `payload.verdict` 原字符串填入
 //! [`ProvidedGateInput`]。本函数不读文件、不推断默认 verdict、不把红/黄门映射成绿。
 //! 本任务按隔离约束只交函数与单测，不修改 PoC-A 正在建设的 admit 调用点。
+//!
+//! **合流改名消歧（2026-11-04）**：本模块原同名 `admit`，与 af-order 的订单受理层
+//! `af_order::admit`（AdmissionRequest→AdmissionReceipt）同名不同层，改名
+//! `gate_admit` 以消歧；af_order::admit 受理层保留原名。
 
 use serde::{Deserialize, Serialize};
 
