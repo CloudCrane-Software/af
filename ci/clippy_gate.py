@@ -12,14 +12,44 @@
 
 基线文件格式（ci/clippy-baseline.txt，每行一条，tab 分隔）:
     <count>\t<lint>\t<相对仓库根的文件路径>
+
+基线钉（fail-closed）: 判据正本须与外部哈希钉 ci/baselines/clippy-baseline.sha256 对账
+（格式 "<sha256>  <数据行数>  clippy-baseline.txt"，同 mutations-registry.sha256 家族约定）。
+钉文件缺席、格式坏、哈希或行数不匹配 → exit 2 红，绝不拿未钉/被篡改的基线判 PASS。
+--update 重写基线时同步刷新钉（人工操作，钉文件 diff 随批评审）。
 """
 import argparse
 import collections
+import hashlib
 import json
 import sys
 from pathlib import Path
 
 DEFAULT_BASELINE = Path(__file__).resolve().parent / "clippy-baseline.txt"
+DEFAULT_PIN = Path(__file__).resolve().parent / "baselines" / "clippy-baseline.sha256"
+
+
+def baseline_data_lines(path: Path) -> int:
+    """基线数据行数（非空、非 # 注释）。"""
+    return sum(1 for l in path.read_text(encoding="utf-8").splitlines()
+               if l.strip() and not l.startswith("#"))
+
+
+def pin_error(baseline: Path, pin: Path):
+    """判据正本 vs 外部哈希钉 fail-closed 对账；返回 None=通过，否则返回红字消息。"""
+    if not pin.exists():
+        return f"基线钉文件缺席（{pin}）——判据未钉，fail-closed 红"
+    parts = pin.read_text(encoding="utf-8").splitlines()[0].split()
+    if len(parts) != 3:
+        return (f"基线钉文件格式坏（{pin}）——须为 "
+                f"'<sha256>  <数据行数>  clippy-baseline.txt'")
+    want_sha, want_count = parts[0], parts[1]
+    got_sha = hashlib.sha256(baseline.read_bytes()).hexdigest()
+    got_count = baseline_data_lines(baseline)
+    if got_sha != want_sha or str(got_count) != want_count:
+        return (f"基线正本漂移：期望 {want_count} 数据行/哈希 {want_sha[:12]}…，"
+                f"实得 {got_count} 数据行/哈希 {got_sha[:12]}…——判据被改须走 --update 同批评审")
+    return None
 
 
 def collect(jsonl_path: str, repo_root: str):
@@ -88,11 +118,20 @@ def main() -> int:
             "# clippy 警告基线 — 由 `python3 ci/clippy_gate.py <jsonl> --update` 生成\n"
             "# 策略: 只拦新增警告；修好现有警告后请用 --update 收紧基线\n"
             + "".join(l + "\n" for l in lines), encoding="utf-8")
-        print(f"clippy-gate: 基线已更新 → {args.baseline}（{len(lines)} 签名 / {n_total} 警告）")
+        DEFAULT_PIN.parent.mkdir(parents=True, exist_ok=True)
+        DEFAULT_PIN.write_text(
+            f"{hashlib.sha256(args.baseline.read_bytes()).hexdigest()}"
+            f"  {len(lines)}  clippy-baseline.txt\n", encoding="utf-8")
+        print(f"clippy-gate: 基线已更新 → {args.baseline}（{len(lines)} 签名 / {n_total} 警告）"
+              f"，钉已刷新 → {DEFAULT_PIN}")
         return 0
 
     if not args.baseline.exists():
         print(f"clippy-gate: 基线缺失 {args.baseline} —— 先用 --update 生成", file=sys.stderr)
+        return 2
+    pin_err = pin_error(args.baseline, DEFAULT_PIN)
+    if pin_err:
+        print(f"clippy-gate: {pin_err}", file=sys.stderr)
         return 2
     base = load_baseline(args.baseline)
 
