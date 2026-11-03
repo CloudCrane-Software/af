@@ -6,6 +6,8 @@ license = "Apache-2.0"
 
 [dependencies]
 rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 
 [lints]

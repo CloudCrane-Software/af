@@ -23,6 +23,7 @@ description = "统一执行面 PoC：订单生命周期驱动（af-engine 门控
 #   af-meter：BudgetLedger（Launch.budget 的 Cents 账本，main.rs:789-793）；
 #   af-stop：StopPolicy（Launch.stop_policy，main.rs:796）。
 [dependencies]
+af-eval = { path = "../af-eval" }
 af-compiler = { path = "../af-compiler" }
 af-credential = { path = "../af-credential" }
 af-harness = { path = "../af-harness" }

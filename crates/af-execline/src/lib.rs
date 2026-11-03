@@ -34,6 +34,7 @@ pub mod driver;
 pub mod engine;
 pub mod error;
 pub mod exec;
+pub mod gate_unit;
 pub mod graph_unit;
 pub mod hostbridge;
 pub mod judge;
@@ -57,6 +58,11 @@ pub use driver::{AttemptLayout, DriveReport, DriverConfig, OrderLifecycleDriver}
 pub use engine::{EngineAccept, EngineClient, EngineOutcome, EngineRejection};
 pub use error::ExeclineError;
 pub use exec::{file_sha256_hex, ExecContext, ExecOutput, ExecuteUnit, StubExecuteUnit};
+pub use gate_unit::{
+    gate_digest_from_record, load_gate_output, persist_gate_order_metrics, GateCheckRunner,
+    GateExecuteUnit, GateOrderMetrics, GateRunnerOutput, GateUnitSpec, ProcessGateRunner,
+    GATE_ARTIFACT_PREFIX, GATE_CHECK_IMPL, GATE_UNIT_ID,
+};
 pub use graph_unit::{linearize, GraphExecuteUnit, GraphUnitSpec};
 pub use hostbridge::{HostBridge, SshBridge};
 pub use judge::{invoke as judge_invoke, ImportAnchor, JudgeLocator};

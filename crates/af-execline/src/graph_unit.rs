@@ -121,6 +121,8 @@ pub struct GraphUnitSpec {
     /// 分派时 fail-loud 拒载——不静默跳判）。装配面（swev 环 spec.judge
     /// 同源）：订单层 wiring 或测试注入。
     pub judge: Option<crate::judge::JudgeLocator>,
+    /// PoC-F：既有 check 节点的 af.gate_result.v1 执行单元；未配置时该 check 拒载。
+    pub gate: Option<Arc<crate::gate_unit::GateExecuteUnit>>,
     /// 单元版本。
     pub unit_version: &'static str,
 }
@@ -137,6 +139,7 @@ impl GraphUnitSpec {
             order_spend_cap_cents: None,
             tool_spend_cents: 1,
             judge: None,
+            gate: None,
             unit_version: "0.1.0",
         }
     }
@@ -815,10 +818,23 @@ impl GraphExecuteUnit {
                 )
                 .verdict
             }
+            n if n == crate::gate_unit::GATE_CHECK_IMPL => {
+                let gate = self.spec.gate.as_ref().ok_or_else(|| {
+                    self.fail(format!(
+                        "check 节点 {} 需要门 Evaluation 执行单元（spec.gate 未配置）",
+                        node.node_id
+                    ))
+                })?;
+                let output = gate.execute(ctx)?;
+                let result = crate::gate_unit::load_gate_output(&output)?;
+                serde_json::to_value(result).map_err(|err| {
+                    self.fail(format!("check 节点 {} 门工件投影失败: {err}", node.node_id))
+                })?
+            }
             other => {
                 return Err(self.fail(format!(
                     "uses.unit {other} 无直调面（分发表内：pkg.sweng.test_unit + \
-                     pkg.sweagent.aci_schema/human_gate/swebench_eval）"
+                     pkg.sweagent.aci_schema/human_gate/swebench_eval + pkg.af.gate_result）"
                 )))
             }
         };
@@ -1092,6 +1108,13 @@ impl GraphExecuteUnit {
             &plan.body.interface.output_type,
             &final_payload,
         );
+        // PoC-F：门终态是完整 af.gate_result.v1 envelope。verdict 三态独立映射；
+        // qualified 只表示结构有效的门工件，红/黄门也可经既有订单面诚实 close。
+        let gate_terminal = gate_terminal_verdict(&final_payload)?;
+        let is_gate_terminal = gate_terminal.is_some();
+        if let Some(gate_verdict) = gate_terminal {
+            verdict = gate_verdict;
+        }
         // 红队 W2-C48：判据退化收口——任一节点取证到测试面改动（test_edit
         // 记账在场），合格终态不得授予：判定压 None（qualified=false → close
         // 门拒收），gate 如实记 test_edit（覆盖 ok/verify_failed——改过的
@@ -1100,7 +1123,20 @@ impl GraphExecuteUnit {
         if test_edited && verdict == Some(true) {
             verdict = None;
         }
-        let artifact_id = format!("graph-{}-{}", plan.body.interface.output_from, final_port);
+        let artifact_id = if is_gate_terminal {
+            let typed: af_eval::GateResultEnvelope = serde_json::from_value(final_payload.clone())
+                .map_err(|err| Self::envelope_err(format!("门终态类型化失败: {err}")))?;
+            let bytes = typed
+                .persistent_bytes()
+                .map_err(|err| Self::envelope_err(format!("门终态持久字节序列化失败: {err}")))?;
+            format!(
+                "{}{}",
+                crate::gate_unit::GATE_ARTIFACT_PREFIX,
+                af_eval::sha256_hex(&bytes)
+            )
+        } else {
+            format!("graph-{}-{}", plan.body.interface.output_from, final_port)
+        };
         // 红队 W1-C36：结果行改走 af.plan.record.v1 统一行契约（swev/report
         // 同款投影 record::swev_v1_row）——此前手拼行缺 node_id/item_id/
         // attempt/host_alias/status/evidence/gate/usage/wall_ms/note 契约键、
@@ -1166,7 +1202,11 @@ impl GraphExecuteUnit {
             artifacts: vec![WorkArtifact {
                 artifact_id,
                 is_final: true,
-                qualified: verdict == Some(true),
+                qualified: if is_gate_terminal {
+                    !test_edited
+                } else {
+                    verdict == Some(true)
+                },
             }],
             outputs,
             note: format!(
@@ -2657,6 +2697,25 @@ fn terminal_verdict(
     }
 }
 
+/// 门终态三态投影。外层 Option 表示是否为门工件；内层 Option 保留 needs_human。
+fn gate_terminal_verdict(payload: &Value) -> Result<Option<Option<bool>>, ExeclineError> {
+    if payload.get("artifact_type").and_then(Value::as_str) != Some(af_eval::GATE_RESULT_TYPE) {
+        return Ok(None);
+    }
+    let result: af_eval::GateResultEnvelope =
+        serde_json::from_value(payload.clone()).map_err(|err| {
+            GraphExecuteUnit::envelope_err(format!("af.gate_result.v1 终态无法解码: {err}"))
+        })?;
+    result.validate().map_err(|err| {
+        GraphExecuteUnit::envelope_err(format!("af.gate_result.v1 终态无效: {err}"))
+    })?;
+    Ok(Some(match result.payload.verdict {
+        af_eval::GateVerdict::Pass => Some(true),
+        af_eval::GateVerdict::Fail => Some(false),
+        af_eval::GateVerdict::NeedsHuman => None,
+    }))
+}
+
 fn check_typed(
     types: &BTreeMap<String, Value>,
     node_id: &str,
@@ -3125,5 +3184,96 @@ mod construction_surface_tests {
         let input = serde_json::json!({"instance_id": ""});
         let err = GraphTask::parse(&input, "f").unwrap_err();
         assert!(err.to_string().contains("为空串"), "空串应拒：{err}");
+    }
+}
+
+#[cfg(test)]
+mod gate_terminal_tests {
+    use super::*;
+    use af_eval::{
+        GateCheckResult, GateCheckStatus, GateEvalRef, GateResult, GateResultEnvelope,
+        GateRunnerRef, GateSubject, GateSubjectKind, GateSuiteRef, GateVerdict, RunVerdict,
+        SkipAccounting, SkipReason,
+    };
+
+    fn digest(ch: char) -> String {
+        std::iter::repeat_n(ch, 64).collect()
+    }
+
+    fn gate_result(verdict: GateVerdict) -> GateResultEnvelope {
+        let check = GateCheckResult {
+            check_id: "c".into(),
+            required: true,
+            status: match verdict {
+                GateVerdict::Pass => GateCheckStatus::Pass,
+                GateVerdict::Fail => GateCheckStatus::Fail,
+                GateVerdict::NeedsHuman => GateCheckStatus::Skip,
+            },
+            skip_reason: (verdict == GateVerdict::NeedsHuman)
+                .then_some(SkipReason::EnvironmentUnavailable),
+            detail: String::new(),
+        };
+        let checks = vec![check];
+        let (_, failure_code) = af_eval::classify_gate(&RunVerdict::Passed, &checks);
+        GateResultEnvelope::new(GateResult {
+            producer_order_id: "wo-gate".into(),
+            eval: GateEvalRef {
+                ledger_id: "eval".into(),
+                run_id: "run".into(),
+            },
+            suite: GateSuiteRef {
+                lineage_id: "f1".into(),
+                version: 1,
+                snapshot_hash: digest('a'),
+            },
+            subject: GateSubject {
+                kind: GateSubjectKind::GitCommit,
+                repo: "r".into(),
+                version: "0123456789abcdef0123456789abcdef01234567".into(),
+                files: Vec::new(),
+            },
+            recipe_digest: digest('b'),
+            runner: GateRunnerRef {
+                r#impl: "test".into(),
+                digest: digest('c'),
+                environment_digest: digest('d'),
+            },
+            inputs: Vec::new(),
+            skip_accounting: SkipAccounting::of(&checks),
+            checks,
+            verdict,
+            failure_code,
+            evidence: Vec::new(),
+            started_at_ms: 1,
+            finished_at_ms: 2,
+        })
+    }
+
+    #[test]
+    fn existing_check_terminal_preserves_gate_three_states() {
+        for (verdict, expected) in [
+            (GateVerdict::Pass, Some(Some(true))),
+            (GateVerdict::Fail, Some(Some(false))),
+            (GateVerdict::NeedsHuman, Some(None)),
+        ] {
+            let payload = serde_json::to_value(gate_result(verdict)).unwrap();
+            assert_eq!(gate_terminal_verdict(&payload).unwrap(), expected);
+        }
+        assert_eq!(
+            gate_terminal_verdict(&serde_json::json!({"pass": true})).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn graph_value_roundtrip_keeps_original_cas_persistent_bytes() {
+        let original = gate_result(GateVerdict::Fail);
+        let value = serde_json::to_value(&original).unwrap();
+        let typed: GateResultEnvelope = serde_json::from_value(value).unwrap();
+        assert_eq!(
+            af_eval::sha256_hex(&typed.persistent_bytes().unwrap()),
+            af_eval::sha256_hex(&original.persistent_bytes().unwrap()),
+            "check 节点 Value 交接后必须仍寻址同一份 CAS 工件"
+        );
     }
 }
