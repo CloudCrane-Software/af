@@ -449,6 +449,17 @@ pub fn admit(
         .map_err(|detail| OrderError::from(AdmitReject::GateListSchema(detail)))?;
     checks.push(CHECK_GATE_LIST_SCHEMA.into());
 
+    // ── 第②步-c：F 门单两查（gate_admit::validate_required_gate_inputs）──
+    // PoC-F 纯函数已收卷合入（af_workorder::gate_admit，合流批改名消歧）。
+    // **只接两查这一层，数据面 PoC-C 落位**：required = 配方声明的必需前级门
+    // 工件（RequiredGateInput），provided = 按 input_id 从 CAS 解出
+    // af.gate_result.v1 后回填的原样 payload.verdict（ProvidedGateInput，不
+    // 推断默认、不把红/黄门映射成绿）。两面的装载（配方→请求、CAS→verdict）
+    // 尚无管道，属 PoC-C 范围；本骨架调用占位恒过，链位、错误映射（门清单
+    // 步骤占位码 OR2105）已钉死不得移动。落位时随数据面一起补 checks 点名
+    // （本骨架不新增点名——回执 checks 面由验收钉死）。
+    gate_input_two_check(request)?;
+
     // ── 第③步：DecisionArtifact 四层校验（真验签，必经引擎子进程）──
     let engine_version = validate_decision_via_engine(client, &order, request, now)?;
     checks.push(CHECK_DECISION_FOUR_LAYER.into());
@@ -605,6 +616,31 @@ fn recheck_next_orders_digest(_decision: &DecisionArtifact) -> Result<(), AdmitR
 /// [`AdmitReject::CredentialIntersection`]。占位恒过。
 fn intersect_credentials(_decision: &DecisionArtifact) -> Result<(), AdmitReject> {
     Ok(())
+}
+
+/// 第②步-c 门单两查执行体：真调 PoC-F 的
+/// [`af_workorder::gate_admit::validate_required_gate_inputs`]（存在性一查 +
+/// verdict 严格等于 "pass" 二查，fail-closed）。
+///
+/// **占位恒过（数据面 PoC-C 落位）**：`required`/`provided` 两侧目前以空清单
+/// 调用——
+/// - `required`：配方面声明的必需前级门工件。admission 请求线格式
+///   （[`AdmissionRequest`]，deny_unknown_fields）尚未携带配方装载的
+///   `RequiredGateInput` 清单，扩线格式属 PoC-C；
+/// - `provided`：按 `input_id` 从 CAS 解出 `af.gate_result.v1`，取其
+///   `payload.verdict` 原字符串。admission 链无 CAS 根参数，CAS 对账（同
+///   input_id 多份工件、digest 与 basis 引用一致性）属 PoC-C 的 basis 重算
+///   （OR2109）邻接面，不在本骨架实现。
+///
+/// 交接（PoC-C）：落位时两侧装载 + 拒绝映射保持本函数形状
+/// （`GateAdmitRejection` → [`AdmitReject::GateListSchema`]，门清单步骤占位
+/// 码，细则可在 PoC-C 拆独立保留码）+ 补 checks 点名（回执 checks 面当前由
+/// 验收钉死 11 项，本骨架不新增）。链位在 schema 校验之后、引擎四层之前，
+/// 不得移动。
+fn gate_input_two_check(_request: &AdmissionRequest) -> Result<(), AdmitReject> {
+    af_workorder::gate_admit::validate_required_gate_inputs(&[], &[]).map_err(|rejection| {
+        AdmitReject::GateListSchema(format!("门单两查未过（PoC-C 落位前不触发）: {rejection}"))
+    })
 }
 
 // ---------- 受理账本 ----------
