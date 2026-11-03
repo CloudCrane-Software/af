@@ -589,7 +589,14 @@ fn cmd_serve(db: &Path, args: &[String]) {
         i += 1;
     }
     // 谓词参数编进 config 字符串（重开重建同一谓词的唯一真相）。
-    let canary_config = format!("{canary_key}@{canary_min_completed}/{canary_max_defects}");
+    // key 已带 @（形如 key@min/max）则原样使用——serve 与调用方共用同一串，
+    // 避免二次拼接（首部署踩过：key 传 burn-runner-admit@3/0 被拼成 ...@3/0@3/0，
+    // 与条目 config 不匹配，渐放变哑）。
+    let canary_config = if canary_key.contains('@') {
+        canary_key.clone()
+    } else {
+        format!("{canary_key}@{canary_min_completed}/{canary_max_defects}")
+    };
     let resume = canary_predicate(canary_min_completed as usize, canary_max_defects);
 
     // 首启声明或按库内声明重开；库里有渐放行则必须带同一谓词参数重入。
