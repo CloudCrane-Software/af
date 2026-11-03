@@ -10,7 +10,8 @@ use chrono::{DateTime, Utc};
 use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 
-use crate::decision::{Decision, DecisionArtifact, Role};
+use crate::decision::{Decision, DecisionArtifact, DecisionAttributes, Role};
+use crate::sign::Ed25519Keypair;
 use crate::error::{GateError, Missing, OrderDecodeError, RejectionEnvelope};
 use crate::identity::{self, inspect_identity_fields, RunContext, StableId};
 use crate::sla::Sla;
@@ -46,13 +47,130 @@ pub struct BudgetVoucher {
 }
 
 /// 工件。close 门控要求存在 `is_final && qualified` 的工件。
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// `content_sha256` 只能由 [`WorkArtifact::from_bytes`] 对实际写入字节计算；
+/// 字段私有，外部构造器不能让调用方自报摘要。旧线格式必须显式走
+/// [`migrate_legacy_artifact_digests`]，没有 serde default 空哈希后门。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WorkArtifact {
     pub artifact_id: String,
-    /// 是否终态工件
+    /// 是否终态工件。
     pub is_final: bool,
-    /// 是否检验合格
+    /// 是否检验合格。
     pub qualified: bool,
+    content_sha256: String,
+}
+
+impl WorkArtifact {
+    pub fn from_bytes(
+        artifact_id: impl Into<String>,
+        is_final: bool,
+        qualified: bool,
+        content: &[u8],
+    ) -> Self {
+        Self {
+            artifact_id: artifact_id.into(),
+            is_final,
+            qualified,
+            content_sha256: crate::hash::sha256_hex(content),
+        }
+    }
+
+    /// 对已落盘字节重新计算，保留资格元数据，不信上游工件自报的 hash。
+    pub fn recompute_from_bytes(&self, content: &[u8]) -> Self {
+        Self::from_bytes(
+            self.artifact_id.clone(),
+            self.is_final,
+            self.qualified,
+            content,
+        )
+    }
+
+    pub fn content_sha256(&self) -> &str {
+        &self.content_sha256
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct WorkArtifactWire {
+    artifact_id: String,
+    is_final: bool,
+    qualified: bool,
+    content_sha256: String,
+}
+
+impl<'de> Deserialize<'de> for WorkArtifact {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let wire = WorkArtifactWire::deserialize(deserializer)?;
+        if !is_sha256_hex(&wire.content_sha256) {
+            return Err(serde::de::Error::custom(
+                "content_sha256 必须是 64 位小写 SHA-256 hex",
+            ));
+        }
+        Ok(Self {
+            artifact_id: wire.artifact_id,
+            is_final: wire.is_final,
+            qualified: wire.qualified,
+            content_sha256: wire.content_sha256,
+        })
+    }
+}
+
+fn is_sha256_hex(text: &str) -> bool {
+    text.len() == crate::hash::SHA256_HEX_LEN
+        && text
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// 显式迁移旧 WorkOrder JSON：逐个为缺 `content_sha256` 的工件向调用方索取
+/// **旧工件实际字节**，并由本函数计算摘要。resolver 无法找到字节时整单拒绝，
+/// 绝不接受调用方自报摘要，也不填空哈希/零哈希。返回是否补过摘要；当前格式不做任何改写。
+pub fn migrate_legacy_artifact_digests<F>(
+    value: &mut serde_json::Value,
+    mut bytes_for: F,
+) -> Result<bool, OrderDecodeError>
+where
+    F: FnMut(&str) -> Result<Vec<u8>, String>,
+{
+    let Some(object) = value.as_object_mut() else {
+        return Ok(false);
+    };
+    let Some(artifacts) = object.get_mut("artifacts") else {
+        return Ok(false);
+    };
+    let Some(artifacts) = artifacts.as_array_mut() else {
+        return Ok(false);
+    };
+    let mut migrated = false;
+    for artifact in artifacts {
+        let Some(artifact_object) = artifact.as_object_mut() else {
+            continue;
+        };
+        if artifact_object.contains_key("content_sha256") {
+            continue;
+        }
+        let Some(artifact_id) = artifact_object
+            .get("artifact_id")
+            .and_then(serde_json::Value::as_str)
+        else {
+            continue;
+        };
+        let content = bytes_for(artifact_id).map_err(|reason| {
+            OrderDecodeError::ArtifactDigestMigration {
+                artifact_id: artifact_id.to_string(),
+                reason,
+            }
+        })?;
+        let digest = crate::hash::sha256_hex(&content);
+        artifact_object.insert(
+            "content_sha256".into(),
+            serde_json::Value::String(digest),
+        );
+        migrated = true;
+    }
+    Ok(migrated)
 }
 
 /// 状态机迁移履历(按发生顺序)。
@@ -287,17 +405,28 @@ impl WorkOrder {
         identity::decision_payload(&self.stable_id, subject)
     }
 
-    /// 签发决策工件。哈希覆盖 [`Self::decision_payload`],因此换 run 不改变哈希,换身份会。
+    /// admit 专用 payload。不能复用引擎 approve_decision 的 graph-only subject：
+    /// adjudication/v1 域、稳定身份和 graph_version 一起绑定，换单/换版图均不可重放。
+    pub fn admission_decision_payload(&self) -> String {
+        self.decision_payload(&format!(
+            "adjudication/v1:graph:{}",
+            self.graph_version().as_str()
+        ))
+    }
+
+    /// 签发真 ed25519 决策工件。哈希覆盖 [`Self::decision_payload`]，四个扩展字段
+    /// 同时进入 DecisionArtifact v2 被签字节；换 run 不换哈希，换身份会。
     pub fn seal_decision(
         &self,
         actor_id: impl Into<String>,
         role: Role,
         decision: Decision,
         subject: &str,
-        key_id: impl Into<String>,
+        keypair: &Ed25519Keypair,
+        attributes: DecisionAttributes,
     ) -> DecisionArtifact {
         let payload = self.decision_payload(subject);
-        DecisionArtifact::seal(actor_id, role, decision, &payload, key_id)
+        DecisionArtifact::seal(actor_id, role, decision, &payload, keypair, attributes)
     }
 
     /// 分片键。`shard_count` 是配方层的分片数,不存在本单上。
@@ -506,11 +635,7 @@ mod tests {
     }
 
     fn artifact(id: &str, is_final: bool, qualified: bool) -> WorkArtifact {
-        WorkArtifact {
-            artifact_id: id.into(),
-            is_final,
-            qualified,
-        }
+        WorkArtifact::from_bytes(id, is_final, qualified, id.as_bytes())
     }
 
     #[test]
@@ -634,15 +759,16 @@ mod tests {
             wo.transition(Transition::Close),
             Err(GateError::IllegalTransition { .. })
         ));
-        // 完成后不可取消
+        // 完成后的 rework/pivot/abort 可诚实取消；终态 Closed 后仍拒绝任何迁移。
         wo.bind_line(line()).unwrap();
         wo.attach_budget_voucher(voucher(true)).unwrap();
         wo.release().unwrap();
         wo.start().unwrap();
         wo.attach_artifact(artifact("fa-1", true, true)).unwrap();
         wo.complete().unwrap();
+        assert_eq!(wo.cancel().unwrap(), OrderState::Cancelled);
         assert!(matches!(
-            wo.cancel(),
+            wo.close(),
             Err(GateError::IllegalTransition { .. })
         ));
     }
@@ -766,6 +892,47 @@ mod tests {
         assert_ne!(successor.stable_id(), &sid);
         assert_eq!(successor.stable_id(), &StableId::generate("wo-1b"));
         assert_eq!(successor.supersedes(), Some("wo-1"));
+    }
+
+    #[test]
+    fn legacy_artifact_digest_requires_explicit_byte_backed_migration() {
+        let mut wo = WorkOrder::new("wo-migrate", GraphVersion::new("g-3"), sla());
+        wo.bind_line(line()).unwrap();
+        wo.attach_budget_voucher(voucher(true)).unwrap();
+        wo.release().unwrap();
+        wo.start().unwrap();
+        wo.attach_artifact(artifact("fa-old", true, true)).unwrap();
+        let mut value = serde_json::to_value(&wo).unwrap();
+        value.as_object_mut().unwrap()["artifacts"][0]
+            .as_object_mut()
+            .unwrap()
+            .remove("content_sha256")
+            .unwrap();
+
+        // 不迁移时缺字段必须红；不存在 serde default 空哈希。
+        assert!(decode_work_order_value(value.clone()).is_err());
+        let err = migrate_legacy_artifact_digests(&mut value.clone(), |_| {
+            Err("旧工件字节不存在".into())
+        })
+        .unwrap_err();
+        assert!(matches!(
+            err,
+            OrderDecodeError::ArtifactDigestMigration { .. }
+        ));
+
+        let expected = crate::hash::sha256_hex(b"actual old bytes");
+        let migrated = migrate_legacy_artifact_digests(&mut value, |id| {
+            assert_eq!(id, "fa-old");
+            Ok(b"actual old bytes".to_vec())
+        })
+        .unwrap();
+        assert!(migrated);
+        let restored = decode_work_order_value(value.clone()).unwrap();
+        assert_eq!(restored.artifacts()[0].content_sha256(), expected);
+        assert!(!migrate_legacy_artifact_digests(&mut value, |_| {
+            panic!("当前格式不应再调用迁移器")
+        })
+        .unwrap());
     }
 
     const LEGACY_ORDER: &str = r#"{

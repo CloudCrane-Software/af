@@ -61,11 +61,12 @@ fn main() {
     println!("\nrelease ✅ → {:?}", wo.state());
     wo.start().unwrap();
     let mut wo_bare = wo.clone(); // 无工件副本,用来演示 close 门控
-    wo.attach_artifact(WorkArtifact {
-        artifact_id: "fa-1".into(),
-        is_final: true,
-        qualified: true,
-    })
+    wo.attach_artifact(WorkArtifact::from_bytes(
+        "fa-1",
+        true,
+        true,
+        b"gate demo final artifact",
+    ))
     .unwrap();
     wo.complete().unwrap();
     wo_bare.complete().unwrap();

@@ -1198,16 +1198,19 @@ impl GraphExecuteUnit {
             .map_err(|err| self.fail(format!("写 records 失败: {err}")))?;
         let mut outputs = vec![task_dir.join("plan.json"), task_dir.join("task.json")];
         outputs.extend(stage.envelope_files.values().cloned());
+        let artifact_bytes = row.to_string().into_bytes();
         Ok(ExecOutput {
-            artifacts: vec![WorkArtifact {
+            artifacts: vec![WorkArtifact::from_bytes(
                 artifact_id,
-                is_final: true,
-                qualified: if is_gate_terminal {
+                true,
+                if is_gate_terminal {
                     !test_edited
                 } else {
                     verdict == Some(true)
                 },
-            }],
+                &artifact_bytes,
+            )],
+            artifact_contents: vec![artifact_bytes],
             outputs,
             note: format!(
                 "图执行器驱动 {} 节点（{} → …），判定 {:?}",

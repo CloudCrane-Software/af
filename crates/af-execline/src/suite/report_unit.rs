@@ -1814,12 +1814,15 @@ impl ReportExecuteUnit {
             attempt_dir.join("report.md"),
             attempt_dir.join("verify.log"),
         ];
+        let artifact_bytes = v1_row.to_string().into_bytes();
         Ok(ExecOutput {
-            artifacts: vec![WorkArtifact {
-                artifact_id: format!("report-{}", ctx.task_id),
-                is_final: true,
-                qualified: verdict, // 工件资格只看判分（双 passed）
-            }],
+            artifacts: vec![WorkArtifact::from_bytes(
+                format!("report-{}", ctx.task_id),
+                true,
+                verdict, // 工件资格只看判分（双 passed）
+                &artifact_bytes,
+            )],
+            artifact_contents: vec![artifact_bytes],
             outputs: evidence.clone(),
             note: note.chars().take(300).collect(),
             verdict: Some(verdict),

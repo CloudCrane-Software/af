@@ -47,11 +47,12 @@ fn arm(wo: &mut WorkOrder) {
 }
 
 fn close_with_final(wo: &mut WorkOrder) {
-    wo.attach_artifact(WorkArtifact {
-        artifact_id: "fa-1".into(),
-        is_final: true,
-        qualified: true,
-    })
+    wo.attach_artifact(WorkArtifact::from_bytes(
+        "fa-1",
+        true,
+        true,
+        b"calendar final artifact",
+    ))
     .unwrap();
     wo.complete().unwrap();
     wo.close().unwrap();

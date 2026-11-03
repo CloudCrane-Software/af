@@ -111,6 +111,9 @@ pub fn verify_task_digest(path: &Path, expected: Option<&str>) -> Result<(), Exe
 #[derive(Debug, Clone)]
 pub struct ExecOutput {
     pub artifacts: Vec<WorkArtifact>,
+    /// 与 `artifacts` 同序的实际内容字节。驱动把这些字节交给引擎重算摘要，
+    /// 不把 WorkArtifact 中已有的 digest 当作写入证明。
+    pub artifact_contents: Vec<Vec<u8>>,
     pub outputs: Vec<PathBuf>,
     pub note: String,
     /// 判定（resolved）；None = 无判定（供给面失败/未跑完）。
@@ -174,13 +177,16 @@ impl ExecuteUnit for StubExecuteUnit {
             serde_json::to_string_pretty(&payload).map_err(|err| ExeclineError::UnitFailed {
                 detail: format!("工件载荷序列化失败: {err}"),
             })?;
-        fs::write(&artifact_path, format!("{text}\n"))?;
+        let bytes = format!("{text}\n");
+        fs::write(&artifact_path, &bytes)?;
         Ok(ExecOutput {
-            artifacts: vec![WorkArtifact {
-                artifact_id: self.artifact_id.clone(),
-                is_final: self.is_final,
-                qualified: self.qualified,
-            }],
+            artifacts: vec![WorkArtifact::from_bytes(
+                self.artifact_id.clone(),
+                self.is_final,
+                self.qualified,
+                bytes.as_bytes(),
+            )],
+            artifact_contents: vec![bytes.into_bytes()],
             outputs: vec![artifact_path],
             note: format!("stub 单元产出工件 {}", self.artifact_id),
             verdict: None,

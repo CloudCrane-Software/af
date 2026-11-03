@@ -425,6 +425,7 @@ impl OrderLifecycleDriver {
             self.replay_skip(idem)?;
             return Ok(ExecOutput {
                 artifacts: self.order.artifacts().to_vec(),
+                artifact_contents: Vec::new(),
                 outputs: Vec::new(),
                 note: "replay: 工件已登记，未重跑执行单元".to_string(),
                 verdict: None,
@@ -500,7 +501,7 @@ impl OrderLifecycleDriver {
             }
         };
         // 协议一次一个工件：逐个过引擎登记。任一被拒都入账并向上传播。
-        self.attach_artifacts(&output.artifacts, &idem)?;
+        self.attach_artifacts(&output.artifacts, &output.artifact_contents, &idem)?;
         self.append_record(
             "attach_artifact",
             idem.clone(),
@@ -660,18 +661,36 @@ impl OrderLifecycleDriver {
         self.append_record("replay_skip", idem, true, None, Some(self.order.clone()))
     }
 
-    /// 逐个工件过引擎登记（协议一次一个工件）。任一被拒：入账 ok=false 并
-    /// 返回类型化错误；ok=true 行与幂等键落账由调用方（`execute`）负责。
+    /// 逐个工件过引擎登记（协议一次一个工件）。写入口只带 metadata + 实际
+    /// 内容字节，content_sha256 由引擎对字节重算，不信工件 metadata 自报值。
+    /// 任一被拒：入账 ok=false 并返回类型化错误；ok=true 行与幂等键落账由
+    /// 调用方（`execute`）负责。
     fn attach_artifacts(
         &mut self,
         artifacts: &[af_workorder::WorkArtifact],
+        contents: &[Vec<u8>],
         idem: &str,
     ) -> Result<(), ExeclineError> {
-        for artifact in artifacts {
+        if artifacts.len() != contents.len() {
+            return Err(ExeclineError::UnitFailed {
+                detail: format!(
+                    "工件与内容字节数量不一致：{} 件 vs {} 份内容",
+                    artifacts.len(),
+                    contents.len()
+                ),
+            });
+        }
+        for (artifact, content) in artifacts.iter().zip(contents) {
+            let write = json!({
+                "artifact_id": artifact.artifact_id,
+                "is_final": artifact.is_final,
+                "qualified": artifact.qualified,
+                "content": content,
+            });
             let request = engine_request(
                 &self.order,
                 "attach_artifact",
-                json!({ "artifact": artifact }),
+                json!({ "artifact": write }),
             )?;
             match self.client.call(&request)? {
                 EngineOutcome::Accept(accept) => self.order = accept.order,

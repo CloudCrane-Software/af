@@ -50,6 +50,14 @@ $ENGINE_CHANNEL_DIR/
 
 因此新规则的请求即使打到旧二进制上，旧二进制也不会用旧规则把订单判过去。编排在写 pin 之前核对响应里的 `engine_version`。与这次选择的预期不一致时，不把该路径写入 pin。
 
+## 0.2.0 线协议切换
+
+0.2.0 同时引入三类调用方可见变更：`Completed → Cancelled` 新边、DecisionArtifact v2 真 ed25519 验签（额外需要 `actor_registry` 与 `validated_at`），以及 WorkArtifact 必填的 `content_sha256`。这些都不是旧二进制可以诚实执行的请求，因此按本文规则发新二进制并先走 canary；新 run 可用 `engine_version_min: "0.2.0"` fail-closed，旧 run 继续 pin 旧版，不能在同一 run 中静默换规则。
+
+0.2.0 的 `attach_artifact` 写入口同时换成「实际内容字节」语义：请求带 `{artifact_id, is_final, qualified, content}`，摘要在引擎内对 `content` 现算；0.1.0 及更早请求里自报 `content_sha256` 的形态被 `deny_unknown_fields` 拒绝。
+
+旧订单/ledger 快照缺 `content_sha256` 时，0.2.0 不用 serde default 填零哈希或空哈希。重放前必须由迁移器取得每件旧工件的实际字节并计算 SHA-256；字节不可定位即整单拒绝。当前格式已经带摘要的快照不由迁移器改写。
+
 ## 操作步骤
 
 下面这一组命令是发布 canary 与回滚的全部文件操作。干跑入口是 `scripts/engine-channel-dry-run.sh`：它只对每条命令做 `command -v`，不编译、不复制、不摘指针。

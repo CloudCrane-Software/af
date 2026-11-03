@@ -9,7 +9,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
-use af_workorder::WorkOrder;
+use af_workorder::{migrate_legacy_artifact_digests, WorkOrder};
 use serde::{Deserialize, Serialize};
 
 use crate::error::ExeclineError;
@@ -39,6 +39,35 @@ pub struct LedgerRecord {
     /// 该 op 之后的整单快照（拒绝行为空——快照不变，以上一条为准）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub order_after: Option<WorkOrder>,
+}
+
+/// 旧账本工件摘要迁移器。stub 旧单直接读 `artifacts/<id>.json`；其他旧单元
+/// 必须由运营者把实际旧字节放到 `artifact-bytes/<id>`。核心迁移器收到字节后
+/// 自行计算 SHA-256；两条来源都缺失即拒绝，不猜空 hash，也不接受自报摘要。
+fn legacy_artifact_bytes(order_dir: &Path, artifact_id: &str) -> Result<Vec<u8>, String> {
+    let safe_id = !artifact_id.is_empty()
+        && artifact_id != "."
+        && artifact_id != ".."
+        && artifact_id.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+        });
+    if safe_id {
+        for path in [
+            order_dir
+                .join("artifacts")
+                .join(format!("{artifact_id}.json")),
+            order_dir.join("artifact-bytes").join(artifact_id),
+        ] {
+            if path.is_file() {
+                return fs::read(&path)
+                    .map_err(|err| format!("读取旧工件 {} 失败: {err}", path.display()));
+            }
+        }
+    }
+    Err(format!(
+        "旧工件 {artifact_id} 的实际字节不可定位；stub 应有 artifacts/<id>.json，其他单元须备 {}",
+        order_dir.join("artifact-bytes").join(artifact_id).display()
+    ))
 }
 
 /// 订单 ledger 句柄。
@@ -86,10 +115,29 @@ impl OrderLedger {
             if trimmed.is_empty() {
                 continue;
             }
-            let record: LedgerRecord =
-                serde_json::from_str(trimmed).map_err(|err| ExeclineError::LedgerCorrupt {
-                    detail: format!("第 {} 行不是合法 ledger 记录: {err}", index + 1),
+            let mut value: serde_json::Value = serde_json::from_str(trimmed).map_err(|err| {
+                ExeclineError::LedgerCorrupt {
+                    detail: format!("第 {} 行不是合法 ledger JSON: {err}", index + 1),
+                }
+            })?;
+            if let Some(order_after) = value
+                .as_object_mut()
+                .and_then(|record| record.get_mut("order_after"))
+                .filter(|order| !order.is_null())
+            {
+                let order_dir = path.parent().unwrap_or_else(|| Path::new("."));
+                migrate_legacy_artifact_digests(order_after, |artifact_id| {
+                    legacy_artifact_bytes(order_dir, artifact_id)
+                })
+                .map_err(|err| ExeclineError::LedgerCorrupt {
+                    detail: format!("第 {} 行旧单摘要迁移失败: {err}", index + 1),
                 })?;
+            }
+            let record: LedgerRecord = serde_json::from_value(value).map_err(|err| {
+                ExeclineError::LedgerCorrupt {
+                    detail: format!("第 {} 行不是合法 ledger 记录: {err}", index + 1),
+                }
+            })?;
             records.push(record);
         }
         for (index, record) in records.iter().enumerate() {
@@ -186,6 +234,7 @@ impl OrderLedger {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use af_workorder::sha256_hex;
 
     fn record(seq: u64, op: &str) -> LedgerRecord {
         LedgerRecord {
@@ -231,6 +280,85 @@ mod tests {
             vec![1, 2],
             "重载后序号连续"
         );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn legacy_order_replay_fills_digest_from_actual_artifact_bytes_or_fails() {
+        let dir = std::env::temp_dir().join(format!(
+            "af-execline-legacy-digest-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("artifacts")).unwrap();
+        let path = dir.join("ledger.jsonl");
+        let mut order = WorkOrder::new(
+            "wo-ledger",
+            af_workorder::GraphVersion::new("g-1"),
+            af_workorder::Sla::new(None, af_workorder::Priority::Normal),
+        );
+        order
+            .bind_line(af_workorder::LineBinding {
+                line_id: "l".into(),
+                line_version: "v".into(),
+            })
+            .unwrap();
+        order
+            .attach_budget_voucher(af_workorder::BudgetVoucher {
+                voucher_id: "bv".into(),
+                amount: 1,
+                signed: true,
+            })
+            .unwrap();
+        order.release().unwrap();
+        order.start().unwrap();
+        order
+            .attach_artifact(af_workorder::WorkArtifact::from_bytes(
+                "fa-old", true, true, b"new placeholder",
+            ))
+            .unwrap();
+        order
+            .attach_artifact(af_workorder::WorkArtifact::from_bytes(
+                "swev-old", true, true, b"another placeholder",
+            ))
+            .unwrap();
+        let mut row = record(1, "attach_artifact");
+        row.order_after = Some(order);
+        let mut value = serde_json::to_value(row).unwrap();
+        for artifact in value["order_after"]["artifacts"]
+            .as_array_mut()
+            .unwrap()
+        {
+            artifact
+                .as_object_mut()
+                .unwrap()
+                .remove("content_sha256")
+                .unwrap();
+        }
+        fs::write(&path, format!("{value}\n")).unwrap();
+        fs::write(dir.join("artifacts/fa-old.json"), b"actual legacy bytes").unwrap();
+        fs::create_dir_all(dir.join("artifact-bytes")).unwrap();
+        fs::write(
+            dir.join("artifact-bytes/swev-old"),
+            b"actual swev legacy bytes",
+        )
+        .unwrap();
+
+        let loaded = OrderLedger::load(&path).unwrap();
+        let artifacts = &loaded[0].order_after.as_ref().unwrap().artifacts();
+        assert_eq!(
+            artifacts[0].content_sha256(),
+            sha256_hex(b"actual legacy bytes")
+        );
+        assert_eq!(
+            artifacts[1].content_sha256(),
+            sha256_hex(b"actual swev legacy bytes")
+        );
+
+        fs::remove_file(dir.join("artifacts/fa-old.json")).unwrap();
+        let err = OrderLedger::load(&path).unwrap_err();
+        assert!(err.to_string().contains("旧单摘要迁移失败"), "{err}");
         let _ = fs::remove_dir_all(&dir);
     }
 

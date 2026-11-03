@@ -11,6 +11,12 @@ expression: view
   ],
   "decision": "Reject",
   "payload_hash": "[payload_hash]",
+  "decision_seq": 1,
+  "basis": [
+    "snapshot basis"
+  ],
+  "next_orders_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expires_at": "2027-01-01T00:00:00Z",
   "signature": "[signature]",
   "outcome": "rejected",
   "qualified_final_artifact": null,

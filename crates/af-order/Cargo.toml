@@ -14,6 +14,10 @@ description = "下单门面 CLI 骨架：submit/list/show 一命令直驱订单�
 af-compiler = { path = "../af-compiler" }
 af-execline = { path = "../af-execline" }
 af-workorder = { path = "../af-workorder" }
+# PoC-A2 admit：AdmissionRequest 内嵌 DecisionArtifact/TrustedActorRegistry
+# （其公开 API 面带 chrono::DateTime<Utc>），请求解析需要 chrono serde——
+# 与 af-workorder/af-engine 同款声明（版本随 Cargo.lock 既有解析，非新引第三方）。
+chrono = { version = "0.4", features = ["serde"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

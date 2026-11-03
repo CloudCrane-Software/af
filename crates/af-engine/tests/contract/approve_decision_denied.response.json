@@ -1,1 +1,1 @@
-{"ok":false,"error":{"kind":"Decision","decision":{"PermissionDenied":{"decision":"Approve","required":"Approve","granted":["Read"]}}},"engine_version":"0.1.0"}
+{"ok":false,"error":{"kind":"Decision","decision":{"PermissionDenied":{"decision":"Approve","required":"Approve","granted":["Read"]}}},"engine_version":"0.2.0"}

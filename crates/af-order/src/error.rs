@@ -11,7 +11,7 @@ use crate::spec::SpecError;
 pub enum OrderError {
     /// OR1001：命令行用法错误（退出码 2）。
     #[error(
-        "OR1001: 用法错误: {detail}（用法: af-order submit --spec <order.json> --state <dir> | af-order list --state <dir> | af-order show <order-id> --state <dir>）"
+        "OR1001: 用法错误: {detail}（用法: af-order submit --spec <order.json> --state <dir> | af-order admit --request <admission.json> --state <dir> | af-order list --state <dir> | af-order show <order-id> --state <dir>）"
     )]
     Usage { detail: String },
     /// OR2001：spec 文件读不到。
@@ -32,6 +32,22 @@ pub enum OrderError {
     /// 引擎 / 账本 / 执行失败：af-execline 稳定码原样透传。
     #[error("{source}")]
     Submit { source: ExeclineError },
+    /// OR2006：admission request 文件读不到（admit 子命令）。
+    #[error("OR2006: admission request 读取失败 {path}: {detail}")]
+    RequestRead { path: String, detail: String },
+    /// OR2007：admission request 被拒（缺字段 / 未知字段 / 类型不合 /
+    /// 路径不安全，全部点名）。
+    #[error("OR2007: admission request 被拒: {detail}")]
+    RequestInvalid { detail: String },
+    /// admit 校验链类型化拒绝（OR21xx，见 [`crate::admit::AdmitReject`]）。
+    #[error("{source}")]
+    Admit {
+        #[from]
+        source: crate::admit::AdmitReject,
+    },
+    /// admit 链引擎调用失败：af-execline 稳定码原样透传。
+    #[error("{source}")]
+    Engine { source: ExeclineError },
 }
 
 impl OrderError {

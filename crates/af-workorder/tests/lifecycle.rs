@@ -2,8 +2,9 @@
 //! 执行 → 合格工件 → 关单",以及"换版走变更单生成后继工单"、"多方决策工件汇聚"两条支线。
 
 use af_workorder::{
-    BudgetVoucher, ChangeOrder, Decision, DecisionArtifact, DrainStrategy, GateError, GraphVersion,
-    LineBinding, Missing, OrderState, Priority, RelayStrategy, Role, Sla, Transition, WorkArtifact,
+    BudgetVoucher, ChangeOrder, Decision, DecisionArtifact, DecisionAttributes, DrainStrategy,
+    Ed25519Keypair, GateError, GraphVersion, LineBinding, Missing, OrderState, Priority,
+    RelayStrategy, Role, Sla, Transition, TrustedActor, TrustedActorRegistry, WorkArtifact,
     WorkOrder,
 };
 
@@ -12,6 +13,27 @@ fn sla(priority: Priority) -> Sla {
         .unwrap()
         .with_timezone(&chrono::Utc);
     Sla::new(Some(deadline), priority)
+}
+
+fn time(text: &str) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::parse_from_rfc3339(text)
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+}
+
+fn decision_key() -> Ed25519Keypair {
+    Ed25519Keypair::from_seed(&[0x51; 32])
+}
+
+fn decision_attributes() -> DecisionAttributes {
+    DecisionAttributes::new(1, vec!["basis".into()], "a".repeat(64), time("2027-01-01T00:00:00Z"))
+}
+
+fn decision_registry() -> TrustedActorRegistry {
+    TrustedActorRegistry::new(vec![
+        TrustedActor::new("user-approver", Role::Approver, &decision_key().public_key(), time("2027-01-01T00:00:00Z")),
+        TrustedActor::new("user-reader", Role::Reader, &Ed25519Keypair::from_seed(&[0x52; 32]).public_key(), time("2027-01-01T00:00:00Z")),
+    ]).unwrap()
 }
 
 fn prepared_order(id: &str, graph: &str) -> WorkOrder {
@@ -60,21 +82,17 @@ fn full_lifecycle_with_gates_end_to_end() {
     assert_eq!(wo.start().unwrap(), OrderState::InProgress);
 
     // 执行产出:中间件(合格但非终态)不影响 close 门控;终态合格件放行
-    wo.attach_artifact(WorkArtifact {
-        artifact_id: "ia-1".into(),
-        is_final: false,
-        qualified: true,
-    })
+    wo.attach_artifact(WorkArtifact::from_bytes(
+        "ia-1", false, true, b"intermediate artifact",
+    ))
     .unwrap();
     assert_eq!(wo.complete().unwrap(), OrderState::Completed);
     let err = wo.close().unwrap_err();
     assert_eq!(err.missing().unwrap(), &[Missing::NoQualifiedFinalArtifact]);
 
-    wo.attach_artifact(WorkArtifact {
-        artifact_id: "fa-1".into(),
-        is_final: true,
-        qualified: true,
-    })
+    wo.attach_artifact(WorkArtifact::from_bytes(
+        "fa-1", true, true, b"final artifact",
+    ))
     .unwrap();
     assert_eq!(wo.close().unwrap(), OrderState::Closed);
 
@@ -139,10 +157,11 @@ fn multi_actor_decisions_collect_then_gate_release() {
         Role::Reader,
         Decision::Approve,
         payload,
-        "k-reader",
+        &Ed25519Keypair::from_seed(&[0x52; 32]),
+        decision_attributes(),
     );
     assert!(matches!(
-        reader_vote.validate_against(payload),
+        reader_vote.validate_against(payload, &decision_registry(), time("2026-11-03T00:00:00Z")),
         Err(af_workorder::DecisionError::PermissionDenied { .. })
     ));
 
@@ -151,21 +170,25 @@ fn multi_actor_decisions_collect_then_gate_release() {
         Role::Approver,
         Decision::Approve,
         payload,
-        "k-approver",
+        &decision_key(),
+        decision_attributes(),
     );
-    approver_vote.validate_against(payload).unwrap();
+    approver_vote
+        .validate_against(payload, &decision_registry(), time("2026-11-03T00:00:00Z"))
+        .unwrap();
     assert_eq!(approver_vote.actor_id, "user-approver");
 
-    // payload 被掉包 → hash 对不上,决策作废
+    // payload 被掉包 → hash 对不上，决策作废。
     let tampered = DecisionArtifact::seal(
         "user-approver",
         Role::Approver,
         Decision::Approve,
         "wo-multi:release-request:g-3:v3",
-        "k-approver",
+        &decision_key(),
+        decision_attributes(),
     );
     assert!(matches!(
-        tampered.validate_against(payload),
+        tampered.validate_against(payload, &decision_registry(), time("2026-11-03T00:00:00Z")),
         Err(af_workorder::DecisionError::PayloadHashMismatch { .. })
     ));
 

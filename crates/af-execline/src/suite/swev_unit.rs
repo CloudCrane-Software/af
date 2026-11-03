@@ -288,14 +288,17 @@ impl ExecuteUnit for SwevExecuteUnit {
         .into_iter()
         .filter(|path| path.is_file())
         .collect::<Vec<_>>();
+        let artifact_bytes = v1_row.to_string().into_bytes();
         Ok(ExecOutput {
             // resolved=true → 合格终态工件（引擎 close 门材料；gate 不接 close 门，
             // §2.4——no_patch/test_edit 行照落，工件资格只看判分）。
-            artifacts: vec![WorkArtifact {
-                artifact_id: format!("swev-{}", task.instance_id),
-                is_final: true,
-                qualified: resolved == Some(true),
-            }],
+            artifacts: vec![WorkArtifact::from_bytes(
+                format!("swev-{}", task.instance_id),
+                true,
+                resolved == Some(true),
+                &artifact_bytes,
+            )],
+            artifact_contents: vec![artifact_bytes],
             outputs: evidence.clone(),
             note: facts.verifier_note.chars().take(300).collect(),
             verdict: resolved,

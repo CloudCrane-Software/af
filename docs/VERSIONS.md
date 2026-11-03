@@ -18,7 +18,7 @@
 > 覆盖与枚举）；g0b 补合流（step3 provenance 门/9a9b 基线机算/mutations 元探针，
 > 均不新增 step 槽——step3/9 段内改写编号不变）；crate 版本零改动，门数账三键随各 merge commit 同批更新（门数账自举纪律）。
 
-## 一、crate 版本（{{numbers.af.crates}} crate，全部 0.1.0）
+## 一、crate 版本（{{numbers.af.crates}} crate；af-engine 0.2.0，其余 0.1.0）
 
 第二阶段主线五件（ADR-002；`af-plan` 折入 af-compiler——折入经 ADR-013
 追认裁决（2026-10-27，红队 W2-C-03 补登正式载体），独立建位列 §五开放议程
@@ -30,7 +30,7 @@
 | af-compiler | 0.1.0 | 四阶段管线；golden 21；`PLAN_VERSION = 1`（`src/plan.rs`） |
 | af-execline | 0.1.0 | swev/graph/report 三单元 + planbind + af-trace-tree-verify（swev 扁平与 report 环双布局） |
 | af-order | 0.1.0 | 下单门面（`submit --unit swev\|graph\|report`） |
-| af-engine | 0.1.0 | 订单持久化（ledger 9-op + MES 四类跃迁 + voucher） |
+| af-engine | 0.2.0 | Completed 可取消、决策真验签、工件内容摘要与显式旧单迁移；订单持久化（ledger 9-op + MES 四类跃迁 + voucher） |
 
 底座件 17 个（af-bench/af-calendar/af-credential/af-dspy-ir/af-effect-gateway/
 af-eval/af-graph/af-harness/af-mes/af-meter/af-release-gate/af-sampling/

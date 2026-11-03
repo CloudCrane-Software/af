@@ -28,7 +28,7 @@ pub enum Transition {
     Complete,
     /// completed → closed,受门控:存在合格终态工件
     Close,
-    /// created/released/in_progress → cancelled
+    /// created/released/in_progress/completed → cancelled
     Cancel,
 }
 
@@ -61,15 +61,15 @@ impl OrderState {
             OrderState::Created => &[Transition::Release, Transition::Cancel],
             OrderState::Released => &[Transition::Start, Transition::Cancel],
             OrderState::InProgress => &[Transition::Complete, Transition::Cancel],
-            OrderState::Completed => &[Transition::Close],
+            OrderState::Completed => &[Transition::Close, Transition::Cancel],
             OrderState::Closed | OrderState::Cancelled => &[],
         }
     }
 
     pub fn can_apply(self, t: Transition) -> bool {
-        // Cancel 的起点是三个状态,单独判断。
+        // Cancel 的起点是四个非终态（含 Completed：rework/pivot/abort 的诚实终态）。
         if t == Transition::Cancel {
-            return matches!(self, Created | Released | InProgress);
+            return matches!(self, Created | Released | InProgress | OrderState::Completed);
         }
         self.allowed_transitions().contains(&t)
     }
@@ -101,20 +101,65 @@ mod tests {
         );
         assert_eq!(
             OrderState::Completed.allowed_transitions(),
-            &[Transition::Close]
+            &[Transition::Close, Transition::Cancel]
         );
         assert!(OrderState::Closed.allowed_transitions().is_empty());
         assert!(OrderState::Cancelled.allowed_transitions().is_empty());
     }
 
     #[test]
-    fn cancel_allowed_only_before_completion() {
+    fn cancel_allowed_from_every_non_terminal_including_completed() {
         assert!(Created.can_apply(Transition::Cancel));
         assert!(Released.can_apply(Transition::Cancel));
         assert!(InProgress.can_apply(Transition::Cancel));
-        assert!(!OrderState::Completed.can_apply(Transition::Cancel));
+        assert!(OrderState::Completed.can_apply(Transition::Cancel));
         assert!(!OrderState::Closed.can_apply(Transition::Cancel));
         assert!(!OrderState::Cancelled.can_apply(Transition::Cancel));
+    }
+
+    #[test]
+    fn exhaustive_transition_matrix_has_no_extra_edges() {
+        let states = [
+            Created,
+            Released,
+            InProgress,
+            OrderState::Completed,
+            OrderState::Closed,
+            OrderState::Cancelled,
+        ];
+        let transitions = [
+            Transition::Release,
+            Transition::Start,
+            Transition::Complete,
+            Transition::Close,
+            Transition::Cancel,
+        ];
+        let legal = [
+            (Created, Transition::Release),
+            (Created, Transition::Cancel),
+            (Released, Transition::Start),
+            (Released, Transition::Cancel),
+            (InProgress, Transition::Complete),
+            (InProgress, Transition::Cancel),
+            (OrderState::Completed, Transition::Close),
+            (OrderState::Completed, Transition::Cancel),
+        ];
+        for from in states {
+            for transition in transitions {
+                assert_eq!(
+                    from.can_apply(transition),
+                    legal.contains(&(from, transition)),
+                    "非法迁移矩阵漂移: {from:?} --{transition:?}--> {:?}",
+                    transition.to_state()
+                );
+                if !from.can_apply(transition) {
+                    assert!(
+                        !from.allowed_transitions().contains(&transition),
+                        "非法边不得出现在类型化 GateError.allowed 中"
+                    );
+                }
+            }
+        }
     }
 
     #[test]

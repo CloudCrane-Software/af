@@ -112,11 +112,13 @@ fn drive(order: &mut WorkOrder, data: &[u8]) {
             });
         }
         if b & 0b0100 != 0 {
-            let _ = order.attach_artifact(WorkArtifact {
-                artifact_id: format!("a{i}"),
-                is_final: b & 0b1000 != 0,
-                qualified: b & 0b1_0000 != 0,
-            });
+            let content = format!("fuzz artifact a{i} from {data:?}");
+            let _ = order.attach_artifact(WorkArtifact::from_bytes(
+                format!("a{i}"),
+                b & 0b1000 != 0,
+                b & 0b1_0000 != 0,
+                content.as_bytes(),
+            ));
         }
         let t = steps[(b as usize) % steps.len()];
         let state_before = order.state();

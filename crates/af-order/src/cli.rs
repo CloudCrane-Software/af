@@ -59,6 +59,16 @@ pub enum Command {
     List { state: PathBuf },
     /// 打印单订单 ledger 摘要与 MES 事件。
     Show { order_id: String, state: PathBuf },
+    /// 裁决受理（PoC-A2）：DecisionArtifact 按固定校验链接收入单，
+    /// 全过后才写 `admissions.jsonl`；receipt 带幂等键（同键同摘要重放
+    /// 返回原 receipt，同 seq 异摘要拒绝）。`now` = 验签时刻覆写（测试/复现）。
+    Admit {
+        request: PathBuf,
+        state: PathBuf,
+        workspace: Option<PathBuf>,
+        target_dir: Option<PathBuf>,
+        now: Option<String>,
+    },
 }
 
 /// 执行一次 CLI。`args` 不含程序名；Ok = 应打到 stdout 的文本。
@@ -87,6 +97,19 @@ pub fn run(args: &[String]) -> Result<String, OrderError> {
         ),
         Command::List { state } => run_list(&state),
         Command::Show { order_id, state } => run_show(&order_id, &state),
+        Command::Admit {
+            request,
+            state,
+            workspace,
+            target_dir,
+            now,
+        } => run_admit(
+            &request,
+            &state,
+            workspace.as_deref(),
+            target_dir.as_deref(),
+            now.as_deref(),
+        ),
     }
 }
 
@@ -157,8 +180,35 @@ pub fn parse_args(args: &[String]) -> Result<Command, OrderError> {
                 state: PathBuf::from(require_flag(&flags, "--state")?),
             })
         }
+        "admit" => {
+            let (flags, positional) = split_flags(
+                rest,
+                &[
+                    "--request",
+                    "--state",
+                    "--workspace",
+                    "--target-dir",
+                    "--now",
+                ],
+            )?;
+            forbid_positional(&positional, "admit")?;
+            let now = flag_value(&flags, "--now").map(str::to_string);
+            if let Some(raw) = &now {
+                // 解析期即拒坏时间（OR1001），不等到链内才失败。
+                chrono::DateTime::parse_from_rfc3339(raw).map_err(|err| OrderError::Usage {
+                    detail: format!("--now 不是合法 RFC3339: {err}"),
+                })?;
+            }
+            Ok(Command::Admit {
+                request: PathBuf::from(require_flag(&flags, "--request")?),
+                state: PathBuf::from(require_flag(&flags, "--state")?),
+                workspace: flag_value(&flags, "--workspace").map(PathBuf::from),
+                target_dir: flag_value(&flags, "--target-dir").map(PathBuf::from),
+                now,
+            })
+        }
         other => Err(OrderError::Usage {
-            detail: format!("未知子命令 {other}（可选 submit/list/show）"),
+            detail: format!("未知子命令 {other}（可选 submit/admit/list/show）"),
         }),
     }
 }
@@ -690,6 +740,50 @@ fn run_show(order_id: &str, state_root: &Path) -> Result<String, OrderError> {
     to_pretty_json(&out)
 }
 
+// ---------- admit ----------
+
+/// 裁决受理：读 admission.json → 解析（OR2007）→ 定位引擎 → 走 admit 校验链。
+/// receipt 落 `admissions.jsonl` 后随引擎路径一并 stdout 留证。
+fn run_admit(
+    request_path: &Path,
+    state_root: &Path,
+    workspace: Option<&Path>,
+    target_dir: Option<&Path>,
+    now: Option<&str>,
+) -> Result<String, OrderError> {
+    let text = fs::read_to_string(request_path).map_err(|err| OrderError::RequestRead {
+        path: request_path.display().to_string(),
+        detail: err.to_string(),
+    })?;
+    let request = crate::admit::parse_request(&text).map_err(|err| OrderError::RequestInvalid {
+        detail: err.to_string(),
+    })?;
+    // 验签/受理时刻：--now 显式覆写（复现/测试），否则请求体内 validated_at，
+    // 再否则系统钟。三处同源进链，receipt.admitted_at 如实记录实际所用值。
+    let validated_at = match now {
+        Some(raw) => chrono::DateTime::parse_from_rfc3339(raw)
+            .map_err(|err| OrderError::Usage {
+                detail: format!("--now 不是合法 RFC3339: {err}"),
+            })?
+            .with_timezone(&chrono::Utc),
+        None => request.validated_at.unwrap_or_else(chrono::Utc::now),
+    };
+
+    let (workspace, target_dir) = resolve_build_dirs(workspace, target_dir);
+    let client = EngineClient::locate(&workspace, &target_dir)?;
+    let state = StateDir::new(state_root);
+    let receipt = crate::admit::admit(&request, &state, &client, validated_at)?;
+
+    let mut out = serde_json::to_value(&receipt).map_err(|err| OrderError::State {
+        detail: format!("回执序列化失败: {err}"),
+    })?;
+    out.as_object_mut().expect("回执是对象").insert(
+        "engine_bin".into(),
+        Value::String(client.bin().display().to_string()),
+    );
+    to_pretty_json(&out)
+}
+
 fn to_pretty_json(value: &Value) -> Result<String, OrderError> {
     serde_json::to_string_pretty(value).map_err(|err| OrderError::State {
         detail: format!("输出序列化失败: {err}"),
@@ -801,6 +895,32 @@ mod tests {
                 state: PathBuf::from("st")
             }
         );
+
+        // admit 形状：必填 --request/--state，可选 --workspace/--target-dir/--now。
+        let Command::Admit {
+            request,
+            state,
+            workspace,
+            target_dir,
+            now,
+        } = parse_args(&args(&[
+            "admit",
+            "--request",
+            "a.json",
+            "--state",
+            "st",
+            "--now",
+            "2026-11-03T00:00:00Z",
+        ]))
+        .unwrap()
+        else {
+            panic!("应解析为 Admit");
+        };
+        assert_eq!(request, PathBuf::from("a.json"));
+        assert_eq!(state, PathBuf::from("st"));
+        assert_eq!(workspace, None);
+        assert_eq!(target_dir, None);
+        assert_eq!(now.as_deref(), Some("2026-11-03T00:00:00Z"));
 
         // 用法错误全部 OR1001 / 退出码 2
         for bad in [

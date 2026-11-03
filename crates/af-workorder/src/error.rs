@@ -78,8 +78,29 @@ pub enum DecisionError {
         required: crate::decision::Permission,
         granted: Vec<crate::decision::Permission>,
     },
-    #[error("占位签名校验失败:{reason}")]
-    InvalidSignature { reason: String },
+    #[error("决策签名载荷编码失败:{reason}")]
+    SigningPayload { reason: String },
+    #[error("受信 actor 注册表无效:{reason}")]
+    InvalidActorRegistry { reason: String },
+    #[error("actor 不在受信注册表:{actor_id}")]
+    UnknownActor { actor_id: String },
+    #[error("actor {actor_id} 的角色越权:注册表为 {registered:?},工件声称 {claimed:?}")]
+    ActorRoleMismatch {
+        actor_id: String,
+        registered: crate::decision::Role,
+        claimed: crate::decision::Role,
+    },
+    #[error("actor {actor_id} 的 key_id 不在受信注册表:{key_id}")]
+    KeyNotTrusted { actor_id: String, key_id: String },
+    #[error("actor {actor_id} 的 key {key_id} 已于 {key_expires_at} 过期(验签时刻 {validated_at})")]
+    ExpiredKey {
+        actor_id: String,
+        key_id: String,
+        key_expires_at: chrono::DateTime<chrono::Utc>,
+        validated_at: chrono::DateTime<chrono::Utc>,
+    },
+    #[error("ed25519 验签结构化拒绝:{source}")]
+    InvalidSignature { source: SignError },
 }
 
 /// ed25519 签发/验签错误。变更单本地闭环使用,不经过 af-credential。
@@ -200,6 +221,8 @@ pub enum OrderDecodeError {
     Malformed(String),
     #[error("{0}")]
     Rejected(RejectionEnvelope),
+    #[error("旧单工件 {artifact_id} 缺 content_sha256,显式迁移失败:{reason}")]
+    ArtifactDigestMigration { artifact_id: String, reason: String },
     #[error("工单载荷字段无法读入:{0}")]
     Invalid(String),
 }
