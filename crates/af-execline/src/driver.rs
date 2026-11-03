@@ -590,6 +590,32 @@ impl OrderLifecycleDriver {
         let exec_output = self.execute(unit)?;
         self.complete()?;
         self.close()?;
+        // PoC-F 红门三分：只有 close 已发生后才持久化 order_execution_succeeded。
+        // qualified 仅代表门工件有效；被测通过仍由 gate_result.payload.verdict 独立决定。
+        let gate_digest = crate::gate_unit::gate_digest_from_record(exec_output.record.as_ref())
+            .map(str::to_string)
+            .or_else(|| {
+                self.order.artifacts().iter().find_map(|artifact| {
+                    artifact
+                        .artifact_id
+                        .strip_prefix(crate::gate_unit::GATE_ARTIFACT_PREFIX)
+                        .map(str::to_string)
+                })
+            });
+        if let Some(digest) = gate_digest {
+            let store = af_eval::GateResultStore::new(self.cfg.out_dir.join(ARTIFACTS_DIR));
+            let result = store
+                .load(&digest)
+                .map_err(|err| ExeclineError::LedgerCorrupt {
+                    detail: format!("close 后回读门工件失败: {err}"),
+                })?;
+            crate::gate_unit::persist_gate_order_metrics(
+                &self.cfg.out_dir,
+                &self.order,
+                &result,
+                &digest,
+            )?;
+        }
         Ok(exec_output)
     }
 

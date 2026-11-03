@@ -12,6 +12,7 @@
 
 mod clock;
 mod error;
+mod gate;
 mod hash;
 mod ledger;
 mod phase;
@@ -21,6 +22,14 @@ mod validate;
 
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{EvalError, Result};
+pub use gate::{
+    classify_gate, fork_gate_suite, freeze_gate_suite, gate_definitions, skip_counts,
+    workspace_snapshot_digest, GateCheckDefinition, GateCheckResult, GateCheckStatus, GateError,
+    GateEvalRef, GateEvidence, GateFailureCode, GateInput, GateResult, GateResultEnvelope,
+    GateResultStore, GateRunnerRef, GateSubject, GateSubjectKind, GateSuiteRef, GateVerdict,
+    SkipAccounting, SkipReason, StoredGateResult, WorkspaceFile, GATE_RESULT_PORT,
+    GATE_RESULT_TYPE,
+};
 pub use hash::{sha256, sha256_hex, SHA256_HEX_LEN, SHA256_LEN};
 pub use ledger::{
     Benchmark, Catalog, Durability, OpenStatus, ParentPin, Recipe, RunRecord, RunSpec, RunVerdict,
