@@ -474,13 +474,19 @@ impl ExecuteUnit for GateExecuteUnit {
             GateVerdict::NeedsHuman => None,
         };
         let artifact_id = format!("{GATE_ARTIFACT_PREFIX}{}", stored.content_sha256);
+        // PoC-A 0.2.0 线协议：工件摘要只认实际字节。这里的字节就是 persist 落盘
+        // 的同一份（persistent_bytes），sha256 与 artifact_id 内嵌 digest 自洽。
+        let artifact_bytes = result.persistent_bytes().map_err(gate_unit)?;
         Ok(ExecOutput {
-            artifacts: vec![WorkArtifact {
-                artifact_id: artifact_id.clone(),
-                is_final: true,
+            artifacts: vec![WorkArtifact::from_bytes(
+                artifact_id,
+                true,
                 // 红门/黄门也能诚实关单：这里只证明 CAS 工件结构有效，绝不表示被测通过。
-                qualified: true,
-            }],
+                true,
+                &artifact_bytes,
+            )],
+            // 实际字节随 ExecOutput 透传，引擎写入口按字节重算摘要，不信自报值。
+            artifact_contents: vec![artifact_bytes],
             outputs: vec![stored.path.clone()],
             note: format!(
                 "门工件有效=true；被测 verdict={:?}；门单执行单元成功=true（订单成功由 close 单独记）",
