@@ -188,6 +188,7 @@ dependencies = [
  "af-dsl",
  "af-execline",
  "af-mes",
+ "af-station",
  "af-workorder",
  "chrono",
  "serde",
