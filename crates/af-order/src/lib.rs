@@ -1,10 +1,11 @@
 //! af-order —— 下单门面 CLI 骨架（ADR-002 / ADR-003）。
 //!
 //! 纯 CLI + 状态文件 + af-engine 子进程调用，无常驻、无 docker / LLM / 网络
-//! （ADR-003：下单门面无需守护进程即可受理订单）。三个子命令：
+//! （ADR-003：下单门面无需守护进程即可受理订单）。四个子命令：
 //!
 //! ```text
 //! af-order submit --spec <order.json> --state <dir>   # 一命令走通全生命周期
+//! af-order admit  --request <admission.json> --state <dir>  # 裁决受理（PoC-A2）
 //! af-order list   --state <dir>                        # 全部订单及终态
 //! af-order show   <order-id> --state <dir>             # 单订单 ledger + MES
 //! ```
@@ -23,9 +24,10 @@
 //!                           voucher.json, voucher-key.seed(0600)}
 //! ```
 //!
-//! 错误码契约（ADR-007 §3）：OR1xxx（用法）/ OR2xxx（spec / 凭证 / 状态）；
-//! 引擎与账本失败透传 af-execline 的 EX 稳定码，见 [`error`]。
+//! 错误码契约（ADR-007 §3）：OR1xxx（用法）/ OR2xxx（spec / 凭证 / 状态 /
+//! admit 受理）；引擎与账本失败透传 af-execline 的 EX 稳定码，见 [`error`]。
 
+pub mod admit;
 pub mod cli;
 pub mod error;
 pub mod exec;
@@ -33,6 +35,10 @@ pub mod spec;
 pub mod state;
 pub mod voucher;
 
+pub use admit::{
+    admit, parse_request, AdjudicationTemplate, AdmissionReceipt, AdmissionRequest, AdmitReject,
+    GateListSpec, GateSpec, RequestError, ResourceClaim, ResourceProfileSpec,
+};
 pub use error::OrderError;
 pub use exec::{
     parse_exec_flags, parse_unit_choice, report_unit_for, resolve_unit, swev_unit_spec_for,
