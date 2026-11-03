@@ -1,0 +1,173 @@
+schema_version: af.resources/v1
+registry_id: machines
+registry_version: v1
+recipe_namespace: user-01
+as_of: "2026-11-03T19:01:34+08:00"
+nodes:
+  - node_id: pandev
+    admin_state: active
+    roles: [development, observability, local_inference]
+    trust_level: T0
+    endpoint:
+      kind: local
+      address: local
+    capacity:
+      cpu:
+        total_cores: 16
+        allocatable: null
+      memory:
+        total_bytes: 15974674432
+        allocatable: null
+      hard_commit:
+        new_run_mechanism: container
+        new_run_memory_bytes: 6442450944
+        new_run_pids_limit: 512
+        existing_load: metered_only
+    disks:
+      - mount: root
+        write_roots: [home/pan-ding/workspace, home/pan-ding/afbuild-pocg]
+        max_post_used_pct: 85
+        min_post_free_bytes: 85899345920
+        enforcement: preflight_metered
+      - mount: tmp
+        write_roots: [af-pocg]
+        max_post_used_pct: 80
+        min_post_free_bytes: 2147483648
+        enforcement: preflight_metered
+    network:
+      tailnet_ip: 100.64.0.8
+      ssh_alias: local
+      egress: tailnet
+    special:
+      - id: ollama
+        kind: local_inference
+        enabled: true
+        state: in_service
+        endpoint: http://127.0.0.1:11434
+        meter:
+          kind: Stock
+          remaining: 1
+          purpose: concurrency_ceiling
+      - id: vendor_sandbox
+        kind: class_b_sandbox
+        enabled: false
+        state: stopped
+        restart: operator_decision_required
+      - id: step
+        kind: provider_channel
+        enabled: false
+        state: expired_not_renewed
+        restart: operator_decision_required
+      - id: kimi
+        kind: provider_channel
+        enabled: true
+        state: restricted
+  - node_id: gov
+    admin_state: active
+    roles: [trust_services, environment]
+    trust_level: T0
+    endpoint:
+      kind: ssh
+      address: gov
+    capacity:
+      cpu:
+        total_cores: 8
+        allocatable: null
+      memory:
+        total_bytes: 16750372454
+        allocatable: null
+      hard_commit:
+        new_run_mechanism: container
+        new_run_memory_bytes: 6442450944
+        new_run_pids_limit: 512
+        existing_load: metered_only
+    disks:
+      - mount: root
+        write_roots: [home, opt]
+        max_post_used_pct: 85
+        min_post_free_bytes: 21474836480
+        enforcement: preflight_metered
+    network:
+      tailnet_ip: 100.64.0.6
+      ssh_alias: gov
+      egress: tailnet
+    special: []
+  - node_id: anolis
+    admin_state: active
+    roles: [execution, gpu, environment]
+    trust_level: T1
+    endpoint:
+      kind: ssh
+      address: anolis
+    capacity:
+      cpu:
+        total_cores: 16
+        allocatable: null
+      memory:
+        total_bytes: 134761648128
+        allocatable: null
+      hard_commit:
+        new_run_mechanism: container
+        new_run_memory_bytes: 6442450944
+        new_run_pids_limit: 512
+        existing_load: metered_only
+    disks:
+      - mount: root
+        write_roots: [home/pan-ding]
+        max_post_used_pct: 85
+        min_post_free_bytes: 16106127360
+        enforcement: preflight_metered
+      - mount: data
+        write_roots: [af-factory, bench, models]
+        max_post_used_pct: 85
+        min_post_free_bytes: 32212254720
+        enforcement: preflight_metered
+    network:
+      tailnet_ip: 100.64.0.7
+      ssh_alias: anolis
+      egress: tailnet
+    special:
+      - id: gpu_v100s
+        kind: gpu
+        enabled: true
+        state: declared
+        note: 2x V100S 32GB
+        meter:
+          kind: Stock
+          remaining: 1
+          purpose: concurrency_ceiling
+  - node_id: mingda
+    admin_state: active
+    roles: [mes, environment]
+    trust_level: T1
+    endpoint:
+      kind: ssh
+      address: mingda-bench
+    capacity:
+      cpu:
+        total_cores: 4
+        allocatable: null
+      memory:
+        total_bytes: 7945689498
+        allocatable: null
+      hard_commit:
+        new_run_mechanism: container
+        new_run_memory_bytes: 6442450944
+        new_run_pids_limit: 512
+        existing_load: metered_only
+    disks:
+      - mount: root
+        write_roots: [data/bench, root/ch-mes-factory]
+        max_post_used_pct: 85
+        min_post_free_bytes: 26843545600
+        enforcement: preflight_metered
+    network:
+      tailnet_ip: 100.64.0.2
+      ssh_alias: mingda-bench
+      egress: tailnet
+    special:
+      - id: mes_clickhouse
+        kind: mes
+        enabled: true
+        state: in_service
+        endpoint: http://100.64.0.2:15221
