@@ -1,0 +1,38 @@
+{
+  "$comment": "af.trigger.v1 触发层注册表（PoC-D）。正本在 poc/poc-super-agent/registry/，运行位=af-state/triggers/registry.json。映射表是数据不是代码：仓库→套件、事件→动作、安灯阈值全部在此改，工具零改动。秘密不落本表（key_id 只作指向，真值走环境变量 AF_TRIGGER_SECRET_<SOURCE>，T1 Ref 化纪律）。recipe_digest 由安装脚本写入口径=本文件（除 recipe_digest 自身与 $comment 外内容）的 sha256，order_id 确定性生成吃它。",
+  "schema": "af.trigger.registry.v1",
+  "sources": [
+    {
+      "name": "gitea-webhook",
+      "domain": "git",
+      "key_id": "pocd-webhook-key-1",
+      "hmac": "sha256",
+      "events": ["push", "pull_request"]
+    }
+  ],
+  "repo_suites": [
+    {
+      "repo_glob": "**",
+      "map": {
+        "push": { "suite": "F1" },
+        "pull_request": {
+          "suite": "F2",
+          "actions": ["opened", "synchronize"]
+        }
+      },
+      "$comment": "首版全仓库同映射；分仓分套件=加一行 repo_glob 更窄的条目（glob 匹配取最窄命中）。push→F1 快速门；pull_request opened/synchronize→F2 全量（v0.3 T7.1：Actions 只跑 F1，全量走收件箱派单）。pull_request 其他 action（closed 等）不映射=收件箱收下（202）但消费腿不派单（记录 skip）——白名单管『能不能进』，映射表管『派不派单』。"
+    }
+  ],
+  "liveness": {
+    "inbox_silent_after_min": 240,
+    "$comment": "收件箱静默安灯阈值（配方值）。治『建成没事件可路由』：事件流曾静默 267h/273.9h（obs-patrol.json obs-feed-silent 前科）。收件箱最新一投递距今超过该值=安灯 amber，落 状态观测/trigger-inbox-liveness.json + alarms.log 摘要行（机制11 状态面）。安灯在 event-router 主循环内随 poll_triggers 每轮评估——router 在跑而收件箱静默，恰是『路由器活着但源头断供』的形态。"
+  },
+  "slow_path": {
+    "router_actor_id": "poc-super-agent/router",
+    "router_role": "Reviser",
+    "line": { "line_id": "line-pocd", "line_version": "1" },
+    "budget_cents": 100,
+    "review_minutes": 30,
+    "$comment": "Router 永远 Reviser、终裁只在人类（T6.4）。decision 侧唯一合法组合=Reviser+Revise；Reviser 无 Approve（四层校验第③层会拒绝，decision.rs 实证）。line/budget_cents=工单 release 门控前置（LineVersionNotBound/BudgetVoucherNotIssued）的配方声明——与 af-state/spec-F*.json 的 line/budget 字段同口径；review_minutes=投放闸审阅权重。预算凭证在本皮层是配方声明占位（真签名凭证面=af-order/voucher.rs，BOOT 链接线，如实登记）。"
+  }
+}

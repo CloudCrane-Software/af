@@ -1,0 +1,346 @@
+--- /home/pan-ding/workspace/agent黑灯工厂/tools/event-router.py.20261103-pre-POCD.bak	2026-11-03 19:02:07.516173313 +0800
++++ /home/pan-ding/workspace/agent黑灯工厂/tools/event-router.py	2026-11-03 19:17:06.064851491 +0800
+@@ -276,7 +276,12 @@
+                   # 收割子进程的 [otel] 逐条记账原被 `2>&1 | tail -1` 整段吃掉、汇总行里的
+                   # otel 记账无人解析——现记在本键（summary=解析出的 spans/metrics/errors/
+                   # stop_skipped，stderr_lines=本轮透传落日志的记账行数）
+-                  "otel": {}}
++                  "otel": {},
++                  # ⑥ Trigger 收件箱消费腿（PoC-D）：trigger_consumed 按 delivery_id 记
++                  # 消费结论（order_id/skip/dedup/rejected，加速缓存——真源=consumed.jsonl
++                  # 游标）；trigger_dedup 按 dedup_key 防业务重放；trigger_leg 记腿起跑/
++                  # 安灯态（活性安灯自建成起算的锚点）。
++                  "trigger_consumed": {}, "trigger_dedup": {}, "trigger_leg": {}}
+ 
+ 
+ def load_state():
+@@ -2450,6 +2455,315 @@
+     return len(stuck)
+ 
+ 
++# ---------- ⑥ Trigger 收件箱消费腿（PoC-D，af.trigger.v1；MES complete 腿不在此批） ----------
++# 契约/注册表正本：af 仓 poc/poc-super-agent/{contracts,registry}/；运行位读
++# af-state/triggers/registry.json。本腿只做：读已验消息→按注册表映射套件→
++# 确定性 order_id 派单记录（**不执行门套件**——webhook 只进收件箱，执行是 F 门单
++# 职责）。派单记录落 af-state/triggers/dispatch/，与 anolis 订单面（af-state/orders/）
++# 分居：本腿首版不直投 af-order CLI（那是 MES complete→裁决单腿/PoC-C 之后的合流面）。
++TRIGGERS_HOME = os.environ.get("AF_TRIGGER_HOME", WS + "/af-state/triggers")
++TRIGGER_REGISTRY_F = TRIGGERS_HOME + "/registry.json"
++TRIGGER_INBOX_D = TRIGGERS_HOME + "/inbox"
++TRIGGER_CONSUMED_F = TRIGGERS_HOME + "/consumed.jsonl"   # 读侧游标（T6.3 一行一事件）
++TRIGGER_DISPATCH_D = TRIGGERS_HOME + "/dispatch"
++TRIGGER_ANDON_DIR = os.environ.get("AF_TRIGGER_ANDON_DIR", WS + "/状态观测")
++TRIGGER_ALARMS_F = os.environ.get("AF_TRIGGER_ALARMS_F", WS + "/状态观测/alarms.log")
++TRIGGER_ANDON_F = TRIGGER_ANDON_DIR + "/trigger-inbox-liveness.json"
++TRIGGER_ANDON_REFRESH_S = 6 * 3600     # 安灯摘要行刷新节奏（防刷屏；跃迁必写）
++TRIGGER_CONTRACT = "af.trigger.v1"
++
++
++def _trigger_registry():
++    """只读触发层注册表（映射表/安灯阈值是数据不是代码）。读不到返回 None——
++    消费腿整腿 no-op（首日志限频：注册表未装=腿未开通，不该每 60s 刷屏）。"""
++    try:
++        with open(TRIGGER_REGISTRY_F, encoding="utf-8") as f:
++            reg = json.load(f)
++    except FileNotFoundError:
++        return None
++    except Exception as e:
++        log(f"触发层注册表损坏（{TRIGGER_REGISTRY_F}: {type(e).__name__}: {str(e)[:80]}），"
++            f"本轮消费腿跳过（fail-loud 不猜）")
++        return None
++    if reg.get("schema") != "af.trigger.registry.v1":
++        log(f"触发层注册表 schema 不识别: {str(reg.get('schema'))[:60]}，本轮消费腿跳过")
++        return None
++    return reg
++
++
++def _trigger_recipe_digest(reg, raw_text):
++    """order_id 确定性生成的配方指纹：优先注册表自带 recipe_digest（安装时算定），
++    缺席时对注册表原文字节现算（同文件同值，仍确定）。"""
++    rd = reg.get("recipe_digest")
++    if isinstance(rd, str) and len(rd) == 64:
++        return rd
++    return hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
++
++
++def _suite_for_event(reg, repo, event_type, action):
++    """按注册表 repo_suites 把事件映射到门套件（push→F1、pull_request
++    opened/synchronize→F2 是注册表数据，不是代码）。多条命中取 glob 最窄者；
++    pull_request 的 action 不在 actions 列表=收下不派单（返回 None，记 skip）。"""
++    import fnmatch
++    hits = []
++    for row in reg.get("repo_suites", []):
++        pat = row.get("repo_glob", "**")
++        if fnmatch.fnmatch(repo, pat):
++            hits.append((len(pat), row))
++    if not hits:
++        return None
++    row = max(hits, key=lambda t: t[0])[1]          # 最窄 glob 优先
++    m = (row.get("map") or {}).get(event_type)
++    if not isinstance(m, dict):
++        return None                                  # 该事件类型无映射
++    if event_type == "pull_request":
++        acts = m.get("actions") or []
++        if action not in acts:
++            return None                              # 白名单管进门，actions 管派单
++    s = m.get("suite")
++    return s if isinstance(s, str) and s else None
++
++
++def _trigger_order_id(repo, suite, subject, recipe_digest):
++    """order_id 确定性生成 = hash(repo+suite+subject+recipe_digest) 前 16 hex。
++    同内容必然同单号——重放/重复投递在派单面天然幂等（状态文件之外的第三道对账锚）。"""
++    h = hashlib.sha256("|".join([repo, suite, subject, recipe_digest]).encode("utf-8")).hexdigest()
++    return f"{suite}-{repo.replace('/', '-')}-{h[:16]}"
++
++
++def _trigger_consumed_ledger():
++    """读侧游标真源（consumed.jsonl，一行一事件）。返回 (delivery_ids, dedup_keys,
++    order_ids)。损坏行跳过并记日志（追加型日志，坏行不阻断整腿）。"""
++    dids, dkeys, oids = set(), set(), set()
++    try:
++        with open(TRIGGER_CONSUMED_F, encoding="utf-8") as f:
++            for ln in f:
++                ln = ln.strip()
++                if not ln:
++                    continue
++                try:
++                    j = json.loads(ln)
++                except Exception:
++                    log(f"consumed.jsonl 坏行跳过: {ln[:80]}")
++                    continue
++                if j.get("delivery_id"):
++                    dids.add(f"{j.get('source')}/{j['delivery_id']}")
++                if j.get("dedup_key"):
++                    dkeys.add(j["dedup_key"])
++                if j.get("order_id"):
++                    oids.add(j["order_id"])
++    except FileNotFoundError:
++        pass  # 首轮无游标属正常起步
++    except OSError as e:
++        log(f"consumed.jsonl 读失败 {type(e).__name__}: {str(e)[:80]}（按空游标起步）")
++    return dids, dkeys, oids
++
++
++def _trigger_append_consumed(rec):
++    """游标追加（一行一事件）。"""
++    with open(TRIGGER_CONSUMED_F, "a", encoding="utf-8") as f:
++        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
++
++
++def _trigger_liveness_andon(reg, st):
++    """收件箱活性安灯（PoC-D 任务5；复用机制11 状态面）。
++    治『建成没事件可路由』——事件流曾静默 267h/273.9h（obs-patrol obs-feed-silent 前科）。
++    判据：收件箱最新一投递距今超过注册表 liveness.inbox_silent_after_min ⇒ amber。
++    起算=本腿首跑时刻（收件箱自建成就没来过事件也算静默，从建成起算，不冤枉刚部署）。
++    落面：①状态观测/trigger-inbox-liveness.json 判据文件（每轮重写=报活心跳，
++    同 obs-patrol.json 形态）；②状态观测/alarms.log 摘要行（跃迁必写+每 6h 刷新，
++    同 af-execline-idle 节奏）。安灯随主循环评估=STOP 熔断在位时同样停报（全腿一致）。"""
++    import glob as _glob
++    from datetime import datetime, timezone
++    leg = st.setdefault("trigger_leg", {})
++    if not leg.get("started_at"):
++        leg["started_at"] = time.time()
++    newest = 0.0
++    for p in _glob.glob(os.path.join(TRIGGER_INBOX_D, "*", "*.json")):
++        try:
++            newest = max(newest, os.path.getmtime(p))
++        except OSError:
++            pass
++    since = max(newest, leg["started_at"])
++    silent_s = time.time() - since
++    lv = reg.get("liveness") or {}
++    thr_min = lv.get("inbox_silent_after_min")
++    if thr_min is None:                    # 缺省回落 240（显式 None 判——0 是合法阈值）
++        thr_min = 240
++    thr_s = float(thr_min) * 60
++    status = "amber" if silent_s > thr_s else "green"
++    if status == "amber":
++        code = "trigger-inbox-silent"
++        msg = (f"Trigger 收件箱静默 {silent_s / 3600:.1f}h（>阈 {thr_min}min）——"
++               f"Fast Path 断供：无事件可路由；恢复=事件源重投/检查 webhook 出口")
++    else:
++        code, msg = "trigger-inbox-live", (f"收件箱活性正常（最新投递 {silent_s / 60:.0f}min 前，"
++                                           f"阈 {thr_min}min）")
++    now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
++    snap = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "ts_epoch": int(time.time()),
++            "tool": "event-router/trigger-leg", "status": status,
++            "message": msg, "alarm_code": code,
++            "newest_delivery_age_s": int(silent_s), "threshold_min": thr_min,
++            "inbox_dir": TRIGGER_INBOX_D, "since_epoch": int(since)}
++    if not DRY:
++        try:
++            os.makedirs(TRIGGER_ANDON_DIR, exist_ok=True)
++            tmp = TRIGGER_ANDON_F + ".tmp"
++            with open(tmp, "w", encoding="utf-8") as f:
++                json.dump(snap, f, ensure_ascii=False, indent=1)
++            os.replace(tmp, TRIGGER_ANDON_F)
++        except OSError as e:
++            log(f"安灯判据文件写失败 {type(e).__name__}: {str(e)[:80]}（不阻塞主循环）")
++    # 摘要行：跃迁必写；持续 amber 每 6h 刷新一次
++    prev = leg.get("alarm_state")
++    due_refresh = time.time() - (leg.get("last_alarm_ts") or 0) > TRIGGER_ANDON_REFRESH_S
++    if not DRY and status == "amber" and (prev != "amber" or due_refresh):
++        try:
++            with open(TRIGGER_ALARMS_F, "a", encoding="utf-8") as f:
++                f.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"),
++                                    "level": "amber", "code": code, "message": msg,
++                                    "since": datetime.fromtimestamp(since).strftime(
++                                        "%Y-%m-%d %H:%M:%S")}, ensure_ascii=False) + "\n")
++            leg["last_alarm_ts"] = time.time()
++        except OSError as e:
++            log(f"安灯摘要行写失败 {type(e).__name__}: {str(e)[:80]}（不阻塞主循环）")
++    leg["alarm_state"] = status
++    leg["last_liveness"] = now_iso
++    return snap
++
++
++def poll_triggers(st):
++    """Trigger 收件箱消费腿（PoC-D）：只读**已验消息**（trigger-inbox 落盘时已
++    HMAC 验签+白名单；本腿再核信封完整性=contract 对+payload_sha256 对 body_b64
++    复算——防收件箱文件被篡改），按注册表映射套件，产派单记录。**不执行门套件**。
++    防重放三道：consumed.jsonl 游标（真源）/dedup_key（业务内容）/order_id（确定性
++    单号）。异常不带崩主循环（外层还有 try，这里内层再兜一层=与全线护栏一致）。"""
++    from datetime import datetime, timezone
++    try:
++        raw_text = None
++        with open(TRIGGER_REGISTRY_F, encoding="utf-8") as f:
++            raw_text = f.read()
++        reg = json.loads(raw_text)
++        if reg.get("schema") != "af.trigger.registry.v1":
++            raise ValueError(f"schema 不识别: {str(reg.get('schema'))[:60]}")
++    except FileNotFoundError:
++        leg = st.setdefault("trigger_leg", {})
++        now = time.time()
++        if now - (leg.get("last_no_reg_log") or 0) > 3600:   # 限频：1 行/h
++            leg["last_no_reg_log"] = now
++            log(f"触发层注册表不在位（{TRIGGER_REGISTRY_F}）——消费腿 no-op"
++                f"（腿未开通；安装=poc-super-agent/registry/ 正本安放运行位）")
++        st.setdefault("trigger_consumed", {})
++        st.setdefault("trigger_dedup", {})
++        return
++    except Exception as e:
++        log(f"触发层注册表读失败 {type(e).__name__}: {str(e)[:80]}，本轮消费腿跳过")
++        return
++    # 安灯评估（收件箱空也要报活——先于消费，静默与有货两态都评估）
++    try:
++        _trigger_liveness_andon(reg, st)
++    except Exception as e:  # noqa: BLE001 - 安灯异常不带崩消费腿
++        log(f"触发层安灯评估异常（不阻塞消费腿）: {type(e).__name__}: {str(e)[:120]}")
++    import glob as _glob
++    dids, dkeys, oids = _trigger_consumed_ledger()
++    st.setdefault("trigger_consumed", {})
++    st.setdefault("trigger_dedup", {})
++    recipe_digest = _trigger_recipe_digest(reg, raw_text)
++    n_new = n_skip = 0
++    for path in sorted(_glob.glob(os.path.join(TRIGGER_INBOX_D, "*", "*.json"))):
++        source = os.path.basename(os.path.dirname(path))
++        delivery_id = os.path.splitext(os.path.basename(path))[0]
++        dk = f"{source}/{delivery_id}"
++        if dk in dids or delivery_id in (st["trigger_consumed"] or {}):
++            continue
++        # 只读已验消息：信封契约头 + payload_sha256 对 body_b64 复算
++        try:
++            env = json.load(open(path, encoding="utf-8"))
++        except Exception as e:
++            log(f"触发信封不可读（跳过）: {path}: {type(e).__name__}: {str(e)[:80]}")
++            continue
++        import base64
++        ok = (env.get("contract") == TRIGGER_CONTRACT and isinstance(env.get("body_b64"), str)
++              and env.get("payload_sha256") == hashlib.sha256(
++                  base64.b64decode(env["body_b64"])).hexdigest())
++        if not ok:
++            leg = st.setdefault("trigger_leg", {})
++            rejected = leg.setdefault("rejected", {})
++            if dk not in rejected:
++                rejected[dk] = time.time()
++                log(f"拒读未验消息（信封契约/哈希不符，不消费不派单）: {path}")
++            continue
++        etype = env.get("event_type")
++        body = env.get("body") if isinstance(env.get("body"), dict) else {}
++        repo = str((body.get("repository") or {}).get("full_name")
++                   or (body.get("repository") or {}).get("name") or "unknown-repo")
++        action = str(body.get("action") or "")
++        dedup_key = str(env.get("dedup_key") or f"{etype}:{repo}:{delivery_id}")
++        if etype == "push":
++            subject = str(body.get("after") or body.get("sha") or delivery_id)
++        else:
++            pr = body.get("pull_request") or {}
++            subject = str((pr.get("head") or {}).get("sha") or body.get("head_sha")
++                          or delivery_id)
++        suite = _suite_for_event(reg, repo, etype, action)
++        rec_common = {"delivery_id": delivery_id, "source": source, "event_type": etype,
++                      "thread_key": env.get("thread_key"), "dedup_key": dedup_key,
++                      "repo": repo, "consumed_at": datetime.now(timezone.utc).isoformat(
++                          timespec="seconds")}
++        if suite is None:
++            # 收件箱收下（202）但注册表无映射（如 pull_request closed）：记 skip 游标行
++            n_skip += 1
++            _trigger_append_consumed({**rec_common, "order_id": None, "result": "skip-no-mapping"})
++            st["trigger_consumed"][delivery_id] = "skip"
++            changelog(f"Trigger 消费：{etype} {repo}"
++                      f"{'/' + action if action else ''} 无套件映射（注册表），收下不派单")
++            continue
++        if dedup_key in dkeys or dedup_key in (st["trigger_dedup"] or {}):
++            n_skip += 1
++            _trigger_append_consumed({**rec_common, "order_id": None, "result": "skip-dedup"})
++            st["trigger_consumed"][delivery_id] = "dedup"
++            continue                                    # 同业务内容换 delivery 重放：不重复派单
++        order_id = _trigger_order_id(repo, suite, subject, recipe_digest)
++        if order_id in oids:
++            n_skip += 1
++            _trigger_append_consumed({**rec_common, "order_id": order_id, "result": "skip-order-id"})
++            st["trigger_consumed"][delivery_id] = "order-id-dup"
++            continue
++        # 派单记录（只登记，不执行门套件——webhook 只进收件箱，PoC-D 纪律）
++        disp = {"order_id": order_id, "suite": suite, "repo": repo, "subject": subject,
++                "thread_key": env.get("thread_key"), "dedup_key": dedup_key,
++                "source": source, "delivery_id": delivery_id, "event_type": etype,
++                "action": action or None, "recipe_digest": recipe_digest,
++                "payload_sha256": env.get("payload_sha256"),
++                "created_at": rec_common["consumed_at"],
++                "status": "dispatch-record-only",
++                "note": ("PoC-D 派单记录：webhook 只进收件箱；门套件执行不在本腿"
++                         "（F 门单/门套件职责）。order_id=hash(repo+suite+subject+"
++                         "recipe_digest) 确定性生成，重放天然幂等。")}
++        if not DRY:
++            os.makedirs(TRIGGER_DISPATCH_D, exist_ok=True)
++            tmp = os.path.join(TRIGGER_DISPATCH_D, order_id + ".json.tmp")
++            with open(tmp, "w", encoding="utf-8") as f:
++                json.dump(disp, f, ensure_ascii=False, indent=1)
++            os.replace(tmp, os.path.join(TRIGGER_DISPATCH_D, order_id + ".json"))
++            _trigger_append_consumed({**rec_common, "order_id": order_id,
++                                      "result": "dispatched"})
++            changelog(f"Trigger 消费：{etype} {repo}"
++                      f"{'/' + action if action else ''}@{str(subject)[:12]} → {suite} "
++                      f"派单记录 {order_id}（只登记不执行门套件）")
++        else:
++            log(f"[DRY] Trigger 消费：{etype} {repo}@{str(subject)[:12]} → {suite} "
++                f"派单 {order_id}（只登记）")
++        st["trigger_consumed"][delivery_id] = order_id
++        st["trigger_dedup"][dedup_key] = order_id
++        dids.add(dk)
++        dkeys.add(dedup_key)
++        oids.add(order_id)
++        n_new += 1
++    if n_new or n_skip:
++        log(f"Trigger 消费腿：新派单 {n_new}、skip {n_skip}（游标 {TRIGGER_CONSUMED_F}）")
++
++
+ def main():
+     st = load_state()
+     # 版本钉（2026-11-03 在役换码批）：起跑即把「在役载入源码指纹」登记进状态面并落盘
+@@ -2508,6 +2822,13 @@
+                 arb_reissue_accounting(st)
+             except Exception as e:  # noqa: BLE001 - 消费腿异常不许带崩主循环
+                 log(f"零终裁重派账消费腿异常（不阻塞主循环）: {type(e).__name__}: {str(e)[:160]}")
++            # ⑥ Trigger 收件箱消费腿（PoC-D，af.trigger.v1）：在既有 60s 主循环内、
++            # 同一 STOP 熔断/异常护栏之下（上方 if os.path.exists(STOP) 在位即 continue，
++            # 本腿与 ①②③⑤ 同进退）；只产派单记录，不执行门套件。
++            try:
++                poll_triggers(st)
++            except Exception as e:  # noqa: BLE001 - 消费腿异常不许带崩主循环
++                log(f"Trigger 消费腿异常（不阻塞主循环）: {type(e).__name__}: {str(e)[:160]}")
+             save_state(st)
+         except Exception as e:
+             log(f"循环异常（不退出）: {e}")

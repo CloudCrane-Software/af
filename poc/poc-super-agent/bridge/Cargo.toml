@@ -1,0 +1,21 @@
+[package]
+name = "af-super-agent-bridge"
+version = "0.1.0"
+edition = "2021"
+
+# 独立工程：空 [workspace] 防止被挂进 AF workspace（poc/ 惯例，同 poc-ledger）。
+# 这是 Router 最小皮（Python）到 af 内核现成 API 的唯一薄门面：
+#   decision_payload / seal_decision / validate_against(四层校验) / ReleaseGate::admit
+# 桥不造新语义，只做参数进出；策略（三禁/Router 永远 Reviser）在 Python 皮层
+# （router/admit/cli），桥保留显式 --role/--decision 仅供负例探针用。
+[workspace]
+
+[dependencies]
+af-workorder = { path = "../../../crates/af-workorder" }
+af-release-gate = { path = "../../../crates/af-release-gate" }
+serde_json = "1"
+
+# 与内核同源锁版（af-workorder 经 workspace 继承 chrono/serde；此处只加 serde_json 直依赖，
+# 版本与根 workspace.package 锁定一致，不引入新第三方依赖面）。
+[dependencies.serde]
+version = "1"
