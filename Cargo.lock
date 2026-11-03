@@ -87,9 +87,10 @@ dependencies = [
 
 [[package]]
 name = "af-engine"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "af-workorder",
+ "chrono",
  "serde",
  "serde_json",
 ]

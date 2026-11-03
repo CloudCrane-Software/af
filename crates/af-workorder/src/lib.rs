@@ -29,7 +29,10 @@ pub mod state;
 
 pub use af_calendar::{Calendar, CalendarError};
 pub use change::{ChangeOrder, DrainStrategy, RelayStrategy, SignedChangeOrder};
-pub use decision::{Decision, DecisionArtifact, Permission, Role, Signature};
+pub use decision::{
+    Decision, DecisionArtifact, DecisionAttributes, Permission, Role, Signature, TrustedActor,
+    TrustedActorRegistry, DECISION_SIGNING_DOMAIN, SIGNATURE_ALGORITHM_PLACEHOLDER,
+};
 pub use error::{
     ChangeError, DecisionError, GateError, IdentityError, Missing, OrderDecodeError,
     RejectionEnvelope, RejectionKind, ShardError, SignError,
@@ -39,8 +42,8 @@ pub use identity::{
     decision_payload, RunContext, StableId, DECISION_PAYLOAD_DOMAIN, STABLE_ID_DOMAIN,
 };
 pub use order::{
-    decode_work_order, decode_work_order_value, BudgetVoucher, GraphVersion, HistoryRecord,
-    LineBinding, WorkArtifact, WorkOrder,
+    decode_work_order, decode_work_order_value, migrate_legacy_artifact_digests, BudgetVoucher,
+    GraphVersion, HistoryRecord, LineBinding, WorkArtifact, WorkOrder,
 };
 pub use sign::{
     Ed25519Keypair, Ed25519PublicKey, ED25519_PUBLIC_KEY_LEN, ED25519_SEED_LEN,

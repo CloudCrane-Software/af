@@ -174,13 +174,15 @@ impl ExecuteUnit for StubExecuteUnit {
             serde_json::to_string_pretty(&payload).map_err(|err| ExeclineError::UnitFailed {
                 detail: format!("工件载荷序列化失败: {err}"),
             })?;
-        fs::write(&artifact_path, format!("{text}\n"))?;
+        let bytes = format!("{text}\n");
+        fs::write(&artifact_path, &bytes)?;
         Ok(ExecOutput {
-            artifacts: vec![WorkArtifact {
-                artifact_id: self.artifact_id.clone(),
-                is_final: self.is_final,
-                qualified: self.qualified,
-            }],
+            artifacts: vec![WorkArtifact::from_bytes(
+                self.artifact_id.clone(),
+                self.is_final,
+                self.qualified,
+                bytes.as_bytes(),
+            )],
             outputs: vec![artifact_path],
             note: format!("stub 单元产出工件 {}", self.artifact_id),
             verdict: None,

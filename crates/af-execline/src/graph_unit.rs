@@ -1163,11 +1163,12 @@ impl GraphExecuteUnit {
         let mut outputs = vec![task_dir.join("plan.json"), task_dir.join("task.json")];
         outputs.extend(stage.envelope_files.values().cloned());
         Ok(ExecOutput {
-            artifacts: vec![WorkArtifact {
+            artifacts: vec![WorkArtifact::from_bytes(
                 artifact_id,
-                is_final: true,
-                qualified: verdict == Some(true),
-            }],
+                true,
+                verdict == Some(true),
+                row.to_string().as_bytes(),
+            )],
             outputs,
             note: format!(
                 "图执行器驱动 {} 节点（{} → …），判定 {:?}",

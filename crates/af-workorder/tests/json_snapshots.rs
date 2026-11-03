@@ -10,10 +10,10 @@ use std::fs;
 use std::path::Path;
 
 use af_workorder::{
-    sha256_hex, BudgetVoucher, ChangeOrder, Decision, DecisionArtifact, DrainStrategy,
-    Ed25519Keypair, GraphVersion, LineBinding, Missing, OrderState, Priority, RelayStrategy, Role,
-    SignedChangeOrder, Sla, WorkArtifact, WorkOrder, ED25519_SIGNATURE_LEN, SHA256_HEX_LEN,
-    SIGNATURE_ALGORITHM_ED25519,
+    sha256_hex, BudgetVoucher, ChangeOrder, Decision, DecisionArtifact, DecisionAttributes,
+    DrainStrategy, Ed25519Keypair, GraphVersion, LineBinding, Missing, OrderState, Priority,
+    RelayStrategy, Role, SignedChangeOrder, Sla, TrustedActor, TrustedActorRegistry, WorkArtifact,
+    WorkOrder, ED25519_SIGNATURE_LEN, SHA256_HEX_LEN, SIGNATURE_ALGORITHM_ED25519,
 };
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -28,6 +28,25 @@ fn utc(rfc3339: &str) -> DateTime<Utc> {
 
 fn sla() -> Sla {
     Sla::new(Some(utc("2026-11-01T00:00:00Z")), Priority::High)
+}
+
+fn decision_attributes() -> DecisionAttributes {
+    DecisionAttributes::new(
+        1,
+        vec!["snapshot basis".into()],
+        "a".repeat(64),
+        utc("2027-01-01T00:00:00Z"),
+    )
+}
+
+fn decision_registry() -> TrustedActorRegistry {
+    TrustedActorRegistry::new(vec![TrustedActor::new(
+        "user-approver",
+        Role::Approver,
+        &Ed25519Keypair::from_seed(&CHANGE_SEED).public_key(),
+        utc("2027-01-01T00:00:00Z"),
+    )])
+    .unwrap()
 }
 
 /// 走到 Completed，尚未挂工件。截止时刻是注入的常量，不读系统钟。
@@ -94,11 +113,7 @@ fn assert_redacted(name: &str, secrets: &[&str], expect_payload_hash: bool) {
 #[test]
 fn qualified_final_artifact_release_decision() {
     let mut order = drive_to_completed("wo-close");
-    let piece = WorkArtifact {
-        artifact_id: "fa-1".into(),
-        is_final: true,
-        qualified: true,
-    };
+    let piece = WorkArtifact::from_bytes("fa-1", true, true, b"snapshot final bytes");
     order.attach_artifact(piece.clone()).unwrap();
     assert_eq!(order.close().unwrap(), OrderState::Closed);
 
@@ -108,15 +123,18 @@ fn qualified_final_artifact_release_decision() {
         Role::Approver,
         Decision::Approve,
         payload,
-        "k-close-approve",
+        &Ed25519Keypair::from_seed(&CHANGE_SEED),
+        decision_attributes(),
     );
-    decision.validate_against(payload).unwrap();
+    decision
+        .validate_against(payload, &decision_registry(), utc("2026-11-03T00:00:00Z"))
+        .unwrap();
     assert_eq!(decision.decision, Decision::Approve);
     assert_eq!(decision.payload_hash.len(), SHA256_HEX_LEN);
     assert_eq!(decision.payload_hash, sha256_hex(payload.as_bytes()));
-    assert_eq!(decision.signature.algorithm, "ed25519-placeholder");
+    assert_eq!(decision.signature.algorithm, SIGNATURE_ALGORITHM_ED25519);
     assert_eq!(decision.signature.bytes.len(), ED25519_SIGNATURE_LEN);
-    assert!(decision.signature.bytes.iter().all(|byte| *byte == 0xde));
+    assert!(decision.signature.bytes.iter().any(|byte| *byte != 0xde));
 
     let view = DecisionView {
         artifact: &decision,
@@ -137,7 +155,7 @@ fn qualified_final_artifact_release_decision() {
     // 占位签名字节是 0xde，未涂红时 JSON 数字为 222。
     assert_redacted(
         "qualified_final_artifact_release_decision",
-        &[&decision.payload_hash, "k-close-approve", "222"],
+        &[&decision.payload_hash, decision.signature.key_id.as_str(), "222"],
         true,
     );
 }
@@ -147,18 +165,20 @@ fn reject_decision_names_missing_qualified_final_artifact() {
     let mut order = drive_to_completed("wo-close");
     // 终态不合格、合格但非终态，都不构成 close 放行条件。
     order
-        .attach_artifact(WorkArtifact {
-            artifact_id: "fa-bad".into(),
-            is_final: true,
-            qualified: false,
-        })
+        .attach_artifact(WorkArtifact::from_bytes(
+            "fa-bad",
+            true,
+            false,
+            b"unqualified final bytes",
+        ))
         .unwrap();
     order
-        .attach_artifact(WorkArtifact {
-            artifact_id: "ia-1".into(),
-            is_final: false,
-            qualified: true,
-        })
+        .attach_artifact(WorkArtifact::from_bytes(
+            "ia-1",
+            false,
+            true,
+            b"intermediate bytes",
+        ))
         .unwrap();
     let err = order.close().unwrap_err();
     let missing = err.missing().expect("门控拒绝应带缺失清单");
@@ -181,9 +201,12 @@ fn reject_decision_names_missing_qualified_final_artifact() {
         Role::Approver,
         Decision::Reject,
         payload,
-        "k-close-reject",
+        &Ed25519Keypair::from_seed(&CHANGE_SEED),
+        decision_attributes(),
     );
-    decision.validate_against(payload).unwrap();
+    decision
+        .validate_against(payload, &decision_registry(), utc("2026-11-03T00:00:00Z"))
+        .unwrap();
     assert_eq!(decision.decision, Decision::Reject);
     assert_eq!(decision.payload_hash, sha256_hex(payload.as_bytes()));
     assert_eq!(decision.signature.bytes.len(), ED25519_SIGNATURE_LEN);
@@ -207,7 +230,7 @@ fn reject_decision_names_missing_qualified_final_artifact() {
     // 占位签名字节是 0xde，未涂红时 JSON 数字为 222。
     assert_redacted(
         "reject_decision_names_missing_qualified_final_artifact",
-        &[&decision.payload_hash, "k-close-reject", "222"],
+        &[&decision.payload_hash, decision.signature.key_id.as_str(), "222"],
         true,
     );
 }

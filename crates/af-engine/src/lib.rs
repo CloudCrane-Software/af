@@ -23,7 +23,7 @@ mod version;
 
 use af_workorder::{
     decode_work_order_value, BudgetVoucher, DecisionArtifact, DecisionError, GateError,
-    LineBinding, OrderDecodeError, WorkArtifact, WorkOrder,
+    LineBinding, OrderDecodeError, TrustedActorRegistry, WorkArtifact, WorkOrder,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -58,6 +58,7 @@ enum WireError {
     Decision { decision: DecisionError },
 }
 
+#[derive(Clone, Copy)]
 enum Op {
     BindLine,
     AttachVoucher,
@@ -68,6 +69,7 @@ enum Op {
     Close,
     Cancel,
     ApproveDecision,
+    AdmitDecision,
 }
 
 fn bad(message: impl Into<String>) -> WireError {
@@ -172,6 +174,7 @@ fn parse_op(obj: &Map<String, Value>) -> Result<Op, WireError> {
         "close" => Ok(Op::Close),
         "cancel" => Ok(Op::Cancel),
         "approve_decision" => Ok(Op::ApproveDecision),
+        "admit_decision" => Ok(Op::AdmitDecision),
         other => Err(bad(format!("未知 op: {other}"))),
     }
 }
@@ -188,9 +191,11 @@ fn parse_order(obj: &Map<String, Value>) -> Result<WorkOrder, WireError> {
             field: envelope.field,
             detail: envelope.detail,
         }),
-        Err(err @ (OrderDecodeError::Malformed(_) | OrderDecodeError::Invalid(_))) => {
-            Err(bad(format!("订单快照无法反序列化: {err}")))
-        }
+        Err(
+            err @ (OrderDecodeError::Malformed(_)
+            | OrderDecodeError::Invalid(_)
+            | OrderDecodeError::ArtifactDigestMigration { .. }),
+        ) => Err(bad(format!("订单快照无法反序列化: {err}"))),
     }
 }
 
@@ -236,21 +241,26 @@ fn dispatch(op: Op, order: &mut WorkOrder, obj: &Map<String, Value>) -> Result<(
         Op::Complete => order.complete().map(|_| ()).map_err(gate),
         Op::Close => order.close().map(|_| ()).map_err(gate),
         Op::Cancel => order.cancel().map(|_| ()).map_err(gate),
-        Op::ApproveDecision => {
+        Op::ApproveDecision | Op::AdmitDecision => {
             let artifact: DecisionArtifact = parse_field(obj, "artifact")?;
             let supplied: String = parse_field(obj, "payload")?;
-            // 被签字符串只由这张订单现算。调用方自带的 payload 必须逐字相同，
-            // 不能拿另一张订单的工件配上一份自洽的 payload 混过来。
-            // `decision_payload` 把 stable_id 放进域分离格式；subject 用 graph_version，
-            // 所以换图版本也会换哈希。run_id 不在这段字节里。
-            // 工单上没有决策字段，release 门控也不读决策。校验通过后原样送回快照。
-            let bound = order_decision_payload(order);
+            // 信任根与验签时刻独立于工件：注册表由编排从受信凭证存储装载，
+            // validated_at 由编排注入。工件只带 key_id，不能自证公钥或自改验签时间。
+            let registry: TrustedActorRegistry = parse_field(obj, "actor_registry")?;
+            let validated_at: chrono::DateTime<chrono::Utc> = parse_field(obj, "validated_at")?;
+            let bound = if matches!(op, Op::ApproveDecision) {
+                order_decision_payload(order)
+            } else {
+                order.admission_decision_payload()
+            };
             if supplied != bound {
                 return Err(bad(
                     "payload 与订单现算的 decision_payload 不一致（须绑定 stable_id 与 graph_version）",
                 ));
             }
-            artifact.validate_against(&bound).map_err(decision)?;
+            artifact
+                .validate_against(&bound, &registry, validated_at)
+                .map_err(decision)?;
             Ok(())
         }
     }

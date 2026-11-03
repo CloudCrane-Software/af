@@ -3,8 +3,9 @@
 //! 时刻与熵都不读系统:身份由订单 id 或调用方带回的 stable_id 决定。
 
 use af_workorder::{
-    decode_work_order, sha256_hex, Decision, DecisionError, GraphVersion, OrderDecodeError,
-    Priority, RejectionKind, Role, RunContext, Sla, StableId, WorkOrder,
+    decode_work_order, sha256_hex, Decision, DecisionAttributes, DecisionError, Ed25519Keypair,
+    GraphVersion, OrderDecodeError, Priority, RejectionKind, Role, RunContext, Sla, StableId,
+    TrustedActor, TrustedActorRegistry, WorkOrder,
 };
 use chrono::{DateTime, Utc};
 
@@ -13,6 +14,39 @@ fn sla() -> Sla {
         .unwrap()
         .with_timezone(&Utc);
     Sla::new(Some(deadline), Priority::Normal)
+}
+
+fn decision_key() -> Ed25519Keypair {
+    Ed25519Keypair::from_seed(&[0x61; 32])
+}
+
+fn decision_attributes() -> DecisionAttributes {
+    DecisionAttributes::new(
+        1,
+        vec!["basis".into()],
+        "a".repeat(64),
+        DateTime::parse_from_rfc3339("2027-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc),
+    )
+}
+
+fn decision_registry() -> TrustedActorRegistry {
+    TrustedActorRegistry::new(vec![TrustedActor::new(
+        "user-a",
+        Role::Approver,
+        &decision_key().public_key(),
+        DateTime::parse_from_rfc3339("2027-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc),
+    )])
+    .unwrap()
+}
+
+fn validated_at() -> DateTime<Utc> {
+    DateTime::parse_from_rfc3339("2026-11-03T00:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc)
 }
 
 #[test]
@@ -151,14 +185,17 @@ fn decision_artifact_hash_includes_stable_id() {
         Role::Approver,
         Decision::Approve,
         "release-request",
-        "k2",
+        &decision_key(),
+        decision_attributes(),
     );
     assert_eq!(artifact.payload_hash, expected);
-    artifact.validate_against(&payload).unwrap();
+    artifact
+        .validate_against(&payload, &decision_registry(), validated_at())
+        .unwrap();
 
     let stripped = "af-workorder/decision-payload/v1|0||15|release-request";
     assert!(matches!(
-        artifact.validate_against(stripped),
+        artifact.validate_against(stripped, &decision_registry(), validated_at()),
         Err(DecisionError::PayloadHashMismatch { .. })
     ));
 
@@ -168,7 +205,8 @@ fn decision_artifact_hash_includes_stable_id() {
         Role::Approver,
         Decision::Approve,
         "release-request",
-        "k2",
+        &decision_key(),
+        decision_attributes(),
     );
     assert_eq!(again.payload_hash, expected);
     assert_eq!(order.decision_payload("release-request"), payload);
@@ -188,7 +226,8 @@ fn decision_artifact_hash_includes_stable_id() {
                 Role::Approver,
                 Decision::Approve,
                 "release-request",
-                "k2",
+                &decision_key(),
+        decision_attributes(),
             )
             .payload_hash,
         expected

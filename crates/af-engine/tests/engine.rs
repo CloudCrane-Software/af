@@ -7,14 +7,60 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
 use af_workorder::{
-    decode_work_order_value, BudgetVoucher, Decision, DecisionArtifact, DecisionError, GateError,
-    GraphVersion, LineBinding, OrderDecodeError, OrderState, Role, WorkArtifact, WorkOrder,
+    decode_work_order_value, BudgetVoucher, Decision, DecisionArtifact, DecisionAttributes,
+    DecisionError, Ed25519Keypair, GateError, GraphVersion, LineBinding, OrderDecodeError,
+    OrderState, Role, TrustedActor, TrustedActorRegistry, WorkArtifact, WorkOrder,
 };
 use serde_json::{json, Value};
 
 /// 与引擎 `approve_decision` 使用同一条绑定：`decision_payload(graph_version)`。
 fn bound_payload(order: &WorkOrder) -> String {
     order.decision_payload(order.graph_version().as_str())
+}
+
+fn time(text: &str) -> chrono::DateTime<chrono::Utc> {
+    chrono::DateTime::parse_from_rfc3339(text)
+        .unwrap()
+        .with_timezone(&chrono::Utc)
+}
+
+fn decision_key() -> Ed25519Keypair {
+    Ed25519Keypair::from_seed(&[0x71; 32])
+}
+
+fn reader_key() -> Ed25519Keypair {
+    Ed25519Keypair::from_seed(&[0x72; 32])
+}
+
+fn decision_attributes() -> DecisionAttributes {
+    DecisionAttributes::new(
+        1,
+        vec!["engine test basis".into()],
+        "a".repeat(64),
+        time("2027-01-01T00:00:00Z"),
+    )
+}
+
+fn actor_registry() -> TrustedActorRegistry {
+    TrustedActorRegistry::new(vec![
+        TrustedActor::new(
+            "user-approver",
+            Role::Approver,
+            &decision_key().public_key(),
+            time("2027-01-01T00:00:00Z"),
+        ),
+        TrustedActor::new(
+            "user-reader",
+            Role::Reader,
+            &reader_key().public_key(),
+            time("2027-01-01T00:00:00Z"),
+        ),
+    ])
+    .unwrap()
+}
+
+fn validated_at() -> chrono::DateTime<chrono::Utc> {
+    time("2026-11-03T00:00:00Z")
 }
 
 fn created() -> WorkOrder {
@@ -50,11 +96,7 @@ fn voucher(signed: bool) -> BudgetVoucher {
 }
 
 fn artifact(id: &str, is_final: bool, qualified: bool) -> WorkArtifact {
-    WorkArtifact {
-        artifact_id: id.into(),
-        is_final,
-        qualified,
-    }
+    WorkArtifact::from_bytes(id, is_final, qualified, id.as_bytes())
 }
 
 fn bound() -> WorkOrder {
@@ -103,7 +145,8 @@ fn approver() -> DecisionArtifact {
         Role::Approver,
         Decision::Approve,
         &bound_payload(&order),
-        "k-approver",
+        &decision_key(),
+        decision_attributes(),
     )
 }
 
@@ -114,7 +157,8 @@ fn reader() -> DecisionArtifact {
         Role::Reader,
         Decision::Approve,
         &bound_payload(&order),
-        "k-reader",
+        &reader_key(),
+        decision_attributes(),
     )
 }
 
@@ -461,27 +505,31 @@ fn close_from_in_progress_is_illegal_even_with_final_artifact() {
 }
 
 #[test]
-fn cancel_accepts_created_and_rejects_completed() {
+fn cancel_accepts_created_and_completed_but_rejects_terminal_states() {
     let wo = created();
     let mut next = wo.clone();
     next.cancel().unwrap();
     assert_same_order(&call("cancel", &wo, json!({})), &next);
     assert_eq!(next.state(), OrderState::Cancelled);
+    let err = next.clone().cancel().unwrap_err();
+    assert_gate(&call("cancel", &next, json!({})), &err);
 
     let wo = completed_bare();
-    let err = wo.clone().cancel().unwrap_err();
-    assert_gate(&call("cancel", &wo, json!({})), &err);
+    let mut cancelled = wo.clone();
+    cancelled.cancel().unwrap();
+    assert_same_order(&call("cancel", &wo, json!({})), &cancelled);
+    assert_eq!(cancelled.state(), OrderState::Cancelled);
 }
 
 #[test]
 fn approve_decision_accepts_approver_and_returns_same_order() {
     let wo = released();
     let payload = bound_payload(&wo);
-    approver().validate_against(&payload).unwrap();
+    approver().validate_against(&payload, &actor_registry(), validated_at()).unwrap();
     let got = call(
         "approve_decision",
         &wo,
-        json!({"artifact": approver(), "payload": payload}),
+        json!({"artifact": approver(), "payload": payload, "actor_registry": actor_registry(), "validated_at": validated_at()}),
     );
     assert_same_order(&got, &wo);
     assert_eq!(got["order"]["state"], "Released");
@@ -492,12 +540,12 @@ fn approve_decision_rejects_reader() {
     let wo = created();
     let payload = bound_payload(&wo);
     let art = reader();
-    let err = art.validate_against(&payload).unwrap_err();
+    let err = art.validate_against(&payload, &actor_registry(), validated_at()).unwrap_err();
     assert!(matches!(err, DecisionError::PermissionDenied { .. }));
     let got = call(
         "approve_decision",
         &wo,
-        json!({"artifact": art, "payload": payload}),
+        json!({"artifact": art, "payload": payload, "actor_registry": actor_registry(), "validated_at": validated_at()}),
     );
     assert_decision(&got, &err);
 }
@@ -512,14 +560,15 @@ fn approve_decision_rejects_hash_mismatch() {
         Role::Approver,
         Decision::Approve,
         "不是这张订单的 payload",
-        "k-approver",
+        &decision_key(),
+        decision_attributes(),
     );
-    let err = art.validate_against(&payload).unwrap_err();
+    let err = art.validate_against(&payload, &actor_registry(), validated_at()).unwrap_err();
     assert!(matches!(err, DecisionError::PayloadHashMismatch { .. }));
     let got = call(
         "approve_decision",
         &wo,
-        json!({"artifact": art, "payload": payload}),
+        json!({"artifact": art, "payload": payload, "actor_registry": actor_registry(), "validated_at": validated_at()}),
     );
     assert_decision(&got, &err);
 }
@@ -536,10 +585,11 @@ fn approve_decision_rejects_matching_artifact_on_the_wrong_order() {
         Role::Approver,
         Decision::Approve,
         &payload,
-        "k-approver",
+        &decision_key(),
+        decision_attributes(),
     );
     artifact
-        .validate_against(&payload)
+        .validate_against(&payload, &actor_registry(), validated_at())
         .expect("工件对这份 payload 成立");
 
     let mut other_id = serde_json::to_value(&victim).unwrap();
@@ -549,7 +599,7 @@ fn approve_decision_rejects_matching_artifact_on_the_wrong_order() {
     let got = call(
         "approve_decision",
         &other_id,
-        json!({"artifact": artifact, "payload": payload}),
+        json!({"artifact": artifact, "payload": payload, "actor_registry": actor_registry(), "validated_at": validated_at()}),
     );
     assert_bad(&got, "payload 与订单现算的 decision_payload 不一致");
 
@@ -560,7 +610,7 @@ fn approve_decision_rejects_matching_artifact_on_the_wrong_order() {
     let got = call(
         "approve_decision",
         &other_graph,
-        json!({"artifact": artifact, "payload": payload}),
+        json!({"artifact": artifact, "payload": payload, "actor_registry": actor_registry(), "validated_at": validated_at()}),
     );
     assert_bad(&got, "payload 与订单现算的 decision_payload 不一致");
 
@@ -571,13 +621,16 @@ fn approve_decision_rejects_matching_artifact_on_the_wrong_order() {
         Role::Approver,
         Decision::Approve,
         foreign,
-        "k-approver",
+        &decision_key(),
+        decision_attributes(),
     );
-    foreign_art.validate_against(foreign).unwrap();
+    foreign_art
+        .validate_against(foreign, &actor_registry(), validated_at())
+        .unwrap();
     let got = call(
         "approve_decision",
         &victim,
-        json!({"artifact": foreign_art, "payload": foreign}),
+        json!({"artifact": foreign_art, "payload": foreign, "actor_registry": actor_registry(), "validated_at": validated_at()}),
     );
     assert_bad(&got, "payload 与订单现算的 decision_payload 不一致");
 
@@ -588,7 +641,7 @@ fn approve_decision_rejects_matching_artifact_on_the_wrong_order() {
     let got = call(
         "approve_decision",
         &other_run,
-        json!({"artifact": artifact, "payload": payload}),
+        json!({"artifact": artifact, "payload": payload, "actor_registry": actor_registry(), "validated_at": validated_at()}),
     );
     assert_same_order(&got, &other_run);
 }
@@ -1038,7 +1091,7 @@ fn samples() -> Vec<(&'static str, String)> {
             request_line(
                 "approve_decision",
                 &released(),
-                json!({"artifact": approver(), "payload": bound_payload(&released())}),
+                json!({"artifact": approver(), "payload": bound_payload(&released()), "actor_registry": actor_registry(), "validated_at": validated_at()}),
             ),
         ),
         (
@@ -1046,7 +1099,7 @@ fn samples() -> Vec<(&'static str, String)> {
             request_line(
                 "approve_decision",
                 &created(),
-                json!({"artifact": reader(), "payload": bound_payload(&created())}),
+                json!({"artifact": reader(), "payload": bound_payload(&created()), "actor_registry": actor_registry(), "validated_at": validated_at()}),
             ),
         ),
         ("unknown_op", r#"{"op":"frob"}"#.to_string()),

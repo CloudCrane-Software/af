@@ -1,0 +1,32 @@
+---
+source: crates/af-workorder/tests/json_snapshots.rs
+assertion_line: 147
+expression: view
+---
+{
+  "actor_id": "user-approver",
+  "role": "Approver",
+  "permissions": [
+    "Read",
+    "Approve"
+  ],
+  "decision": "Approve",
+  "payload_hash": "[payload_hash]",
+  "decision_seq": 1,
+  "basis": [
+    "snapshot basis"
+  ],
+  "next_orders_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expires_at": "2027-01-01T00:00:00Z",
+  "signature": "[signature]",
+  "outcome": "closed",
+  "qualified_final_artifact": {
+    "artifact_id": "fa-1",
+    "is_final": true,
+    "qualified": true,
+    "content_sha256": "6457e9a2e05b737e1cd4af9a22a1830c4f019b5503abd2743c4cb4823dc4889f"
+  },
+  "missing": [],
+  "detail": [],
+  "gate_message": "close 放行"
+}

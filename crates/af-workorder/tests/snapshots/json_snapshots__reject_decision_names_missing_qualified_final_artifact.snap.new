@@ -1,0 +1,31 @@
+---
+source: crates/af-workorder/tests/json_snapshots.rs
+assertion_line: 222
+expression: view
+---
+{
+  "actor_id": "user-approver",
+  "role": "Approver",
+  "permissions": [
+    "Read",
+    "Approve"
+  ],
+  "decision": "Reject",
+  "payload_hash": "[payload_hash]",
+  "decision_seq": 1,
+  "basis": [
+    "snapshot basis"
+  ],
+  "next_orders_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "expires_at": "2027-01-01T00:00:00Z",
+  "signature": "[signature]",
+  "outcome": "rejected",
+  "qualified_final_artifact": null,
+  "missing": [
+    "NoQualifiedFinalArtifact"
+  ],
+  "detail": [
+    "缺少合格的终态工件"
+  ],
+  "gate_message": "门控拒绝 Close:前置条件缺失 [NoQualifiedFinalArtifact]"
+}
