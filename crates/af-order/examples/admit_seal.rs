@@ -5,22 +5,26 @@
 //! 用法：
 //! ```text
 //! admit_seal --state <dir> --order-id <id> --out <admission.json> \
-//!            [--actor-id user-a] [--seq 7] [--basis artifact:fa-x:qualified] \
-//!            [--expires 2026-11-04T00:00:00Z] [--seed-hex <64hex>]
+//!            [--actor-id user-a] [--seq 7] [--basis artifact:<id>:<sha256>] \
+//!            [--next-orders id1,id2] [--expires 2026-11-04T00:00:00Z] [--seed-hex <64hex>]
 //! ```
 //!
 //! 不给 --seed-hex 时从 /dev/urandom 取新种子（ Steward 一次性密钥联调形态；
-//! 种子与注册表一并打印，便于复现）。模板/资源画像/门清单取骨架缺省样例
-//! （与 tests/admit.rs 同源），只供联调——生产面由配方层供给。
+//! 种子与注册表一并打印，便于复现）。basis 缺省 = 源单实际实体解析
+//! （af_order::adjudicate::resolved_basis），计划面 digest 与受理侧同一规范
+//! 化现算，凭证面缺省呈报源单持有预算凭证——默认产出可通过 admit 全链的
+//! 请求。模板/资源画像/门清单取骨架缺省样例（与 tests/admit.rs 同源），
+//! 只供联调——生产面由配方层供给。
 
 use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 
 use af_order::admit::{
-    AdjudicationTemplate, AdmissionRequest, GateListSpec, GateSpec, ResourceClaim,
-    ResourceProfileSpec,
+    canonical_next_orders_digest, AdjudicationTemplate, AdmissionRequest, GateListSpec, GateSpec,
+    ResourceClaim, ResourceProfileSpec,
 };
+use af_order::adjudicate::{resolved_basis, template_body_sha256};
 use af_workorder::{
     Decision, DecisionArtifact, DecisionAttributes, Ed25519Keypair, Role, TrustedActor,
     TrustedActorRegistry,
@@ -42,7 +46,8 @@ fn run(args: &[String]) -> Result<(), String> {
     let mut out: Option<PathBuf> = None;
     let mut actor_id = "user-a".to_string();
     let mut seq = 7u64;
-    let mut basis = vec!["artifact:fa-wo-poca2-001:qualified".to_string()];
+    let mut basis: Option<Vec<String>> = None;
+    let mut next_orders: Vec<String> = Vec::new();
     let mut expires: DateTime<Utc> = DateTime::parse_from_rfc3339("2026-11-04T00:00:00Z")
         .map_err(|err| err.to_string())?
         .with_timezone(&Utc);
@@ -64,7 +69,15 @@ fn run(args: &[String]) -> Result<(), String> {
                     .parse()
                     .map_err(|_| format!("--seq 不是 u64: {value}"))?
             }
-            "--basis" => basis = vec![value.clone()],
+            "--basis" => basis = Some(vec![value.clone()]),
+            "--next-orders" => {
+                next_orders = value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|entry| !entry.is_empty())
+                    .map(str::to_string)
+                    .collect();
+            }
             "--expires" => {
                 expires = DateTime::parse_from_rfc3339(value)
                     .map_err(|err| format!("--expires 不是合法 RFC3339: {err}"))?
@@ -91,6 +104,17 @@ fn run(args: &[String]) -> Result<(), String> {
         .rev()
         .find_map(|record| record.order_after.clone())
         .ok_or_else(|| format!("全账本无订单快照: {}", ledger_path.display()))?;
+
+    // basis 缺省 = 源单实际实体解析（工件/凭证真实摘要，可过 OR2109）。
+    let basis = basis.unwrap_or_else(|| resolved_basis(&order));
+    // 凭证面缺省 = 呈报源单持有预算凭证（可过 OR2111）。
+    let held_voucher = order
+        .budget_voucher()
+        .map(|voucher| voucher.voucher_id.clone())
+        .ok_or_else(|| format!("源单 {order_id} 未绑预算凭证，无法组凭证面"))?;
+    // 计划面 digest 与受理侧同一规范化现算（可过 OR2110）。
+    let digest = canonical_next_orders_digest(&next_orders)
+        .map_err(|reason| format!("--next-orders 不合法: {reason}"))?;
 
     // steward 密钥：显式种子联调复现，否则 urandom 新铸。
     let seed: [u8; 32] = match &seed_hex {
@@ -123,7 +147,7 @@ fn run(args: &[String]) -> Result<(), String> {
         Decision::Approve,
         &payload,
         &keypair,
-        DecisionAttributes::new(seq, basis, "a".repeat(64), expires),
+        DecisionAttributes::new(seq, basis, digest, expires),
     );
     let request = AdmissionRequest {
         order_id: order_id.clone(),
@@ -133,7 +157,7 @@ fn run(args: &[String]) -> Result<(), String> {
             template_id: "tpl-adjudication-v1".into(),
             template_version: "1.0".into(),
             doc_kind: "裁决单".into(),
-            body_sha256: "c".repeat(64),
+            body_sha256: template_body_sha256(),
         },
         resource_profile: ResourceProfileSpec {
             profile_id: "rp-poc".into(),
@@ -150,6 +174,8 @@ fn run(args: &[String]) -> Result<(), String> {
                 required: true,
             }],
         },
+        next_orders,
+        required_credentials: vec![held_voucher],
         validated_at: None,
     };
     let text = serde_json::to_string_pretty(&json!({
@@ -159,6 +185,8 @@ fn run(args: &[String]) -> Result<(), String> {
         "template": serde_json::to_value(&request.template).map_err(|err| err.to_string())?,
         "resource_profile": serde_json::to_value(&request.resource_profile).map_err(|err| err.to_string())?,
         "gate_list": serde_json::to_value(&request.gate_list).map_err(|err| err.to_string())?,
+        "next_orders": serde_json::to_value(&request.next_orders).map_err(|err| err.to_string())?,
+        "required_credentials": serde_json::to_value(&request.required_credentials).map_err(|err| err.to_string())?,
     }))
     .map_err(|err| err.to_string())?;
     fs::write(&out, format!("{text}\n")).map_err(|err| format!("落盘 {}: {err}", out.display()))?;

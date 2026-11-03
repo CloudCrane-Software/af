@@ -28,6 +28,7 @@
 //! admit 受理）；引擎与账本失败透传 af-execline 的 EX 稳定码，见 [`error`]。
 
 pub mod admit;
+pub mod adjudicate;
 pub mod cli;
 pub mod error;
 pub mod exec;
@@ -36,8 +37,15 @@ pub mod state;
 pub mod voucher;
 
 pub use admit::{
-    admit, parse_request, AdjudicationTemplate, AdmissionReceipt, AdmissionRequest, AdmitReject,
-    GateListSpec, GateSpec, RequestError, ResourceClaim, ResourceProfileSpec,
+    canonical_next_orders_digest, admit, parse_request, AdjudicationTemplate, AdmissionReceipt,
+    AdmissionRequest, AdmitReject, GateListSpec, GateSpec, RequestError, ResourceClaim,
+    ResourceProfileSpec,
+};
+pub use adjudicate::{
+    generate_adjudication_doc, load_doc, run_steward_loop, verify_doc, AdjudicateError,
+    AdjudicationDoc, AdjudicationSeed, LoopFacilities, StewardOutcome, ADJUDICATION_DOC_KIND,
+    ADJUDICATION_TEMPLATE_ID, ADJUDICATION_TEMPLATE_VERSION, STEWARD_ROLE, TEMPLATE_BODY,
+    ADJUDICATIONS_DIR,
 };
 pub use error::OrderError;
 pub use exec::{

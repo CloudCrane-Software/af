@@ -14,6 +14,10 @@ description = "下单门面 CLI 骨架：submit/list/show 一命令直驱订单�
 af-compiler = { path = "../af-compiler" }
 af-execline = { path = "../af-execline" }
 af-workorder = { path = "../af-workorder" }
+# PoC-C 裁决环：裁决单入队/认领/完成全部走 af-station 既有队列件（enqueue
+# 幂等键 UNIQUE / claim 带守卫 UPDATE / complete 现任判定）。分层方向
+# af-order（门面）→ af-station（人工任务账本），不反向（防依赖环）。
+af-station = { path = "../af-station" }
 # PoC-A2 admit：AdmissionRequest 内嵌 DecisionArtifact/TrustedActorRegistry
 # （其公开 API 面带 chrono::DateTime<Utc>），请求解析需要 chrono serde——
 # 与 af-workorder/af-engine 同款声明（版本随 Cargo.lock 既有解析，非新引第三方）。

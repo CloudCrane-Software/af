@@ -1,14 +1,22 @@
 //! PoC-A2 admit 集成验收：真引擎子进程走 admit_decision 四层真验签路径 +
 //! receipt 幂等窗两条负例（同键重放 / 同 seq 异摘要）+ 各步类型化拒绝。
+//! PoC-C 增补：OR2109/2110/2111 与 seq 单调门的细则负例（空 basis / 伪造
+//! basis / digest 不一致 / 凭证交集空 / seq 回退 五类必红）与正例。
 //!
 //! 与 tests/cli.rs 同款纪律：不用 mock 引擎——`EngineClient::locate` 定位/
 //! 构建真 af-engine（CARGO_TARGET_DIR 经环境继承，与门面解析同优先级）。
+//! 注：占位期 fixture（如 `artifact:fa-1:qualified`、占位 digest）只在恒过
+//! stub 下成立；PoC-C 口径落地后请求输入面（basis/计划面/凭证面）一律按
+//! admit docstring 口径取源单真实实体与现算摘要——断言面零改动。
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use af_execline::{EngineClient, LedgerRecord, OrderLedger};
-use af_order::admit::{admissions_path, decision_digest, idempotency_key, AdmissionRequest};
+use af_order::admit::{
+    admissions_path, canonical_next_orders_digest, decision_digest, idempotency_key,
+    AdmissionRequest,
+};
 use af_order::{parse_request, OrderError, StateDir};
 use af_workorder::{
     Decision, DecisionArtifact, DecisionAttributes, Ed25519Keypair, GraphVersion, LineBinding,
@@ -163,32 +171,57 @@ fn registry() -> TrustedActorRegistry {
     .unwrap()
 }
 
-/// 按 admission payload 真签一份决策工件。
+/// 源单实际实体解析的决策依据（工件真实摘要 + 凭证 canonical 摘要，
+/// 与生成侧 adjudicate::resolved_basis 同源，admit OR2109 可独立重算）。
+fn valid_basis(order: &WorkOrder) -> Vec<String> {
+    af_order::adjudicate::resolved_basis(order)
+}
+
+/// 计划面缺省：一个后继 rework 单（digest 现算进被签字节）。
+fn default_next_orders(order_id: &str) -> Vec<String> {
+    vec![format!("{order_id}-rw")]
+}
+
+/// 源单持有预算凭证 id（凭证求交的非空交保证）。
+fn held_credential(order: &WorkOrder) -> String {
+    order
+        .budget_voucher()
+        .map(|voucher| voucher.voucher_id.clone())
+        .unwrap_or_else(|| "bv-absent".into())
+}
+
+/// 按 admission payload 真签一份决策工件（digest 由计划面同一规范化现算）。
 fn seal_admission_decision(
     order: &WorkOrder,
     seq: u64,
     basis: Vec<String>,
+    next_orders: &[String],
     decision_expiry: &str,
     seed: &[u8; 32],
 ) -> DecisionArtifact {
+    let digest = canonical_next_orders_digest(next_orders).expect("测试计划面应可规范化");
     DecisionArtifact::seal(
         "user-a",
         Role::Approver,
         Decision::Approve,
         &order.admission_decision_payload(),
         &Ed25519Keypair::from_seed(seed),
-        DecisionAttributes::new(seq, basis, "a".repeat(64), time(decision_expiry)),
+        DecisionAttributes::new(seq, basis, digest, time(decision_expiry)),
     )
 }
 
 /// 组一份 admission 请求 JSON（走 parse_request 解析，连解析面一起验收）。
+/// next_orders / required_credentials 是 PoC-C 落地的请求字段（计划面与
+/// 凭证面），须与 decision 的被签 digest / 源单持有凭证面一致才能过链。
 fn request_json(
-    order_id: &str,
+    order: &WorkOrder,
     decision: &DecisionArtifact,
     registry: &TrustedActorRegistry,
+    next_orders: &[String],
+    required_credentials: &[String],
 ) -> String {
     json!({
-        "order_id": order_id,
+        "order_id": order.id(),
         "decision": serde_json::to_value(decision).unwrap(),
         "actor_registry": serde_json::to_value(registry).unwrap(),
         "template": {
@@ -205,6 +238,8 @@ fn request_json(
         "gate_list": {
             "gates": [{ "gate_id": "F1", "kind": "fast", "required": true }],
         },
+        "next_orders": next_orders,
+        "required_credentials": required_credentials,
     })
     .to_string()
 }
@@ -238,14 +273,22 @@ fn admit_full_chain_then_idempotent_replay_and_seq_conflict() {
             .unwrap()
     };
     let client = engine_client();
+    let next_orders = default_next_orders(order_id);
     let decision = seal_admission_decision(
         &order,
         7,
-        vec!["artifact:fa-1:qualified".into()],
+        valid_basis(&order),
+        &next_orders,
         DECISION_EXPIRY,
         &SEED_TRUSTED,
     );
-    let request = parse(&request_json(order_id, &decision, &registry()));
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
 
     // 首次受理：全链过，回执落盘。
     let receipt =
@@ -292,10 +335,12 @@ fn admit_full_chain_then_idempotent_replay_and_seq_conflict() {
     assert_eq!(admissions_after.lines().count(), 1, "重放不得追加第二笔");
 
     // 同 seq 异摘要（同一 actor 重签不同 basis）：OR2107 拒绝，零写入。
+    // 该负例在幂等窗（先于第②步起的所有校验）被拒——basis 无需可解析。
     let redecided = seal_admission_decision(
         &order,
         7,
         vec!["artifact:fa-2:qualified".into()],
+        &next_orders,
         DECISION_EXPIRY,
         &SEED_TRUSTED,
     );
@@ -304,7 +349,13 @@ fn admit_full_chain_then_idempotent_replay_and_seq_conflict() {
         decision_digest(&decision),
         "测试前提：异摘要"
     );
-    let conflicting = parse(&request_json(order_id, &redecided, &registry()));
+    let conflicting = parse(&request_json(
+        &order,
+        &redecided,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
     let err = af_order::admit::admit(&conflicting, &StateDir::new(&state), &client, time(NOW))
         .unwrap_err();
     assert_admit_err(err, "OR2107");
@@ -336,14 +387,22 @@ fn admit_rejects_cancelled_source_with_or2102_and_zero_writes() {
             .find_map(|record| record.order_after.clone())
             .unwrap()
     };
+    let next_orders = default_next_orders(order_id);
     let decision = seal_admission_decision(
         &order,
         1,
-        vec!["artifact:fa-1:qualified".into()],
+        valid_basis(&order),
+        &next_orders,
         DECISION_EXPIRY,
         &SEED_TRUSTED,
     );
-    let request = parse(&request_json(order_id, &decision, &registry()));
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
     let err = af_order::admit::admit(
         &request,
         &StateDir::new(&state),
@@ -380,14 +439,22 @@ fn admit_accepts_closed_source_and_records_source_state() {
             .unwrap()
     };
     assert_eq!(order.state(), af_workorder::OrderState::Closed);
+    let next_orders = default_next_orders(order_id);
     let decision = seal_admission_decision(
         &order,
         3,
-        vec!["artifact:fa-1:qualified".into()],
+        valid_basis(&order),
+        &next_orders,
         DECISION_EXPIRY,
         &SEED_TRUSTED,
     );
-    let request = parse(&request_json(order_id, &decision, &registry()));
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
     let receipt = af_order::admit::admit(
         &request,
         &StateDir::new(&state),
@@ -419,14 +486,22 @@ fn admit_rejects_untrusted_signature_with_or2106() {
             .unwrap()
     };
     // 未受信 key 签发（key 不在注册表）——四层第④层必拒。
+    let next_orders = default_next_orders(order_id);
     let decision = seal_admission_decision(
         &order,
         1,
-        vec!["artifact:fa-1:qualified".into()],
+        valid_basis(&order),
+        &next_orders,
         DECISION_EXPIRY,
         &[0x42; 32],
     );
-    let request = parse(&request_json(order_id, &decision, &registry()));
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
     let err = af_order::admit::admit(
         &request,
         &StateDir::new(&state),
@@ -460,14 +535,22 @@ fn admit_rejects_expired_decision_with_or2108() {
             .find_map(|record| record.order_after.clone())
             .unwrap()
     };
+    let next_orders = default_next_orders(order_id);
     let decision = seal_admission_decision(
         &order,
         1,
-        vec!["artifact:fa-1:qualified".into()],
+        valid_basis(&order),
+        &next_orders,
         "2026-11-02T00:00:00Z", // 早于 validated_at
         &SEED_TRUSTED,
     );
-    let request = parse(&request_json(order_id, &decision, &registry()));
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
     let err = af_order::admit::admit(
         &request,
         &StateDir::new(&state),
@@ -501,15 +584,23 @@ fn admit_rejects_schema_violations_with_typed_codes() {
             .find_map(|record| record.order_after.clone())
             .unwrap()
     };
+    let next_orders = default_next_orders(order_id);
     let decision = seal_admission_decision(
         &order,
         1,
-        vec!["artifact:fa-1:qualified".into()],
+        valid_basis(&order),
+        &next_orders,
         DECISION_EXPIRY,
         &SEED_TRUSTED,
     );
-    let mut value: Value =
-        serde_json::from_str(&request_json(order_id, &decision, &registry())).unwrap();
+    let mut value: Value = serde_json::from_str(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ))
+    .unwrap();
 
     // 模板 doc_kind 越集 → OR2103。
     value["template"]["doc_kind"] = json!("派单");
@@ -566,14 +657,22 @@ fn admit_rejects_missing_source_with_or2101() {
         GraphVersion::new("af-order/poc-1"),
         Sla::new(None, Priority::Normal),
     );
+    let next_orders = default_next_orders(order_id);
     let decision = seal_admission_decision(
         &order,
         1,
-        vec!["artifact:fa-1:qualified".into()],
+        valid_basis(&order),
+        &next_orders,
         DECISION_EXPIRY,
         &SEED_TRUSTED,
     );
-    let request = parse(&request_json(order_id, &decision, &registry()));
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
     let err = af_order::admit::admit(
         &request,
         &StateDir::new(&state),
@@ -587,4 +686,316 @@ fn admit_rejects_missing_source_with_or2101() {
         "第①步拒绝零写入"
     );
     let _ = fs::remove_dir_all(&state);
+}
+
+// ---------------------------------------------------------------------------
+// PoC-C 决策校验链细则（OR2109/2110/2111 + seq 单调门）——五类必红 + 正例
+// ---------------------------------------------------------------------------
+
+/// 负例①：空 basis → OR2109（没有依据的决策不受理）。
+#[test]
+fn admit_rejects_empty_basis_with_or2109() {
+    let state = scratch("empty-basis");
+    let order_id = "wo-admit-eb";
+    seed_terminal_order(&state, order_id, false);
+    let order = latest_order(&state, order_id);
+    let next_orders = default_next_orders(order_id);
+    let decision = seal_admission_decision(
+        &order,
+        1,
+        Vec::new(),
+        &next_orders,
+        DECISION_EXPIRY,
+        &SEED_TRUSTED,
+    );
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
+    let err = af_order::admit::admit(
+        &request,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_err();
+    assert_admit_err(err, "OR2109");
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// 负例②：伪造 basis——指向不存在的实体 / 真实体换摘要 → 都 OR2109。
+#[test]
+fn admit_rejects_forged_basis_with_or2109() {
+    let state = scratch("forged-basis");
+    let order_id = "wo-admit-fb";
+    seed_terminal_order(&state, order_id, false);
+    let order = latest_order(&state, order_id);
+    let next_orders = default_next_orders(order_id);
+
+    // (a) 实体不存在：源单没有 fa-nonexistent 工件。
+    let forged_entity = vec![format!("artifact:fa-nonexistent:{}", "a".repeat(64))];
+    let decision = seal_admission_decision(
+        &order,
+        1,
+        forged_entity,
+        &next_orders,
+        DECISION_EXPIRY,
+        &SEED_TRUSTED,
+    );
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
+    let err = af_order::admit::admit(
+        &request,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_err();
+    assert_admit_err(err, "OR2109");
+
+    // (b) 实体存在但摘要不符：真工件 id + 换掉的 digest。
+    let real_id = order.artifacts()[0].artifact_id.clone();
+    let forged_digest = vec![format!("artifact:{real_id}:{}", "b".repeat(64))];
+    let decision2 = seal_admission_decision(
+        &order,
+        1,
+        forged_digest,
+        &next_orders,
+        DECISION_EXPIRY,
+        &SEED_TRUSTED,
+    );
+    let request2 = parse(&request_json(
+        &order,
+        &decision2,
+        &registry(),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
+    let err2 = af_order::admit::admit(
+        &request2,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_err();
+    assert_admit_err(err2, "OR2109");
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// 负例③：digest 不一致——签的是 A 计划面，提交的是 B 计划面 → OR2110。
+#[test]
+fn admit_rejects_next_orders_digest_mismatch_with_or2110() {
+    let state = scratch("digest");
+    let order_id = "wo-admit-dm";
+    seed_terminal_order(&state, order_id, false);
+    let order = latest_order(&state, order_id);
+    let signed_plan = default_next_orders(order_id);
+    let submitted_plan = vec![format!("{order_id}-different")];
+    let decision = seal_admission_decision(
+        &order,
+        1,
+        valid_basis(&order),
+        &signed_plan,
+        DECISION_EXPIRY,
+        &SEED_TRUSTED,
+    );
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &submitted_plan,
+        &[held_credential(&order)],
+    ));
+    let err = af_order::admit::admit(
+        &request,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_err();
+    assert_admit_err(err, "OR2110");
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// 负例④：凭证交集空——呈报与源单持有面无关的凭证 / 空清单 → OR2111。
+#[test]
+fn admit_rejects_empty_credential_intersection_with_or2111() {
+    let state = scratch("cred");
+    let order_id = "wo-admit-cred";
+    seed_terminal_order(&state, order_id, false);
+    let order = latest_order(&state, order_id);
+    let next_orders = default_next_orders(order_id);
+    let decision = seal_admission_decision(
+        &order,
+        1,
+        valid_basis(&order),
+        &next_orders,
+        DECISION_EXPIRY,
+        &SEED_TRUSTED,
+    );
+    // (a) 呈报无关凭证：交集空。
+    let unrelated = vec!["bv-some-other-order".to_string()];
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &unrelated,
+    ));
+    let err = af_order::admit::admit(
+        &request,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_err();
+    assert_admit_err(err, "OR2111");
+    // (b) 空清单：交集空。
+    let request2 = parse(&request_json(
+        &order,
+        &decision,
+        &registry(),
+        &next_orders,
+        &[],
+    ));
+    let err2 = af_order::admit::admit(
+        &request2,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_err();
+    assert_admit_err(err2, "OR2111");
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// 负例⑤：seq 回退——先受理 seq=7，再提交合法但更小的 seq=5 → OR2107
+/// 单调门（新 seq 必须 > 本源单已见最大 seq）。
+#[test]
+fn admit_rejects_seq_regression_with_or2107() {
+    let state = scratch("seq-reg");
+    let order_id = "wo-admit-seq";
+    seed_terminal_order(&state, order_id, false);
+    let order = latest_order(&state, order_id);
+    let client = engine_client();
+    let next_orders = default_next_orders(order_id);
+    let first = seal_admission_decision(
+        &order,
+        7,
+        valid_basis(&order),
+        &next_orders,
+        DECISION_EXPIRY,
+        &SEED_TRUSTED,
+    );
+    af_order::admit::admit(
+        &parse(&request_json(
+            &order,
+            &first,
+            &registry(),
+            &next_orders,
+            &[held_credential(&order)],
+        )),
+        &StateDir::new(&state),
+        &client,
+        time(NOW),
+    )
+    .unwrap_or_else(|err| panic!("前置受理 seq=7 应过: {err}"));
+    // 换 actor/换内容签一份合法 seq=5（不同摘要，非重放）——回退必红。
+    let regressed = DecisionArtifact::seal(
+        "user-a",
+        Role::Approver,
+        Decision::Approve,
+        &order.admission_decision_payload(),
+        &Ed25519Keypair::from_seed(&SEED_TRUSTED),
+        {
+            let digest = canonical_next_orders_digest(&next_orders).unwrap();
+            DecisionAttributes::new(5, valid_basis(&order), digest, time(DECISION_EXPIRY))
+        },
+    );
+    assert_ne!(
+        decision_digest(&regressed),
+        decision_digest(&first),
+        "测试前提：非同键重放"
+    );
+    let err = af_order::admit::admit(
+        &parse(&request_json(
+            &order,
+            &regressed,
+            &registry(),
+            &next_orders,
+            &[held_credential(&order)],
+        )),
+        &StateDir::new(&state),
+        &client,
+        time(NOW),
+    )
+    .unwrap_err();
+    let text = err.to_string();
+    assert!(text.contains("OR2107"), "应报 OR2107: {text}");
+    assert!(
+        text.contains("回退") && text.contains("单调"),
+        "拒因应点名 seq 单调回退: {text}"
+    );
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// 正例：seq 单调递增连续受理全过（OR2109/2110/2111 全绿的第二组证据；
+/// 首组在 happy/closed-source 两用例）。
+#[test]
+fn admit_accepts_increasing_seq_across_rechecks() {
+    let state = scratch("seq-inc");
+    let order_id = "wo-admit-inc";
+    seed_terminal_order(&state, order_id, false);
+    let order = latest_order(&state, order_id);
+    let client = engine_client();
+    let next_orders = default_next_orders(order_id);
+    for seq in [1u64, 2] {
+        let decision = seal_admission_decision(
+            &order,
+            seq,
+            valid_basis(&order),
+            &next_orders,
+            DECISION_EXPIRY,
+            &SEED_TRUSTED,
+        );
+        let receipt = af_order::admit::admit(
+            &parse(&request_json(
+                &order,
+                &decision,
+                &registry(),
+                &next_orders,
+                &[held_credential(&order)],
+            )),
+            &StateDir::new(&state),
+            &client,
+            time(NOW),
+        )
+        .unwrap_or_else(|err| panic!("seq={seq} 单调受理应过: {err}"));
+        assert_eq!(receipt.decision_seq, seq);
+        assert!(!receipt.replayed);
+        assert!(receipt.checks.contains(&"basis_recheck".to_string()));
+        assert!(receipt.checks.contains(&"digest_recheck".to_string()));
+        assert!(receipt
+            .checks
+            .contains(&"credential_intersection".to_string()));
+    }
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// 最近快照读回（各负例共用；与 admit 链第①步同口径）。
+fn latest_order(state: &Path, order_id: &str) -> WorkOrder {
+    OrderLedger::load(&StateDir::new(state).order_dir(order_id).join("ledger.jsonl"))
+        .unwrap()
+        .iter()
+        .rev()
+        .find_map(|record| record.order_after.clone())
+        .unwrap()
 }
