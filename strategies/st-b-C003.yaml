@@ -1,0 +1,103 @@
+id: st-b-C003
+name: "入口三查门控与并行度求解：价值是防损而非增益，错误路由一次即 −70% 赔钱而门控成本近零"
+tier: B
+claim: "入口三查门控与并行度求解：价值是防损而非增益，错误路由一次即 −70% 赔钱而门控成本近零"
+claimed_value:
+  metric: "loss_avoidance_rate"
+  direction: up
+  context: "入口三查（任务可判定/预算充足/可分片）不过即升级人工；并行度由分片基数与 max_fanout 帽求解"
+sources: [MA-rank3, MA-rank6]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: entry_triage_gate
+    graph_version: "1.0"
+    entry: triage
+    input: triage_input
+    output: { ref: tally_result, from: collect }
+    intent: "入口三查门控（可判定/预算充足/可分片）——价值是防损：不过闸即升级人工，错误路由不进执行面"
+  types:
+    - name: triage_input
+      schema:
+        type: object
+        required: [task_decidable, budget_cents, shardable, shards]
+        properties:
+          task_decidable: { type: boolean }
+          budget_cents: { type: integer }
+          shardable: { type: boolean }
+          shards: { type: array, items: { type: string } }
+    - name: shard_result
+      schema:
+        type: object
+        required: [shard, ok]
+        properties:
+          shard: { type: string }
+          ok: { type: boolean }
+    - name: tally_result
+      schema:
+        type: object
+        required: [answers, top_count, top_share_milli]
+        properties:
+          answers: { type: integer }
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+  nodes:
+    - id: triage
+      kind: gate
+      assert: "input.task_decidable == true && input.budget_cents >= 500 && input.shardable == true"   # 入口三查
+      emits: { go: signal }
+      route:
+        default: escalate
+        rules:
+          - { when: "triage.passed == true", goto: fanout }
+    - id: escalate
+      kind: task
+      human:
+        station: intake_desk
+        role: operator
+        resume:
+          schema:
+            type: object
+            required: [ruling]
+            properties:
+              ruling: { type: string }
+      consumes: { go: signal }
+      emits: { go: signal }
+    - id: fanout
+      kind: task
+      consumes: { go: signal }
+      map:
+        over: input.shards
+        max_fanout: 4                  # 并行度求解：分片基数 + fanout 帽
+        body:
+          nodes:
+            - id: shard_worker
+              kind: task
+              uses: { model: route.cheap@1 }
+              emits: { result: shard_result }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.shard.worker_system, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 600 }
+      emits: { results: { from_body: shard_worker.result } }
+    - id: collect
+      kind: transform
+      consumes: { results: "list<shard_result>" }
+      ops:
+        - { op: tally, port: results, by: ok, into: stats }
+      emits: { stats: tally_result }
+  edges:
+    - { from: triage, output: go, to: fanout, input: go }
+    - { from: triage, output: go, to: escalate, input: go }
+    - { from: fanout, output: results, to: collect, input: results }
+  policies:
+    budgets:
+      - { id: gate_cap, dimension: cents, scope: node:triage, cap: 5 }      # 门控成本近零
+      - { id: fanout_cap, dimension: cents, scope: map:fanout, cap: 500 }
+      - { id: plan_cap, dimension: cents, scope: plan, cap: 505 }
+    failures:
+      - { class: gate_refused, terminal: true, outcome: escalated_human }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

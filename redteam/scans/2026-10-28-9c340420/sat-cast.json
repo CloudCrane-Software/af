@@ -1,0 +1,21 @@
+{
+  "family": "sat-cast",
+  "mode": "diff",
+  "batch": "2026-10-28-9c340420",
+  "ts": "2026-10-28T08:58:12+00:00",
+  "git_commit": "9c340420ca4e68c28d909efec99a550dc99560f9",
+  "scan_roots": [
+    "."
+  ],
+  "hits": [],
+  "whitelist_applied": [
+    {
+      "path": "crates/af-execline/src/graph_unit.rs",
+      "line": 1068,
+      "debt": "D-50",
+      "text": "turns: stage.turns as u32,"
+    }
+  ],
+  "method_a_summary": null,
+  "method_b_summary": null
+}

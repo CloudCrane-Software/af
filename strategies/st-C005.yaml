@@ -1,0 +1,102 @@
+id: st-C005
+name: 文件式外置记忆（structured note-taking / memory tool）
+tier: A
+claim: 文件式外置记忆：把待办、决策、中间产物持久化到上下文窗口之外的文件，需要时再拉回
+claimed_value:
+  metric: success_rate
+  direction: up
+  context: 记忆；长时域/跨会话任务；对照组=纯上下文压缩（compaction）；记忆条目经守门入库（可自动检查才写），读取按需检索注入（S003 测试设计口径）
+sources: [MA-rank5, S003, S030]
+consensus: { corpora: 2, cards: 3 }
+experiment: { status: none, exp_id: "-", note: "-" }
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: file_external_memory
+    graph_version: "1.0"
+    entry: work
+    input: mem_input
+    output: { ref: answer, from: work }
+    intent: "外置记忆环：solver 按需从持久记忆槽检索注入（policy=retrieve）→ 产出草稿条目经守门（可自动检查才入库）→ curator 单写者落盘；上下文窗口只放当前工作+按需拉回的条目，待办/决策/中间产物全部外置"
+  types:
+    - name: mem_input
+      schema:
+        type: object
+        required: [question]
+        properties: { question: { type: string } }
+    - name: note
+      schema:
+        type: object
+        required: [name, description, body_ref]
+        properties:
+          name: { type: string }
+          description: { type: string }
+          body_ref: { type: string }
+    - name: answer
+      schema:
+        type: object
+        required: [text, supports]
+        properties:
+          text: { type: string }
+          supports: { type: array, items: { type: string } }
+  stores:
+    - name: memory
+      type: collection
+      item: note
+      writer: work.curator
+      lifecycle: persistent
+      retention: { max_items: 512 }
+  nodes:
+    - id: work
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: solver
+              kind: task
+              uses: { model: route.main@1 }
+              emits: { draft: note, answer: answer }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.mem.solver_system, quota_tokens: 500 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+                  - { from: store, store: memory, policy: retrieve, component: pkg.mem.similarity@1, args: { k: 3 }, quota_tokens: 1500 }
+            - id: admit
+              kind: gate
+              consumes: { draft: note }
+              assert: "inputs.draft.body_ref != ''"
+              emits: { draft: note }
+              route:
+                default: curator
+                rules:
+                  - { when: "admit.passed == false", goto: exit }
+            - id: curator
+              kind: transform
+              consumes: { draft: note }
+              writes: [memory]
+              ops:
+                - { op: project, port: draft, into: memory }
+              emits: {}
+          edges:
+            - { from: solver, output: draft, to: admit, input: draft }
+            - { from: admit, output: draft, to: curator, input: draft }
+        max_iterations: 12
+        carried:
+          - { store: memory, max_items: 512 }
+        safety_points:
+          - { node: admit, kind: gate }
+        exit_when: "attempt.passed == true"
+        on_exhausted: continue
+      emits: { answer: { from_body: solver.answer } }
+  edges: []
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 600 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 1200000 }
+    failures:
+      - class: gate_refused
+        route: next_iteration
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed

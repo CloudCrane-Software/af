@@ -1,0 +1,13 @@
+id: st-b-C079
+name: "OS 级双边界沙箱（文件系统只读边界+网络代理白名单），减少 84% 权限打断"
+tier: B
+claim: "OS 级双边界沙箱：Linux bubblewrap/macOS Seatbelt 限定工作目录可写+代理域白名单上网，权限打断减少 84%"
+claimed_value:
+  metric: "permission_prompts"
+  direction: down
+  context: "同一任务集两组：全权限提示模式（对照） vs FS+网络双边界沙箱（bubblewrap/Seatbelt + 代理域白名单）"
+sources: [S073, S074]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "缺「执行环境边界声明段」：v0.1 的节点字段（uses/ops/route/loop/map/human/escape）与 policies 三账都不描述执行环境 confinement——无文件系统可写边界、无网络代理白名单、无权限打断预算；escape 的 env_adapter 类只做 L4 记账，不声明边界本身。\n扩展建议（示例，挂在节点或图级）：\n  nodes:\n    - id: coder\n      kind: task\n      sandbox:                                   # 新增执行环境边界段\n        fs: { writable: [workdir], read_only: [system_paths] }   # bubblewrap/Seatbelt 双边界\n        net: { mode: proxy_allowlist, domains: [registry.npmjs.org, pypi.org] }\n        permission_budget: { prompts: 0 }        # 权限打断预算（减少 84% 口径）\n落地前，沙箱边界只能实现在执行器/容器层（AFB 外），图内不可声明、不可静态核对。"

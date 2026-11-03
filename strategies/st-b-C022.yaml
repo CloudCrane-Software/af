@@ -1,0 +1,13 @@
+id: st-b-C022
+name: "无标准答案的评审门禁与评委校准：判分污染会制造方向性假结论，门禁须能判 undecidable 或翻转结论"
+tier: B
+claim: "无标准答案的评审门禁与评委校准：判分污染会制造方向性假结论，门禁须能判 undecidable 或翻转结论"
+claimed_value:
+  metric: "judge_decision_reliability"
+  direction: up
+  context: "评审门禁带评委校准与污染检测；须能输出 undecidable 或在污染下翻转结论"
+sources: [OB-S2, OB-S4]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "判分校准方法学：策略内容是「无标准答案场景的评审门禁设计 + 评委校准 + 判分污染检测」的评审质量方法（OB 卡目标句），约束的是判分器本身的可信度；AFB 的 check/gate 只消费判定结果，不表达判分器校准与污染审计协议。"

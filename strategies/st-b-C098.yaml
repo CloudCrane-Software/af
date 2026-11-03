@@ -1,0 +1,13 @@
+id: st-b-C098
+name: "CRBugBench：先量化『review agent 到底能抓多少真 bug』，再谈无人值守产线"
+tier: B
+claim: "CRBugBench 评审能力标定：最强 review agent 在 top-5 评论内抓到 71.9% 的 bug，复杂改动明显掉点"
+claimed_value:
+  metric: "review_agent_bug_capture_rate"
+  direction: up
+  context: "对照组=无评审直接合入；实验组=review agent（top-5 评论）作为合入 gate；比逃逸缺陷数/耗时/误报返工"
+sources: [S105, S106, S144]
+consensus: {corpora: 1, cards: 3}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "能力标定基准：策略内容是「先用 CRBugBench 量化 review agent 抓真 bug 的上界，再决定是否进无人值守」的准入标定协议（S106 body.测试设计），被评测对象是评审能力本身；AFB 不承载「能力标定基准」这类离线测量语义。"

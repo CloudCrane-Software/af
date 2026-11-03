@@ -1,0 +1,13 @@
+id: st-b-C064
+name: "技能选择优先用传统 IR（BM25 + 小重排）而非 LLM 中介检索循环"
+tier: B
+claim: "技能选择优先用BM25+小重排而非LLM中介检索：实测持平且每trial 51.30降到27.54美元"
+claimed_value:
+  metric: "cost_per_trial"
+  direction: down
+  context: "同一批仓库任务三组：模型隐式路由 / BM25+cross-encoder 预选 / LLM 中介检索循环；质量持平看成本"
+sources: [S051, S052]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "缺「检索型算子」与「技能资产注入段」两处语法：\n① ops 八算子（project/merge/slice/anonymize/shuffle_seeded/truncate/tally/select_best）无检索原语——BM25 top-k + cross-encoder 重排无法在 transform 节点上表达；\n② context.sections 的 from 五来源（template/input/arg/edge/store）无 skill 源——选中的技能集无法作为上下文段注入。\n扩展建议（示例）：\n  nodes:\n    - id: skill_select\n      kind: transform\n      ops:\n        - { op: retrieve, port: query, over: skill_index, by: bm25, top_k: 5, rerank: pkg.ir.cross_encoder@1, into: picked }\n      emits: { picked: \"list<skill_entry>\" }\n  # sections 增 skill 源：\n  #   - { from: skill, name: picked, policy: full, quota_tokens: 2000 }\n落地前，「harness 侧 BM25 预选再注入」只能实现在 AFB 图外（装订层前置），图内不可表达。"

@@ -1,0 +1,128 @@
+id: st-C006
+name: 子代理上下文隔离与 orchestrator-worker 并行编排（只回传摘要）
+tier: A
+claim: 子代理上下文隔离与并行编排：探索交给干净上下文的子代理、只回传摘要，多agent系统比单体高90.2%
+claimed_value:
+  metric: success_rate
+  direction: up
+  context: 多agent协同；同一批定位类编码任务：单体全量探索 vs lead 派 3–5 个只读子代理回传 1–2k 摘要（另设 fork 臂）（S004 测试设计口径）
+sources: [MA-rank7, S004, S084]
+consensus: { corpora: 2, cards: 3 }
+experiment: { status: none, exp_id: "-", note: "-" }
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: subagent_isolation_orch
+    graph_version: "1.0"
+    entry: lead
+    input: lead_input
+    output: { ref: verify_report, from: verify }
+    intent: "orchestrator-worker：lead 分解定位探针 → map 并行派只读 scout（上下文只有本探针+模板，无共享槽=干净上下文）→ 只回传 1–2k 摘要（digest 经边进 fixer 上下文，黑板单写者留档）→ 高成本 fixer 只据摘要改码 → 外部验证"
+  types:
+    - name: lead_input
+      schema:
+        type: object
+        required: [question, repo_root]
+        properties:
+          question: { type: string }
+          repo_root: { type: string }
+    - name: probe
+      schema:
+        type: object
+        required: [probe_id, instruction, scope]
+        properties:
+          probe_id: { type: string }
+          instruction: { type: string }
+          scope: { type: string }
+    - name: finding
+      schema:
+        type: object
+        required: [probe_id, summary, refs]
+        properties:
+          probe_id: { type: string }
+          summary: { type: string }
+          refs: { type: array, items: { type: string } }
+    - name: patch
+      schema:
+        type: object
+        required: [diff_ref]
+        properties: { diff_ref: { type: string } }
+    - name: verify_report
+      schema:
+        type: object
+        required: [pass, failures]
+        properties:
+          pass: { type: boolean }
+          failures: { type: array, items: { type: string } }
+  stores:
+    - name: blackboard
+      type: collection
+      item: finding
+      writer: summarize
+      lifecycle: run
+      retention: { max_items: 128 }
+  nodes:
+    - id: lead
+      kind: task
+      uses: { model: route.main@1 }
+      emits: { probes: "list<probe>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.orch.lead_system, quota_tokens: 500 }
+          - { from: input, fields: [question, repo_root], policy: project, quota_tokens: 800 }
+    - id: explore
+      kind: task
+      map:
+        over: lead.probes
+        body:
+          nodes:
+            - id: scout
+              kind: task
+              uses: { model: route.cheap@1, tools: [pkg.hopqa.search@1, pkg.hopqa.lookup@1] }
+              emits: { finding: finding }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.orch.scout_system, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 600 }
+          edges: []
+      emits: { findings: { from_body: scout.finding } }
+    - id: summarize
+      kind: transform
+      consumes: { findings: "list<finding>" }
+      writes: [blackboard]
+      ops:
+        - { op: project, port: findings, into: blackboard }
+        - { op: project, port: findings, into: digest }
+      emits: { digest: "list<finding>" }
+    - id: fixer
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.sweng.view@1, pkg.sweng.edit@1] }
+      consumes: { digest: "list<finding>" }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.orch.fixer_system, quota_tokens: 500 }
+          - { from: input, fields: [question, repo_root], policy: project, quota_tokens: 600 }
+          - { from: edge, port: digest, policy: project, quota_tokens: 2000 }
+    - id: verify
+      kind: check
+      uses: { unit: pkg.sweng.test_unit@1 }
+      consumes: { patch: patch }
+      emits: { report: verify_report }
+  edges:
+    - { from: lead, output: probes, to: explore, input: probes }
+    - { from: explore, output: findings, to: summarize, input: findings }
+    - { from: summarize, output: digest, to: fixer, input: digest }
+    - { from: fixer, output: patch, to: verify, input: patch }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 700 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 1500000 }
+    failures:
+      - class: tool_error
+        route: same_node
+        feedback: error_observation
+      - class: budget_exhausted
+        terminal: true
+        outcome: failed

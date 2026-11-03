@@ -1,0 +1,3 @@
+  WL crates/af-execline/src/graph_unit.rs:1068: 白名单生效（D-50）: turns: stage.turns as u32,
+  WL crates/af-execline/src/shadow.rs:392: 白名单生效（D-50）: turns: row.get("turns").and_then(Value::as_u64).map(|t| t as u32),
+== budget-cast-lint: 0 违规 / 2 白名单生效（root=/home/pan-ding/workspace/af-wt-g0merge, whitelist=ci/budget-cast-whitelist.json）

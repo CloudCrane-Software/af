@@ -1,0 +1,13 @@
+id: st-b-C058
+name: "自建工具检索层前先测检索器：工具检索本身是短板（ToolRet）"
+tier: B
+claim: "自建工具检索层前先测检索器：ToolRet最佳嵌入nDCG@10仅33.83，检索差拖累通过率11.4%"
+claimed_value:
+  metric: "tool_retrieval_nDCG@10"
+  direction: up
+  context: "以自有工具描述+真实任务查询构造内部评测集；先测检索器本身再建检索层"
+sources: [S043, S055, S056, S057]
+consensus: {corpora: 1, cards: 4}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "离线组件选型规程：策略内容是「构造内部评测集→A/B 不同检索器与查询改写→报 nDCG@10 并追踪下游任务成功率」的实验方法（S056 body.测试设计），被评测对象是检索器组件而非 agent 运行流；AFB 表达面（nodes/edges/stores/policies 七段）描述运行时图结构，无「离线评测协议」对应语义，投影只会得到与策略无关的空壳图。"

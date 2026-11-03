@@ -1,0 +1,13 @@
+id: st-b-C086
+name: "上下文压缩四件套：阈值触发 + 结构化交接摘要 + 保留最近比例原文 + 摘要失败降级为截断"
+tier: B
+claim: "上下文压缩四件套：阈值触发+结构化交接摘要+保留最近比例原文+摘要失败降级为截断"
+claimed_value:
+  metric: "context_compression_robustness"
+  direction: up
+  context: "对照组=只做截断式压缩（丢弃最旧消息）或不压缩直到超限报错；实验组=四件套"
+sources: [S082, S083]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "缺「上下文压缩策略段」（与 st-b-C028 同族，本条四件套更具体）：阈值触发位、结构化交接摘要模板绑定、保留最近比例原文、摘要失败降级链，v0.1 均无对应语法。\n扩展建议（示例）：\n  context:\n    compression:\n      trigger: { ratio: 0.80 }                        # ① 阈值触发\n      handoff_summary:                                 # ② 结构化交接摘要\n        template_ref: pkg.ctx.handoff\n        fields: [goal, done, next, blockers]\n      keep_recent_ratio: 0.25                          # ③ 保留最近 25% 原文\n      on_failure: truncate                             # ④ 摘要失败降级为截断\n簇内支撑：S082 的压缩阈值与 S083 的工具响应预算常量同源（chatCompressionService.ts:274），扩展参数应同文件锚定。"

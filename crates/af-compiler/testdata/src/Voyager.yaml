@@ -1,0 +1,265 @@
+version: 1
+meta:
+  name: voyager_curriculum
+  graph_version: "1.0"
+  entry: explore
+  input: env_input
+  output: { ref: "list<skill_entry>", from: export_skills }
+  intent: "Voyager（Wang et al. 2023）：外层自动课程环（观察→提议→内层习得环）+ 持久技能库 + 检索注入 + 守门入库；任意代码执行/原始动作通道/软性目标判定走 L4 逃逸舱"
+
+types:
+  - name: env_input
+    schema:
+      type: object
+      required: [env_summary]
+      properties:
+        env_summary: { type: string }     # 初始世界快照（文本）
+        seed_task: { type: string }        # 可选：首个课程目标的提示
+  - name: goal
+    schema:
+      type: object
+      required: [text, difficulty]
+      properties:
+        text: { type: string }             # 下一个递进目标（任务指令）
+        difficulty: { type: integer }      # 难度档
+        rationale: { type: string }        # 可行性说明
+  - name: skill_entry
+    schema:
+      type: object
+      required: [name, description, code]
+      properties:
+        name: { type: string }             # 技能名
+        description: { type: string }      # 技能描述（检索用）
+        code: { type: string }             # 可执行 Python 代码
+  - name: action_call
+    schema:
+      type: object
+      required: [actions]
+      properties:
+        actions: { type: array, items: { type: string } }   # 原始动作序列（未声明动作组合）
+        note: { type: string }
+  - name: env_observation
+    schema:
+      type: object
+      required: [health, inventory]
+      properties:
+        health: { type: integer }
+        hunger: { type: integer }
+        inventory: { type: array, items: { type: string } }
+        nearby_blocks: { type: array, items: { type: string } }
+        note: { type: string }
+  - name: exec_report
+    schema:
+      type: object
+      required: [ok, feedback]
+      properties:
+        ok: { type: boolean }              # 解释器是否执行成功
+        feedback: { type: string }         # 成功观察 / 异常栈
+        error: { type: string }
+  - name: self_check
+    schema:
+      type: object
+      required: [pass]
+      properties:
+        pass: { type: boolean }            # 同一次生成内的自我验证结论
+        reason: { type: string }
+  - name: verdict
+    schema:
+      type: object
+      required: [achieved]
+      properties:
+        achieved: { type: boolean }        # 软性：目标是否达成
+        confidence: { type: integer }
+        reason: { type: string }
+
+stores:
+  - name: curriculum
+    type: collection
+    item: goal
+    writer: explore.proposer             # 课程表：提议器唯一写者
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: skill_library
+    type: vector_index
+    item: skill_entry
+    writer: explore.acquire.curator     # INV-2：守门通过才由 curator 单写入库
+    lifecycle: persistent                # 跨会话持久
+    retention: { max_items: 512 }
+  - name: exec_log
+    type: kv
+    value: exec_report
+    writer: explore.acquire.code_exec   # 执行反馈 = 上下文唯一回流通道
+    lifecycle: run
+    retention: { max_items: 1 }          # 只留最近一次（非对话式历史累积）
+  - name: env_state
+    type: kv
+    value: env_observation
+    writer: explore.acquire.code_exec   # 程序路径下的世界状态快照
+    lifecycle: run
+    retention: { max_items: 1 }
+  - name: action_log
+    type: kv
+    value: env_observation
+    writer: explore.acquire.raw_action  # 原始动作通道的观察与反馈
+    lifecycle: run
+    retention: { max_items: 1 }
+
+nodes:
+  - id: explore
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: observe
+            kind: task
+            uses: { tool: pkg.openworld.env@1 }
+            emits: { state: env_observation }
+          - id: proposer
+            kind: task
+            uses: { model: route.cheap@1 }
+            writes: [curriculum]
+            emits: { goal: goal }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.openworld.curriculum_prompt, quota_tokens: 500 }
+                - { from: input, fields: [env_summary], policy: project, quota_tokens: 300 }
+                - { from: edge, port: state, policy: project, quota_tokens: 600 }
+                - { from: store, store: curriculum, policy: latest_k, args: { k: 10 }, quota_tokens: 900 }
+                - { from: store, store: env_state, policy: full, quota_tokens: 400 }
+                - { from: store, store: action_log, policy: full, quota_tokens: 200 }
+          - id: acquire
+            kind: task
+            loop:
+              args:
+                goal_text: proposer.goal.text   # 隐式依赖边：proposer → acquire
+                world: observe.state             # 本轮起始世界快照
+              body:
+                nodes:
+                  - id: generator
+                    kind: task
+                    uses: { model: route.main@1 }
+                    emits: { draft: skill_entry, actions: action_call, check: self_check }
+                    context:
+                      sections:
+                        # 固定槽位提示模板：任务指令 / 技能代码 / 执行反馈 / 自我验证 / 计划
+                        - { from: template, template_ref: pkg.openworld.iterative_prompt, quota_tokens: 700 }
+                        - { from: arg, name: goal_text, policy: project, quota_tokens: 200 }
+                        - { from: arg, name: world, policy: project, quota_tokens: 400 }
+                        # 检索注入：任务描述 → 嵌入 top-k 相似技能（仅名称+描述+代码）
+                        - { from: store, store: skill_library, policy: retrieve, component: pkg.openworld.similarity@1, args: { k: 3 }, quota_tokens: 1500 }
+                        - { from: store, store: env_state, policy: full, quota_tokens: 400 }
+                        - { from: store, store: exec_log, policy: full, quota_tokens: 600 }
+                        - { from: store, store: action_log, policy: full, quota_tokens: 300 }
+                  - id: code_exec
+                    kind: task
+                    escape:
+                      kind: program_synthesis
+                      impl_ref: packages/openworld@1.0.0/hatches/code_exec.py
+                      reason: "生成器产出的任意 Python 需在沙箱解释器求值（卡 ⑥b-1）；其实现内部引用 L3 组件 pkg.openworld.env@1 提供动作 API，装载期核对类别"
+                      owner: lang-team
+                      share_budget_pct: 20
+                    consumes: { draft: skill_entry }
+                    emits: { report: exec_report, state: env_observation }
+                    writes: [exec_log, env_state]
+                  - id: raw_action
+                    kind: task
+                    escape:
+                      kind: dynamic_tool_registry
+                      impl_ref: packages/openworld@1.0.0/hatches/raw_action.py
+                      reason: "模型可能组合出 DSL 未声明的动作（卡 ⑥b-3）：保留原始动作调用通道，绕过声明式工具 schema 直落环境"
+                      owner: lang-team
+                      share_budget_pct: 5
+                    consumes: { actions: action_call }
+                    emits: { observation: env_observation }
+                    writes: [action_log]
+                  - id: verdict
+                    kind: task
+                    escape:
+                      kind: llm_predicate
+                      impl_ref: packages/openworld@1.0.0/hatches/goal_verdict.py
+                      reason: "目标达成由环境隐藏状态 + LLM 自验证共同决定，无客观信号（卡 ⑥b-6）：软性判据以非确定性守卫注入，不落 CEL"
+                      owner: lang-team
+                      share_budget_pct: 5
+                    consumes: { check: self_check, report: exec_report, observation: env_observation }
+                    reads: [env_state]
+                    emits: { judgement: verdict }
+                  - id: admit
+                    kind: gate
+                    consumes: { draft: skill_entry, report: exec_report, check: self_check, judgement: verdict }
+                    assert: "inputs.report.ok && inputs.check.pass && inputs.judgement.achieved"
+                    emits: { draft: skill_entry }
+                    route:
+                      default: curator
+                      rules:
+                        - { when: "admit.passed == false", goto: exit }   # 不入库，交给 failures.gate_refused → next_iteration
+                  - id: curator
+                    kind: transform
+                    writes: [skill_library]
+                    ops:
+                      - { op: project, port: draft, into: skill_library }   # 末端落点 = store
+                    consumes: { draft: skill_entry }
+                    emits: {}
+                edges:
+                  - { from: generator, output: draft, to: code_exec, input: draft }
+                  - { from: generator, output: actions, to: raw_action, input: actions }
+                  - { from: generator, output: check, to: verdict, input: check }
+                  - { from: code_exec, output: report, to: verdict, input: report }
+                  - { from: raw_action, output: observation, to: verdict, input: observation }
+                  - { from: generator, output: draft, to: admit, input: draft }
+                  - { from: generator, output: check, to: admit, input: check }
+                  - { from: code_exec, output: report, to: admit, input: report }
+                  - { from: verdict, output: judgement, to: admit, input: judgement }
+                  - { from: admit, output: draft, to: curator, input: draft }
+              max_iterations: 6
+              carried:
+                - { store: skill_library, max_items: 512 }
+                - { store: exec_log, max_items: 1 }
+                - { store: env_state, max_items: 1 }
+                - { store: action_log, max_items: 1 }
+              safety_points:
+                - { node: admit, kind: gate }
+              exit_when: "attempt.passed == true"   # 入库成功 → 本目标收束，换下一个课程目标
+              on_exhausted: continue                # 轮次耗尽 → 课程回退（换目标）
+        edges:
+          - { from: observe, output: state, to: proposer, input: state }
+          - { from: proposer, output: goal, to: acquire, input: goal }
+      max_iterations: 200
+      carried:
+        - { store: curriculum, max_items: 64 }
+        - { store: skill_library, max_items: 512 }
+        - { store: exec_log, max_items: 1 }
+        - { store: env_state, max_items: 1 }
+        - { store: action_log, max_items: 1 }
+      safety_points:
+        - { node: acquire.admit, kind: gate }      # 跨层路径：经嵌套体解析
+      exit_when: "budget.cents_spent >= budget.cents_cap * 9 / 10"
+      on_exhausted: continue
+  - id: export_skills
+    kind: transform
+    reads: [skill_library]
+    ops:
+      - { op: project, port: skill_library, into: skills }
+    emits: { skills: "list<skill_entry>" }
+
+edges:
+  - { from: explore, output: done, to: export_skills, input: done }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 3000 }
+    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 3000000 }
+    - { id: session_turns, dimension: turns, scope: plan, cap: 400 }
+  stop:
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: completed }
+  failures:
+    - class: tool_error
+      route: same_node
+      feedback: error_observation    # 异常栈回灌同一节点上下文（下一轮改写代码）
+    - class: environment_failure
+      retry: { max: 3, backoff_ms: 60000 }
+    - class: gate_refused
+      route: next_iteration         # 自验证不通过：任务保持不变，重规划（轮次耗尽才换目标）
+      feedback: self_check_feedback
+    - class: budget_exhausted
+      terminal: true
+      outcome: completed             # 预算到顶 = 会话收束，导出已习得技能

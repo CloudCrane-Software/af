@@ -1,0 +1,13 @@
+id: st-b-C128
+name: "上下文文件（AGENTS.md/CLAUDE.md）本身不保证正确性：把工程预算从「写文件」挪到「调优文件」"
+tier: B
+claim: "上下文文件（AGENTS.md/CLAUDE.md）不保证正确性：两 agent 消融未测到效应（上界 ≤10–15pp），预算应挪到调优文件"
+claimed_value:
+  metric: "context_file_marginal_effect"
+  direction: up
+  context: "对照组=真实仓库 AGENTS.md/CLAUDE.md 原样注入；两 agent 消融+等价性检验；预算改投调优与验证器"
+sources: [S178, S179]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "工程资源配置建议：策略结论是「上下文文件无可测收益，预算从写文件挪到调优文件/验证器」的投入导向（S178 消融设计），属资产管理决策；AFB 的 template_ref 装载不涉及「文件是否值得写」的资源配置语义。"

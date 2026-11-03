@@ -1,0 +1,162 @@
+version: 1
+meta:
+  name: voyager_curriculum
+  graph_version: "1.0"
+  entry: explore
+  input: env_input
+  output: { ref: "list<skill_entry>", from: export_skills }
+  intent: "嵌套受控循环：外层课程步（提案→内层习得环）；技能库持久+检索注入；守门入库；任意代码执行走 L4"
+
+types:
+  - name: env_input
+    schema:
+      type: object
+      required: [env_summary]
+      properties: { env_summary: { type: string } }
+  - name: goal
+    schema:
+      type: object
+      required: [text, difficulty]
+      properties:
+        text: { type: string }
+        difficulty: { type: integer }
+  - name: skill_entry
+    schema:
+      type: object
+      required: [name, description, body_ref]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        body_ref: { type: string }
+  - name: code_artifact
+    schema:
+      type: object
+      required: [source]
+      properties: { source: { type: string } }
+  - name: exec_report
+    schema:
+      type: object
+      required: [ok, feedback]
+      properties:
+        ok: { type: boolean }
+        feedback: { type: string }
+  - name: self_check
+    schema:
+      type: object
+      required: [pass]
+      properties: { pass: { type: boolean } }
+
+stores:
+  - name: curriculum
+    type: collection
+    item: goal
+    writer: explore.proposer
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: skill_library
+    type: collection
+    item: skill_entry
+    writer: explore.acquire.curator   # INV-2：守门写入（执行成功 ∧ 自检通过才入库）
+    lifecycle: persistent             # 跨会话持久
+    retention: { max_items: 512 }
+
+nodes:
+  - id: explore
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: proposer
+            kind: task
+            uses: { model: route.cheap@1 }
+            writes: [curriculum]
+            emits: { goal: goal }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.openworld.curriculum_prompt, quota_tokens: 500 }
+                - { from: input, fields: [env_summary], policy: project, quota_tokens: 400 }
+                - { from: store, store: curriculum, policy: latest_k, args: { k: 10 }, quota_tokens: 900 }
+          - id: acquire
+            kind: task
+            loop:
+              args: { goal_text: proposer.goal.text }   # 隐式依赖边：proposer → acquire
+              body:
+                nodes:
+                  - id: generator
+                    kind: task
+                    uses: { model: route.main@1 }
+                    emits: { draft: skill_entry, code: code_artifact, check: self_check }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.openworld.iterative_prompt, quota_tokens: 700 }
+                        - { from: arg, name: goal_text, policy: project, quota_tokens: 200 }
+                        - { from: store, store: skill_library, policy: retrieve, component: pkg.openworld.similarity@1, args: { k: 3 }, quota_tokens: 1500 }
+                  - id: code_exec
+                    kind: task
+                    escape:                # L4：沙箱解释器执行任意生成代码（Voyager 卡 ⑥b-1）
+                      impl_ref: packages/openworld@1.0.0/hatches/code_exec.py
+                      reason: "生成器产出的任意 Python 需在沙箱解释器求值；其实现内部引用 L3 组件 pkg.openworld.env@1 提供动作 API（装载期核对类别）"
+                      owner: lang-team
+                      share_budget_pct: 25
+                    consumes: { code: code_artifact }
+                    emits: { report: exec_report }
+                  - id: admit
+                    kind: gate              # 技能写入门禁：执行成功 ∧ 自验证通过
+                    consumes: { report: exec_report, check: self_check, draft: skill_entry }
+                    assert: "inputs.report.ok && inputs.check.pass"
+                    emits: { draft: skill_entry }      # 通过则前向转发工件
+                    route:                # 不通过 → 不入库，结束本轮（failures.gate_refused 接下一步）
+                      default: curator
+                      rules:
+                        - { when: "admit.passed == false", goto: exit }
+                  - id: curator
+                    kind: transform
+                    writes: [skill_library]
+                    ops:
+                      - { op: project, port: draft, into: skill_library }   # 末端落点=store
+                    consumes: { draft: skill_entry }
+                    emits: {}
+                edges:
+                  - { from: generator, output: draft, to: admit, input: draft }
+                  - { from: generator, output: code, to: code_exec, input: code }
+                  - { from: generator, output: check, to: admit, input: check }
+                  - { from: code_exec, output: report, to: admit, input: report }
+                  - { from: admit, output: draft, to: curator, input: draft }
+              max_iterations: 6
+              carried:
+                - { store: skill_library, max_items: 512 }
+              safety_points:
+                - { node: admit, kind: gate }
+              exit_when: "attempt.passed == true"   # 入库成功 → 本目标收束
+              on_exhausted: continue                # 轮次耗尽 → 换下一个课程目标
+      max_iterations: 200
+      carried:
+        - { store: curriculum, max_items: 64 }
+        - { store: skill_library, max_items: 512 }
+      safety_points:
+        - { node: acquire.admit, kind: gate }      # 跨层路径：经嵌套体解析
+      exit_when: "budget.cents_spent >= budget.cents_cap * 9 / 10"
+      on_exhausted: continue
+  - id: export_skills
+    kind: transform
+    reads: [skill_library]
+    ops:
+      - { op: project, port: skill_library, into: skills }
+    emits: { skills: "list<skill_entry>" }
+
+edges:
+  - { from: explore, output: done, to: export_skills, input: done }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 3000 }
+    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 3000000 }
+  failures:
+    - class: tool_error
+      route: same_node
+      feedback: error_observation    # 异常栈回灌，改写重试
+    - class: gate_refused
+      route: next_iteration          # 自检不过：不入库，重规划
+    - class: budget_exhausted
+      terminal: true
+      outcome: completed             # 预算到顶=会话收束，导出已习得技能

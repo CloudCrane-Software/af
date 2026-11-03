@@ -1,0 +1,99 @@
+id: st-b-C096
+name: "AlphaCode 式『大采样 → 用测试过滤 → 按行为聚类』：把测试当过滤器而不是唯一判据"
+tier: B
+claim: "AlphaCode 大采样→测试过滤→行为聚类：样例测试过滤移除超 99% 采样，false positive 62%→4%"
+claimed_value:
+  metric: "false_positive_rate"
+  direction: down
+  context: "对照组=按随机/先到先得挑候选提交；实验组=样例测试过滤 + 行为聚类集中度门限"
+sources: [S100, S103]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: sample_filter_behavior_cluster
+    graph_version: "1.0"
+    entry: samples
+    input: alpha_input
+    output: { ref: kept_candidate, from: cluster }
+    intent: "大采样→样例测试过滤（移除 >99% 采样）→行为聚类集中度门限→代表选取；测试是过滤器不是唯一判据"
+  types:
+    - name: alpha_input
+      schema:
+        type: object
+        required: [issue, sample_ids]
+        properties:
+          issue: { type: string }
+          sample_ids: { type: array, items: { type: integer } }
+    - name: candidate
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: kept_candidate
+      schema:
+        type: object
+        required: [ref, diff_ref, behavior_sig, sample_pass_milli]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+          behavior_sig: { type: string }
+          sample_pass_milli: { type: integer }
+    - name: tally_result
+      schema:
+        type: object
+        required: [answers, top_count, top_share_milli]
+        properties:
+          answers: { type: integer }
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+  nodes:
+    - id: samples
+      kind: task
+      map:
+        over: input.sample_ids
+        max_fanout: 32                 # 大采样
+        body:
+          nodes:
+            - id: coder
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              emits: { candidate: candidate }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.ttc.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+      emits: { candidates: { from_body: coder.candidate } }
+    - id: filter
+      kind: check
+      uses: { unit: pkg.alpha.sample_filter@1 }   # 样例测试当过滤器（非唯一判据）
+      consumes: { candidates: "list<candidate>" }
+      emits: { kept: "list<kept_candidate>" }
+    - id: cluster
+      kind: transform
+      consumes: { kept: "list<kept_candidate>" }
+      ops:
+        - { op: tally, port: kept, by: behavior_sig, into: clusters }      # 行为聚类
+        - { op: select_best, port: kept, by: sample_pass_milli, prefer: max, into: winner }
+      emits:
+        clusters: tally_result
+        winner: kept_candidate
+    - id: fp_gate
+      kind: gate
+      consumes: { clusters: tally_result }
+      assert: "inputs.clusters.top_share_milli >= 700"   # 聚类集中度门限（false positive 控制）
+  edges:
+    - { from: samples, output: candidates, to: filter, input: candidates }
+    - { from: filter, output: kept, to: cluster, input: kept }
+    - { from: cluster, output: clusters, to: fp_gate, input: clusters }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 2000 }
+      - { id: sample_cap, dimension: model_calls, scope: map:samples, cap: 200 }
+    failures:
+      - { class: gate_refused, terminal: true, outcome: failed }
+      - { class: budget_exhausted, terminal: true, outcome: completed }

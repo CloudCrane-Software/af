@@ -1,0 +1,13 @@
+id: st-b-C001
+name: "采样聚合与倒U停机闸：成本最低、证据最强，复杂协议须先赢同预算采样-投票否则判无增量"
+tier: B
+claim: "采样聚合与倒U停机闸：成本最低、证据最强，复杂协议须先赢同预算采样-投票否则判无增量"
+claimed_value:
+  metric: "cost_adjusted_gain"
+  direction: up
+  context: "同预算纯采样消融臂打平即判协议无增量；倒U 拐点（连续零 accepted 轮）触发停机/降级"
+sources: [MA-rank1, MA-rank8]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "采样聚合骨架（map + tally + select_best）在 v0.1 可表达，但「倒U停机闸」的两个核心机制缺语法：\n① 停机判据需要跨轮滚动计数器（如「连续 2 轮零 accepted」），而 loop.exit_when / policies.stop[].when 的 CEL 作用域只含当轮 attempt/节点端口与全局五根（steps/budget/last_tool/last_message/input）——store 内累计值不可见，跨轮状态无处绑定；\n② 「打平即降级为纯采样模式」是模式切换路由，v0.1 无 on_diminishing/降级目标表达。\n扩展建议（示例）：\n  loop:\n    exit_when: \"counters.accepted_zero_streak >= 2\"     # 跨轮计数器进停机作用域\n    on_diminishing: { switch_to: pure_sampling }        # 倒U 拐点降级路由\n  # policies.stop 同款：\n  #   - { when: \"counters.accepted_zero_streak >= 2\", outcome: completed }\n在扩展落地前，倒U 停机闸只能靠 harness 外挂调度实现，AFB 图内不可声明、不可静态校验。"

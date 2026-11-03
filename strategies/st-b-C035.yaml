@@ -1,0 +1,94 @@
+id: st-b-C035
+name: "RL 训练的专用检索 agent 替代 LLM 自发 grep（CodeGrep，含检索精度阈值判据）"
+tier: B
+claim: "RL 训练专用检索 agent（CodeGrep）：27.0% vs 基线 25.8%，低精度检索反而劣化 agent"
+claimed_value:
+  metric: "retrieval_precision"
+  direction: up
+  context: "检索器做成可替换组件三档 A/B：LLM 自发 grep / BM25 类基线 / 专用检索 agent；低精度检索拒绝进入下游"
+sources: [S013, S166]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: retrieval_agent_precision_gate
+    graph_version: "1.0"
+    entry: locate
+    input: ret_input
+    output: { ref: patch, from: fixer }
+    intent: "专用检索 agent 替代自发 grep；检索精度阈值门禁——低精度检索拒绝下游（低精度反而劣化 agent）"
+  types:
+    - name: ret_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: retrieval_report
+      schema:
+        type: object
+        required: [hits, precision_milli]
+        properties:
+          hits: { type: array, items: { type: string } }
+          precision_milli: { type: integer }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+  nodes:
+    - id: locate
+      kind: task
+      uses: { model: route.retrieval@1, tools: [pkg.ret.codegrep] }   # RL 训练的专用检索 agent
+      emits: { report: retrieval_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.ret.codegrep_system, quota_tokens: 500 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+    - id: precision_gate
+      kind: gate
+      consumes: { report: retrieval_report }
+      emits: { report: retrieval_report }
+      assert: "inputs.report.precision_milli >= 700"    # 检索精度阈值判据
+      route:
+        default: escalate
+        rules:
+          - { when: "precision_gate.passed == true", goto: fixer }
+    - id: fixer
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+      consumes: { report: retrieval_report }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.coder_system, quota_tokens: 600 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+          - { from: edge, port: report, fields: [hits], policy: project, quota_tokens: 1500 }
+    - id: escalate
+      kind: task
+      human:
+        station: retrieval_review
+        role: retriever_owner
+        resume:
+          schema:
+            type: object
+            required: [note]
+            properties:
+              note: { type: string }
+      consumes: { report: retrieval_report }
+      emits: { patch: patch }
+  edges:
+    - { from: locate, output: report, to: precision_gate, input: report }
+    - { from: precision_gate, output: report, to: fixer, input: report }
+    - { from: precision_gate, output: report, to: escalate, input: report }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+      - { id: retrieve_cap, dimension: tool_calls, scope: node:locate, cap: 24 }
+    failures:
+      - { class: gate_refused, terminal: true, outcome: escalated_human }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

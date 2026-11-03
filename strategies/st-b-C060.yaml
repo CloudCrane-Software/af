@@ -1,0 +1,94 @@
+id: st-b-C060
+name: "Critic 模型 + best-of-N 推理时扩展：多 rollout 采样、训练专用打分器挑最优补丁"
+tier: B
+claim: "best-of-N+微调critic选优：采样5条轨迹使SWE-bench Verified从60.6%升到66.4%"
+claimed_value:
+  metric: "resolved_rate"
+  direction: up
+  context: "同一大仓库任务集、对照组单 rollout、同预算；采样 5 条轨迹 + critic 打分选优"
+sources: [S046, S091, S094]
+consensus: {corpora: 1, cards: 3}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: best_of_n_critic
+    graph_version: "1.0"
+    entry: rollouts
+    input: bon_input
+    output: { ref: scored_patch, from: choose }
+    intent: "best-of-N 多 rollout 采样 + critic 打分选优；fanout 与成本受预算帽约束（对照单 rollout 基线）"
+  types:
+    - name: bon_input
+      schema:
+        type: object
+        required: [issue, rollout_ids]
+        properties:
+          issue: { type: string }
+          rollout_ids: { type: array, items: { type: integer } }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: scored_patch
+      schema:
+        type: object
+        required: [ref, diff_ref, score_milli]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+          score_milli: { type: integer }
+  nodes:
+    - id: rollouts
+      kind: task
+      map:
+        over: input.rollout_ids
+        max_fanout: 5                  # N=5 条并行轨迹（簇断言口径）
+        body:
+          nodes:
+            - id: coder
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.ttc.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+      emits: { patches: { from_body: coder.patch } }
+    - id: score
+      kind: task
+      map:
+        over: rollouts.patches
+        body:
+          nodes:
+            - id: critic
+              kind: task
+              uses: { model: route.critic@1 }   # 训练专用打分器（微调 critic）
+              emits: { scored: scored_patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.ttc.critic_system, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 1200 }
+      emits: { scored: { from_body: critic.scored } }
+    - id: choose
+      kind: transform
+      consumes: { scored: "list<scored_patch>" }
+      ops:
+        - { op: select_best, port: scored, by: score_milli, prefer: max, into: winner }
+      emits: { winner: scored_patch }
+  edges:
+    - { from: rollouts, output: patches, to: score, input: candidates }
+    - { from: score, output: scored, to: choose, input: scored }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 900 }
+      - { id: fanout_turns, dimension: turns, scope: map:rollouts, cap: 150 }
+    stop:
+      - { when: "budget.cents_spent >= budget.cents_cap * 9 / 10", outcome: completed }
+    failures:
+      - { class: schema_invalid, retry: { max: 2, backoff_ms: 0 } }
+      - { class: budget_exhausted, terminal: true, outcome: completed }

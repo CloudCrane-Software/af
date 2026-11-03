@@ -1,0 +1,374 @@
+{
+  "v": 1,
+  "body": {
+    "plan_id": "plan.sweng_sop_no_qa@1.0+0b751294ef7e",
+    "compiled_from": {
+      "dsl_digest": "0b751294ef7e9fbbc0983dd94a7cdc403cd50f18515ff7ef62469ae47eccf91c",
+      "compiler_version": "0.1.0",
+      "graph_version": "1.0",
+      "registry_digest": "63c3478e9321e1c58318620a592e9953ef34cee3a5d19ea4c3300a722fafe15b"
+    },
+    "line": {
+      "line_id": null,
+      "line_version": null,
+      "domain_pack_digest": null
+    },
+    "order": {
+      "id": "",
+      "stable_id": "",
+      "run_id": "",
+      "state": "Created",
+      "graph_version": "1.0",
+      "line": null,
+      "budget_voucher": null,
+      "artifacts": [],
+      "sla": {
+        "deadline": null,
+        "priority": "Normal"
+      },
+      "supersedes": null,
+      "history": []
+    },
+    "graph": {
+      "graph_version": "1.0",
+      "name": "sweng_sop_no_qa",
+      "entry": "planner",
+      "nodes": [
+        {
+          "id": "coder",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "planner",
+          "kind": "task",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "planner",
+          "output": "plan",
+          "to": "coder",
+          "input": "plan",
+          "checkpoint": true
+        }
+      ],
+      "subgraphs": {}
+    },
+    "interface": {
+      "input_type": "swe_task_input",
+      "output_type": "list<code_file>",
+      "output_from": "coder",
+      "intent": "软件工程包多 agent SOP 无 QA 变体：sop_full 去评审员/测试员环节——计划员→工程师两节点链，产物=变更文件清单；评审/测试环节的补位属铺单批档位面，不在本图"
+    },
+    "types": {
+      "code_file": {
+        "properties": {
+          "content_ref": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content_ref"
+        ],
+        "type": "object"
+      },
+      "plan_step": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "depends_on": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "target"
+        ],
+        "type": "object"
+      },
+      "swe_task_input": {
+        "properties": {
+          "image": {
+            "type": "string"
+          },
+          "instance_id": {
+            "type": "string"
+          },
+          "problem_statement": {
+            "type": "string"
+          },
+          "repo": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "repo",
+          "instance_id",
+          "problem_statement"
+        ],
+        "type": "object"
+      },
+      "task_plan": {
+        "properties": {
+          "instance_id": {
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "type": "plan_step"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "instance_id",
+          "steps"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "workspace": {
+        "name": "workspace",
+        "kind": "collection",
+        "item": "code_file",
+        "writer": "coder",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 256
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": [
+      {
+        "node_id": "coder",
+        "unit": null,
+        "components": {
+          "model_route": "route.main@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [
+            {
+              "reference": "pkg.sweng.edit@1",
+              "effect_class": "persist"
+            },
+            {
+              "reference": "pkg.sweng.locate@1",
+              "effect_class": "pure"
+            },
+            {
+              "reference": "pkg.sweng.view@1",
+              "effect_class": "pure"
+            }
+          ],
+          "context_compaction": null
+        },
+        "budget": [
+          {
+            "id": "coder_turns",
+            "dimension": "turns",
+            "cap": 60
+          }
+        ],
+        "artifact_contract": [
+          {
+            "name": "files",
+            "is_final": true,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "planner",
+        "unit": null,
+        "components": {
+          "model_route": "route.plan@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "plan",
+            "is_final": false,
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      }
+    ],
+    "budget": {
+      "budgets": [
+        {
+          "id": "coder_turns",
+          "dimension": "turns",
+          "scope": "node:coder",
+          "cap": 60
+        },
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 400
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 300000
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "steps.turns >= 70",
+            "roots": [
+              "steps"
+            ],
+            "digest": "06c54a9dba4095c32777f29ee9568b736fec327b17cd9edc33c041190afa8405"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "environment_failure",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "resources": {
+      "gates": [],
+      "limits": []
+    },
+    "observation": {
+      "span_tree": [
+        "invoke_workflow",
+        "invoke_agent",
+        "chat",
+        "execute_tool"
+      ],
+      "ctx_propagation": "env",
+      "otel": {
+        "enabled": false,
+        "endpoint": null,
+        "batch_size": 512
+      },
+      "events": {
+        "root_env": "AF_OBS_ROOT",
+        "line": "",
+        "index": true,
+        "manifest": true
+      },
+      "mes": {
+        "endpoint_ref": "env:MES_CH_URL",
+        "database": "af_mes",
+        "line_id": "",
+        "station_id": ""
+      }
+    },
+    "recovery": {
+      "node_retry": null,
+      "resume_source": [
+        "run_store",
+        "record_stream",
+        "mes_events"
+      ],
+      "safety_points": [],
+      "failures": [
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "environment_failure",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {}
+  }
+}

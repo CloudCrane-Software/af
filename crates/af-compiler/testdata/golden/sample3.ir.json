@@ -1,0 +1,529 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "debate_kv",
+      "entry": "rounds",
+      "nodes": [
+        {
+          "id": "adjudicate",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "finalize",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "rounds",
+          "kind": "task",
+          "loop_spec": {
+            "body": "debate_kv/rounds",
+            "max_iterations": 3,
+            "carried": [
+              {
+                "store": "transcript",
+                "max_items": 64
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "converge_gate",
+                "kind": "gate"
+              }
+            ],
+            "exit_when": {
+              "source": "tally.result.top_share_milli >= 700",
+              "roots": [
+                "tally"
+              ],
+              "digest": "3b8de17168ef613e27e4ea51b45277b0c9b842bd01fcd70ec9df1d5354f698b1"
+            },
+            "on_exhausted": "continue"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "vote",
+          "kind": "transform",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "adjudicate",
+          "output": "winner",
+          "to": "finalize",
+          "input": "winner",
+          "checkpoint": false
+        },
+        {
+          "from": "rounds",
+          "output": "positions",
+          "to": "vote",
+          "input": "positions",
+          "checkpoint": false
+        },
+        {
+          "from": "vote",
+          "output": "winner",
+          "to": "adjudicate",
+          "input": "winner",
+          "checkpoint": false,
+          "guard": {
+            "source": "!((vote.stats.top_count * 2 > vote.stats.answers))",
+            "roots": [
+              "vote"
+            ],
+            "digest": "83f7db4374ac54b9fde6ba93297062901e0fe2de90ae8d5dcfe911c61ea53b69"
+          }
+        },
+        {
+          "from": "vote",
+          "output": "winner",
+          "to": "finalize",
+          "input": "winner",
+          "checkpoint": false,
+          "guard": {
+            "source": "(vote.stats.top_count * 2 > vote.stats.answers)",
+            "roots": [
+              "vote"
+            ],
+            "digest": "46e5f18898fec7952d1cfa27943ef7e891683443b698b0de7c4610f746a1f56c"
+          }
+        }
+      ],
+      "subgraphs": {
+        "debate_kv/rounds": {
+          "graph_version": "1.0",
+          "entry": "debate_map",
+          "nodes": [
+            {
+              "id": "collector",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "converge_gate",
+              "kind": "gate",
+              "capability_refs": []
+            },
+            {
+              "id": "debate_map",
+              "kind": "task",
+              "map_spec": {
+                "body": "debate_kv/rounds/debate_map",
+                "over": "input.personas"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "tally",
+              "kind": "transform",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "debate_map",
+              "output": "items",
+              "to": "collector",
+              "input": "items",
+              "checkpoint": false
+            },
+            {
+              "from": "debate_map",
+              "output": "items",
+              "to": "tally",
+              "input": "items",
+              "checkpoint": false
+            },
+            {
+              "from": "tally",
+              "output": "result",
+              "to": "converge_gate",
+              "input": "result",
+              "checkpoint": false
+            }
+          ]
+        },
+        "debate_kv/rounds/debate_map": {
+          "graph_version": "1.0",
+          "entry": "debater",
+          "nodes": [
+            {
+              "id": "debater",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": []
+        }
+      }
+    },
+    "interface": {
+      "input_type": "debate_input",
+      "output_type": "position",
+      "output_from": "finalize",
+      "intent": "N 辩手 map 并行互不可见；collector 是黑板唯一写者；多数票+裁决 fallback；一致性早停"
+    },
+    "types": {
+      "debate_input": {
+        "properties": {
+          "personas": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "personas"
+        ],
+        "type": "object"
+      },
+      "position": {
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "confidence_milli": {
+            "type": "integer"
+          },
+          "persona": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "persona",
+          "claim",
+          "confidence_milli"
+        ],
+        "type": "object"
+      },
+      "tally_result": {
+        "properties": {
+          "answers": {
+            "type": "integer"
+          },
+          "top_count": {
+            "type": "integer"
+          },
+          "top_share_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "answers",
+          "top_count",
+          "top_share_milli"
+        ],
+        "type": "object"
+      },
+      "turn_record": {
+        "properties": {
+          "claim": {
+            "type": "string"
+          },
+          "confidence_milli": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "claim",
+          "confidence_milli"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "transcript": {
+        "name": "transcript",
+        "kind": "collection",
+        "item": "turn_record",
+        "writer": "rounds.collector",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "adjudicate": {
+        "node_id": "adjudicate",
+        "components": {
+          "model": "route.main@1"
+        },
+        "consumes": {
+          "winner": "position"
+        },
+        "artifacts": {
+          "winner": {
+            "type": "position",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.debatekit.judge_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 300,
+            "fields": [
+              "question"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "port": "winner",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 6000,
+            "store": "transcript",
+            "policy": "full"
+          }
+        ]
+      },
+      "finalize": {
+        "node_id": "finalize",
+        "components": {},
+        "consumes": {
+          "winner": "position"
+        },
+        "artifacts": {
+          "answer": {
+            "type": "position",
+            "is_final": true,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "winner",
+            "into": "answer"
+          }
+        ]
+      },
+      "rounds": {
+        "node_id": "rounds",
+        "components": {},
+        "artifacts": {
+          "positions": {
+            "from_body": "debate_map.items",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds.collector": {
+        "node_id": "collector",
+        "components": {},
+        "writes": [
+          "transcript"
+        ],
+        "consumes": {
+          "items": "list<position>"
+        },
+        "ops": [
+          {
+            "op": "anonymize",
+            "port": "items",
+            "into": "anonymous",
+            "drop": [
+              "persona"
+            ]
+          },
+          {
+            "op": "shuffle_seeded",
+            "port": "anonymous",
+            "into": "shuffled",
+            "seed_ref": "input.question"
+          },
+          {
+            "op": "truncate",
+            "port": "shuffled",
+            "into": "transcript",
+            "max_tokens_each": 200
+          }
+        ]
+      },
+      "rounds.converge_gate": {
+        "node_id": "converge_gate",
+        "components": {},
+        "consumes": {
+          "result": "tally_result"
+        },
+        "assert": {
+          "source": "inputs.result.top_share_milli >= 0 && inputs.result.top_share_milli <= 1000",
+          "roots": [
+            "inputs"
+          ],
+          "digest": "e95d0436ae4075ef397d5616ffc39d08a242ff2aca05e0771f11d50229ce2d97"
+        }
+      },
+      "rounds.debate_map": {
+        "node_id": "debate_map",
+        "components": {},
+        "artifacts": {
+          "items": {
+            "from_body": "debater.position",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "rounds.debate_map.debater": {
+        "node_id": "debater",
+        "components": {
+          "model": "route.main@1"
+        },
+        "artifacts": {
+          "position": {
+            "type": "position",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.debatekit.system",
+            "vars": {
+              "persona": "arg.item"
+            }
+          },
+          {
+            "from": "input",
+            "quota_tokens": 300,
+            "fields": [
+              "question"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 2400,
+            "store": "transcript",
+            "policy": "latest_k",
+            "args": {
+              "k": 8
+            }
+          }
+        ]
+      },
+      "rounds.tally": {
+        "node_id": "tally",
+        "components": {},
+        "consumes": {
+          "items": "list<position>"
+        },
+        "artifacts": {
+          "result": {
+            "type": "tally_result",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "tally",
+            "port": "items",
+            "into": "result",
+            "by": "claim"
+          }
+        ]
+      },
+      "vote": {
+        "node_id": "vote",
+        "components": {},
+        "consumes": {
+          "positions": "list<position>"
+        },
+        "artifacts": {
+          "stats": {
+            "type": "tally_result",
+            "is_final": false,
+            "provenance": null
+          },
+          "winner": {
+            "type": "position",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "tally",
+            "port": "positions",
+            "into": "stats",
+            "by": "claim"
+          },
+          {
+            "op": "select_best",
+            "port": "positions",
+            "into": "winner",
+            "by": "claim",
+            "prefer": "max"
+          }
+        ]
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 400
+        },
+        {
+          "id": "turns_cap",
+          "dimension": "turns",
+          "scope": "loop:rounds",
+          "cap": 30
+        }
+      ],
+      "stop": [],
+      "failures": [
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "fallback_route": "adjudicate"
+        },
+        {
+          "class": "gate_refused",
+          "terminal": true,
+          "outcome": "failed"
+        },
+        {
+          "class": "budget_exhausted",
+          "route": "vote",
+          "terminal": true,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "escapes": {},
+    "trust": {}
+  }
+}

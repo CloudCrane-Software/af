@@ -1,0 +1,515 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "voyager_curriculum",
+      "entry": "explore",
+      "nodes": [
+        {
+          "id": "explore",
+          "kind": "task",
+          "loop_spec": {
+            "body": "voyager_curriculum/explore",
+            "max_iterations": 200,
+            "carried": [
+              {
+                "store": "curriculum",
+                "max_items": 64
+              },
+              {
+                "store": "skill_library",
+                "max_items": 512
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "acquire.admit",
+                "kind": "gate"
+              }
+            ],
+            "exit_when": {
+              "source": "budget.cents_spent >= budget.cents_cap * 9 / 10",
+              "roots": [
+                "budget"
+              ],
+              "digest": "3be1e182158bab26f6795b5974234a63c498ed5ca6b81c13be78e05453256197"
+            },
+            "on_exhausted": "continue"
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "export_skills",
+          "kind": "transform",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "explore",
+          "output": "done",
+          "to": "export_skills",
+          "input": "done",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "voyager_curriculum/explore": {
+          "graph_version": "1.0",
+          "entry": "proposer",
+          "nodes": [
+            {
+              "id": "acquire",
+              "kind": "task",
+              "loop_spec": {
+                "body": "voyager_curriculum/explore/acquire",
+                "max_iterations": 6,
+                "carried": [
+                  {
+                    "store": "skill_library",
+                    "max_items": 512
+                  }
+                ],
+                "safety_points": [
+                  {
+                    "node": "admit",
+                    "kind": "gate"
+                  }
+                ],
+                "args": {
+                  "goal_text": "proposer.goal.text"
+                },
+                "exit_when": {
+                  "source": "attempt.passed == true",
+                  "roots": [
+                    "attempt"
+                  ],
+                  "digest": "b707e3923259e94f203a322ec06f7be5d99dfe98319a2cf2dc9796466dfff682"
+                },
+                "on_exhausted": "continue"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "proposer",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": []
+        },
+        "voyager_curriculum/explore/acquire": {
+          "graph_version": "1.0",
+          "entry": "generator",
+          "nodes": [
+            {
+              "id": "admit",
+              "kind": "gate",
+              "route_exit_guard": {
+                "source": "(admit.passed == false)",
+                "roots": [
+                  "admit"
+                ],
+                "digest": "0c451aa5665895c21cd386890a6d1bd795b807ba8b688f7d8967d6cc11b63f7b"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "code_exec",
+              "kind": "task",
+              "escape": {
+                "impl_ref": "packages/openworld@1.0.0/hatches/code_exec.py",
+                "reason": "生成器产出的任意 Python 需在沙箱解释器求值；其实现内部引用 L3 组件 pkg.openworld.env@1 提供动作 API（装载期核对类别）",
+                "owner": "lang-team",
+                "share_budget_pct": 25
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "curator",
+              "kind": "transform",
+              "capability_refs": []
+            },
+            {
+              "id": "generator",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "admit",
+              "output": "draft",
+              "to": "curator",
+              "input": "draft",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((admit.passed == false))",
+                "roots": [
+                  "admit"
+                ],
+                "digest": "941769d9f5804455f02d816cc38b332550f6f592e0f3b611d85273d203aa32e0"
+              }
+            },
+            {
+              "from": "code_exec",
+              "output": "report",
+              "to": "admit",
+              "input": "report",
+              "checkpoint": false
+            },
+            {
+              "from": "generator",
+              "output": "check",
+              "to": "admit",
+              "input": "check",
+              "checkpoint": false
+            },
+            {
+              "from": "generator",
+              "output": "code",
+              "to": "code_exec",
+              "input": "code",
+              "checkpoint": false
+            },
+            {
+              "from": "generator",
+              "output": "draft",
+              "to": "admit",
+              "input": "draft",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "env_input",
+      "output_type": "list<skill_entry>",
+      "output_from": "export_skills",
+      "intent": "嵌套受控循环：外层课程步（提案→内层习得环）；技能库持久+检索注入；守门入库；任意代码执行走 L4"
+    },
+    "types": {
+      "code_artifact": {
+        "properties": {
+          "source": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "type": "object"
+      },
+      "env_input": {
+        "properties": {
+          "env_summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "env_summary"
+        ],
+        "type": "object"
+      },
+      "exec_report": {
+        "properties": {
+          "feedback": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok",
+          "feedback"
+        ],
+        "type": "object"
+      },
+      "goal": {
+        "properties": {
+          "difficulty": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "difficulty"
+        ],
+        "type": "object"
+      },
+      "self_check": {
+        "properties": {
+          "pass": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pass"
+        ],
+        "type": "object"
+      },
+      "skill_entry": {
+        "properties": {
+          "body_ref": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "body_ref"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "curriculum": {
+        "name": "curriculum",
+        "kind": "collection",
+        "item": "goal",
+        "writer": "explore.proposer",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 64
+        },
+        "eval_input": false
+      },
+      "skill_library": {
+        "name": "skill_library",
+        "kind": "collection",
+        "item": "skill_entry",
+        "writer": "explore.acquire.curator",
+        "lifecycle": "persistent",
+        "retention": {
+          "max_items": 512
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "explore": {
+        "node_id": "explore",
+        "components": {}
+      },
+      "explore.acquire": {
+        "node_id": "acquire",
+        "components": {}
+      },
+      "explore.acquire.admit": {
+        "node_id": "admit",
+        "components": {},
+        "consumes": {
+          "check": "self_check",
+          "draft": "skill_entry",
+          "report": "exec_report"
+        },
+        "artifacts": {
+          "draft": {
+            "type": "skill_entry",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "assert": {
+          "source": "inputs.report.ok && inputs.check.pass",
+          "roots": [
+            "inputs"
+          ],
+          "digest": "8eeb90ff124d3a6c822b9b82c46df6f1465bcb02eed572db86c15bd69ad13f13"
+        }
+      },
+      "explore.acquire.code_exec": {
+        "node_id": "code_exec",
+        "components": {},
+        "consumes": {
+          "code": "code_artifact"
+        },
+        "artifacts": {
+          "report": {
+            "type": "exec_report",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "explore.acquire.curator": {
+        "node_id": "curator",
+        "components": {},
+        "writes": [
+          "skill_library"
+        ],
+        "consumes": {
+          "draft": "skill_entry"
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "draft",
+            "into": "skill_library"
+          }
+        ]
+      },
+      "explore.acquire.generator": {
+        "node_id": "generator",
+        "components": {
+          "model": "route.main@1"
+        },
+        "artifacts": {
+          "check": {
+            "type": "self_check",
+            "is_final": false,
+            "provenance": null
+          },
+          "code": {
+            "type": "code_artifact",
+            "is_final": false,
+            "provenance": null
+          },
+          "draft": {
+            "type": "skill_entry",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 700,
+            "template_ref": "pkg.openworld.iterative_prompt"
+          },
+          {
+            "from": "arg",
+            "quota_tokens": 200,
+            "name": "goal_text",
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1500,
+            "store": "skill_library",
+            "policy": "retrieve",
+            "args": {
+              "k": 3
+            },
+            "component": "pkg.openworld.similarity@1"
+          }
+        ]
+      },
+      "explore.proposer": {
+        "node_id": "proposer",
+        "components": {
+          "model": "route.cheap@1"
+        },
+        "writes": [
+          "curriculum"
+        ],
+        "artifacts": {
+          "goal": {
+            "type": "goal",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.openworld.curriculum_prompt"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 400,
+            "fields": [
+              "env_summary"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 900,
+            "store": "curriculum",
+            "policy": "latest_k",
+            "args": {
+              "k": 10
+            }
+          }
+        ]
+      },
+      "export_skills": {
+        "node_id": "export_skills",
+        "components": {},
+        "reads": [
+          "skill_library"
+        ],
+        "artifacts": {
+          "skills": {
+            "type": "list<skill_entry>",
+            "is_final": true,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "skill_library",
+            "into": "skills"
+          }
+        ]
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 3000
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 3000000
+        }
+      ],
+      "stop": [],
+      "failures": [
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "gate_refused",
+          "route": "next_iteration"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "completed"
+        }
+      ]
+    },
+    "escapes": {
+      "explore.acquire.code_exec": {
+        "impl_ref": "packages/openworld@1.0.0/hatches/code_exec.py",
+        "reason": "生成器产出的任意 Python 需在沙箱解释器求值；其实现内部引用 L3 组件 pkg.openworld.env@1 提供动作 API（装载期核对类别）",
+        "owner": "lang-team",
+        "share_budget_pct": 25
+      }
+    },
+    "trust": {}
+  }
+}

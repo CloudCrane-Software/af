@@ -1,0 +1,13 @@
+id: st-b-C126
+name: "工具接口（CLI vs MCP）选型看「失败成本」与「agent 是否真的走了被指派的接口」，而不是只看 toke…"
+tier: B
+claim: "CLI vs MCP选型看失败成本与实际接口服从：scaffold效应大于接口效应"
+claimed_value:
+  metric: "interface_adherence_rate"
+  direction: up
+  context: "对照组=同一任务强制 CLI；实验组=MCP；同时测接口服从率与失败成本（scaffold 效应大于接口效应）"
+sources: [S173, S176]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "接口选型方法：策略内容是「按失败成本与实际接口服从（而非 token 数）选 CLI/MCP」的选型判据（S176 body.测试设计），是工具面决策规程；AFB 的 uses.tools 只做组件装订，不表达选型实验口径。"

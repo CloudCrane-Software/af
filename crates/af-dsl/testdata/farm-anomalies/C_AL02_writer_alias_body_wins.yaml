@@ -1,0 +1,83 @@
+version: 1
+meta:
+  name: farm_g
+  graph_version: '1'
+  entry: n1
+  input: T_in
+  output:
+    ref: T_out
+    from: a.b
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+- name: T_item
+  schema:
+    type: object
+    properties:
+      x:
+        type: string
+stores:
+- name: S
+  type: kv
+  writer: a.b
+  lifecycle: run
+  retention:
+    max_items: 16
+nodes:
+- id: a.b
+  kind: check
+  emits:
+    out: T_out
+  writes:
+  - S
+- id: a
+  kind: task
+  loop:
+    body:
+      nodes:
+      - id: b
+        kind: check
+        writes:
+        - S
+        emits:
+          o: T_out
+      edges: []
+    max_iterations: 2
+    carried:
+    - store: S
+      max_items: 4
+    safety_points:
+    - node: b
+      kind: check
+- id: n1
+  kind: task
+  uses:
+    model: m@1
+  emits:
+    out: T_item
+  context:
+    sections:
+    - from: input
+      fields:
+      - q
+      quota_tokens: 100
+edges:
+- from: n1
+  output: out
+  to: a
+  input: go
+policies: {}

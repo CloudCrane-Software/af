@@ -1,0 +1,7 @@
+meta:
+  name: t
+  graph_version: "1.0"
+  entry: n1
+  input: in_t
+  output: { ref: a, from: n1 }
+nodes: []

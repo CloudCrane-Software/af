@@ -1,0 +1,419 @@
+version: 1
+meta:
+  name: adas_mas_search
+  graph_version: "1.0"
+  entry: loader
+  input: adas_input
+  output: { ref: meta_program, from: code_compile }
+  intent: "ADAS 的 Meta Agent Search 外壳：LLM meta agent 生成候选 agent 程序（源码工件）→ 沙箱执行 → 外部验证打分 → 结构化反馈回灌 → 迭代择优（取最优而非最后一版）；候选程序的运行时拓扑/新角色/自举/任意 Python/可编程选择在 L4 逃逸面记账，DSL 只承载『发现物的固定执行图』"
+  topology_selector:
+    # ⑥(a)-8 跨域迁移：编译期在已版本化的发现物图之间选择（裁决 §二-1：编译期解析，产物仍是单一确定图）
+    rules:
+      - { when: "input.domain == 'maze'", use: pkg.adaskit.discovered_maze@1 }
+      - { when: "input.domain == 'wordle'", use: pkg.adaskit.discovered_wordle@1 }
+    fallback: pkg.adaskit.mas_search@1
+
+types:
+  - name: adas_input
+    schema:
+      type: object
+      required: [domain, task_description, code_template_ref]
+      properties:
+        domain: { type: string }
+        task_description: { type: string }
+        code_template_ref: { type: string }
+        eval_task_ids: { type: array, items: { type: string } }
+  - name: candidate_code
+    schema:
+      type: object
+      required: [candidate_id, source, entry_point]
+      properties:
+        candidate_id: { type: string }
+        source: { type: string }
+        entry_point: { type: string }
+        roles: { type: array, items: { type: string } }
+  - name: role_table
+    schema:
+      type: object
+      required: [roles]
+      properties:
+        roles: { type: array, items: { type: string } }
+        registry_ref: { type: string }
+  - name: run_output
+    schema:
+      type: object
+      required: [ok, answer]
+      properties:
+        ok: { type: boolean }
+        answer: { type: string }
+        exit_code: { type: integer }
+        traceback: { type: string }
+        tool_calls: { type: array, items: { type: string } }
+  - name: verification
+    schema:
+      type: object
+      required: [pass, reward_milli]
+      properties:
+        pass: { type: boolean }
+        reward_milli: { type: integer }
+        reason: { type: string }
+  - name: discovery_record
+    schema:
+      type: object
+      required: [candidate_id, source_ref, reward_milli]
+      properties:
+        candidate_id: { type: string }
+        source_ref: { type: string }
+        reward_milli: { type: integer }
+        generation: { type: integer }
+        note: { type: string }
+  - name: feedback_note
+    schema:
+      type: object
+      required: [summary]
+      properties:
+        summary: { type: string }
+        error_digest: { type: string }
+        hint: { type: string }
+  - name: stop_decision
+    schema:
+      type: object
+      required: [stop]
+      properties:
+        stop: { type: boolean }
+        note: { type: string }
+  - name: reference_answer
+    schema:
+      type: object
+      required: [task_id, expected]
+      properties:
+        task_id: { type: string }
+        expected: { type: string }
+  - name: meta_program
+    schema:
+      type: object
+      required: [program_ref, description]
+      properties:
+        program_ref: { type: string }
+        description: { type: string }
+
+stores:
+  - name: candidates
+    type: collection
+    item: candidate_code
+    writer: mas_loop.meta_agent          # INV-2：候选源码由 meta agent 单写
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: records
+    type: collection
+    item: discovery_record
+    writer: mas_loop.scoreboard           # INV-2：候选↔分数对由记分板单写
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: exec_logs
+    type: collection
+    item: run_output
+    writer: mas_loop.sandbox_env          # INV-2：执行日志由沙箱边界单写
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: boot_records
+    type: collection
+    item: discovery_record
+    writer: boot_loop.scoreboard2         # 自举阶段的独立记分板
+    lifecycle: run
+    retention: { max_items: 32 }
+  - name: answers_ref
+    type: collection
+    item: reference_answer
+    writer: loader
+    lifecycle: run
+    retention: { max_items: 64 }
+    eval_input: true                      # INV-4：参考答案只对验证器可读（候选程序看不到）
+
+nodes:
+  - id: loader
+    kind: task
+    uses: { tool: pkg.adaskit.task_loader@1 }
+    writes: [answers_ref]
+    emits: { done: signal }
+
+  # ===== MAS 外层搜索循环（卡①核心机制 / ⑥(a)-1,2,4,5,6,7）=====
+  - id: mas_loop
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: meta_agent
+            kind: task
+            uses: { model: route.main@1 }
+            writes: [candidates]
+            emits: { candidate: candidate_code }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.adaskit.meta_system, quota_tokens: 800 }
+                - { from: template, template_ref: pkg.adaskit.code_template, quota_tokens: 1200 }
+                - { from: input, fields: [domain, task_description, code_template_ref], policy: project, quota_tokens: 800 }
+                - { from: edge, port: score, fields: [reward_milli, note], policy: project, quota_tokens: 400 }
+                - { from: edge, port: note, fields: [summary, error_digest], policy: project, quota_tokens: 600 }
+                - { from: edge, port: decision, fields: [note], policy: project, quota_tokens: 200 }
+                - { from: store, store: candidates, policy: latest_k, args: { k: 3 }, quota_tokens: 3000 }
+                - { from: store, store: exec_logs, policy: latest_k, args: { k: 2 }, quota_tokens: 1500 }
+
+          - id: role_registry
+            kind: task
+            escape:                              # L4 ⑥(b)-2：运行时新增角色
+              kind: dynamic_tool_registry
+              impl_ref: packages/adaskit@1.0.0/hatches/role_registry.py
+              reason: "meta agent 生成的代码可 def 出模板预设之外的角色函数与工具；角色集合在运行前不可静态枚举，核心只能承接包内 registry 的枚举结果"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { candidate: candidate_code }
+            emits: { roles: role_table }
+
+          - id: candidate_run
+            kind: task
+            escape:                              # L4 ⑥(b)-1：运行时决定拓扑
+              kind: program_synthesis
+              impl_ref: packages/adaskit@1.0.0/hatches/candidate_run.py
+              reason: "候选系统的角色调用关系与控制流写在生成的 Python 里，运行前不可静态枚举为节点/边；DSL 只能承载发现物的固定执行图"
+              owner: lang-team
+              share_budget_pct: 25
+            consumes: { candidate: candidate_code, roles: role_table }
+            emits: { run: run_output }
+
+          - id: sandbox_env
+            kind: task
+            escape:                              # L4 ⑥(b)-4：任意 Python 能力
+              kind: env_adapter
+              impl_ref: packages/adaskit@1.0.0/hatches/sandbox_env.py
+              reason: "沙箱进程边界：候选代码的 import/文件读写/未列入工具表的库调用在包内执行器完成，stdout/stderr/traceback/退出码在边界处归一为工件"
+              owner: runtime-team
+              share_budget_pct: 15
+            consumes: { run: run_output }
+            writes: [exec_logs]
+            emits: { logs: run_output }
+
+          - id: verifier
+            kind: check                          # ⑥(a)-5：任务验证器（外部判定单元）
+            uses: { unit: pkg.adaskit.verifier@1 }
+            reads: [answers_ref]                 # INV-4：唯一合法读者集合内的评估器
+            consumes: { logs: run_output }
+            emits: { verdict: verification }
+
+          - id: feedback_parse
+            kind: task
+            escape:                              # L4 ⑥(b)-5：不定形状的反馈
+              kind: free_text_parser
+              impl_ref: packages/adaskit@1.0.0/hatches/feedback_parse.py
+              reason: "执行反馈是 traceback/工具日志/自由文本/数值的混合体，固定 schema 覆盖不了；解析与诊断摘要的生成在包内完成，核心只收结构化 note"
+              owner: lang-team
+              share_budget_pct: 8
+            consumes: { logs: run_output }
+            emits: { note: feedback_note }
+
+          - id: scoreboard
+            kind: transform
+            writes: [records]
+            consumes: { verdict: verification }
+            ops:
+              - { op: project, port: verdict, into: score }
+              - { op: project, port: score, into: records }   # 末端落点 = store
+            emits: { score: discovery_record }
+
+          - id: human_stop
+            kind: task
+            human:                               # 卡④-5：人工终止
+              station: research-desk
+              role: maintainer
+              quorum: 1
+              resume:
+                schema:
+                  type: object
+                  required: [stop]
+                  properties: { stop: { type: boolean }, note: { type: string } }
+            consumes: { score: discovery_record }
+            emits: { decision: stop_decision }
+        edges:
+          - { from: meta_agent, output: candidate, to: role_registry, input: candidate }
+          - { from: meta_agent, output: candidate, to: candidate_run, input: candidate }
+          - { from: role_registry, output: roles, to: candidate_run, input: roles }
+          - { from: candidate_run, output: run, to: sandbox_env, input: run }
+          - { from: sandbox_env, output: logs, to: verifier, input: logs }
+          - { from: sandbox_env, output: logs, to: feedback_parse, input: logs }
+          - { from: verifier, output: verdict, to: scoreboard, input: verdict }
+          - { from: scoreboard, output: score, to: meta_agent, input: score }
+          - { from: scoreboard, output: score, to: human_stop, input: score }
+          - { from: feedback_parse, output: note, to: meta_agent, input: note }
+          - { from: human_stop, output: decision, to: meta_agent, input: decision }
+      max_iterations: 20                      # MAS 迭代上限（卡④-5 迭代预算）
+      carried:
+        - { store: candidates, max_items: 64 }
+        - { store: records, max_items: 64 }
+        - { store: exec_logs, max_items: 64 }
+      safety_points:
+        - { node: verifier, kind: check }
+        - { node: human_stop, kind: human }
+      exit_when: "scoreboard.score.reward_milli >= 800 || human_stop.decision.stop == true"
+      on_exhausted: keep_best                  # 卡④-4/6：保留并输出历史最佳候选
+    emits: { record: { from_body: scoreboard.score } }
+
+  - id: best_pick
+    kind: transform
+    reads: [records]
+    consumes: { done: signal }
+    ops:
+      - { op: select_best, port: records, by: reward_milli, prefer: max, into: winner }
+    emits: { winner: discovery_record }
+
+  - id: selector
+    kind: task
+    escape:                                   # L4 ⑥(b)-6：程序化选择与打分
+      kind: llm_predicate
+      impl_ref: packages/adaskit@1.0.0/hatches/selector.py
+      reason: "候选选择在论文里是『各训练/验证任务多次运行准确率排序』的可编程聚合（多任务加权/成功率聚合），难以退化为静态边权与单字段排序"
+      owner: lang-team
+      share_budget_pct: 12
+    reads: [records, candidates]
+    consumes: { seed: discovery_record, winner: discovery_record }
+    emits: { final_best: discovery_record }
+
+  - id: bootstrap_meta
+    kind: task
+    escape:                                   # L4 ⑥(b)-3：自举（meta agent 被发现物替换）
+      kind: meta_loop
+      impl_ref: packages/adaskit@1.0.0/hatches/bootstrap_meta.py
+      reason: "自举把已发现的 agent 顶替原 meta agent 继续搜索：拓扑发生递归替换、可无限嵌套，核心只能承接包内给出的『发现物即新 meta agent』程序"
+      owner: lang-team
+      share_budget_pct: 10
+    consumes: { seed: discovery_record }
+    emits: { boot_program: meta_program }
+
+  # ===== 自举阶段：发现物充当新 meta agent 的第二轮搜索 =====
+  - id: boot_loop
+    kind: task
+    loop:
+      args:
+        boot: bootstrap_meta.boot_program      # 体形参：发现物作为新 meta agent 的程序
+      body:
+        nodes:
+          - id: boot_meta_agent
+            kind: task
+            uses: { model: route.main@1 }
+            emits: { candidate: candidate_code }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.adaskit.meta_system, quota_tokens: 800 }
+                - { from: arg, name: boot, policy: project, quota_tokens: 2500 }
+                - { from: input, fields: [domain, task_description], policy: project, quota_tokens: 600 }
+
+          - id: cand_run2
+            kind: task
+            escape:                            # L4 ⑥(b)-1 的第二实例（自举阶段）
+              kind: program_synthesis
+              impl_ref: packages/adaskit@1.0.0/hatches/candidate_run.py
+              reason: "自举阶段的候选程序同样以运行时角色拓扑执行；与主搜索共用同一个执行面 impl_ref"
+              owner: lang-team
+              share_budget_pct: 20
+            consumes: { candidate: candidate_code }
+            emits: { run: run_output }
+
+          - id: sandbox2
+            kind: task
+            escape:                            # L4 ⑥(b)-4 的第二实例
+              kind: env_adapter
+              impl_ref: packages/adaskit@1.0.0/hatches/sandbox_env.py
+              reason: "自举阶段的沙箱边界：任意 Python 执行与日志归一，impl_ref 与主搜索共用"
+              owner: runtime-team
+              share_budget_pct: 5
+            consumes: { run: run_output }
+            emits: { logs: run_output }
+
+          - id: verifier2
+            kind: check
+            uses: { unit: pkg.adaskit.verifier@1 }
+            reads: [answers_ref]
+            consumes: { logs: run_output }
+            emits: { verdict: verification }
+
+          - id: scoreboard2
+            kind: transform
+            writes: [boot_records]
+            consumes: { verdict: verification }
+            ops:
+              - { op: project, port: verdict, into: score }
+              - { op: project, port: score, into: boot_records }   # 末端落点 = store
+            emits: { score: discovery_record }
+        edges:
+          - { from: boot_meta_agent, output: candidate, to: cand_run2, input: candidate }
+          - { from: cand_run2, output: run, to: sandbox2, input: run }
+          - { from: sandbox2, output: logs, to: verifier2, input: logs }
+          - { from: verifier2, output: verdict, to: scoreboard2, input: verdict }
+      max_iterations: 10
+      carried:
+        - { store: boot_records, max_items: 32 }
+      safety_points:
+        - { node: verifier2, kind: check }
+      exit_when: "scoreboard2.score.reward_milli >= 900"
+      on_exhausted: keep_best
+    emits: { record: { from_body: scoreboard2.score } }
+
+  - id: final_report
+    kind: transform
+    reads: [records]
+    consumes: { final: discovery_record }
+    ops:
+      - { op: project, port: records, into: archive }
+      - { op: project, port: final, into: final_doc }
+    emits:
+      archive: "list<discovery_record>"
+      final_doc: discovery_record
+
+  - id: code_compile
+    kind: task
+    escape:                                   # L4 ⑥(b)-7：编译目标差异（DSL → 任意代码）
+      kind: program_synthesis
+      impl_ref: packages/adaskit@1.0.0/hatches/compile_discovery.py
+      reason: "发现物要落成 while/try/递归等嵌套控制流的任意代码并在新域实例化，DSL 只能表达图，必须提供『图 → 任意代码』的编译逃逸面"
+      owner: lang-team
+      share_budget_pct: 15
+    reads: [candidates, records]
+    consumes: { final_doc: discovery_record }
+    emits: { artifact: meta_program }
+
+edges:
+  - { from: loader, output: done, to: mas_loop, input: done }
+  - { from: mas_loop, output: done, to: best_pick, input: done }
+  - { from: mas_loop, output: record, to: selector, input: seed }
+  - { from: best_pick, output: winner, to: selector, input: winner }
+  - { from: selector, output: final_best, to: bootstrap_meta, input: seed }
+  - { from: bootstrap_meta, output: boot_program, to: boot_loop, input: boot_program }
+  - { from: boot_loop, output: record, to: final_report, input: final }
+  - { from: final_report, output: final_doc, to: code_compile, input: final_doc }
+
+policies:
+  budgets:
+    - { id: plan_cents, dimension: cents, scope: plan, cap: 5000 }
+    - { id: meta_tokens, dimension: tokens_total, scope: node:mas_loop.meta_agent, cap: 2000000 }
+    - { id: iter_turns, dimension: turns, scope: loop:mas_loop, cap: 200 }
+    - { id: boot_turns, dimension: turns, scope: loop:boot_loop, cap: 60 }
+  stop:
+    - { when: "steps.iterations >= 20", outcome: completed }         # 迭代上限兜底
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: failed }
+  failures:
+    - class: schema_invalid        # 候选代码不合 schema：回灌给 meta agent 重写
+      retry: { max: 1, backoff_ms: 0 }
+      route: next_iteration
+      feedback: candidate
+    - class: tool_error            # 候选代码运行报错（traceback）：错误驱动自修复
+      retry: { max: 1, backoff_ms: 0 }
+      route: next_iteration
+      feedback: exec_log
+    - class: timeout               # 沙箱执行挂起/超时：超时信息作为一类失败反馈
+      route: next_iteration
+      feedback: exec_log
+    - class: gate_refused          # 验证不通过：把判定理由回灌，meta agent 改提示/角色划分/工作流
+      route: next_iteration
+      feedback: verdict
+    - class: budget_exhausted      # 预算到顶：中止并输出已发现的最佳候选
+      terminal: true
+      outcome: completed

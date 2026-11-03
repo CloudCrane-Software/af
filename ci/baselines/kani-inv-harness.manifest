@@ -1,0 +1,41 @@
+# ci/baselines/kani-inv-harness.manifest — Kani INV 镜像 harness 清单正本
+# 生成: bash ci/baseline_calc.sh gen-kani -o ci/baselines/kani-inv-harness.manifest
+# 源:   proofs/Kani镜像员-INV组/harness/src（#[cfg(feature=..)] 门控模块不计）
+# 纪律: 有意增删 harness 须同批再生成本正本并同步 numbers.json
+#   （fv.kani_inv_harness.count / .manifest_sha256）——防悄悄改基线=逃逸。
+# 数据行: <模块文件>\t<模块>::<harness>；count=去重 harness 总数；
+# names-sha256=名字清单（sort -u）SHA-256——run.sh 9b 以此替手写常数 32。
+mirror_inv1.rs	mirror_inv1::a01_completeness
+mirror_inv1.rs	mirror_inv1::a01_soundness
+mirror_inv1.rs	mirror_inv1::a02_completeness
+mirror_inv1.rs	mirror_inv1::a02_soundness
+mirror_inv1.rs	mirror_inv1::a03_completeness
+mirror_inv1.rs	mirror_inv1::a03_soundness
+mirror_inv1.rs	mirror_inv1::a04_completeness
+mirror_inv1.rs	mirror_inv1::a04_soundness
+mirror_inv1.rs	mirror_inv1::a05_existence_non_llm
+mirror_inv1.rs	mirror_inv1::a05_range_soundness
+mirror_inv1.rs	mirror_inv1::a06_completeness
+mirror_inv1.rs	mirror_inv1::a06_soundness_counterpart
+mirror_inv2.rs	mirror_inv2::a07_completeness
+mirror_inv2.rs	mirror_inv2::a07_soundness
+mirror_inv2.rs	mirror_inv2::a08_completeness
+mirror_inv2.rs	mirror_inv2::a08_soundness
+mirror_inv2.rs	mirror_inv2::a09_completeness
+mirror_inv2.rs	mirror_inv2::a09_soundness
+mirror_inv2.rs	mirror_inv2::a10_completeness_closure
+mirror_inv2.rs	mirror_inv2::a10_no_conflict_lemma
+mirror_inv3.rs	mirror_inv3::a11_completeness
+mirror_inv3.rs	mirror_inv3::a11_soundness
+mirror_inv3.rs	mirror_inv3::a12_existence_indirect_ok
+mirror_inv3.rs	mirror_inv3::a12_range_soundness
+mirror_inv3.rs	mirror_inv3::a13_completeness_e2321
+mirror_inv3.rs	mirror_inv3::a13_soundness_e2322
+mirror_inv4.rs	mirror_inv4::a14_completeness
+mirror_inv4.rs	mirror_inv4::a14_soundness
+mirror_inv4.rs	mirror_inv4::a15_completeness
+mirror_inv4.rs	mirror_inv4::a15_whitelist_members_never_flagged
+mirror_inv4.rs	mirror_inv4::a16_decl_surface_basis
+mirror_inv4.rs	mirror_inv4::a16_oob_independence
+count	32
+names-sha256	6ee08a95cf9273cce33402163cdf483b88bc7745f9ac61eb270c2d0bdba1e421

@@ -1,0 +1,316 @@
+{
+  "version": 1,
+  "suite": "af-ci-mutations",
+  "_doc": "mutations/ 元探针注册表（复盘 C3-2/PP1；G0-CI机制批 子代理B 草案）。本文件为 JSON 子集（合法 YAML），python3 标准库可解析。每探针=一个用例，预登记期望 exit code + 期望 stderr 子串，机械判定无裁量。完整性由 ci/baselines/mutations-registry.sha256 钉住（mutation_runner.sh check-registry），删改任一探针即漂移红；有意变更须 update-registry-baseline 同批评审提交。触发规则=diff 触及 gate_inputs glob 全量跑（should-run 判 full）、否则 nightly。",
+  "gate_inputs": ["ci/**", "proofs/**"],
+  "probes": [
+    {
+      "id": "MUT-001",
+      "description": "删门脚本必须红：删 ci/k5-path-lint.py（step1 门脚本，盘上真实文件）后 step1 门命令必须非零退出——门必须失败于删除（复盘 C3-1/C3-2 元探针两件套之一）",
+      "action": "delete",
+      "target": "ci/k5-path-lint.py",
+      "mirror_of": "step1",
+      "run": "cargo fmt --check --all && python3 ci/k5-path-lint.py",
+      "timeout_sec": 120,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": "nonzero",
+        "stderr_contains": "k5-path-lint.py",
+        "_doc_expect": "run 与 ci/run.sh:121 step1 门命令逐字同串（mirror 审计强制）；脚本缺席时 python3 报 can't open file（文件名上 stderr）→ 命令链非零 → run.sh step() 判 FAIL → OVERALL=1（run.sh:50-58 统一接线）"
+      }
+    },
+    {
+      "id": "MUT-002",
+      "description": "删探针必须红（自指防护）：从注册表删任一探针条目后，注册表完整性检查必须以 exit 1 + 「探针清单漂移」红——探针被删=计数/哈希漂移（复盘 C3-2「探针清单（数量+每探针期望值）哈希…探针被删即计数漂移红」）",
+      "action": "registry-remove-probe",
+      "args": { "remove_id": "MUT-001" },
+      "run": "bash ci/mutation_runner.sh check-registry",
+      "timeout_sec": 30,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "探针清单漂移"
+      }
+    },
+    {
+      "id": "MUT-003",
+      "description": "摘门保牌必须红·xcheck 臂（红队 2026-10-31 发现回归探针）：从 ci/run.sh 静默删除 step13b/13c 调用与 step14 machine_batch 执行调用、保留全部 echo 登记行后，xcheck 门数对账必须以 exit 1 + gates-exec-binding 红——登记在册而执行缺席（修复前该变异 xcheck 全绿复现在案；2026-10-31 修复批起门数对账数执行事实、登记行走双向绑定）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^step 13b \"",
+          "arm_wiring_check\\.py --check",
+          "^step 13c \"",
+          "budget_cast_lint\\.py --root",
+          "^machine_batch > \"\\$OUT/step14\\.log"
+        ],
+        "_doc_args": "五条正则=13b 调用行+其续行/13c 调用行+其续行/step14 执行调用行；任一零命中=正本漂移、探针源失效即红（fail-closed）"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "run.sh 缺 step14 执行事实行后 registered(14)≠executed(1..13)，gates-exec-binding 硬红；gates 基础口径过，gates-g0-erratum 自 2026-11-01 整槽连摘修复批起因 ci.steps_total 登记↔独立重算漂移同为硬红（exit 判定确定性=1 不变）"
+      }
+    },
+    {
+      "id": "MUT-004",
+      "description": "摘门保牌必须红·step12 臂（红队 2026-10-31 发现回归探针）：同 MUT-003 变异（删 step13b/13c 调用与 step14 machine_batch 执行调用、保留登记行）后，step12 计数复算必须以 exit 1 红——gates.ci_steps/ci.steps_total 执行事实槽位 14→13、gates.ci_hard 13→12、gates.ci_step13_subgates 3→1 逐键漂移（修复前该变异 step12 全绿复现在案；source 已由登记行计数改执行事实口径）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^step 13b \"",
+          "arm_wiring_check\\.py --check",
+          "^step 13c \"",
+          "budget_cast_lint\\.py --root",
+          "^machine_batch > \"\\$OUT/step14\\.log"
+        ],
+        "_doc_args": "同 MUT-003"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "四个门数键复算漂移 → step12 硬红 exit 1（infra 错为 exit 2、全绿为 0，均不满足期望=探针红）"
+      }
+    },
+    {
+      "id": "MUT-005",
+      "description": "整槽连摘必须红·xcheck 臂（红队 2026-10-31 发现回归探针，2026-11-01 修复批入册）：从 ci/run.sh 整槽摘除 step10/11/12 三对账硬门（`step N` 调用行+门脚本续行+`echo \"== stepN\"` 登记行一并删，登记行 14→11，对账机检随槽清零）后，xcheck 必须以 exit 1 + gates-g0-erratum 硬红——批未齐分支不再无条件软 PASS：numbers.json ci.steps_total 登记 14 ↔ run.sh 执行事实重算 11 漂移即红（修复前该变异 xcheck exit 0 全绿，probe4/5 复现在案；同批接线=run.sh step0 全量演练消费 should-run）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^echo \"== step10 ",
+          "^step 10 \"",
+          "step10_check\\.py",
+          "^echo \"== step11 ",
+          "^step 11 \"",
+          "step11_check\\.py",
+          "^echo \"== step12 ",
+          "^step 12 \"",
+          "step12_check\\.py"
+        ],
+        "_doc_args": "九条正则=step10/11/12 各槽的登记行+调用行+门脚本续行（整槽连摘：登记与执行一并删；每条恰命中 1 行）。任一零命中=正本漂移、探针源失效即红（fail-closed）——正本已被整槽连摘时本探针在 step0 全量演练即红（防护被关掉本身就是红）"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "三槽整摘后 g0_hard=[13,14]（2/5 入批未齐分支）→ ci.steps_total 登记 14 ↔ xcheck 独立重算 11 → gates-g0-erratum 硬红 exit 1（修复前该分支无条件软 PASS exit 0）"
+      }
+    },
+    {
+      "id": "MUT-006",
+      "description": "整槽连摘必须红·step12 臂（红队 2026-10-31 发现回归探针，2026-11-01 修复批入册）：同 MUT-005 变异（整槽摘除 step10/11/12 登记行+执行行）后，step12 计数复算必须以 exit 1 红——gates.ci_steps/ci.steps_total 执行事实槽位 14→11、gates.ci_hard 13→10 逐键漂移（变异删的是三对账门槽位本身，但门脚本 ci/step12_check.py 与数据正本 numbers.json 仍在场，scratch 直跑即复算）；与 MUT-005 构成整槽连摘双臂（xcheck+step12 互为跨锚，单修任一臂仍红）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^echo \"== step10 ",
+          "^step 10 \"",
+          "step10_check\\.py",
+          "^echo \"== step11 ",
+          "^step 11 \"",
+          "step11_check\\.py",
+          "^echo \"== step12 ",
+          "^step 12 \"",
+          "step12_check\\.py"
+        ],
+        "_doc_args": "同 MUT-005"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "门数键复算漂移（14→11/13→10）→ step12 硬红 exit 1（infra 错为 exit 2、全绿为 0，均不满足期望=探针红）"
+      }
+    },
+    {
+      "id": "MUT-007",
+      "description": "判分链登记表收缩必须红（红队 RT-E6/E51 发现回归探针）：从 ci/scorechain-manifest.txt 删掉 judge.rs 登记行（判分链门本体 crates/af-execline/src/judge.rs 脱离哈希锚保护面）后，k5 判分链 lint 必须以 exit 1 + 「判分链登记表被收缩」红——修复前该变异 lint 全绿（PASS「3 件」：登记表 4→3 件、在册行仍逐位对锚，故 judge.rs 可任意改写而 step1 硬门不红）复现在案；修复后由「判分链必需成员下界」对账（ci/k5-path-lint.py REQUIRED_MEMBERS）与「门输入全集钉」（ci/gate_inputs_check.sh GATE_INPUTS 含 ci/scorechain-manifest.txt）双臂拦截",
+      "action": "edit-drop-lines",
+      "target": "ci/scorechain-manifest.txt",
+      "args": {
+        "drop_patterns": [
+          "^crates/af-execline/src/judge\\.rs"
+        ],
+        "_doc_args": "一条正则=判分链门本体 judge.rs 的登记表行（登记表 4→3 件＝收缩）；零命中=正本漂移、探针源失效即红（fail-closed）"
+      },
+      "run": "python3 -I ci/k5-path-lint.py",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "判分链登记表被收缩",
+        "_doc_expect": "登记表收缩后 k5-path-lint 的「判分链必需成员下界」对账缺 crates/af-execline/src/judge.rs → sys.exit(1)、stderr 含「判分链登记表被收缩」（修复前该变异 lint PASS「3 件」exit 0）"
+      }
+    },
+    {
+      "id": "MUT-008",
+      "description": "同名替换摘门必须红·step12 臂（红队终局轮 RT-E81 发现回归探针，2026-11-02 修复批入册）：把 ci/run.sh 中 14d 的 `(cd \"$AF_ROOT\" && python3 -B ci/strategies_check.py); rc_d=$?` 换成 `(cd \"$AF_ROOT\" && python3 -B ci/xcheck.py); rc_d=$?`（14d 策略库门被 xcheck 顶替——子门数不变、钉键手写正则枚举仍数到 4、策略库 schema+index 完备性+计数对账+af-dsl 编译断言门实际静默消失）后，step12 计数复算必须以 exit 1 红——单点名册 ci/subgates.list 的 strategies_check 件在 ci/run.sh 无非评论接线行（名册逐件在场数 4→3），且三者一致断言（名册计数==正则计数==名册逐件在场数）不成立（修复前该变异 step12 全绿复现在案）",
+      "action": "edit-replace-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "replace_patterns": [
+          {
+            "pattern": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/strategies_check\\.py\\); rc_d=\\$\\?$",
+            "replace": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/xcheck\\.py\\); rc_d=\\$\\?$"
+          }
+        ],
+        "_doc_args": "一条正则=14d 策略库调用行；替换为同名 xcheck 调用行（子门数不变、正则枚举仍数到 4）。任一零命中=正本漂移、探针源失效即红（fail-closed）"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "名册逐件在场数 4→3 与登记 4 漂移（gates.ci_step14_subgates 名册生成 source）+ 三者一致断言红 → step12 硬红 exit 1（全绿为 0，不满足期望=探针红）"
+      }
+    },
+    {
+      "id": "MUT-009",
+      "description": "同名替换摘门必须红·xcheck 臂（红队终局轮 RT-E81 发现回归探针，2026-11-02 修复批入册）：同 MUT-008 变异（14d 策略库调用行被同名 xcheck 调用行顶替）后，xcheck 必须以 exit 1 + subgates-roster-binding 硬红——单点名册 ci/subgates.list 的 strategies_check 件在 ci/run.sh 无非评论接线行（名册逐件在场面）；修复前该变异 xcheck 硬项全绿复现在案",
+      "action": "edit-replace-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "replace_patterns": [
+          {
+            "pattern": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/strategies_check\\.py\\); rc_d=\\$\\?$",
+            "replace": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/xcheck\\.py\\); rc_d=\\$\\?$"
+          }
+        ],
+        "_doc_args": "同 MUT-008"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "subgates-roster-binding 硬红（名册件 strategies_check 缺席）→ exit 1"
+      }
+    },
+    {
+      "id": "MUT-010",
+      "description": "接线弱化必须红·step12 臂（红队终局轮 RT-E81 发现回归探针，2026-11-02 修复批入册）：把 ci/run.sh 中 14d 的调用行改为 `(cd \"$AF_ROOT\" && python3 -B ci/strategies_check.py --skip-compile); rc_d=$?`（R4 af-dsl 编译断言面被静默关闭、子门数与钉键计数不变）后，step12 计数复算必须以 exit 1 红——名册件的接线行带弱化标志 --skip-compile 即红（修复前该变异 step12 全绿、且门自身仍宣称「编译断言经 af-dsl 装载测试」复现在案）",
+      "action": "edit-replace-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "replace_patterns": [
+          {
+            "pattern": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/strategies_check\\.py\\); rc_d=\\$\\?$",
+            "replace": "  (cd \"$AF_ROOT\" && python3 -B ci/strategies_check.py --skip-compile); rc_d=$?"
+          }
+        ],
+        "_doc_args": "一条正则=14d 策略库调用行；替换为带 --skip-compile 的同款调用行"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "名册件接线行带弱化标志 --skip-compile → step12 硬红 exit 1"
+      }
+    },
+    {
+      "id": "MUT-011",
+      "description": "接线弱化必须红·xcheck 臂（红队终局轮 RT-E81 发现回归探针，2026-11-02 修复批入册）：同 MUT-010 变异（14d 调用行加 --skip-compile 关闭 R4 af-dsl 编译断言面）后，xcheck 必须以 exit 1 + subgates-roster-binding 硬红——名册件的接线行带弱化标志即红",
+      "action": "edit-replace-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "replace_patterns": [
+          {
+            "pattern": "^  \\(cd \"\\$AF_ROOT\" && python3 -B ci/strategies_check\\.py\\); rc_d=\\$\\?$",
+            "replace": "  (cd \"$AF_ROOT\" && python3 -B ci/strategies_check.py --skip-compile); rc_d=$?"
+          }
+        ],
+        "_doc_args": "同 MUT-010"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "subgates-roster-binding 硬红（接线行带 --skip-compile）→ exit 1"
+      }
+    },
+    {
+      "id": "MUT-012",
+      "description": "整槽连摘一致化收缩必须红·xcheck 臂（红队 2026-11-03 确证逃逸变体回归探针）：同 MUT-005 整槽摘除 step10/11/12（登记行+执行行一并删）后**同批**把 numbers.json 门数账收缩（ci.steps_total/gates.ci_steps/gates.ci_hard 各 -3——「登记=重算」一致化改账；登记锚 ci.steps_total 的 source 自指重数 run.sh，锚与被守物同源同灭，批未齐分支登记锚与逐键复算全数自证吸收）后，xcheck 必须以 exit 1 + accountability-slot-floor 硬红——独立锚=三对账门槽位下限（三对账门脚本必须在 run.sh 有执行事实行，与 numbers.json 任何键无关；修前该变体 xcheck exit 0 硬项全过、三对账硬门静默蒸发，沙盒复现在案）",
+      "action": "edit-consistent-shrink",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^echo \"== step10 ",
+          "^step 10 \"",
+          "step10_check\\.py",
+          "^echo \"== step11 ",
+          "^step 11 \"",
+          "step11_check\\.py",
+          "^echo \"== step12 ",
+          "^step 12 \"",
+          "step12_check\\.py"
+        ],
+        "rebook": {
+          "file": "numbers.json",
+          "deltas": { "ci.steps_total": -3, "gates.ci_steps": -3, "gates.ci_hard": -3 }
+        },
+        "_doc_args": "九条 drop 正则同 MUT-005（整槽连摘：登记+执行一并删，每条恰命中 1 行）；rebook.deltas=攻击者的同批改账步（登记值随摘槽 -3——修前变体只改 ci.steps_total 单键即可吸收登记锚，本探针取全键一致化收缩=攻击者不漏键的最强形态，登记锚/逐键复算全绿，只有独立锚能红）。任一 drop 零命中或 rebook 键缺席/非 int=正本漂移、探针源失效即红（fail-closed）"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "gates-g0-erratum 批未齐分支登记锚 11==重算 11（被一致化改账吸收照绿）、gates/gates-exec-binding 过 → 独立锚 accountability-slot-floor 红（step10/11/12 无执行事实行）→ exit 判定确定性=1"
+      }
+    },
+    {
+      "id": "MUT-013",
+      "description": "整槽连摘一致化收缩必须红·step12 臂（红队 2026-11-03 确证逃逸变体回归探针）：同 MUT-012 变异（整槽摘除 step10/11/12+门数账全键同批收缩）后，step12 计数复算必须以 exit 1 红——逐键复算「登记==复算」全绿（改账已吸收复算面），唯一拦截=第⑤节三对账门槽位下限（step10/11/12 门脚本在 run.sh 无执行事实行；与 ci/xcheck.py accountability-slot-floor 臂同口径互为跨锚，单修任一臂仍红）",
+      "action": "edit-consistent-shrink",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^echo \"== step10 ",
+          "^step 10 \"",
+          "step10_check\\.py",
+          "^echo \"== step11 ",
+          "^step 11 \"",
+          "step11_check\\.py",
+          "^echo \"== step12 ",
+          "^step 12 \"",
+          "step12_check\\.py"
+        ],
+        "rebook": {
+          "file": "numbers.json",
+          "deltas": { "ci.steps_total": -3, "gates.ci_steps": -3, "gates.ci_hard": -3 }
+        },
+        "_doc_args": "同 MUT-012"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "门数键逐键复算一致（改账吸收）→ 第⑤节 accountability-slot-floor 红（三对账槽位无执行事实行）→ step12 硬红 exit 1（infra 错为 exit 2、全绿为 0，均不满足期望=探针红）"
+      }
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+id: st-b-C036
+name: "词法锚定 + 图结构局部扩展的检索（LARGER，替换纯 grep 导航）"
+tier: B
+claim: "词法锚定+图结构局部扩展检索（LARGER）：LocBench 文件级 Acc@5 相对最强基线 +13.9pp（调优超参）"
+claimed_value:
+  metric: "file_level_Acc@5"
+  direction: up
+  context: "固定任务集上「纯 grep/glob 基线 vs 词法锚定+图扩展」A/B；文件级 Acc@5 主指标"
+sources: [S014, S164]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: lexical_anchor_graph_expand
+    graph_version: "1.0"
+    entry: locate
+    input: larger_input
+    output: { ref: test_verdict, from: verify }
+    intent: "词法锚定+图结构局部扩展检索替换纯 grep 导航：检索工具面两件装订，定位阶段产物经类型化边进修补"
+  types:
+    - name: larger_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: code_loc
+      schema:
+        type: object
+        required: [path, line, score_milli]
+        properties:
+          path: { type: string }
+          line: { type: integer }
+          score_milli: { type: integer }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: test_verdict
+      schema:
+        type: object
+        required: [passed, failures]
+        properties:
+          passed: { type: boolean }
+          failures: { type: array, items: { type: string } }
+  nodes:
+    - id: locate
+      kind: task
+      uses:
+        model: route.retrieval@1
+        tools: [pkg.ret.lex_anchor, pkg.ret.graph_expand]   # 词法锚定 + 图结构局部扩展
+      emits: { candidates: "list<code_loc>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.ret.larger_system, quota_tokens: 500 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+    - id: fixer
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+      consumes: { candidates: "list<code_loc>" }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.coder_system, quota_tokens: 600 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+          - { from: edge, port: candidates, fields: [path, line, score_milli], policy: project, quota_tokens: 1800 }
+    - id: verify
+      kind: check
+      uses: { unit: pkg.sweng.test_unit@1 }
+      consumes: { patch: patch }
+      emits: { verdict: test_verdict }
+  edges:
+    - { from: locate, output: candidates, to: fixer, input: candidates }
+    - { from: fixer, output: patch, to: verify, input: patch }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 500 }
+      - { id: locate_cap, dimension: tool_calls, scope: node:locate, cap: 30 }
+    failures:
+      - { class: tool_error, route: same_node, feedback: error_observation }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

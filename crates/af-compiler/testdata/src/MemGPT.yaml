@@ -1,0 +1,279 @@
+version: 1
+meta:
+  name: memgpt_layered
+  graph_version: "1.0"
+  entry: session
+  input: memgpt_input
+  output: { ref: reply, from: session }
+  intent: "MemGPT（Packer et al. 2023）中断驱动式分层记忆：外层=步循环（每步一条中断），内层=步内函数调用轮次（≤N）；常驻区=核心记忆+滚动消息缓冲（全量注入主上下文），分页区=归档向量库+全会话历史（按需检索）；记忆管理函数=带写回副作用的自编辑调用（append/replace 双算子）；步内调用上限+主上下文上限=受控循环上限+预算守卫；运行时函数面/语义分页驱逐/动态注入量/跨会话外部存储/异步抢占走 L4 逃逸记账"
+
+types:
+  - name: memgpt_input
+    schema:
+      type: object
+      required: [session_id, message]
+      properties:
+        session_id: { type: string }        # 会话标识（跨会话一致性由外部存储适配器承担）
+        message: { type: string }           # 初始用户消息（宿主事件队列的种子，运行时由 intake 取用）
+  - name: reply
+    schema:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+  - name: interrupt_event
+    schema:
+      type: object
+      required: [kind, message]
+      properties:
+        kind: { type: string }              # user_message | timer | external_event
+        message: { type: string }
+  - name: memory_plan
+    schema:
+      type: object
+      required: [op, target, payload]
+      properties:
+        op: { type: string }                # 闭环动作词表：core_memory_append | core_memory_replace | archival_insert | archival_search | conversation_search
+        target: { type: string }            # 核心记忆分段（persona/instructions/key/human）或检索查询
+        payload: { type: string }
+  - name: observation
+    schema:
+      type: object
+      required: [ok, op, content]
+      properties:
+        ok: { type: boolean }               # 函数执行是否成功（失败时 content 为错误文本，回灌自纠）
+        op: { type: string }
+        content: { type: string }           # 函数返回值 / 检索结果 / 错误文本
+  - name: core_edit
+    schema:
+      type: object
+      required: [mode, section, content]
+      properties:
+        mode: { type: string }              # append | replace（自编辑写回双算子）
+        section: { type: string }           # 核心记忆分段
+        content: { type: string }
+  - name: archive_write
+    schema:
+      type: object
+      required: [key, content]
+      properties:
+        key: { type: string }
+        content: { type: string }
+  - name: context_report
+    schema:
+      type: object
+      required: [tokens, injected]
+      properties:
+        tokens: { type: integer }           # 本轮主上下文占用估算（守卫判据）
+        injected: { type: integer }         # 本轮回注主上下文的字符/条数
+  - name: completion_verdict
+    schema:
+      type: object
+      required: [done, reason]
+      properties:
+        done: { type: boolean }
+        reason: { type: string }
+  - name: core_record
+    schema:
+      type: object
+      required: [section, content]
+      properties:
+        section: { type: string }
+        content: { type: string }
+  - name: archival_record
+    schema:
+      type: object
+      required: [key, content]
+      properties:
+        key: { type: string }
+        content: { type: string }
+  - name: turn_record
+    schema:
+      type: object
+      required: [role, content]
+      properties:
+        role: { type: string }
+        content: { type: string }
+
+stores:
+  - name: core_memory
+    type: kv                        # 常驻区：主上下文内的可自编辑常驻记忆（分段存放）
+    value: core_record
+    writer: session.step.host_mem   # INV-2：写回副作用的唯一落点（宿主执行层）
+    lifecycle: run
+    retention: { max_items: 32 }
+  - name: message_buffer
+    type: message_log               # 常驻区：近期对话与调用历史，按条数/窗口滚动（⑥a-7）
+    writer: session.step.host_mem
+    lifecycle: run
+    retention: { policy: rolling_window, max_items: 20, keep_system: true }
+  - name: archival_memory
+    type: vector_index              # 分页区：归档记忆向量库，跨会话持久（⑥a-5）
+    item: archival_record
+    writer: session.step.archive_store   # INV-2：跨会话外部存储适配器是唯一写者
+    lifecycle: persistent
+    retention: { max_items: 4096 }
+  - name: recall_history
+    type: collection                # 分页区：完整消息历史（conversation_search 的检索底料，⑥a-4/⑥a-5）
+    item: turn_record
+    writer: session.step.host_mem
+    lifecycle: persistent
+    retention: { max_items: 2048 }
+  - name: inbox
+    type: message_log               # 宿主事件队列：中断到达即 append（不等模型决定，卡③-1）
+    writer: session.intake
+    lifecycle: run
+    retention: { max_items: 64 }
+
+nodes:
+  - id: session
+    kind: task
+    loop:                            # 外层：中断驱动的「步」循环（每步处理一条中断）
+      body:
+        nodes:
+          - id: intake
+            kind: task
+            escape:                              # L4 记账：卡片⑥b-6（任意时刻插入的中断 / 异步抢占）
+              kind: env_adapter
+              impl_ref: packages/memgpt@1.0.0/hatches/event_intake.py
+              reason: "用户消息/定时任务可抢占正在进行的生成并改变步边界；宿主事件队列与抢占语义由事件适配器承担（卡⑥b-6）。静态拓扑只能表达步边界处的取事件，生成中途抢占在该实现内完成"
+              owner: lang-team
+              share_budget_pct: 4
+            writes: [inbox]
+            emits: { event: interrupt_event }
+          - id: step
+            kind: task
+            loop:                        # 内层：一步之内的函数调用轮次（≤N，卡④-「步内调用上限」）
+              args: { event: intake.event }   # 隐式依赖边 intake → step：本步处理的中断
+              body:
+                nodes:
+                  - id: agent
+                    kind: task
+                    uses: { model: route.main@1 }
+                    emits: { reply: reply, plans: "list<memory_plan>" }
+                    context:
+                      sections:
+                        # 卡片③-2 的固定拼装模板顺序：指令 → 核心记忆 → 缓冲 → 外部检索 → 本步中断
+                        - { from: template, template_ref: pkg.memgpt.system, quota_tokens: 600 }
+                        - { from: input, fields: [session_id], policy: project, quota_tokens: 100 }
+                        # 常驻层（resident tier）：核心记忆全量 + 消息缓冲滚动窗口（⑥a-2/⑥a-7）
+                        - { from: store, store: core_memory, policy: full, quota_tokens: 1200 }
+                        - { from: store, store: message_buffer, policy: full, quota_tokens: 2500 }
+                        # 本步中断消息（宿主事件队列取出；最新一条，故置于缓冲之后）
+                        - { from: arg, name: event, policy: project, quota_tokens: 400 }
+                        # 分页层（paged-out tier）：归档检索 + 会话召回 = 只读检索边（⑥a-4）
+                        - { from: store, store: archival_memory, policy: retrieve, component: pkg.memgpt.similarity@1, args: { k: 5 }, quota_tokens: 1200 }
+                        - { from: store, store: recall_history, policy: retrieve, component: pkg.memgpt.similarity@1, args: { k: 5 }, quota_tokens: 800 }
+                  - id: mem_dispatch
+                    kind: task
+                    escape:                       # L4 记账：卡片⑥b-2（运行时自由选择下一工具/可调用集合）
+                      kind: dynamic_tool_registry
+                      impl_ref: packages/memgpt@1.0.0/hatches/mem_dispatch.py
+                      reason: "记忆管理函数的可调用集合与调用序列由模型在运行时决定、不可静态枚举（卡⑥b-2）：本节点是运行时函数注册表的分派面，产出函数响应 observation 与写回请求 core_edit"
+                      owner: lang-team
+                      share_budget_pct: 8
+                    consumes: { plans: "list<memory_plan>" }
+                    reads: [core_memory, archival_memory, recall_history]
+                    emits: { observation: "list<observation>", edit: "list<core_edit>", archive: "list<archive_write>" }
+                  - id: archive_store
+                    kind: task
+                    escape:                       # L4 记账：卡片⑥a-5/⑥b-7（跨会话外部存储与一致性语义）
+                      kind: env_adapter
+                      impl_ref: packages/memgpt@1.0.0/hatches/archive_store.py
+                      reason: "归档记忆与会话召回存于跨会话持久外部存储，其写入与后续会话读取的一致性语义超出单次拓扑声明范围（卡⑥b-7）；该适配器是归档库的唯一写者"
+                      owner: lang-team
+                      share_budget_pct: 5
+                    consumes: { archive: "list<archive_write>" }
+                    writes: [archival_memory]
+                    emits: { archived: "list<archive_write>" }
+                  - id: host_mem
+                    kind: task
+                    escape:                       # L4 记账：卡片⑥b-1/⑥b-4/⑥b-5（自编辑写回、动态注入量与预算分配、语义化分页/驱逐）
+                      kind: runtime_context_mutation
+                      impl_ref: packages/memgpt@1.0.0/hatches/host_mem.py
+                      reason: "宿主执行层：执行模型自编辑指令对核心记忆的写回副作用（append/replace 双算子，卡⑥b-1）、追加消息缓冲与跨会话历史；并在主上下文超预算时按语义条件『先写外部再驱逐主上下文条目』（卡⑥b-5），以及运行时决定回注量与预算分配（卡⑥b-4）——三者均不可静态表达"
+                      owner: lang-team
+                      share_budget_pct: 9
+                    consumes: { reply: reply, observation: "list<observation>", edit: "list<core_edit>", archived: "list<archive_write>" }
+                    reads: [core_memory, message_buffer, inbox]
+                    writes: [core_memory, message_buffer, recall_history]
+                    emits: { report: context_report }
+                  - id: mem_guard
+                    kind: gate                  # ⑥a-6：主上下文上限的运行时守卫（验证面，内建 passed）
+                    consumes: { report: context_report }
+                    assert: "inputs.report.tokens <= 4000"    # 主上下文固定额度（实验用 2k/4k/8k 取 4k）
+                    emits: { report: context_report }
+                  - id: semantic_done
+                    kind: task
+                    escape:                       # L4 记账：卡片⑥b-3（自然语言终止谓词；主路径未启用）
+                      kind: llm_predicate
+                      impl_ref: packages/memgpt@1.0.0/hatches/semantic_done.py
+                      reason: "『直到模型不再发出函数调用』在主路径由结构判据（last_message.has_tool_calls）承担；若改用语义完成判定（模型以自然语言自述已完成），需非确定性谓词注入（卡⑥b-3），本节点为该变体的落点，当前不在关键路径上"
+                      owner: lang-team
+                      share_budget_pct: 3
+                    consumes: { reply: reply }
+                    emits: { verdict: completion_verdict }
+                edges:
+                  - { from: agent, output: reply, to: host_mem, input: reply }
+                  - { from: agent, output: reply, to: semantic_done, input: reply }
+                  - { from: agent, output: plans, to: mem_dispatch, input: plans }
+                  - { from: mem_dispatch, output: observation, to: host_mem, input: observation }
+                  - { from: mem_dispatch, output: edit, to: host_mem, input: edit }
+                  - { from: mem_dispatch, output: archive, to: archive_store, input: archive }
+                  - { from: archive_store, output: archived, to: host_mem, input: archived }
+                  - { from: host_mem, output: report, to: mem_guard, input: report }
+              max_iterations: 4                # 步内函数调用上限 N（论文实验可调，典型 1–4）
+              carried:
+                - { store: core_memory, max_items: 32 }
+                - { store: message_buffer, max_items: 20 }
+                - { store: recall_history, max_items: 2048 }
+                - { store: archival_memory, max_items: 4096 }
+              safety_points:
+                - { node: mem_guard, kind: gate }        # 每轮必须过主上下文预算守卫
+              exit_when: "last_message.has_tool_calls == false"   # 步终止判据（卡④）：模型返回不含函数调用的消息 → 本步结束并回复用户
+              on_exhausted: continue             # 步内调用上限用尽 → 强制收束作答，以当前回复交回外层
+            emits: { reply: { from_body: agent.reply } }
+        edges:
+          - { from: intake, output: event, to: step, input: event }
+      max_iterations: 12                   # 全局最大步数（卡④-「最大步数硬超时」）
+      carried:
+        - { store: inbox, max_items: 64 }
+        - { store: core_memory, max_items: 32 }
+        - { store: message_buffer, max_items: 20 }
+        - { store: recall_history, max_items: 2048 }
+        - { store: archival_memory, max_items: 4096 }
+      safety_points:
+        - { node: step.mem_guard, kind: gate }   # 跨层路径：经嵌套体解析
+      exit_when: "budget.cents_spent >= budget.cents_cap * 9 / 10"   # 会话收束（预算到顶）
+      on_exhausted: continue                    # 步数用尽 → 会话收束，输出当前回复
+    emits: { reply: { from_body: step.reply } }
+
+edges: []                        # 根图只有一个步循环节点：中断→步→回灌的环在体内闭合
+
+policies:
+  budgets:
+    - { id: step_calls, dimension: tool_calls, scope: loop:session, cap: 48 }        # 全会话函数调用总量
+    - { id: ctx_tokens, dimension: tokens_total, scope: node:session.step, cap: 4000 }  # 主上下文固定额度（2k/4k/8k）
+    - { id: session_turns, dimension: turns, scope: plan, cap: 96 }
+    - { id: plan_calls, dimension: model_calls, scope: plan, cap: 60 }
+    - { id: plan_tokens, dimension: tokens_total, scope: plan, cap: 240000 }
+    - { id: plan_cost, dimension: cents, scope: plan, cap: 600 }
+  stop:
+    - { when: "budget.tool_calls_spent >= budget.tool_calls_cap", outcome: completed }   # 调用预算到顶 → 收束作答
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: failed }
+  failures:
+    - class: tool_error                       # 函数执行异常（检索超时/存储不可用/参数非法）：错误文本回灌自纠（卡④）
+      route: same_node
+      feedback: error_observation
+    - class: environment_failure              # 存储不可用：宿主层重试
+      retry: { max: 2, backoff_ms: 1000 }
+    - class: schema_invalid                   # 写入超长/参数非法：回灌错误，要求模型改写压缩后再写（卡④）
+      retry: { max: 2, backoff_ms: 0 }
+      route: same_node
+      feedback: format_reminder
+    - class: gate_refused                     # 主上下文超预算且无法降级裁剪：本步判失败
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted                 # 全局步数/费用硬超时，避免反复调用死循环（卡④）
+      terminal: true
+      outcome: failed

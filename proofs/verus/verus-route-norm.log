@@ -1,0 +1,80 @@
+note: automatically chose triggers for this expression:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:195:9
+    |
+195 | /         forall |k: int| 0 <= k < rules@.len() ==> is_exit(rules[k])
+196 | |             || ((rules[k] as int) < targets@.len()),
+    | |___________________________________________________^
+
+note:   trigger 1 of 1:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:195:59
+    |
+195 |         forall |k: int| 0 <= k < rules@.len() ==> is_exit(rules[k])
+    |                                                           ^^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:199:9
+    |
+199 |         forall |q: int| 0 <= q < edges@.len() ==> edges[q].to == targets[q],
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note:   trigger 1 of 1:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:199:66
+    |
+199 |         forall |q: int| 0 <= q < edges@.len() ==> edges[q].to == targets[q],
+    |                                                                  ^^^^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:200:9
+    |
+200 |         forall |a: int, b: int| 0 <= a < b < edges@.len() ==> edges[a].to < edges[b].to,
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note:   trigger 1 of 1:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:200:63
+    |
+200 |         forall |a: int, b: int| 0 <= a < b < edges@.len() ==> edges[a].to < edges[b].to,
+    |                                                               ^^^^^^^^      ^^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:209:13
+    |
+209 |             forall |p: int| 0 <= p < q as int ==> edges[p].to == targets[p],
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+note:   trigger 1 of 1:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:209:66
+    |
+209 |             forall |p: int| 0 <= p < q as int ==> edges[p].to == targets[p],
+    |                                                                  ^^^^^^^^^^
+
+note: automatically chose triggers for this expression:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:223:5
+    |
+223 |     assert forall |a: int, b: int| (0 <= a < b < edges@.len()) implies edges[a].to < edges[b].to by {
+    |     ^^^^^^
+
+note:   trigger 1 of 1:
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:223:72
+    |
+223 |     assert forall |a: int, b: int| (0 <= a < b < edges@.len()) implies edges[a].to < edges[b].to by {
+    |                                                                        ^^^^^^^^      ^^^^^^^^
+
+note: Verus printed one or more automatically chosen quantifier triggers
+      because it had low confidence in the chosen triggers.
+      To suppress these messages, do one of the following:
+        (1) manually annotate a single desired trigger using #[trigger]
+            (example: forall|i: int, j: int| f(i) && #[trigger] g(i) && #[trigger] h(j)),
+        (2) manually annotate multiple desired triggers using #![trigger ...]
+            (example: forall|i: int| #![trigger f(i)] #![trigger g(i)] f(i) && g(i)),
+        (3) accept the automatically chosen trigger using #![auto]
+            (example: forall|i: int, j: int| #![auto] f(i) && g(i) && h(j))
+        (4) use the --triggers-mode silent command-line option to suppress all printing of triggers.
+      (Note: triggers are used by the underlying SMT theorem prover to instantiate quantifiers;
+      the theorem prover instantiates a quantifier whenever some expression matches the
+      pattern specified by one of the quantifier's triggers.)
+   --> /home/pan-ding/workspace/af-wt-phase2-execline/proofs/verus/route_norm.rs:223:5
+    |
+223 |     assert forall |a: int, b: int| (0 <= a < b < edges@.len()) implies edges[a].to < edges[b].to by {
+    |     ^^^^^^
+
+verification results:: 12 verified, 0 errors

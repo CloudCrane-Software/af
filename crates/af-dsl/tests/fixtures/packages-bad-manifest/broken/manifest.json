@@ -1,0 +1,6 @@
+{
+  "package": "broken",
+  "graphs": [
+    { "name": "g@1", "version": "1", "source": "graphs/g@1.afb" }
+  ]
+}

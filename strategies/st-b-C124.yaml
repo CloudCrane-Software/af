@@ -1,0 +1,13 @@
+id: st-b-C124
+name: "缓存友好的上下文布局 + cache_key 粘性路由（2026 定价机制：写 1.25–2×、读 0.1×、ca…"
+tier: B
+claim: "缓存友好的上下文布局+cache_key粘性路由：cached input约10倍价差，官方称省最多90%成本"
+claimed_value:
+  metric: "llm_cost"
+  direction: down
+  context: "同一批任务，A 组动态系统提示/时间戳前置/共享 cache_key，B 组稳定前缀+append-only；看 cached input 占比与成本"
+sources: [S168, S169]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "缺「缓存亲和声明」两处语法：\n① 上下文布局约束：v0.1 的 context.sections 有声明序但无「稳定前缀/append-only/禁动态时间戳」的布局约束表达，缓存友好的布局不可声明、不可校验；\n② cache_key 粘性路由：uses.model 是静态端点串，无「同 cache_key 粘住同端点/同会话」的路由面。\n扩展建议（示例）：\n  meta:\n    cache_affinity:\n      stable_prefix: [template, static_docs]        # 稳定段前置（禁动态内容）\n      layout: append_only                           # 布局约束\n  # 节点/uses 级：\n  #   uses: { model: route.main@1, cache_key: { from: input.session_id, sticky: true } }\n簇内提示：两卡 link_dead=true（确证线带豁免），落地上限前应先在自家 harness 复测价差假设。"

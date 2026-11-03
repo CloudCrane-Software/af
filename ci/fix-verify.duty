@@ -1,0 +1,41 @@
+# ci/fix-verify.duty —— 跨树收口门（ci/fix_verify.py）在役树名册
+#
+# 用途（RT-E49 / RT-E97「修复耐久性未跨树收口」的收口义务正本）：
+#   ① 「在役树」范围有正本——收口门对名册在列的每棵在役树跑整槽连摘篡改回放，
+#      全红才判该树带 E49/E6 修复（机制①）；
+#   ② 门码单源（机制③）——**门族全集**以主干基线 ref（phase2）为正本：门码面
+#      （ci/ 全集，排除运行证据面 ci/out/ 与历史快照面 *.bak）+ 判据/证据自指正本
+#      （numbers.json / deliverables.yaml / doc-claims.txt）+ 策略正本数据面
+#      （strategies/ 全库 + af-dsl 编译断言测试件），各在役树逐件双核对账
+#      （提交面 git blob oid + 工作树面 sha256），分叉/缺件/多余件即红；非在役树
+#      若带门码，其 sha256 必须在此显式钉住（钉值漂移=静默改门即红；
+#      不钉=未登记分叉即红）；
+#      【2026-11-03 扩面】原实现只对账 ci/xcheck.py 一个门码文件——CI 门族另外
+#      3 个本体与 strategies/ 正本双向分叉时门照绿（假绿：「绿 19 / 红 0」）。
+#   ③ 漏登记即红——仓内每棵工作树必须在本名册在列（缩名册把在役树摘出去即旁路）。
+#
+# 格式：分支 | 类别(duty/archived) | 门码 sha256(NONE=该树无 ci/xcheck.py) | 理由
+#   · 理由不得为空：空理由=未交代的缩名单册，门判红。
+#   · duty 行：门码 sha256 留 NONE（以主干基线为正本，门内自动对账），本列只登记
+#     「该树带门族」这一事实由门内 sha256 实测判定，不手填（手填会与实物漂移）。
+#   · archived 行：门码钉值须与该树 ci/xcheck.py 实测 sha256 逐字一致。
+#
+# 维护纪律：本名册改动须与门本体（ci/fix_verify.py）同批提交并留变更日志说明；
+#   把在役树改 archived = 缩收口范围，须同批把该树缺的修复补达（或把修复落主干
+#   基线并显式写明理由），否则主干基线在场性检查（机制②）会红。
+#   **消费面=主干基线 ref 的已提交副本**（门内 git show <base-ref>:ci/fix-verify.duty）
+#   ——工作树未提交编辑对门不可见（RT-E48「版本面外修复」模式在名册面上排除）：
+#   改名册必须落基线提交才生效；--roster 参数仅供测试覆写。
+#
+# 登记（2026-11-02，RT-E49/E6 跨树收口批）：
+sil-writeback | duty | NONE | 生产活跃回写线（SIL 守护④回写面，本工作树）；E49/E6 修复在此树在场，篡改回放须硬红
+g0merge | duty | NONE | G0 合流主线（CI 七门产物入库面）；与 sil 门码同源（sha256 逐件对账）
+phase2 | duty | NONE | 主干基线检出树（CI 门族正本所在；SIL 守护 wb_base=phase2 重建工作树的来源——修复不落此基线则回滚/重建即灭失）
+guardrail-fix2 | archived | NONE | Rust bench 线七步 CI（af 主检出，fmt/clippy/test/cue/scrub/cosign/deny/neutrality）；无 G0 对账门族，收口义务由 phase2 基线树承担
+g0a | archived | NONE | G0-A 对账三件套批次树（2026-10-28 归档，成果已由 2a7208b 合入 g0merge）；该树无 ci/xcheck.py
+g0b | archived | NONE | G0-B 真伪门批次树（2026-10-28 归档，成果已合入 g0merge）；该树无 ci/xcheck.py
+g0c | archived | NONE | G0-C 横切与对称批次树（2026-10-28 归档，成果已合入 g0merge）；该树无 ci/xcheck.py
+g0d | archived | b8d43243f9f446d94c0b684886c4a644b50d4305f154c3952b09079f3a8e8ba4 | G0-D 覆盖与枚举批次树（2026-10-28 归档）：带 E49 修复**前**的门码 fork，钉住其内容防静默改门；该树无 numbers.json（登记值锚缺席）故 E49 修复不适用其树，收口由 phase2 基线树承担
+mm-compat | archived | b8d43243f9f446d94c0b684886c4a644b50d4305f154c3952b09079f3a8e8ba4 | report 环并行线（2026-10-30，载荷归一修复批）：带 E49 修复**前**的门码 fork，钉住其内容防静默改门；该线非 CI 在役面，收口由 phase2 基线树承担
+phase2-execline-p6 | archived | NONE | phase2 薄壳化批次树（2026-10-24，bench→execline 换锁）；无 G0 门族
+e1-fivegaps-20261103 | archived | ce3f60c205ec6e8f111b4d9ba323d504e81f32a348fe56d16661d4c7749c9a82 | 缺口①..⑤ 特性开发并行线（2026-11-03，af-wt-e1-fivegaps）：带门族且门码与主干基线正本同源（xcheck sha256=ce3f60c205ec…，CI 门族 108 件面与基线逐件一致），但**非 CI 在役面**（特性开发树，不承载门运行面）——按并行线先例（mm-compat）登记 archived 并钉住其门码防静默改门；收口义务由 phase2 基线树承担（本树随特性推进可有合法分叉，故不入 duty 逐件单源对账面）

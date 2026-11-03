@@ -1,0 +1,13 @@
+id: st-b-C038
+name: "工具输出按意图闸门过滤成「紧凑证据包」，原文外置可按需回取（可逆压缩）"
+tier: B
+claim: "工具输出意图闸门过滤：返回紧凑证据包，同时保留按需恢复完整源码"
+claimed_value:
+  metric: "context_token_cost"
+  direction: down
+  context: "对照组=现 harness 整段工具输出直塞（必要时加普通截断）；实验组=意图闸门过滤+原文外置+按需回取"
+sources: [S016, S165]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "缺「工具输出治理段」：v0.1 的 context.sections 只描述「已进入上下文的段」如何装裁，描述不了工具输出在进入上下文前的治理——无「按查询意图投影字段」的闸门、无「原文外置 + 句柄回取」的可逆压缩表达。\n扩展建议（示例，挂在 uses.tools 或节点级）：\n  tools_output:\n    gate: project                       # 按意图闸门：只投影与当前意图相关字段\n    compact_quota_tokens: 800           # 紧凑证据包含额\n    externalize:\n      store: tool_outputs               # 原文外置（可逆）\n      handle_field: output_ref\n    recall:\n      - { from: store, store: tool_outputs, policy: retrieve, component: pkg.tools.recall@1, args: { k: 4 } }\n落地前，该机制只能实现在工具实现内部（AFB 外），图内不可声明、不可校验。"

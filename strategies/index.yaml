@@ -1,0 +1,71 @@
+version: 1
+library: af-strategies
+batch: libA+libB-20261029（A 档 11 簇 + B 档 48 簇全量投影；格式契约两线一致，见 strategies/README.md）
+source: "计划/研究组/B线核心批-20261029/策略册-v0.1.jsonl（只读正本）；A 线=甲 libA-20261029，B 线=乙 libB-20261029（条目清单 libB-条目清单.yaml）"
+note: "rank=策略册全局排序键（跨语料数>卡数>引证密度，簇 id 升序兜底）；topic=策略册主题标签；dsl_state/tier 与条目文件实测一致（ci/strategies_check.py R2/R3 对账）"
+entries:
+  - { id: st-C008, file: st-C008.yaml, tier: A, topic: 多agent协同, dsl_state: compilable, rank: 1 }
+  - { id: st-C007, file: st-C007.yaml, tier: A, topic: 评测方法论, dsl_state: compilable, rank: 2 }
+  - { id: st-C015, file: st-C015.yaml, tier: A, topic: 上下文管理, dsl_state: compilable, rank: 3 }
+  - { id: st-C019, file: st-C019.yaml, tier: A, topic: 工具与接口, dsl_state: compilable, rank: 4 }
+  - { id: st-C006, file: st-C006.yaml, tier: A, topic: 多agent协同, dsl_state: compilable, rank: 5 }
+  - { id: st-C005, file: st-C005.yaml, tier: A, topic: 记忆, dsl_state: compilable, rank: 6 }
+  - { id: st-C016, file: st-C016.yaml, tier: A, topic: 多agent协同, dsl_state: compilable, rank: 7 }
+  - { id: st-C018, file: st-C018.yaml, tier: A, topic: 反思与自修正, dsl_state: compilable, rank: 8 }
+  - { id: st-C010, file: st-C010.yaml, tier: A, topic: 多agent协同, dsl_state: compilable, rank: 9 }
+  - { id: st-C009, file: st-C009.yaml, tier: A, topic: 规划与分解, dsl_state: compilable, rank: 10 }
+  - { id: st-C012, file: st-C012.yaml, tier: A, topic: 多agent协同, dsl_state: compilable, rank: 11 }
+  - { id: st-b-C058, file: st-b-C058.yaml, tier: B, topic: 工具与接口, dsl_state: not_applicable, rank: 12 }
+  - { id: st-b-C060, file: st-b-C060.yaml, tier: B, topic: 测试时扩展, dsl_state: compilable, rank: 13 }
+  - { id: st-b-C097, file: st-b-C097.yaml, tier: B, topic: 验证与测试, dsl_state: compilable, rank: 14 }
+  - { id: st-b-C121, file: st-b-C121.yaml, tier: B, topic: 记忆, dsl_state: not_applicable, rank: 15 }
+  - { id: st-b-C108, file: st-b-C108.yaml, tier: B, topic: harness工程, dsl_state: not_applicable, rank: 16 }
+  - { id: st-b-C111, file: st-b-C111.yaml, tier: B, topic: 多agent协同, dsl_state: compilable, rank: 17 }
+  - { id: st-b-C037, file: st-b-C037.yaml, tier: B, topic: 强弱模型协同, dsl_state: compilable, rank: 18 }
+  - { id: st-b-C063, file: st-b-C063.yaml, tier: B, topic: 技能与插件, dsl_state: not_applicable, rank: 19 }
+  - { id: st-b-C098, file: st-b-C098.yaml, tier: B, topic: 验证与测试, dsl_state: not_applicable, rank: 20 }
+  - { id: st-b-C077, file: st-b-C077.yaml, tier: B, topic: 反思与自修正, dsl_state: compilable, rank: 21 }
+  - { id: st-b-C080, file: st-b-C080.yaml, tier: B, topic: 评测方法论, dsl_state: not_applicable, rank: 22 }
+  - { id: st-b-C125, file: st-b-C125.yaml, tier: B, topic: 多agent协同, dsl_state: needs_syntax, rank: 23 }
+  - { id: st-b-C071, file: st-b-C071.yaml, tier: B, topic: 工具与接口, dsl_state: compilable, rank: 24 }
+  - { id: st-b-C073, file: st-b-C073.yaml, tier: B, topic: 评测方法论, dsl_state: not_applicable, rank: 25 }
+  - { id: st-b-C028, file: st-b-C028.yaml, tier: B, topic: 上下文管理, dsl_state: needs_syntax, rank: 26 }
+  - { id: st-b-C042, file: st-b-C042.yaml, tier: B, topic: 记忆, dsl_state: compilable, rank: 27 }
+  - { id: st-b-C054, file: st-b-C054.yaml, tier: B, topic: 评测方法论, dsl_state: not_applicable, rank: 28 }
+  - { id: st-b-C102, file: st-b-C102.yaml, tier: B, topic: 多agent协同, dsl_state: compilable, rank: 29 }
+  - { id: st-b-C118, file: st-b-C118.yaml, tier: B, topic: 评测方法论, dsl_state: not_applicable, rank: 30 }
+  - { id: st-b-C035, file: st-b-C035.yaml, tier: B, topic: 仓库级理解与检索, dsl_state: compilable, rank: 31 }
+  - { id: st-b-C069, file: st-b-C069.yaml, tier: B, topic: 工具与接口, dsl_state: compilable, rank: 32 }
+  - { id: st-b-C087, file: st-b-C087.yaml, tier: B, topic: 反思与自修正, dsl_state: not_applicable, rank: 33 }
+  - { id: st-b-C114, file: st-b-C114.yaml, tier: B, topic: 评测方法论, dsl_state: not_applicable, rank: 34 }
+  - { id: st-b-C126, file: st-b-C126.yaml, tier: B, topic: 工具与接口, dsl_state: not_applicable, rank: 35 }
+  - { id: st-b-C128, file: st-b-C128.yaml, tier: B, topic: 技能与插件, dsl_state: not_applicable, rank: 36 }
+  - { id: st-b-C046, file: st-b-C046.yaml, tier: B, topic: 技能与插件, dsl_state: not_applicable, rank: 37 }
+  - { id: st-b-C064, file: st-b-C064.yaml, tier: B, topic: 技能与插件, dsl_state: needs_syntax, rank: 38 }
+  - { id: st-b-C078, file: st-b-C078.yaml, tier: B, topic: 验证与测试, dsl_state: compilable, rank: 39 }
+  - { id: st-b-C095, file: st-b-C095.yaml, tier: B, topic: 测试时扩展, dsl_state: compilable, rank: 40 }
+  - { id: st-b-C096, file: st-b-C096.yaml, tier: B, topic: 验证与测试, dsl_state: compilable, rank: 41 }
+  - { id: st-b-C109, file: st-b-C109.yaml, tier: B, topic: 强弱模型协同, dsl_state: compilable, rank: 42 }
+  - { id: st-b-C003, file: st-b-C003.yaml, tier: B, topic: 评测方法论, dsl_state: compilable, rank: 43 }
+  - { id: st-b-C038, file: st-b-C038.yaml, tier: B, topic: 上下文管理, dsl_state: needs_syntax, rank: 44 }
+  - { id: st-b-C048, file: st-b-C048.yaml, tier: B, topic: 验证与测试, dsl_state: compilable, rank: 45 }
+  - { id: st-b-C055, file: st-b-C055.yaml, tier: B, topic: 多agent协同, dsl_state: compilable, rank: 46 }
+  - { id: st-b-C075, file: st-b-C075.yaml, tier: B, topic: harness工程, dsl_state: not_applicable, rank: 47 }
+  - { id: st-b-C092, file: st-b-C092.yaml, tier: B, topic: 测试时扩展, dsl_state: compilable, rank: 48 }
+  - { id: st-b-C036, file: st-b-C036.yaml, tier: B, topic: 仓库级理解与检索, dsl_state: compilable, rank: 49 }
+  - { id: st-b-C001, file: st-b-C001.yaml, tier: B, topic: 测试时扩展, dsl_state: needs_syntax, rank: 50 }
+  - { id: st-b-C029, file: st-b-C029.yaml, tier: B, topic: 上下文管理, dsl_state: needs_syntax, rank: 51 }
+  - { id: st-b-C062, file: st-b-C062.yaml, tier: B, topic: 技能与插件, dsl_state: needs_syntax, rank: 52 }
+  - { id: st-b-C086, file: st-b-C086.yaml, tier: B, topic: 上下文管理, dsl_state: needs_syntax, rank: 53 }
+  - { id: st-b-C105, file: st-b-C105.yaml, tier: B, topic: 上下文管理, dsl_state: not_applicable, rank: 54 }
+  - { id: st-b-C124, file: st-b-C124.yaml, tier: B, topic: 成本与推理效率, dsl_state: needs_syntax, rank: 55 }
+  - { id: st-b-C022, file: st-b-C022.yaml, tier: B, topic: 记忆, dsl_state: not_applicable, rank: 56 }
+  - { id: st-b-C057, file: st-b-C057.yaml, tier: B, topic: 工具与接口, dsl_state: compilable, rank: 57 }
+  - { id: st-b-C056, file: st-b-C056.yaml, tier: B, topic: 规划与分解, dsl_state: compilable, rank: 58 }
+  - { id: st-b-C079, file: st-b-C079.yaml, tier: B, topic: 执行与沙箱, dsl_state: needs_syntax, rank: 59 }
+  - { id: st-C122, file: st-C122.yaml, tier: C, topic: "记忆", dsl_state: needs_syntax, rank: 70 }
+  - { id: st-C103, file: st-C103.yaml, tier: C, topic: "多agent协同", dsl_state: needs_syntax, rank: 81 }
+counts:
+  total: 61
+  tiers: { A: 11, B: 48, C: 2 }
+  dsl_states: { compilable: 32, needs_syntax: 12, not_applicable: 17 }

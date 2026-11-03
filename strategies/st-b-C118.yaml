@@ -1,0 +1,13 @@
+id: st-b-C118
+name: "把成本效率设为一等评测指标（SWE-Effi 效率重排 + Agentless/mini-swe-agent 成本基线）"
+tier: B
+claim: "成本效率设为一等评测指标：SWE-Effi 发现「昂贵失败」——未解决尝试平均 8.8M tokens/658s，成功仅 1.8M/167.2s"
+claimed_value:
+  metric: "cost_per_resolved"
+  direction: down
+  context: "harness 每次运行统一产出 $/resolved、tokens/call、失败均值÷成功均值；与 Agentless/mini-swe-agent 成本基线对比"
+sources: [S152, S170]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "评测指标定义：策略内容是「把 $/resolved、tokens/call、昂贵失败比设为一等指标并建成本基线」的度量口径（S170 body.测试设计）；AFB 的 budgets 只约束本图执行的资源帽，不定义跨运行的成本效率报表语义。"

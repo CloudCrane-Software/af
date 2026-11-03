@@ -1,0 +1,10 @@
+[package]
+name = "inv_mirror"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# 陈述字面反例实证 harness（预期 FAILURE = 冲突证据），默认不编入——照 FV-0 pending.rs 门控先例。
+conflict-demo = []
+
+[dependencies]

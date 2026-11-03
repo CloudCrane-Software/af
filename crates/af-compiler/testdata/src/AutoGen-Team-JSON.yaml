@@ -1,0 +1,522 @@
+version: 1
+
+meta:
+  name: autogen_team
+  graph_version: "1.0"
+  entry: client_registry
+  input: team_input
+  output: { ref: team_result, from: finalize }
+  intent: "AutoGen v0.4 Team 运行时：共享消息流（单一写者 relay）+ 参与者声明（模型/工具/记忆/人在回路）+ Selector 派发与 Swarm 交接 + MagenticOne 编排器/账本/停滞检测 + termination 家族（预算 + stop 谓词 + 检查面）"
+  # 择优裁决 §二-1：拓扑选择器为编译期语义——只决定编译产物采用哪个候选图，
+  # 解析后计划是单一确定图（选择器不进运行时）。五个候选拓扑是包内的版本化图。
+  topology_selector:
+    rules:
+      - { when: "input.topology == 'round_robin'", use: "pkg.autogen.team.round_robin@1.0" }
+      - { when: "input.topology == 'selector'", use: "pkg.autogen.team.selector@1.0" }
+      - { when: "input.topology == 'magentic_one'", use: "pkg.autogen.team.magentic_one@1.0" }
+      - { when: "input.topology == 'swarm'", use: "pkg.autogen.team.swarm@1.0" }
+      - { when: "input.topology == 'graph_flow'", use: "pkg.autogen.team.graph_flow@1.0" }
+    fallback: "pkg.autogen.team.selector@1.0"
+
+types:
+  - name: team_input
+    schema:
+      type: object
+      required: [task, topology]
+      properties:
+        task: { type: string }
+        topology: { type: string }
+  - name: chat_message
+    schema:
+      type: object
+      required: [speaker, content, kind]
+      properties:
+        speaker: { type: string }
+        content: { type: string }
+        kind: { type: string }          # text | function_call | function_result | handoff | stop
+  - name: handoff_request
+    schema:
+      type: object
+      required: [target, reason]
+      properties:
+        target: { type: string }
+        reason: { type: string }
+  - name: plan_record
+    schema:
+      type: object
+      required: [goal, steps, revision]
+      properties:
+        goal: { type: string }
+        steps: { type: array, items: { type: string } }
+        revision: { type: integer }
+  - name: ledger_entry
+    schema:
+      type: object
+      required: [fact, speaker]
+      properties:
+        fact: { type: string }
+        speaker: { type: string }
+  - name: selector_decision
+    schema:
+      type: object
+      required: [next_speaker, reason]
+      properties:
+        next_speaker: { type: string }
+        reason: { type: string }
+  - name: ledger_view
+    schema:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+  - name: stall_state
+    schema:
+      type: object
+      required: [stalled, note]
+      properties:
+        stalled: { type: boolean }
+        note: { type: string }
+  - name: termination_state
+    schema:
+      type: object
+      required: [terminated, reason]
+      properties:
+        terminated: { type: boolean }
+        reason: { type: string }
+  - name: verdict
+    schema:
+      type: object
+      required: [terminated, reason]
+      properties:
+        terminated: { type: boolean }
+        reason: { type: string }
+  - name: usage_record
+    schema:
+      type: object
+      required: [tokens_total, model_calls]
+      properties:
+        tokens_total: { type: integer }
+        model_calls: { type: integer }
+  - name: tool_result
+    schema:
+      type: object
+      required: [ok, output]
+      properties:
+        ok: { type: boolean }
+        output: { type: string }
+  - name: team_result
+    schema:
+      type: object
+      required: [speaker, content]
+      properties:
+        speaker: { type: string }
+        content: { type: string }
+
+stores:
+  - name: team_messages
+    type: message_log
+    writer: team_loop.relay          # INV-2：共享消息流单一写者（参与者只发消息，由 relay 串行落账）
+    lifecycle: run
+    retention: { max_items: 256 }
+  - name: team_ledger
+    type: collection
+    item: ledger_entry
+    writer: team_loop.ledger_sync    # MagenticOne 任务账本（结构化部分；自然语言演化走逃逸舱）
+    lifecycle: run
+    retention: { max_items: 128 }
+  - name: plan_board
+    type: collection
+    item: plan_record
+    writer: team_loop.plan_sync      # 编排器的计划（当前修订版）
+    lifecycle: run
+    retention: { max_items: 32 }
+  - name: stall_flag
+    type: kv
+    value: stall_state
+    writer: team_loop.stall_sync     # 停滞判定的跨回合标志（编排器下一回合据此重规划）
+    lifecycle: run
+    retention: { max_items: 1 }
+  - name: handoff_inbox
+    type: kv
+    value: handoff_request
+    writer: team_loop.handoff_sync   # Swarm 交接请求（下一发言者选择器可见）
+    lifecycle: run
+    retention: { max_items: 1 }
+  - name: exec_log
+    type: collection
+    item: tool_result
+    writer: team_loop.code_sync      # 代码执行结果旁路槽（参与者经上下文注入读回）
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: usage_log
+    type: collection
+    item: usage_record
+    writer: team_loop.usage_sync     # provider 侧用量影子账（声明期不可预估，事后统计）
+    lifecycle: run
+    retention: { max_items: 64 }
+
+nodes:
+  # ---------- 装载期：模型客户端/工具注册表（逃逸：to_config 的自足性边界） ----------
+  - id: client_registry
+    kind: task
+    escape:
+      kind: dynamic_tool_registry
+      impl_ref: packages/autogen@1.0.0/hatches/client_registry.py
+      reason: "模型客户端与工具在配置里只存类名与数据，行为不可静态校验；运行期按声明装配客户端/工具注册表（卡 ⑥b-8）"
+      owner: lang-team
+      share_budget_pct: 5
+    emits: { ready: signal }
+
+  # ---------- 团队回合循环（= AutoGen 的 group_chat 主循环） ----------
+  - id: team_loop
+    kind: task
+    consumes: { ready: signal }
+    loop:
+      body:
+        nodes:
+          # (1) MagenticOne 编排器：产出计划与事实（账本条目）
+          - id: orchestrate
+            kind: task
+            uses:
+              model: route.main@1
+              memory: [pkg.autogen.mem.list@1]
+            emits: { plan: plan_record, facts: ledger_entry }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.autogen.sys.orchestrator, quota_tokens: 600 }
+                - { from: input, fields: [task], policy: project, quota_tokens: 400 }
+                - { from: store, store: team_ledger, policy: latest_k, args: { k: 8 }, quota_tokens: 1200 }
+                - { from: store, store: plan_board, policy: full, quota_tokens: 800 }
+                - { from: store, store: stall_flag, policy: full, quota_tokens: 100 }
+
+          # (2) 账本的结构化落账（单一写者）；自然语言演化另走 ledger_evolve 逃逸舱
+          - id: ledger_sync
+            kind: transform
+            consumes: { facts: ledger_entry }
+            writes: [team_ledger]
+            ops:
+              - { op: project, port: facts, into: team_ledger }
+            emits: {}
+
+          # (3) 账本自然语言演化 —— 逃逸舱（卡 ⑥b-2）
+          - id: ledger_evolve
+            kind: task
+            escape:
+              kind: runtime_context_mutation
+              impl_ref: packages/autogen@1.0.0/hatches/ledger_evolve.py
+              reason: "MagenticOne 账本的自然语言演化是 LLM 运行期生成的状态，静态字段装不下（卡 ⑥b-2）"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { facts: ledger_entry }
+            emits: { ledger_view: ledger_view }
+
+          # (4) 停滞检测 —— 验证面（外部判定单元），安全点之一
+          - id: stall_check
+            kind: check
+            uses: { unit: pkg.autogen.team.stall_unit@1 }
+            consumes: { facts: ledger_entry, ledger_view: ledger_view }
+            emits: { stall: stall_state }
+
+          # (5) 停滞标志落槽（跨回合可见）
+          - id: stall_sync
+            kind: transform
+            consumes: { stall: stall_state }
+            writes: [stall_flag]
+            ops:
+              - { op: project, port: stall, into: stall_flag }
+            emits: {}
+
+          # (6) 重规划（更换分工）—— 逃逸舱（卡 ⑥b-4：拓扑/分工运行时改写）
+          - id: replanner
+            kind: task
+            escape:
+              kind: meta_loop
+              impl_ref: packages/autogen@1.0.0/hatches/replanner.py
+              reason: "重规划按运行时进展改写分工与执行次序，属运行时图结构变更，静态边装不下（卡 ⑥b-4）"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { plan: plan_record, stall: stall_state }
+            emits: { plan: plan_record }
+
+          # (7) 计划落槽（单一写者）
+          - id: plan_sync
+            kind: transform
+            consumes: { plan: plan_record }
+            writes: [plan_board]
+            ops:
+              - { op: project, port: plan, into: plan_board }
+            emits: {}
+
+          # (8) 发言者选择（SelectorGroupChat）：模型读共享消息流后给出下一个发言者
+          - id: pick_speaker
+            kind: task
+            uses: { model: route.main@1 }
+            consumes: { plan: plan_record }
+            emits: { decision: selector_decision }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.autogen.sys.selector, quota_tokens: 500 }
+                - { from: input, fields: [task], policy: project, quota_tokens: 300 }
+                - { from: edge, port: plan, fields: [goal, steps], policy: project, quota_tokens: 800 }
+                - { from: store, store: team_messages, policy: latest_k, args: { k: 12 }, quota_tokens: 2400 }
+                - { from: store, store: handoff_inbox, policy: full, quota_tokens: 200 }
+
+          # (9) 自定义选择闭包覆盖 —— 逃逸舱（卡 ⑥b-1）；也是路由点
+          - id: selector_override
+            kind: task
+            escape:
+              kind: llm_predicate
+              impl_ref: packages/autogen@1.0.0/hatches/selector_override.py
+              reason: "自定义 selector_func / 选择提示词是运行时闭包与自由提示词，静态 DSL 无法表达（卡 ⑥b-1）"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { decision: selector_decision }
+            emits: { decision: selector_decision }
+            route:                            # 多路路由 = 下一发言者选择（Selector/Swarm 的声明式落点）
+              default: critic
+              rules:
+                - { when: "selector_override.decision.next_speaker == 'researcher'", goto: researcher }
+                - { when: "selector_override.decision.next_speaker == 'solver'", goto: solver }
+                - { when: "selector_override.decision.next_speaker == 'user_proxy'", goto: user_wait }
+
+          # (10) 参与者：研究员（FunctionTool 检索）
+          - id: researcher
+            kind: task
+            uses:
+              model: route.main@1
+              tools: [pkg.autogen.tool.search@1]
+              memory: [pkg.autogen.mem.list@1]
+            consumes: { decision: selector_decision }
+            emits: { msg: chat_message, handoff: handoff_request }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.autogen.sys.researcher, quota_tokens: 400 }
+                - { from: edge, port: decision, fields: [reason], policy: project, quota_tokens: 200 }
+                - { from: store, store: team_messages, policy: latest_k, args: { k: 12 }, quota_tokens: 2400 }
+                - { from: store, store: exec_log, policy: latest_k, args: { k: 3 }, quota_tokens: 600 }
+                - { from: store, store: plan_board, policy: full, quota_tokens: 600 }
+
+          # (11) 参与者：解题者（产出代码 → 代码执行者）
+          - id: solver
+            kind: task
+            uses:
+              model: route.main@1
+              tools: [pkg.autogen.tool.calc@1]
+              memory: [pkg.autogen.mem.list@1]
+            consumes: { decision: selector_decision }
+            emits: { msg: chat_message, handoff: handoff_request }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.autogen.sys.solver, quota_tokens: 400 }
+                - { from: edge, port: decision, fields: [reason], policy: project, quota_tokens: 200 }
+                - { from: store, store: team_messages, policy: latest_k, args: { k: 12 }, quota_tokens: 2400 }
+                - { from: store, store: exec_log, policy: latest_k, args: { k: 3 }, quota_tokens: 600 }
+                - { from: store, store: plan_board, policy: full, quota_tokens: 600 }
+
+          # (12) 参与者：批评者
+          - id: critic
+            kind: task
+            uses:
+              model: route.main@1
+              memory: [pkg.autogen.mem.list@1]
+            consumes: { decision: selector_decision }
+            emits: { msg: chat_message, handoff: handoff_request }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.autogen.sys.critic, quota_tokens: 400 }
+                - { from: edge, port: decision, fields: [reason], policy: project, quota_tokens: 200 }
+                - { from: store, store: team_messages, policy: latest_k, args: { k: 12 }, quota_tokens: 2400 }
+                - { from: store, store: plan_board, policy: full, quota_tokens: 600 }
+
+          # (13) 人在回路的阻塞等待 —— 逃逸舱（卡 ⑥b-7）
+          - id: user_wait
+            kind: task
+            escape:
+              kind: env_adapter
+              impl_ref: packages/autogen@1.0.0/hatches/user_wait.py
+              reason: "UserProxyAgent 阻塞等待人工输入、阻塞期占用线程且超时按错误处理，属外部交互事件（卡 ⑥b-7）"
+              owner: lang-team
+              share_budget_pct: 5
+            consumes: { decision: selector_decision }
+            emits: { request: chat_message }
+
+          # (14) 参与者：人工工位（类型化恢复值 = 人在回路的声明式落点）
+          - id: user_proxy
+            kind: task
+            human:
+              station: team-console
+              role: approver
+              quorum: 1
+              resume:
+                schema:
+                  type: object
+                  required: [speaker, content]
+                  properties:
+                    speaker: { type: string }
+                    content: { type: string }
+            consumes: { request: chat_message }
+            emits: { msg: chat_message, handoff: handoff_request }
+
+          # (15) 代码执行者 —— 逃逸舱（卡 ⑥b-5：任意 Python 与副作用）
+          - id: code_runner
+            kind: task
+            escape:
+              kind: program_synthesis
+              impl_ref: packages/autogen@1.0.0/hatches/code_runner.py
+              reason: "CodeExecutorTool 在进程内执行任意生成的代码并产生写文件/网络副作用，不可静态声明（卡 ⑥b-5）"
+              owner: lang-team
+              share_budget_pct: 15
+            consumes: { msg: chat_message }
+            emits: { msg: chat_message, exec: tool_result }
+
+          # (16) 执行结果落槽（单一写者）
+          - id: code_sync
+            kind: transform
+            consumes: { exec: tool_result }
+            writes: [exec_log]
+            ops:
+              - { op: project, port: exec, into: exec_log }
+            emits: {}
+
+          # (17) 交接请求落槽（单一写者；Swarm 的交接 = 下一发言者选择器可见的交接单）
+          - id: handoff_sync
+            kind: transform
+            consumes: { handoff: handoff_request }
+            writes: [handoff_inbox]
+            ops:
+              - { op: project, port: handoff, into: handoff_inbox }
+            emits: {}
+
+          # (18) 共享消息流单一写者：所有参与者的发言在此串行落账
+          - id: relay
+            kind: transform
+            consumes: { msg: chat_message }
+            writes: [team_messages]
+            ops:
+              - { op: project, port: msg, into: team_messages }
+            emits: { turn: chat_message }
+
+          # (19) 动态终止判据（文本命中/交接目标/外部取消）—— 逃逸舱（卡 ⑥b-3）
+          - id: term_judge
+            kind: task
+            escape:
+              kind: free_text_parser
+              impl_ref: packages/autogen@1.0.0/hatches/term_judge.py
+              reason: "TextMention/SourceMatch/Handoff/External 终止判据依赖运行时消息内容与外部事件，CEL 保守子集无字符串函数，装不下（卡 ⑥b-3）"
+              owner: lang-team
+              share_budget_pct: 5
+            consumes: { turn: chat_message }
+            emits: { verdict: verdict }
+
+          # (20) 终止判定（验证面，安全点之一）
+          - id: term_check
+            kind: check
+            uses: { unit: pkg.autogen.team.term_unit@1 }
+            consumes: { verdict: verdict, turn: chat_message }
+            emits: { termination: termination_state }
+
+          # (21) provider 侧用量/计费探针 —— 逃逸舱（卡 ⑥b-6）
+          - id: usage_probe
+            kind: task
+            escape:
+              kind: env_adapter
+              impl_ref: packages/autogen@1.0.0/hatches/usage_probe.py
+              reason: "provider 侧 token 计费与重试策略外部不可见，需运行期遥测钩子；声明期无静态成本模型（卡 ⑥b-6）"
+              owner: lang-team
+              share_budget_pct: 5
+            consumes: { turn: chat_message }
+            emits: { usage: usage_record }
+
+          # (22) 用量影子账落槽（单一写者）
+          - id: usage_sync
+            kind: transform
+            consumes: { usage: usage_record }
+            writes: [usage_log]
+            ops:
+              - { op: project, port: usage, into: usage_log }
+            emits: {}
+        edges:
+          - { from: orchestrate, output: facts, to: ledger_sync, input: facts }
+          - { from: orchestrate, output: facts, to: ledger_evolve, input: facts }
+          - { from: orchestrate, output: facts, to: stall_check, input: facts }
+          - { from: orchestrate, output: plan, to: replanner, input: plan }
+          - { from: ledger_evolve, output: ledger_view, to: stall_check, input: ledger_view }
+          - { from: stall_check, output: stall, to: stall_sync, input: stall }
+          - { from: stall_check, output: stall, to: replanner, input: stall }
+          - { from: replanner, output: plan, to: plan_sync, input: plan }
+          - { from: replanner, output: plan, to: pick_speaker, input: plan }
+          - { from: pick_speaker, output: decision, to: selector_override, input: decision }
+          - { from: selector_override, output: decision, to: researcher, input: decision }
+          - { from: selector_override, output: decision, to: solver, input: decision }
+          - { from: selector_override, output: decision, to: critic, input: decision }
+          - { from: selector_override, output: decision, to: user_wait, input: decision }
+          - { from: researcher, output: msg, to: relay, input: msg }
+          - { from: researcher, output: handoff, to: handoff_sync, input: handoff }
+          - { from: solver, output: msg, to: code_runner, input: msg }
+          - { from: solver, output: handoff, to: handoff_sync, input: handoff }
+          - { from: code_runner, output: msg, to: relay, input: msg }
+          - { from: code_runner, output: exec, to: code_sync, input: exec }
+          - { from: critic, output: msg, to: relay, input: msg }
+          - { from: critic, output: handoff, to: handoff_sync, input: handoff }
+          - { from: user_wait, output: request, to: user_proxy, input: request }
+          - { from: user_proxy, output: msg, to: relay, input: msg }
+          - { from: user_proxy, output: handoff, to: handoff_sync, input: handoff }
+          - { from: relay, output: turn, to: term_judge, input: turn }
+          - { from: relay, output: turn, to: usage_probe, input: turn }
+          - { from: relay, output: turn, to: term_check, input: turn }
+          - { from: term_judge, output: verdict, to: term_check, input: verdict }
+      max_iterations: 12                    # MaxMessageTermination：消息条数上限
+      carried:
+        - { store: team_messages, max_items: 256 }
+        - { store: team_ledger, max_items: 128 }
+        - { store: plan_board, max_items: 32 }
+        - { store: stall_flag, max_items: 1 }
+        - { store: handoff_inbox, max_items: 1 }
+        - { store: exec_log, max_items: 64 }
+        - { store: usage_log, max_items: 64 }
+      safety_points:
+        - { node: term_check, kind: check }
+        - { node: stall_check, kind: check }
+      exit_when: "term_check.termination.terminated == true"   # termination 家族命中的收敛点
+      on_exhausted: continue                # 消息/预算到顶 → 用当前结果收束
+    emits: { turns: { from_body: relay.turn } }
+
+  # ---------- 收束：最终工件（= 团队最后一条消息） ----------
+  - id: finalize
+    kind: transform
+    consumes: { turns: chat_message }
+    ops:
+      - { op: project, port: turns, into: answer, fields: [speaker, content] }
+    emits: { answer: team_result }
+
+edges:
+  - { from: client_registry, output: ready, to: team_loop, input: ready }
+  - { from: team_loop, output: turns, to: finalize, input: turns, checkpoint: true }
+
+policies:
+  budgets:
+    - { id: msg_cap, dimension: turns, scope: loop:team_loop, cap: 12 }          # MaxMessageTermination
+    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 400000 }       # TokenUsageTermination
+    - { id: clock_cap, dimension: clock_ms, scope: plan, cap: 600000 }           # TimeoutTermination
+    - { id: model_call_cap, dimension: model_calls, scope: plan, cap: 120 }
+  stop:
+    - { when: "steps.turns >= 12", outcome: completed }                                    # MaxMessageTermination
+    - { when: "budget.tokens_total_spent >= budget.tokens_total_cap", outcome: completed } # TokenUsageTermination
+    - { when: "budget.clock_ms_spent >= budget.clock_ms_cap", outcome: completed }          # TimeoutTermination
+    - { when: "last_tool.name == 'terminate'", outcome: completed }                         # FunctionCallTermination
+    - { when: "last_tool.ok == false", outcome: failed }                                    # 工具报错不静默吞
+  failures:
+    - class: transport_transient        # ModelClient 内置 max_retries
+      retry: { max: 3, backoff_ms: 800 }
+    - class: tool_error                 # 代码异常转错误消息回灌，不崩溃
+      route: same_node
+      feedback: error_observation
+    - class: timeout                    # UserProxyAgent 阻塞超时按错误处理
+      route: same_node
+      feedback: timeout_notice
+    - class: schema_invalid
+      retry: { max: 2, backoff_ms: 0 }
+      route: same_node
+    - class: budget_exhausted           # 预算到顶 → 交回当前最佳结果
+      terminal: true
+      outcome: completed

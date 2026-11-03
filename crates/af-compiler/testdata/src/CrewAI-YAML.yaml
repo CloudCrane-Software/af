@@ -1,0 +1,449 @@
+# CrewAI YAML 装配（agents.yaml + tasks.yaml）→ AFB 草稿
+#
+# 目标：CrewAI 的 YAML 装配方式（角色三元组 / 任务契约与分配 / Process=sequential|hierarchical）
+# 依据：计划/研究组/对齐机制卡/CrewAI-YAML.md ⑥(a)(b)
+#       计划/研究组/DSL-语法提案-B.md（AFB 正本：七段 + 六正交构造）
+#       计划/研究组/DSL-语法择优-裁决-20261024.md §二（escape.kind 七类闭环词表；topology_selector 编译期语义）
+# 语法参照：af-wt-phase2-dsl/crates/af-dsl/testdata/sample{1..6}.yaml（M1 已解析通过的 golden 种子）
+#
+# 本稿是**草稿**：最终通过与否由编译器裁定。卡片 ⑥(b) 的机制一律走 escape 构造 + 七类词表记账，
+# 不为 CrewAI 专有概念（Process 枚举、Manager 委派、RPM 限流、YAML extra 字段）编造语法。
+
+version: 1
+
+meta:
+  name: crewai_yaml_crew
+  graph_version: "1.0"
+  entry: llm_transport
+  input: crew_brief
+  output: { ref: crew_output, from: crew_report }
+  intent: "CrewAI YAML 装配：agents.yaml 的角色三元组=节点模板变量（role/goal/backstory）；tasks.yaml 的任务契约=节点 I/O（description→输入提示，expected_output→输出类型，output_pydantic→types 表 schema）；Process=sequential=静态线性 DAG（TaskOutput→context 边），Process=hierarchical=Manager 节点+委派边的半静态图（运行时改次序走 escape）；planning=条件前置规划节点；ReAct 多轮=节点内迭代；guardrail=验证面（check）+LLM 判据逃逸；human_input=human 构造；Memory=状态槽+检索注入；async_execution=map 并发分支"
+
+# ---------------------------------------------------------------- types
+types:
+  - name: crew_brief
+    schema:
+      type: object
+      required: [topic, process]
+      properties:
+        topic: { type: string }
+        process: { type: string }            # sequential | hierarchical（CrewAI Process 枚举）
+        planning: { type: boolean }          # Crew 级 planning 开关
+        parallel_topics: { type: array, items: { type: string } }   # async_execution 并行分片
+  - name: task_output
+    schema:
+      type: object
+      required: [summary]
+      properties:
+        summary: { type: string }            # expected_output 的自然语言期望（TaskOutput.raw）
+        artifact_ref: { type: string }       # TaskOutput.file_path
+  - name: plan_brief
+    schema:
+      type: object
+      required: [steps]
+      properties:
+        steps: { type: array, items: { type: string } }
+  - name: delegation_plan
+    schema:
+      type: object
+      required: [assignees]
+      properties:
+        assignees: { type: array, items: { type: string } }
+        order: { type: array, items: { type: string } }
+  - name: judge_verdict
+    schema:
+      type: object
+      required: [pass, reason]
+      properties:
+        pass: { type: boolean }
+        score: { type: integer }
+        reason: { type: string }
+  - name: completion_state
+    schema:
+      type: object
+      required: [done, reason]
+      properties:
+        done: { type: boolean }
+        reason: { type: string }
+  - name: review_feedback
+    schema:
+      type: object
+      required: [approved]
+      properties:
+        approved: { type: boolean }
+        comments: { type: string }
+  - name: crew_output
+    schema:
+      type: object
+      required: [final]
+      properties:
+        final: { type: string }
+        supports: { type: array, items: { type: string } }
+
+# ---------------------------------------------------------------- stores（状态槽：单写者 + 有界 + 生命周期）
+stores:
+  - name: research_trace
+    type: message_log                        # 研究员的短期记忆 + ReAct 中间步（卡片③）
+    writer: researcher
+    lifecycle: run
+    retention: { max_items: 128 }
+  - name: draft_trace
+    type: message_log                        # 写作任务的 ReAct 轨迹（每次重试重建）
+    writer: compose.writer                   # 点号路径：经 loop 体解析
+    lifecycle: iteration
+    retention: { max_items: 128 }
+  - name: crew_memory
+    type: collection                         # Crew 级 long/entity/contextual 记忆（卡片③：落 SQLite+向量库）
+    item: task_output
+    writer: memory_append                    # 唯一写者：落库点（INV-2）
+    lifecycle: persistent
+    retention: { policy: rolling_window, max_items: 256, keep_system: true }
+
+# ---------------------------------------------------------------- nodes
+nodes:
+  # ---------- 装配期：LLM 资源与传输层（逃逸舱，⑥b-9） ----------
+  - id: llm_transport
+    kind: task
+    escape:
+      kind: env_adapter
+      impl_ref: packages/crewkit@1.0.0/hatches/llm_transport.py
+      reason: "卡片②的 LLM 资源（crew 默认 + agent 覆盖 + manager_llm/planning_llm）与卡片⑥b-9 的 LiteLLM 层重试/退避/多供应商 fallback 都在 DSL 之下的传输层，静态语法装不下（卡片④-3）"
+      owner: lang-team
+      share_budget_pct: 5
+    emits: { ready: signal }
+
+  # ---------- 装配期：限流与配额守卫（逃逸舱，⑥b-7） ----------
+  - id: rate_limit_guard
+    kind: task
+    escape:
+      kind: env_adapter
+      impl_ref: packages/crewkit@1.0.0/hatches/rate_limit_guard.py
+      reason: "卡片⑥b-7 的 max_rpm 节流是运行时资源策略（触发节流或报错），DSL 的 budgets 只能给上限不能给节流；成本侧的静态上限另见 policies.budgets"
+      owner: lang-team
+      share_budget_pct: 5
+    consumes: { ready: signal }
+    emits: { ready: signal }
+
+  # ---------- 装配期：工具注册表（逃逸舱，⑥b-8） ----------
+  - id: tool_registry
+    kind: task
+    escape:
+      kind: dynamic_tool_registry
+      impl_ref: packages/crewkit@1.0.0/hatches/tool_registry.py
+      reason: "卡片⑥b-8：YAML 的 extra 字段透传与插件/MCP 工具的运行时注册使工具集合不可静态封闭枚举，装配期按声明注册运行期工具面"
+      owner: lang-team
+      share_budget_pct: 5
+    consumes: { ready: signal }
+    emits: { tools_ready: signal }
+
+  # ---------- kickoff(inputs)：装配输入字典 ----------
+  - id: intake
+    kind: task
+    uses: { tool: pkg.crewkit.kickoff_inputs@1 }
+    consumes: { tools_ready: signal }
+    emits: { brief: crew_brief }
+
+  # ---------- 拓扑分派：Process 枚举 + planning 开关（运行期配置，不是编译期图选择） ----------
+  - id: dispatch
+    kind: gate
+    consumes: { brief: crew_brief }
+    emits: { brief: crew_brief }
+    assert: "inputs.brief.topic != ''"
+    route:
+      default: parallel_scan
+      rules:
+        - { when: "input.process == 'hierarchical'", goto: manager }
+        - { when: "input.planning == true", goto: planner }
+
+  # ---------- planning=True：前置规划节点（planning_llm，卡片② Planner） ----------
+  - id: planner
+    kind: task
+    uses: { model: route.plan@1 }
+    consumes: { brief: crew_brief }
+    emits: { brief: crew_brief, plan: plan_brief }   # brief 透传给下游并行分支；plan 供研究员消费
+    context:
+      sections:
+        - { from: template, template_ref: pkg.crewkit.sys.planner, quota_tokens: 500 }
+        - { from: edge, port: brief, fields: [topic], policy: project, quota_tokens: 300 }
+        - { from: store, store: crew_memory, policy: retrieve, component: pkg.crewkit.mem.similarity@1, args: { k: 5 }, quota_tokens: 600 }
+
+  # ---------- hierarchical：Manager（规划 / 委派 / 验收） ----------
+  - id: manager
+    kind: task
+    uses: { model: route.manager@1, memory: [pkg.crewkit.mem.longterm@1] }
+    consumes: { brief: crew_brief }
+    emits: { delegation: delegation_plan }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.crewkit.sys.manager, vars: { role: "Crew Manager", goal: "Delegate work and verify deliverables", backstory: "You assign tasks to the best-suited agent" }, quota_tokens: 600 }
+        - { from: edge, port: brief, fields: [topic], policy: project, quota_tokens: 300 }
+        - { from: store, store: crew_memory, policy: full, quota_tokens: 1200 }
+
+  # ---------- hierarchical：运行时动态委派与改写执行次序（逃逸舱，⑥b-1） ----------
+  - id: manager_delegate
+    kind: task
+    escape:
+      kind: meta_loop
+      impl_ref: packages/crewkit@1.0.0/hatches/manager_delegate.py
+      reason: "卡片⑥b-1：hierarchical 的委派边由 LLM 在运行时生成并可改写执行次序，静态 DSL 无法枚举该图"
+      owner: lang-team
+      share_budget_pct: 5
+    consumes: { delegation: delegation_plan }
+    emits: { delegation: delegation_plan }
+
+  # ---------- async_execution：并行分片（map 扇出） ----------
+  - id: parallel_scan
+    kind: task
+    consumes: { brief: crew_brief }
+    map:
+      over: input.parallel_topics
+      body:
+        nodes:
+          - id: scout
+            kind: task
+            uses: { model: route.cheap@1, tools: [pkg.crewkit.tool.web_search@1] }
+            emits: { finding: task_output }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.crewkit.sys.scout, vars: { role: "Scout", goal: "Collect evidence on one sub-topic", backstory: "You are a fast, source-faithful gatherer" }, quota_tokens: 400 }
+                - { from: arg, name: item, policy: project, quota_tokens: 200 }
+                - { from: input, fields: [topic], policy: project, quota_tokens: 200 }
+        edges: []
+    emits: { items: { from_body: scout.finding } }
+
+  # ---------- 并行结果汇聚（单写者口径：只做确定性合并不落槽） ----------
+  - id: merge_findings
+    kind: transform
+    consumes: { items: "list<task_output>" }
+    ops:
+      - { op: merge, ports: [items], into: findings }
+    emits: { findings: "list<task_output>" }
+
+  # ---------- 研究员（agents.yaml 的 researcher 条目） ----------
+  - id: researcher
+    kind: task
+    uses:
+      model: route.main@1
+      tools: [pkg.crewkit.tool.web_search@1, pkg.crewkit.tool.fetch@1]
+      memory: [pkg.crewkit.mem.entity@1]
+    writes: [research_trace]
+    consumes: { findings: "list<task_output>", plan: plan_brief, delegation: delegation_plan }
+    emits: { research: task_output }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.crewkit.sys.researcher, vars: { role: "Senior Data Researcher", goal: "Uncover accurate, sourced data", backstory: "You are meticulous about sources" }, quota_tokens: 600 }
+        - { from: input, fields: [topic], policy: project, quota_tokens: 300 }
+        - { from: edge, port: findings, fields: [summary], policy: project, quota_tokens: 1200, optional: true }
+        - { from: edge, port: plan, fields: [steps], policy: project, quota_tokens: 400, optional: true }
+        - { from: edge, port: delegation, fields: [assignees], policy: project, quota_tokens: 200, optional: true }
+        - { from: store, store: research_trace, policy: full, quota_tokens: 4000 }
+        - { from: store, store: crew_memory, policy: retrieve, component: pkg.crewkit.mem.similarity@1, args: { k: 5 }, quota_tokens: 600 }
+
+  # ---------- 分析师（agents.yaml 的 analyst 条目） ----------
+  - id: analyst
+    kind: task
+    uses: { model: route.main@1, memory: [pkg.crewkit.mem.longterm@1] }
+    consumes: { research: task_output }
+    emits: { analysis: task_output }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.crewkit.sys.analyst, vars: { role: "Reporting Analyst", goal: "Turn findings into insights", backstory: "You prefer numbers over adjectives" }, quota_tokens: 500 }
+        - { from: input, fields: [topic], policy: project, quota_tokens: 200 }
+        - { from: edge, port: research, fields: [summary], policy: project, quota_tokens: 900 }
+
+  # ---------- Crew 级记忆落库（唯一写者） ----------
+  - id: memory_append
+    kind: transform
+    writes: [crew_memory]
+    consumes: { analysis: task_output }
+    ops:
+      - { op: project, port: analysis, into: crew_memory }
+    emits: {}
+
+  # ---------- 写作 + guardrail + 人审 + 重试（受控循环） ----------
+  - id: compose
+    kind: task
+    loop:
+      body:
+        nodes:
+          # 写作节点：角色三元组经模板变量注入（agents.yaml 的 writer 条目）
+          - id: writer
+            kind: task
+            uses: { model: route.main@1, tools: [pkg.crewkit.tool.doc_render@1] }
+            writes: [draft_trace]
+            consumes: { completion: completion_state, judge: judge_verdict, decision: review_feedback }
+            emits: { draft: task_output }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.crewkit.sys.writer, vars: { role: "Content Writer", goal: "Craft an engaging report", backstory: "You write for a busy decision maker" }, quota_tokens: 600 }
+                - { from: arg, name: research, fields: [summary], policy: project, quota_tokens: 900 }
+                - { from: arg, name: analysis, fields: [summary], policy: project, quota_tokens: 700 }
+                - { from: edge, port: completion, fields: [reason], policy: project, quota_tokens: 200, optional: true }
+                - { from: edge, port: judge, fields: [reason], policy: project, quota_tokens: 300, optional: true }
+                - { from: edge, port: decision, fields: [comments], policy: project, quota_tokens: 300, optional: true }
+                - { from: store, store: draft_trace, policy: full, quota_tokens: 4000 }
+                - { from: store, store: crew_memory, policy: retrieve, component: pkg.crewkit.mem.similarity@1, args: { k: 5 }, quota_tokens: 600 }
+
+          # 结构化输出校验（卡片② Guardrail 的结构化那一半，验证面）
+          - id: guardrail
+            kind: check
+            uses: { unit: pkg.crewkit.guardrail.structural@1 }
+            consumes: { draft: task_output }
+            emits: { verdict: judge_verdict }
+
+          # ReAct 终止语义（逃逸舱，⑥b-2）
+          - id: completion_decider
+            kind: task
+            escape:
+              kind: llm_predicate
+              impl_ref: packages/crewkit@1.0.0/hatches/completion_decider.py
+              reason: "卡片⑥b-2：ReAct 内循环「是否已经完成」由 LLM 在运行时决定，DSL 只能给 max_iter 上限，无法声明完成判据"
+              owner: lang-team
+              share_budget_pct: 5
+            consumes: { draft: task_output, verdict: judge_verdict }
+            emits: { completion: completion_state }
+            route:
+              default: output_judge
+              rules:
+                - { when: "completion_decider.completion.done == false", goto: writer }
+
+          # expected_output 的自然语言判据 / LLM-as-judge（逃逸舱，⑥b-3）
+          - id: output_judge
+            kind: task
+            escape:
+              kind: llm_predicate
+              impl_ref: packages/crewkit@1.0.0/hatches/output_judge.py
+              reason: "卡片⑥b-3：expected_output 是自然语言期望，满意度无法编码为 DSL 断言，须由 LLM-as-judge 在运行时判定"
+              owner: lang-team
+              share_budget_pct: 5
+            consumes: { draft: task_output, completion: completion_state }
+            emits: { judge: judge_verdict }
+            route:
+              default: review
+              rules:
+                - { when: "output_judge.judge.pass == false", goto: writer }
+
+          # human_input：阻塞式人机回路（human 构造 + 类型化恢复值）
+          - id: review
+            kind: task
+            human:
+              station: crew-console
+              role: task_reviewer
+              quorum: 1
+              resume:
+                schema:
+                  type: object
+                  required: [approved]
+                  properties:
+                    approved: { type: boolean }
+                    comments: { type: string }
+            consumes: { draft: task_output, judge: judge_verdict }
+            emits: { decision: review_feedback }
+            route:
+              default: exit
+              rules:
+                - { when: "resume.approved == false", goto: writer }
+        edges:
+          - { from: writer, output: draft, to: guardrail, input: draft }
+          - { from: writer, output: draft, to: completion_decider, input: draft }
+          - { from: writer, output: draft, to: output_judge, input: draft }
+          - { from: writer, output: draft, to: review, input: draft }
+          - { from: guardrail, output: verdict, to: completion_decider, input: verdict }
+          - { from: completion_decider, output: completion, to: output_judge, input: completion }
+          - { from: output_judge, output: judge, to: review, input: judge }
+          - { from: completion_decider, output: completion, to: writer, input: completion }
+          - { from: output_judge, output: judge, to: writer, input: judge }
+          - { from: review, output: decision, to: writer, input: decision }
+      max_iterations: 3                       # max_retry_limit（卡片⑤）：写作+校验+人审的重试上限
+      args:
+        research: researcher.research         # 体形参绑定（同时构成隐式依赖边）
+        analysis: analyst.analysis
+      carried:
+        - { store: draft_trace, max_items: 128 }
+      safety_points:
+        - { node: guardrail, kind: check }    # 每轮必须过结构化校验（回环的安全点）
+      exit_when: "attempt.passed == true && review.decision.approved == true"
+      on_exhausted: fail                     # 重试用尽 → 该 Task 失败并终止本次 kickoff（卡片④-6）
+    emits: { draft: { from_body: writer.draft } }
+    route:
+      default: crew_report
+      rules:
+        - { when: "input.process == 'hierarchical'", goto: manager_accept }
+
+  # ---------- hierarchical：Manager 验收（可见全部 worker 输出） ----------
+  - id: manager_accept
+    kind: task
+    uses: { model: route.manager@1 }
+    consumes: { draft: task_output }
+    emits: { draft: task_output }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.crewkit.sys.manager_accept, quota_tokens: 500 }
+        - { from: edge, port: draft, fields: [summary], policy: project, quota_tokens: 900 }
+        - { from: store, store: crew_memory, policy: full, quota_tokens: 1200 }
+
+  # ---------- CrewOutput 汇总 ----------
+  - id: crew_report
+    kind: transform
+    consumes: { draft: task_output }
+    ops:
+      - { op: project, port: draft, into: report }
+    emits: { report: crew_output }
+
+# ---------------------------------------------------------------- edges
+edges:
+  - { from: llm_transport, output: ready, to: rate_limit_guard, input: ready }
+  - { from: rate_limit_guard, output: ready, to: tool_registry, input: ready }
+  - { from: tool_registry, output: tools_ready, to: intake, input: tools_ready }
+  - { from: intake, output: brief, to: dispatch, input: brief }
+  - { from: dispatch, output: brief, to: manager, input: brief }
+  - { from: dispatch, output: brief, to: planner, input: brief }
+  - { from: dispatch, output: brief, to: parallel_scan, input: brief }
+  - { from: planner, output: brief, to: parallel_scan, input: brief }
+  - { from: planner, output: plan, to: researcher, input: plan }
+  - { from: planner, output: plan, to: researcher, input: plan }
+  - { from: manager, output: delegation, to: manager_delegate, input: delegation }
+  - { from: manager_delegate, output: delegation, to: researcher, input: delegation }
+  - { from: parallel_scan, output: items, to: merge_findings, input: items }
+  - { from: merge_findings, output: findings, to: researcher, input: findings }
+  - { from: researcher, output: research, to: analyst, input: research }
+  - { from: analyst, output: analysis, to: memory_append, input: analysis }
+  - { from: compose, output: draft, to: crew_report, input: draft }
+  - { from: compose, output: draft, to: manager_accept, input: draft }
+  - { from: manager_accept, output: draft, to: crew_report, input: draft }
+
+# ---------------------------------------------------------------- policies（三账合一）
+policies:
+  budgets:
+    - { id: crew_cost, dimension: cents, scope: plan, cap: 1200 }
+    - { id: crew_tokens, dimension: tokens_total, scope: plan, cap: 2000000 }
+    - { id: crew_tool_calls, dimension: tool_calls, scope: plan, cap: 200 }
+    - { id: crew_clock, dimension: clock_ms, scope: plan, cap: 1800000 }      # max_execution_time
+    - { id: researcher_turns, dimension: turns, scope: node:researcher, cap: 15 }   # Agent.max_iter
+    - { id: scout_turns, dimension: turns, scope: node:parallel_scan.scout, cap: 10 }
+    - { id: manager_turns, dimension: turns, scope: node:manager, cap: 15 }
+    - { id: compose_turns, dimension: turns, scope: loop:compose, cap: 45 }
+  stop:
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: failed }        # 成本早停（CrewAI 原生没有，见 notes）
+    - { when: "budget.clock_ms_spent >= budget.clock_ms_cap", outcome: failed }  # max_execution_time 强停
+    - { when: "steps.iterations >= 3", outcome: failed }                          # max_retry_limit 用尽
+  failures:
+    - class: tool_error                       # 卡片④-2：工具异常/超时，错误文本作 Observation 回灌，模型自行改路
+      route: same_node
+      feedback: error_observation
+    - class: transport_transient              # 卡片④-3：LiteLLM 传输层重试（细节在 llm_transport 逃逸舱）
+      retry: { max: 3, backoff_ms: 1000 }
+    - class: schema_invalid                   # 卡片④-4：Pydantic 校验失败回灌要求重生成
+      retry: { max: 2, backoff_ms: 0 }
+      route: same_node
+      feedback: format_reminder
+    - class: gate_refused                     # 卡片④-5：guardrail 不通过抛异常，终止该 Task（版本相关，卡片标存疑）
+      terminal: true
+      outcome: failed
+    - class: environment_failure              # 卡片④-9：Planner 失败降级为无计划执行（卡片标存疑）
+      retry: { max: 1, backoff_ms: 0 }
+      route: parallel_scan
+      feedback: plan_degraded
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

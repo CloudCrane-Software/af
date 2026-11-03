@@ -1,0 +1,1690 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "agentsh_delm_harness",
+      "entry": "boot",
+      "nodes": [
+        {
+          "id": "best",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "board_publish",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "boot",
+          "kind": "task",
+          "escape": {
+            "kind": "env_adapter",
+            "impl_ref": "packages/agensh@1.0.0/hatches/activation_roster.py",
+            "reason": "激活节奏与 worker 名单是运行时基础设施编排（map 无激活日程字段），静态 DSL 无落点",
+            "owner": "harness-team",
+            "share_budget_pct": 3
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "fail_watch",
+          "kind": "task",
+          "escape": {
+            "kind": "llm_predicate",
+            "impl_ref": "packages/agensh@1.0.0/hatches/fail_lifecycle.py",
+            "reason": "fail 保持 open 直到被新条目或修复子任务处理，是跨实例条件联动，静态边不可达",
+            "owner": "harness-team",
+            "share_budget_pct": 3
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "finalize",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "intake",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "queue_publish",
+          "kind": "transform",
+          "capability_refs": []
+        },
+        {
+          "id": "submit_gate",
+          "kind": "gate",
+          "capability_refs": []
+        },
+        {
+          "id": "workers",
+          "kind": "task",
+          "map_spec": {
+            "body": "agentsh_delm_harness/workers",
+            "over": "boot.roster",
+            "max_fanout": 1024
+          },
+          "capability_refs": []
+        },
+        {
+          "id": "workspace_publish",
+          "kind": "task",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "best",
+          "output": "chosen",
+          "to": "submit_gate",
+          "input": "chosen",
+          "checkpoint": false
+        },
+        {
+          "from": "boot",
+          "output": "roster",
+          "to": "intake",
+          "input": "roster",
+          "checkpoint": false
+        },
+        {
+          "from": "boot",
+          "output": "roster",
+          "to": "workers",
+          "input": "roster",
+          "checkpoint": false
+        },
+        {
+          "from": "fail_watch",
+          "output": "open_fails",
+          "to": "submit_gate",
+          "input": "open_fails",
+          "checkpoint": false
+        },
+        {
+          "from": "intake",
+          "output": "seed",
+          "to": "queue_publish",
+          "input": "seed",
+          "checkpoint": false
+        },
+        {
+          "from": "submit_gate",
+          "output": "chosen",
+          "to": "finalize",
+          "input": "chosen",
+          "checkpoint": false
+        },
+        {
+          "from": "workers",
+          "output": "claims",
+          "to": "queue_publish",
+          "input": "claims",
+          "checkpoint": false
+        },
+        {
+          "from": "workers",
+          "output": "deliveries",
+          "to": "best",
+          "input": "deliveries",
+          "checkpoint": false
+        },
+        {
+          "from": "workers",
+          "output": "deliveries",
+          "to": "workspace_publish",
+          "input": "deliveries",
+          "checkpoint": false
+        },
+        {
+          "from": "workers",
+          "output": "entries",
+          "to": "board_publish",
+          "input": "entries",
+          "checkpoint": false
+        },
+        {
+          "from": "workers",
+          "output": "entries",
+          "to": "fail_watch",
+          "input": "entries",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {
+        "agentsh_delm_harness/workers": {
+          "graph_version": "1.0",
+          "entry": "slot",
+          "nodes": [
+            {
+              "id": "cycle",
+              "kind": "task",
+              "loop_spec": {
+                "body": "agentsh_delm_harness/workers/cycle",
+                "max_iterations": 24,
+                "carried": [],
+                "safety_points": [
+                  {
+                    "node": "fail_scan",
+                    "kind": "check"
+                  },
+                  {
+                    "node": "lease_guard",
+                    "kind": "gate"
+                  },
+                  {
+                    "node": "verify",
+                    "kind": "check"
+                  }
+                ],
+                "args": {
+                  "worker_id": "slot.who"
+                },
+                "exit_when": {
+                  "source": "attempt.passed == true",
+                  "roots": [
+                    "attempt"
+                  ],
+                  "digest": "b707e3923259e94f203a322ec06f7be5d99dfe98319a2cf2dc9796466dfff682"
+                },
+                "on_exhausted": "continue"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "slot",
+              "kind": "transform",
+              "capability_refs": []
+            }
+          ],
+          "edges": []
+        },
+        "agentsh_delm_harness/workers/cycle": {
+          "graph_version": "1.0",
+          "entry": "board_read",
+          "nodes": [
+            {
+              "id": "act",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "board_read",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/agensh@1.0.0/hatches/board_reader.py",
+                "reason": "全史布尔检索、按条目展开与【D】按 agent 记忆的增量游标是运行时读位置；latest_k 仅为近似",
+                "owner": "harness-team",
+                "share_budget_pct": 4
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "claim",
+              "kind": "task",
+              "escape": {
+                "kind": "env_adapter",
+                "impl_ref": "packages/agensh@1.0.0/hatches/atomic_claim.py",
+                "reason": "CAS 式条件写入是有副作用原语；CEL 保守子集零副作用，gate 只能判定不能抢注",
+                "owner": "harness-team",
+                "share_budget_pct": 4
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "fail_scan",
+              "kind": "check",
+              "capability_refs": []
+            },
+            {
+              "id": "gather",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "guard_pump",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/agensh@1.0.0/hatches/idle_guard.py",
+                "reason": "停滞催工与临近预算提醒都是按运行时事件注入的提示，静态声明式无落点",
+                "owner": "harness-team",
+                "share_budget_pct": 2
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "lease_guard",
+              "kind": "gate",
+              "capability_refs": []
+            },
+            {
+              "id": "merge",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "msg_pump",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/agensh@1.0.0/hatches/message_pump.py",
+                "reason": "频道消息每轮首投、私信每次工具调用后 mid-turn 注入，按运行时事件改写 worker 上下文",
+                "owner": "harness-team",
+                "share_budget_pct": 3
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "negotiate",
+              "kind": "task",
+              "escape": {
+                "kind": "llm_predicate",
+                "impl_ref": "packages/agensh@1.0.0/hatches/claim_negotiation.py",
+                "reason": "谁做/怎么分叉是同伴协商后的语义裁决，保守 CEL 子集无法表达",
+                "owner": "harness-team",
+                "share_budget_pct": 3
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "session",
+              "kind": "task",
+              "escape": {
+                "kind": "env_adapter",
+                "impl_ref": "packages/agensh@1.0.0/hatches/workspace_session.py",
+                "reason": "跨执行的有状态服务契约（合并冲突检测、会话恢复）无静态表达位",
+                "owner": "harness-team",
+                "share_budget_pct": 5
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "verify",
+              "kind": "check",
+              "capability_refs": []
+            },
+            {
+              "id": "wrap",
+              "kind": "task",
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "act",
+              "output": "patch",
+              "to": "verify",
+              "input": "patch",
+              "checkpoint": false
+            },
+            {
+              "from": "board_read",
+              "output": "findings",
+              "to": "msg_pump",
+              "input": "findings",
+              "checkpoint": false
+            },
+            {
+              "from": "claim",
+              "output": "conflict",
+              "to": "lease_guard",
+              "input": "conflict",
+              "checkpoint": false
+            },
+            {
+              "from": "claim",
+              "output": "lease",
+              "to": "lease_guard",
+              "input": "lease",
+              "checkpoint": false
+            },
+            {
+              "from": "fail_scan",
+              "output": "patch",
+              "to": "session",
+              "input": "patch",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((fail_scan.passed == false))",
+                "roots": [
+                  "fail_scan"
+                ],
+                "digest": "366c68c05db1bcdaff51aea597924f3c716f402853da50a23e905e052ea70276"
+              }
+            },
+            {
+              "from": "fail_scan",
+              "output": "report",
+              "to": "act",
+              "input": "feedback",
+              "checkpoint": false,
+              "guard": {
+                "source": "(fail_scan.passed == false)",
+                "roots": [
+                  "fail_scan"
+                ],
+                "digest": "ece239b3553ecae8b14126f445b519111a14ecac9789aeae745c79340fa580cb"
+              }
+            },
+            {
+              "from": "gather",
+              "output": "brief",
+              "to": "claim",
+              "input": "brief",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((budget.clock_ms_spent >= budget.clock_ms_cap * 7 / 8))",
+                "roots": [
+                  "budget"
+                ],
+                "digest": "a77636cbbf1edf7519bf01ff1ee09c9b68452f0940963b05779b178c82e0f78b"
+              }
+            },
+            {
+              "from": "gather",
+              "output": "brief",
+              "to": "wrap",
+              "input": "brief",
+              "checkpoint": false,
+              "guard": {
+                "source": "(budget.clock_ms_spent >= budget.clock_ms_cap * 7 / 8)",
+                "roots": [
+                  "budget"
+                ],
+                "digest": "e09bb3067d9661e221150a848a2afa70c38c73886d2559d84812a6e8dd220a54"
+              }
+            },
+            {
+              "from": "guard_pump",
+              "output": "findings",
+              "to": "gather",
+              "input": "findings",
+              "checkpoint": false
+            },
+            {
+              "from": "guard_pump",
+              "output": "nudge",
+              "to": "gather",
+              "input": "nudge",
+              "checkpoint": false
+            },
+            {
+              "from": "guard_pump",
+              "output": "peer_msg",
+              "to": "gather",
+              "input": "peer_msg",
+              "checkpoint": false
+            },
+            {
+              "from": "lease_guard",
+              "output": "conflict",
+              "to": "negotiate",
+              "input": "conflict",
+              "checkpoint": false,
+              "guard": {
+                "source": "(lease_guard.passed == false)",
+                "roots": [
+                  "lease_guard"
+                ],
+                "digest": "3023035a770499ce36590f824f1cd22be3fadcf8025800709340858830a84d33"
+              }
+            },
+            {
+              "from": "lease_guard",
+              "output": "lease",
+              "to": "act",
+              "input": "lease",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((lease_guard.passed == false))",
+                "roots": [
+                  "lease_guard"
+                ],
+                "digest": "ce1dacc6d14650db46ae33d1ef67f775a17dad4317e0b08957914db58ce1e499"
+              }
+            },
+            {
+              "from": "msg_pump",
+              "output": "findings",
+              "to": "guard_pump",
+              "input": "findings",
+              "checkpoint": false
+            },
+            {
+              "from": "msg_pump",
+              "output": "peer_msg",
+              "to": "guard_pump",
+              "input": "peer_msg",
+              "checkpoint": false
+            },
+            {
+              "from": "negotiate",
+              "output": "resolution",
+              "to": "act",
+              "input": "resolution",
+              "checkpoint": false
+            },
+            {
+              "from": "session",
+              "output": "commit",
+              "to": "merge",
+              "input": "commit",
+              "checkpoint": false
+            },
+            {
+              "from": "session",
+              "output": "patch",
+              "to": "merge",
+              "input": "patch",
+              "checkpoint": false
+            },
+            {
+              "from": "verify",
+              "output": "patch",
+              "to": "fail_scan",
+              "input": "patch",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((verify.passed == false))",
+                "roots": [
+                  "verify"
+                ],
+                "digest": "db80f94c9732c323febbc8676c5d8110929f65e9283009e63f894ec80e5a4936"
+              }
+            },
+            {
+              "from": "verify",
+              "output": "report",
+              "to": "act",
+              "input": "feedback",
+              "checkpoint": false,
+              "guard": {
+                "source": "(verify.passed == false)",
+                "roots": [
+                  "verify"
+                ],
+                "digest": "6a6ba704415ef8ece0a54f5b7a06c09a83f62427afeb8cb17e34222cafd310cb"
+              }
+            },
+            {
+              "from": "wrap",
+              "output": "patch",
+              "to": "session",
+              "input": "patch",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "harness_input",
+      "output_type": "delivery",
+      "output_from": "finalize",
+      "intent": "Agensh（无中心编排者，1→1024 自组织 worker 池）+ DeLM（共享上下文 𝒞 + 任务队列 𝒯 取代主 agent）双目标合一。 拓扑：boot（阶梯激活，逃逸）→ intake（原始任务入队，无分解）→ workers（map 扇出，同构 worker 池）→ 每个 worker 内 cycle（受控循环承载五步合作循环：gather→claim→act→verify→fail_scan→session→merge， verify/fail_scan 不过则 route 回 act）→ 根级单写者汇聚（queue_publish/board_publish/workspace_publish） → fail_watch（全局 fail 开放语义，逃逸）→ submit_gate → finalize。 无中心规划者、无 plan-closure 步；共享上下文/队列/工作区均为「根级单写者 + worker 只读」。"
+    },
+    "types": {
+      "board_entry": {
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "body": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "detail_ref": {
+            "type": "string"
+          },
+          "entry_type": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "entry_type",
+          "body",
+          "author"
+        ],
+        "type": "object"
+      },
+      "brief": {
+        "properties": {
+          "acceptance": {
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "scope_hint": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal",
+          "acceptance",
+          "scope_hint"
+        ],
+        "type": "object"
+      },
+      "commit_receipt": {
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "pr": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "branch",
+          "pr",
+          "status"
+        ],
+        "type": "object"
+      },
+      "delivery": {
+        "properties": {
+          "artifact_paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "evidence"
+        ],
+        "type": "object"
+      },
+      "harness_input": {
+        "properties": {
+          "acceptance": {
+            "type": "string"
+          },
+          "goal": {
+            "type": "string"
+          },
+          "reference_behavior": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "goal",
+          "acceptance"
+        ],
+        "type": "object"
+      },
+      "nudge_note": {
+        "properties": {
+          "body": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "body"
+        ],
+        "type": "object"
+      },
+      "peer_message": {
+        "properties": {
+          "author": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "channel",
+          "author",
+          "body"
+        ],
+        "type": "object"
+      },
+      "progress_report": {
+        "properties": {
+          "body": {
+            "maxLength": 300,
+            "type": "string"
+          },
+          "changed_paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "body",
+          "rationale",
+          "evidence"
+        ],
+        "type": "object"
+      },
+      "queue_entry": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "detail",
+          "status",
+          "owner"
+        ],
+        "type": "object"
+      },
+      "verify_report": {
+        "properties": {
+          "findings": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "passed",
+          "findings"
+        ],
+        "type": "object"
+      },
+      "worker_id": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "workspace_artifact": {
+        "properties": {
+          "content_ref": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content_ref"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "board": {
+        "name": "board",
+        "kind": "message_log",
+        "item": "board_entry",
+        "writer": "board_publish",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 2000
+        },
+        "eval_input": false
+      },
+      "task_queue": {
+        "name": "task_queue",
+        "kind": "collection",
+        "item": "queue_entry",
+        "writer": "queue_publish",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 256
+        },
+        "eval_input": false
+      },
+      "workspace": {
+        "name": "workspace",
+        "kind": "collection",
+        "item": "workspace_artifact",
+        "writer": "workspace_publish",
+        "lifecycle": "persistent",
+        "retention": {
+          "max_items": 4096
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "best": {
+        "node_id": "best",
+        "components": {},
+        "consumes": {
+          "deliveries": "list<delivery>"
+        },
+        "artifacts": {
+          "chosen": {
+            "type": "delivery",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "select_best",
+            "port": "deliveries",
+            "into": "chosen",
+            "by": "evidence",
+            "prefer": "max"
+          }
+        ]
+      },
+      "board_publish": {
+        "node_id": "board_publish",
+        "components": {
+          "tools": {
+            "pkg.agensh.board_append@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "board"
+        ],
+        "consumes": {
+          "entries": "list<board_entry>"
+        }
+      },
+      "boot": {
+        "node_id": "boot",
+        "components": {},
+        "artifacts": {
+          "roster": {
+            "type": "list<worker_id>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "fail_watch": {
+        "node_id": "fail_watch",
+        "components": {},
+        "consumes": {
+          "entries": "list<board_entry>"
+        },
+        "artifacts": {
+          "open_fails": {
+            "type": "list<board_entry>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "finalize": {
+        "node_id": "finalize",
+        "components": {},
+        "consumes": {
+          "chosen": "delivery"
+        },
+        "artifacts": {
+          "answer": {
+            "type": "delivery",
+            "is_final": true,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "chosen",
+            "into": "answer"
+          }
+        ]
+      },
+      "intake": {
+        "node_id": "intake",
+        "components": {
+          "model": "route.cheap@1"
+        },
+        "consumes": {
+          "roster": "list<worker_id>"
+        },
+        "artifacts": {
+          "seed": {
+            "type": "list<queue_entry>",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.agensh.intake_prompt"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 1200,
+            "fields": [
+              "goal",
+              "acceptance"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 800,
+            "port": "roster",
+            "policy": "project"
+          }
+        ]
+      },
+      "queue_publish": {
+        "node_id": "queue_publish",
+        "components": {},
+        "writes": [
+          "task_queue"
+        ],
+        "consumes": {
+          "claims": "list<queue_entry>",
+          "seed": "list<queue_entry>"
+        },
+        "ops": [
+          {
+            "op": "merge",
+            "ports": [
+              "seed",
+              "claims"
+            ],
+            "into": "task_queue"
+          }
+        ]
+      },
+      "submit_gate": {
+        "node_id": "submit_gate",
+        "components": {},
+        "consumes": {
+          "chosen": "delivery",
+          "open_fails": "list<board_entry>"
+        },
+        "artifacts": {
+          "chosen": {
+            "type": "delivery",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "assert": {
+          "source": "inputs.chosen.evidence != ''",
+          "roots": [
+            "inputs"
+          ],
+          "digest": "2782e3af6e5ef344dcd0aa299da6b2a399dfb7daef309c2411206cd57a372c2c"
+        }
+      },
+      "workers": {
+        "node_id": "workers",
+        "components": {},
+        "consumes": {
+          "roster": "list<worker_id>"
+        },
+        "artifacts": {
+          "claims": {
+            "from_body": "cycle.claims",
+            "is_final": false,
+            "provenance": null
+          },
+          "deliveries": {
+            "from_body": "cycle.deliveries",
+            "is_final": false,
+            "provenance": null
+          },
+          "entries": {
+            "from_body": "cycle.entries",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "workers.cycle": {
+        "node_id": "cycle",
+        "components": {},
+        "artifacts": {
+          "claims": {
+            "from_body": "claim.lease",
+            "is_final": false,
+            "provenance": null
+          },
+          "deliveries": {
+            "from_body": "merge.delivery",
+            "is_final": false,
+            "provenance": null
+          },
+          "entries": {
+            "from_body": "merge.entry",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "workers.cycle.act": {
+        "node_id": "act",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.agensh.inspect": {
+              "effect_class": null
+            },
+            "pkg.agensh.local_edit": {
+              "effect_class": null
+            },
+            "pkg.agensh.local_run": {
+              "effect_class": null
+            }
+          }
+        },
+        "consumes": {
+          "feedback": "verify_report",
+          "lease": "queue_entry",
+          "resolution": "queue_entry"
+        },
+        "artifacts": {
+          "patch": {
+            "type": "progress_report",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 700,
+            "template_ref": "pkg.agensh.action_protocol",
+            "vars": {
+              "worker_id": "arg.worker_id"
+            }
+          },
+          {
+            "from": "input",
+            "quota_tokens": 600,
+            "fields": [
+              "goal"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "workspace",
+            "policy": "latest_k",
+            "args": {
+              "k": 32
+            }
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "port": "lease",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "port": "resolution",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 600,
+            "fields": [
+              "findings"
+            ],
+            "port": "feedback",
+            "policy": "project",
+            "optional": true
+          }
+        ]
+      },
+      "workers.cycle.board_read": {
+        "node_id": "board_read",
+        "components": {},
+        "artifacts": {
+          "findings": {
+            "type": "list<board_entry>",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "workers.cycle.claim": {
+        "node_id": "claim",
+        "components": {},
+        "consumes": {
+          "brief": "brief"
+        },
+        "artifacts": {
+          "conflict": {
+            "type": "queue_entry",
+            "is_final": false,
+            "provenance": null
+          },
+          "lease": {
+            "type": "queue_entry",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "workers.cycle.fail_scan": {
+        "node_id": "fail_scan",
+        "components": {
+          "unit": "pkg.agensh.fail_scan@1"
+        },
+        "consumes": {
+          "patch": "progress_report"
+        },
+        "artifacts": {
+          "patch": {
+            "type": "progress_report",
+            "is_final": false,
+            "provenance": null
+          },
+          "report": {
+            "type": "verify_report",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "board",
+            "policy": "retrieve",
+            "args": {
+              "k": 64
+            },
+            "component": "pkg.agensh.fail_index@1"
+          }
+        ]
+      },
+      "workers.cycle.gather": {
+        "node_id": "gather",
+        "components": {
+          "model": "route.main@1"
+        },
+        "consumes": {
+          "findings": "list<board_entry>",
+          "nudge": "nudge_note",
+          "peer_msg": "peer_message"
+        },
+        "artifacts": {
+          "brief": {
+            "type": "brief",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 900,
+            "template_ref": "pkg.agensh.worker_protocol",
+            "vars": {
+              "worker_id": "arg.worker_id"
+            }
+          },
+          {
+            "from": "input",
+            "quota_tokens": 1200,
+            "fields": [
+              "goal",
+              "acceptance"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 4000,
+            "store": "board",
+            "policy": "latest_k",
+            "args": {
+              "k": 2000
+            }
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1500,
+            "store": "workspace",
+            "policy": "latest_k",
+            "args": {
+              "k": 64
+            }
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1000,
+            "store": "task_queue",
+            "policy": "latest_k",
+            "args": {
+              "k": 32
+            }
+          },
+          {
+            "from": "store",
+            "quota_tokens": 800,
+            "store": "board",
+            "policy": "retrieve",
+            "args": {
+              "k": 32
+            },
+            "component": "pkg.agensh.board_grep@1"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 3000,
+            "fields": [
+              "entry_type",
+              "body",
+              "author"
+            ],
+            "port": "findings",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 800,
+            "port": "peer_msg",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 100,
+            "port": "nudge",
+            "policy": "project",
+            "optional": true
+          }
+        ]
+      },
+      "workers.cycle.guard_pump": {
+        "node_id": "guard_pump",
+        "components": {},
+        "consumes": {
+          "findings": "list<board_entry>",
+          "peer_msg": "peer_message"
+        },
+        "artifacts": {
+          "findings": {
+            "type": "list<board_entry>",
+            "is_final": false,
+            "provenance": null
+          },
+          "nudge": {
+            "type": "nudge_note",
+            "is_final": false,
+            "provenance": null
+          },
+          "peer_msg": {
+            "type": "peer_message",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "workers.cycle.lease_guard": {
+        "node_id": "lease_guard",
+        "components": {},
+        "consumes": {
+          "conflict": "queue_entry",
+          "lease": "queue_entry"
+        },
+        "artifacts": {
+          "conflict": {
+            "type": "queue_entry",
+            "is_final": false,
+            "provenance": null
+          },
+          "lease": {
+            "type": "queue_entry",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "assert": {
+          "source": "inputs.lease.status == 'claimed'",
+          "roots": [
+            "inputs"
+          ],
+          "digest": "cf15a1faa3dbb53f59c6debb003d4b8ff35c66544cd209cdf3f1e99653f18e02"
+        }
+      },
+      "workers.cycle.merge": {
+        "node_id": "merge",
+        "components": {
+          "model": "route.cheap@1",
+          "tools": {
+            "pkg.agensh.publish_update": {
+              "effect_class": null
+            }
+          }
+        },
+        "consumes": {
+          "commit": "commit_receipt",
+          "patch": "progress_report"
+        },
+        "artifacts": {
+          "delivery": {
+            "type": "delivery",
+            "is_final": false,
+            "provenance": null
+          },
+          "entry": {
+            "type": "board_entry",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.agensh.merge_prompt",
+            "vars": {
+              "worker_id": "arg.worker_id"
+            }
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 400,
+            "port": "commit",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 600,
+            "port": "patch",
+            "policy": "project"
+          }
+        ]
+      },
+      "workers.cycle.msg_pump": {
+        "node_id": "msg_pump",
+        "components": {},
+        "consumes": {
+          "findings": "list<board_entry>"
+        },
+        "artifacts": {
+          "findings": {
+            "type": "list<board_entry>",
+            "is_final": false,
+            "provenance": null
+          },
+          "peer_msg": {
+            "type": "peer_message",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "workers.cycle.negotiate": {
+        "node_id": "negotiate",
+        "components": {},
+        "consumes": {
+          "conflict": "queue_entry"
+        },
+        "artifacts": {
+          "resolution": {
+            "type": "queue_entry",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "workers.cycle.session": {
+        "node_id": "session",
+        "components": {},
+        "consumes": {
+          "patch": "progress_report"
+        },
+        "artifacts": {
+          "commit": {
+            "type": "commit_receipt",
+            "is_final": false,
+            "provenance": null
+          },
+          "patch": {
+            "type": "progress_report",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "workers.cycle.verify": {
+        "node_id": "verify",
+        "components": {
+          "unit": "pkg.agensh.acceptance_gate@1"
+        },
+        "consumes": {
+          "patch": "progress_report"
+        },
+        "artifacts": {
+          "patch": {
+            "type": "progress_report",
+            "is_final": false,
+            "provenance": null
+          },
+          "report": {
+            "type": "verify_report",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "input",
+            "quota_tokens": 600,
+            "fields": [
+              "acceptance"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 1200,
+            "store": "board",
+            "policy": "latest_k",
+            "args": {
+              "k": 200
+            }
+          }
+        ]
+      },
+      "workers.cycle.wrap": {
+        "node_id": "wrap",
+        "components": {
+          "model": "route.cheap@1"
+        },
+        "consumes": {
+          "brief": "brief"
+        },
+        "artifacts": {
+          "patch": {
+            "type": "progress_report",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.agensh.wrapup_prompt",
+            "vars": {
+              "worker_id": "arg.worker_id"
+            }
+          },
+          {
+            "from": "input",
+            "quota_tokens": 400,
+            "fields": [
+              "goal"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1200,
+            "port": "brief",
+            "policy": "project"
+          }
+        ]
+      },
+      "workers.slot": {
+        "node_id": "slot",
+        "components": {},
+        "consumes": {
+          "item": "worker_id"
+        },
+        "artifacts": {
+          "who": {
+            "type": "worker_id",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "ops": [
+          {
+            "op": "project",
+            "port": "item",
+            "into": "who"
+          }
+        ]
+      },
+      "workspace_publish": {
+        "node_id": "workspace_publish",
+        "components": {
+          "tools": {
+            "pkg.agensh.workspace_commit@1": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "workspace"
+        ],
+        "consumes": {
+          "deliveries": "list<delivery>"
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "org_cost",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 2000
+        },
+        {
+          "id": "org_tokens",
+          "dimension": "tokens_total",
+          "scope": "plan",
+          "cap": 60000000
+        },
+        {
+          "id": "org_tool_calls",
+          "dimension": "tool_calls",
+          "scope": "plan",
+          "cap": 20000
+        },
+        {
+          "id": "wall_clock",
+          "dimension": "clock_ms",
+          "scope": "plan",
+          "cap": 21600000
+        },
+        {
+          "id": "worker_model_calls",
+          "dimension": "model_calls",
+          "scope": "node:workers.cycle.act",
+          "cap": 60
+        },
+        {
+          "id": "worker_turns",
+          "dimension": "turns",
+          "scope": "loop:workers.cycle",
+          "cap": 200
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "budget.clock_ms_spent >= budget.clock_ms_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "ea2ff1609b3b8a98de6949c1e43225dca9cf3af5b5714791bf828f33ec02493e"
+          },
+          "outcome": "failed"
+        },
+        {
+          "when": {
+            "source": "budget.cents_spent >= budget.cents_cap",
+            "roots": [
+              "budget"
+            ],
+            "digest": "c14f82889347ef4739d6e78a7d64a20a9d04eeb8df059cb6799275566c77c6f0"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "tool_error",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 2000
+          },
+          "route": "same_node",
+          "feedback": "conflict_resolution"
+        },
+        {
+          "class": "gate_refused",
+          "route": "next_iteration",
+          "feedback": "verify_feedback"
+        },
+        {
+          "class": "schema_invalid",
+          "retry": {
+            "max": 2,
+            "backoff_ms": 0
+          },
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "environment_failure",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 5000
+          }
+        },
+        {
+          "class": "timeout",
+          "route": "same_node",
+          "feedback": "idle_hint"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {
+      "boot": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/agensh@1.0.0/hatches/activation_roster.py",
+        "reason": "激活节奏与 worker 名单是运行时基础设施编排（map 无激活日程字段），静态 DSL 无落点",
+        "owner": "harness-team",
+        "share_budget_pct": 3
+      },
+      "fail_watch": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/agensh@1.0.0/hatches/fail_lifecycle.py",
+        "reason": "fail 保持 open 直到被新条目或修复子任务处理，是跨实例条件联动，静态边不可达",
+        "owner": "harness-team",
+        "share_budget_pct": 3
+      },
+      "workers.cycle.board_read": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/agensh@1.0.0/hatches/board_reader.py",
+        "reason": "全史布尔检索、按条目展开与【D】按 agent 记忆的增量游标是运行时读位置；latest_k 仅为近似",
+        "owner": "harness-team",
+        "share_budget_pct": 4
+      },
+      "workers.cycle.claim": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/agensh@1.0.0/hatches/atomic_claim.py",
+        "reason": "CAS 式条件写入是有副作用原语；CEL 保守子集零副作用，gate 只能判定不能抢注",
+        "owner": "harness-team",
+        "share_budget_pct": 4
+      },
+      "workers.cycle.guard_pump": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/agensh@1.0.0/hatches/idle_guard.py",
+        "reason": "停滞催工与临近预算提醒都是按运行时事件注入的提示，静态声明式无落点",
+        "owner": "harness-team",
+        "share_budget_pct": 2
+      },
+      "workers.cycle.msg_pump": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/agensh@1.0.0/hatches/message_pump.py",
+        "reason": "频道消息每轮首投、私信每次工具调用后 mid-turn 注入，按运行时事件改写 worker 上下文",
+        "owner": "harness-team",
+        "share_budget_pct": 3
+      },
+      "workers.cycle.negotiate": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/agensh@1.0.0/hatches/claim_negotiation.py",
+        "reason": "谁做/怎么分叉是同伴协商后的语义裁决，保守 CEL 子集无法表达",
+        "owner": "harness-team",
+        "share_budget_pct": 3
+      },
+      "workers.cycle.session": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/agensh@1.0.0/hatches/workspace_session.py",
+        "reason": "跨执行的有状态服务契约（合并冲突检测、会话恢复）无静态表达位",
+        "owner": "harness-team",
+        "share_budget_pct": 5
+      }
+    },
+    "trust": {}
+  }
+}

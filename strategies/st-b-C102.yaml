@@ -1,0 +1,110 @@
+id: st-b-C102
+name: "CodeR：多角色 + 预定义任务图的 issue 修复"
+tier: B
+claim: "CodeR多角色任务图：五角色+预定义任务图修issue，SWE-bench Lite解决28.33%"
+claimed_value:
+  metric: "resolved_rate"
+  direction: up
+  context: "对照：单 agent + 同等工具预算；五角色按预定义任务图线性协作"
+sources: [S111, S112]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: coder_role_task_graph
+    graph_version: "1.0"
+    entry: analyze
+    input: coder_input
+    output: { ref: test_verdict, from: verify }
+    intent: "五角色预定义任务图：分析→定位→修补→复审→验证，角色间工件经类型化边交接"
+  types:
+    - name: coder_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: analysis
+      schema:
+        type: object
+        required: [root_cause, suspect_files]
+        properties:
+          root_cause: { type: string }
+          suspect_files: { type: array, items: { type: string } }
+    - name: locate_report
+      schema:
+        type: object
+        required: [hits]
+        properties:
+          hits: { type: array, items: { type: string } }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: test_verdict
+      schema:
+        type: object
+        required: [passed, failures]
+        properties:
+          passed: { type: boolean }
+          failures: { type: array, items: { type: string } }
+  nodes:
+    - id: analyze
+      kind: task
+      uses: { model: route.strong@1 }
+      emits: { analysis: analysis }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.coder.analyze_system, quota_tokens: 500 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+    - id: locate
+      kind: task
+      uses: { model: route.cheap@1, tools: [pkg.sweng.locate] }
+      consumes: { analysis: analysis }
+      emits: { report: locate_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.coder.locate_system, quota_tokens: 400 }
+          - { from: edge, port: analysis, fields: [root_cause, suspect_files], policy: project, quota_tokens: 1500 }
+    - id: patch_role
+      kind: task
+      uses: { model: route.strong@1, tools: [pkg.sweng.edit] }
+      consumes: { analysis: analysis, report: locate_report }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.coder.patch_system, quota_tokens: 600 }
+          - { from: edge, port: analysis, fields: [root_cause], policy: project, quota_tokens: 900 }
+          - { from: edge, port: report, fields: [hits], policy: project, quota_tokens: 1500 }
+    - id: review
+      kind: task
+      uses: { model: route.mid@1 }
+      consumes: { patch: patch }
+      emits: { reviewed: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.coder.review_system, quota_tokens: 500 }
+          - { from: edge, port: patch, fields: [ref, diff_ref], policy: project, quota_tokens: 2000 }
+    - id: verify
+      kind: check
+      uses: { unit: pkg.sweng.test_unit@1 }
+      consumes: { patch: patch }
+      emits: { verdict: test_verdict }
+  edges:
+    - { from: analyze, output: analysis, to: locate, input: analysis }
+    - { from: analyze, output: analysis, to: patch_role, input: analysis }
+    - { from: locate, output: report, to: patch_role, input: report }
+    - { from: patch_role, output: patch, to: review, input: patch }
+    - { from: review, output: reviewed, to: verify, input: patch }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 700 }
+      - { id: verify_turns, dimension: turns, scope: node:verify, cap: 30 }
+    failures:
+      - { class: schema_invalid, route: same_node, feedback: format_reminder }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

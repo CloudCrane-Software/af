@@ -1,0 +1,420 @@
+//! 结果行双轨制（af-bench 吸收方案 §1.4 / §5-P4）。
+//!
+//! 两轨同源于同一份 [`ExecutionFacts`]，不各自装配（防漂移）：
+//! - **legacy `results.jsonl` 行原样保留**（swe-v 18 键，af-bench main.rs:861-890）：
+//!   现役消费方 bench-mes.py 按行字段取值、看板沿用在飞口径——切流前不破坏。
+//!   写入纪律 append + 每行 flush（main.rs:644-648, 891-895）由 [`RecordSink`]
+//!   承载（文件实现与驱动层接线 = P5，方案 §5-P5）。
+//! - **`af.plan.record.v1` 投影新增**（契约 §1.2 行契约；映射表 = 方案 §1.4）：
+//!   `suite→plan 上下文 / task_id→item_id / reward→verdict / status→status /
+//!   gate→gate / turns+model_calls+tokens+http_retries→usage /
+//!   agent_wall_ms→wall_ms / verifier_note→note`；v1 行落
+//!   `{{output_dir}}/records.jsonl`（与 legacy 分流）。
+//!
+//! 供给失败行（setup_failed/run_failed，契约 §6.2 F2 分类）只落 legacy 轨——
+//! 方案 §1.4 映射表面向完整执行事实，失败行无 v1 投影（登记 RESULT-P4.md）。
+
+use std::path::Path;
+use std::sync::Mutex;
+
+use af_harness::TokenTotals;
+use serde_json::{json, Value};
+
+use crate::error::ExeclineError;
+
+/// note 截断（af-bench main.rs:666/834/889 的 `.chars().take(300)` 口径；
+/// v1 契约 §1.2"截断至 ~300 字符"同源）。
+fn clip300(note: &str) -> String {
+    note.chars().take(300).collect()
+}
+
+/// 结果行写入器（append + flush 语义，main.rs:644-648）。
+///
+/// 两方法对应两条分流：legacy `results.jsonl` 与 `af.plan.record.v1`
+/// `{{output_dir}}/records.jsonl`。文件实现（双文件 sink）与驱动层接线是 P5
+/// （方案 §5-P5"RecordSink 实现"）；P4 直调单元由调用方注入。
+pub trait RecordSink {
+    /// 落一行 legacy results.jsonl（writeln + flush）。
+    fn append_legacy(&self, row: &str) -> Result<(), String>;
+    /// 落一行 af.plan.record.v1 records.jsonl（writeln + flush）。
+    fn append_v1(&self, row: &str) -> Result<(), String>;
+}
+
+/// P4 驱动层占位 sink：驱动面（driver.execute）尚未接线落行——P5 落位 RecordSink
+/// 文件实现与 attempt 分配（方案 §5-P5）。误用即 fail-loud（Err），不静默丢行。
+pub struct PendingRecordSink;
+
+impl RecordSink for PendingRecordSink {
+    fn append_legacy(&self, _row: &str) -> Result<(), String> {
+        Err("驱动层 record sink 未接线（P5 落位）：经驱动执行的单元暂不可落行".into())
+    }
+
+    fn append_v1(&self, _row: &str) -> Result<(), String> {
+        Err("驱动层 record sink 未接线（P5 落位）：经驱动执行的单元暂不可落行".into())
+    }
+}
+
+/// P5（方案 §5-P5"RecordSink 实现"）：文件实现——双文件 sink。legacy 行落
+/// `{{output_dir}}/results.jsonl`、v1 行落 `{{output_dir}}/records.jsonl`；
+/// 写入纪律 append + 每行 flush（af-bench main.rs:644-648 批级文件的逐行纪律，
+/// 单元化后随驱动逐单打开——append 语义保证跨单续写同文件）。
+pub struct FileRecordSink {
+    legacy: Mutex<std::fs::File>,
+    v1: Mutex<std::fs::File>,
+}
+
+impl FileRecordSink {
+    /// 打开（或创建）双文件；输出目录不存在则建。失败 fail-loud（String 文案
+    /// 进 EX3001，由驱动层入账后上抛）。
+    pub fn open(output_dir: &Path) -> Result<Self, String> {
+        std::fs::create_dir_all(output_dir)
+            .map_err(|err| format!("建输出目录 {} 失败: {err}", output_dir.display()))?;
+        let legacy = open_append(&output_dir.join("results.jsonl"))?;
+        let v1 = open_append(&output_dir.join("records.jsonl"))?;
+        Ok(Self {
+            legacy: Mutex::new(legacy),
+            v1: Mutex::new(v1),
+        })
+    }
+}
+
+impl RecordSink for FileRecordSink {
+    fn append_legacy(&self, row: &str) -> Result<(), String> {
+        let mut file = self.legacy.lock().unwrap_or_else(|e| e.into_inner());
+        writeln_flush(&mut file, row, "results")
+    }
+
+    fn append_v1(&self, row: &str) -> Result<(), String> {
+        let mut file = self.v1.lock().unwrap_or_else(|e| e.into_inner());
+        writeln_flush(&mut file, row, "records")
+    }
+}
+
+/// append 模式打开（不存在则建，存在不截断——main.rs:642-648 OpenOptions 面）。
+fn open_append(path: &Path) -> Result<std::fs::File, String> {
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|err| format!("开 {} 失败: {err}", path.display()))
+}
+
+/// writeln + flush（main.rs:644-648 逐行纪律：每行立即刷盘，崩溃不留半行）。
+fn writeln_flush(file: &mut std::fs::File, row: &str, what: &str) -> Result<(), String> {
+    use std::io::Write as _;
+    writeln!(file, "{row}").map_err(|err| format!("写 {what} 失败: {err}"))?;
+    file.flush()
+        .map_err(|err| format!("flush {what} 失败: {err}"))
+}
+
+// ---- 单元侧行落盘共用件（P5 重构抽取：swev/tb 两单元同构段，行为不变）----
+
+/// 成功路径 legacy 行落盘（单元视角；writeln+flush 语义在 sink，失败包
+/// EX3001 fail-loud 不静默丢行）。← main.rs:891-895（swev）/ 1086-1090（tb）同款。
+pub(crate) fn append_legacy_row(
+    ctx: &crate::exec::ExecContext<'_>,
+    row: &Value,
+) -> Result<(), ExeclineError> {
+    ctx.record_sink
+        .append_legacy(&row.to_string())
+        .map_err(|err| ExeclineError::UnitFailed {
+            detail: format!("写 results 失败: {err}"),
+        })
+}
+
+/// 失败路径：先落 legacy 行（append+flush），sink 失败并案进错误文案；随后
+/// 返回 EX3001（§2.4：行由单元落、订单侧不停终态——可重试）。
+/// ← main.rs:668-670（swev）/ 947-949（tb）同款。
+pub(crate) fn fail_with_legacy_row(
+    ctx: &crate::exec::ExecContext<'_>,
+    row: &Value,
+    detail: &str,
+) -> ExeclineError {
+    let sink_note = ctx.record_sink.append_legacy(&row.to_string()).err();
+    ExeclineError::UnitFailed {
+        detail: match sink_note {
+            None => detail.to_string(),
+            Some(err) => format!("{detail}；且落行失败: {err}"),
+        },
+    }
+}
+
+/// 单题执行事实——两轨行的同源（方案 §1.4"防漂移"）。
+/// 字段 = swe-v 18 键 legacy 行（af-bench main.rs:861-890）的并集。
+#[derive(Debug, Clone)]
+pub struct ExecutionFacts {
+    pub suite: &'static str,
+    pub task_id: String,
+    pub profile: String,
+    pub trial: bool,
+    /// 判定（resolved，只从 judge stdout JSON 取）；None → 行内 null。
+    pub reward: Option<bool>,
+    /// RunStatus 六态映射（suite::status_label）。
+    pub status: String,
+    pub scaffold: &'static str,
+    pub reasoning_tier: &'static str,
+    pub run_dir: Option<String>,
+    /// eval.log sha256（判分时计算，D-20 项 2）。
+    pub eval_sha256: Option<String>,
+    /// 完成度记账（ok/no_patch/test_edit）——记账不是门控（方案 §2.4）。
+    pub gate: String,
+    /// fix2：attempt 恒 1（审计 D5 关闭 gate 重试），字段保留供历史行兼容。
+    pub attempts: u32,
+    pub http_retries: u64,
+    pub turns: u32,
+    pub model_calls: u64,
+    pub tokens: TokenTotals,
+    pub agent_wall_ms: u64,
+    /// 判分 note（截断发生在行装配，同 af-bench main.rs:889）。
+    pub verifier_note: String,
+}
+
+/// 18 键 swe-v legacy 行（af-bench main.rs:861-890 原样装配）。
+pub fn swev_legacy_row(facts: &ExecutionFacts) -> Value {
+    json!({
+        "suite": facts.suite,
+        "task_id": facts.task_id,
+        "profile": facts.profile,
+        "trial": facts.trial,
+        "reward": facts.reward,
+        "status": facts.status,
+        // fix2（结果代号 fix2，审计 §6.A 对齐）：scaffold v3 = 提交式完成协议 +
+        // instance 纪律 + 250 步/$3/温度0/top_p1/max_tokens 32000 + 无 gate 重试。
+        // reasoning 档位按审计 §6.A.7 显式声明（保持 Off = mini 默认不发 thinking）。
+        "scaffold": facts.scaffold,
+        "reasoning_tier": facts.reasoning_tier,
+        // D-20 项 1：实际 run 目录（重跑按序号递增，不再同名覆写）。
+        "run_dir": facts.run_dir,
+        // D-20 项 2：eval.log sha256（判分时计算，判分复核可逐字节对账）。
+        "eval_sha256": facts.eval_sha256,
+        "gate": facts.gate,
+        // fix2：attempt 恒 1（审计 D5 关闭 gate 重试），字段保留供历史行兼容。
+        "attempts": facts.attempts,
+        "http_retries": facts.http_retries,
+        "turns": facts.turns,
+        "model_calls": facts.model_calls,
+        "tokens": {
+            "input": facts.tokens.input,
+            "output": facts.tokens.output,
+            "cache_read": facts.tokens.cache_read,
+        },
+        "agent_wall_ms": facts.agent_wall_ms,
+        "verifier_note": clip300(&facts.verifier_note),
+    })
+}
+
+/// `af.plan.record.v1` 投影（契约 §1.2 行形状 + 方案 §1.4 映射表）。
+/// `plan_id/node_id` 来自订单上下文（order_id/line_id），`item_id` = task_id；
+/// evidence_digest = eval_sha256（证据字节指纹，可空）。
+pub fn swev_v1_row(
+    facts: &ExecutionFacts,
+    plan_id: &str,
+    node_id: &str,
+    host_alias: &str,
+    unit_id: &str,
+    unit_version: &str,
+) -> Value {
+    json!({
+        "plan_id": plan_id,
+        "node_id": node_id,
+        "item_id": facts.task_id,
+        "attempt": facts.attempts,
+        "host_alias": host_alias,
+        "unit_id": unit_id,
+        "unit_version": unit_version,
+        "status": facts.status,
+        "verdict": facts.reward,
+        "evidence": {
+            "run_dir": facts.run_dir,
+            "evidence_digest": facts.eval_sha256,
+        },
+        "gate": facts.gate,
+        "usage": {
+            "turns": facts.turns,
+            "unit_calls": facts.model_calls,
+            "http_retries": facts.http_retries,
+            "quota": {
+                "input": facts.tokens.input,
+                "output": facts.tokens.output,
+                "cache_read": facts.tokens.cache_read,
+            },
+        },
+        "wall_ms": facts.agent_wall_ms,
+        "note": clip300(&facts.verifier_note),
+    })
+}
+
+// ---- GRAPH/REPORT 供给失败行（红队 W2-C34）----
+// RESULT-P4 §5「供给失败行由单元落、订单侧不停终态」在 graph/report 两单元
+// 此前缺位：两轨只在成功尾部落行，任何失败路径提前 return，失败单在结果轨
+// 与「从未开跑」不可区分（盘上实证：F5-report/F4B/F4C 双轨 0 字节）。行形状
+// 对齐 swev 失败行键面（字段齐备含 null，D-20），suite 按单元如实（graph /
+// report），error_code 附真实错误类别（EX 码），verdict（reward）恒 null——
+// 失败行只落 legacy 轨，无 v1 投影（RESULT-P4 §4 同口径）。
+
+/// graph/report setup_failed 行（供给面：任务包装载/计划装订/预算提取失败）。
+pub fn unit_setup_failed_row(
+    suite: &str,
+    task_id: &str,
+    profile: &str,
+    trial: bool,
+    error_code: &str,
+    note: &str,
+) -> Value {
+    json!({
+        "suite": suite,
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "setup_failed",
+        "error_code": error_code,
+        // run 目录未建/执行未启动 → null（D-20 口径：字段齐备含 null）。
+        "run_dir": null,
+        "verifier_note": clip300(note),
+    })
+}
+
+/// graph/report run_failed 行（驱动相起：节点驱动/envelope/预算/判分失败）。
+pub fn unit_run_failed_row(
+    suite: &str,
+    task_id: &str,
+    profile: &str,
+    trial: bool,
+    error_code: &str,
+    run_dir: &Path,
+    note: &str,
+) -> Value {
+    json!({
+        "suite": suite,
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "run_failed",
+        "error_code": error_code,
+        // D-20 项 1：run_failed 行也记实际目录（trail 留在现场供复核）。
+        "run_dir": run_dir.display().to_string(),
+        "verifier_note": clip300(note),
+    })
+}
+
+/// setup_failed 行（af-bench main.rs:656-667：字段齐备含 null，D-20）。
+pub fn swev_setup_failed_row(task_id: &str, profile: &str, trial: bool, note: &str) -> Value {
+    json!({
+        "suite": "swe-v",
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "setup_failed",
+        // D-20：供给失败行也保持字段齐备（run 目录未建/eval 未跑 → null）。
+        "run_dir": null,
+        "eval_sha256": null,
+        "verifier_note": clip300(note),
+    })
+}
+
+/// run_failed 行（af-bench main.rs:822-834：记实际目录，trail 留在现场供复核）。
+pub fn swev_run_failed_row(
+    task_id: &str,
+    profile: &str,
+    trial: bool,
+    run_dir: &Path,
+    http_retries: u64,
+    note: &str,
+) -> Value {
+    json!({
+        "suite": "swe-v",
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "run_failed",
+        "scaffold": "v3",
+        // D-20 项 1：run_failed 行也记实际目录（trail 留在现场供复核）。
+        "run_dir": run_dir.display().to_string(),
+        "eval_sha256": null,
+        "http_retries": http_retries,
+        "verifier_note": clip300(note),
+    })
+}
+
+// ---- TB 行（af-bench main.rs:938-946 / 1037-1046 / 1068-1085 原样，P5）----
+// TB 与 swe-v 行形状在 af-bench 即不同（12/7/8 键 vs 18/9/11 键：TB 行无
+// scaffold/reasoning_tier/run_dir/eval_sha256/gate/attempts）——迁移不合并，
+// 如实分行装配（方案 §1.1"12 键 tb 行原样搬"）。
+
+/// 单题执行事实（TB）——12 键 legacy 行的源（main.rs:1068-1085 字段并集）。
+#[derive(Debug, Clone)]
+pub struct TbExecutionFacts {
+    pub task_id: String,
+    pub profile: String,
+    pub trial: bool,
+    /// 判定（verify 容器链 reward.txt：1/0/缺件 None=infra）。
+    pub reward: Option<bool>,
+    /// RunStatus 六态映射（suite::status_label）。
+    pub status: String,
+    pub http_retries: u64,
+    pub turns: u32,
+    pub model_calls: u64,
+    pub tokens: TokenTotals,
+    pub agent_wall_ms: u64,
+    pub verifier_note: String,
+}
+
+/// TB 12 键 legacy 行（af-bench main.rs:1068-1085 原样装配）。
+pub fn tb_legacy_row(facts: &TbExecutionFacts) -> Value {
+    json!({
+        "suite": "terminal-bench",
+        "task_id": facts.task_id,
+        "profile": facts.profile,
+        "trial": facts.trial,
+        "reward": facts.reward,
+        "status": facts.status,
+        "http_retries": facts.http_retries,
+        "turns": facts.turns,
+        "model_calls": facts.model_calls,
+        "tokens": {
+            "input": facts.tokens.input,
+            "output": facts.tokens.output,
+            "cache_read": facts.tokens.cache_read,
+        },
+        "agent_wall_ms": facts.agent_wall_ms,
+        "verifier_note": clip300(&facts.verifier_note),
+    })
+}
+
+/// TB setup_failed 行（af-bench main.rs:938-946 原样：7 键——单题供给失败记
+/// infra 行，不占分母）。
+pub fn tb_setup_failed_row(task_id: &str, profile: &str, trial: bool, note: &str) -> Value {
+    json!({
+        "suite": "terminal-bench",
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "setup_failed",
+        "verifier_note": clip300(note),
+    })
+}
+
+/// TB run_failed 行（af-bench main.rs:1037-1046 原样：8 键）。
+pub fn tb_run_failed_row(
+    task_id: &str,
+    profile: &str,
+    trial: bool,
+    http_retries: u64,
+    note: &str,
+) -> Value {
+    json!({
+        "suite": "terminal-bench",
+        "task_id": task_id,
+        "profile": profile,
+        "trial": trial,
+        "reward": null,
+        "status": "run_failed",
+        "http_retries": http_retries,
+        "verifier_note": clip300(note),
+    })
+}

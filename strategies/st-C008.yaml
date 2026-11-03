@@ -1,0 +1,150 @@
+id: st-C008
+name: 内聚性感知的任务图切分 + 依赖感知调度（Cohesion-aware Coder）
+tier: A
+claim: 内聚性感知任务切分：按依赖图与社区发现切分再依赖感知调度，pass rate最高+14%、墙钟2.10x
+claimed_value:
+  metric: pass_rate
+  direction: up
+  context: 多agent协同编码任务；对照组=按文件/目录均分并行+顺序执行基线+现有多agent编排；扫任务规模10/50/200文件，同报成本与墙钟（S114 测试设计口径）
+sources: [MC-ADAS, S038, S044, S114, S116, S132, S140, S142, S143]
+consensus: { corpora: 2, cards: 9 }
+experiment: { status: none, exp_id: "-", note: "-" }
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: cohesion_aware_partition
+    graph_version: "1.0"
+    entry: partition
+    input: repo_input
+    output: { ref: verify_report, from: integrate }
+    intent: "内聚性感知切分（依赖图+社区发现）→ map 并行施工（worker 实例间互不可见、上下文只收本分片）→ 依赖序集成+逐步验证；拓扑序由 partition 按 dep_rank 升序发射承载，collect 依序入队，integrate 按队序合并"
+  types:
+    - name: repo_input
+      schema:
+        type: object
+        required: [repo_root, goal]
+        properties: { repo_root: { type: string }, goal: { type: string } }
+    - name: shard
+      schema:
+        type: object
+        required: [shard_id, files, dep_rank]
+        properties:
+          shard_id: { type: string }
+          files: { type: array, items: { type: string } }
+          dep_rank: { type: integer }
+    - name: patch
+      schema:
+        type: object
+        required: [shard_id, diff_ref, dep_rank]
+        properties:
+          shard_id: { type: string }
+          diff_ref: { type: string }
+          dep_rank: { type: integer }
+    - name: code_file
+      schema:
+        type: object
+        required: [path, content_ref]
+        properties: { path: { type: string }, content_ref: { type: string } }
+    - name: verify_report
+      schema:
+        type: object
+        required: [pass, failures]
+        properties:
+          pass: { type: boolean }
+          failures: { type: array, items: { type: string } }
+  stores:
+    - name: shard_board
+      type: collection
+      item: shard
+      writer: partition
+      lifecycle: run
+      retention: { max_items: 256 }
+    - name: patch_queue
+      type: collection
+      item: patch
+      writer: collect
+      lifecycle: run
+      retention: { max_items: 256 }
+    - name: repo
+      type: collection
+      item: code_file
+      writer: integrate.apply
+      lifecycle: run
+      retention: { max_items: 256 }
+  nodes:
+    - id: partition
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.cohesion.depgraph@1, pkg.cohesion.community@1] }
+      writes: [shard_board]
+      emits: { shards: "list<shard>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.cohesion.partition_system, quota_tokens: 600 }
+          - { from: input, fields: [repo_root, goal], policy: project, quota_tokens: 800 }
+    - id: build
+      kind: task
+      map:
+        over: partition.shards
+        body:
+          nodes:
+            - id: worker
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.view@1, pkg.sweng.edit@1] }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.worker_system, quota_tokens: 500 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 900 }
+          edges: []
+      emits: { patches: { from_body: worker.patch } }
+    - id: collect
+      kind: transform
+      consumes: { patches: "list<patch>" }
+      writes: [patch_queue]
+      ops:
+        - { op: project, port: patches, into: patch_queue }
+      emits: { done: signal }
+    - id: integrate
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: apply
+              kind: transform
+              reads: [patch_queue]
+              writes: [repo]
+              ops:
+                - { op: merge, ports: [patch_queue], into: snapshot }
+              emits: { snapshot: "list<code_file>" }
+            - id: verify
+              kind: check
+              uses: { unit: pkg.sweng.test_unit@1 }
+              consumes: { snapshot: "list<code_file>" }
+              emits: { report: verify_report }
+          edges:
+            - { from: apply, output: snapshot, to: verify, input: snapshot }
+        max_iterations: 3
+        carried:
+          - { store: repo, max_items: 256 }
+        safety_points:
+          - { node: verify, kind: check }
+        exit_when: "attempt.passed == true"
+        on_exhausted: fail
+      emits: { report: { from_body: verify.report } }
+  edges:
+    - { from: partition, output: shards, to: build, input: shards }
+    - { from: build, output: patches, to: collect, input: patches }
+    - { from: collect, output: done, to: integrate, input: done }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 900 }
+      - { id: fix_turns, dimension: turns, scope: loop:integrate, cap: 60 }
+    failures:
+      - class: schema_invalid
+        retry: { max: 2, backoff_ms: 0 }
+      - class: environment_failure
+        retry: { max: 3, backoff_ms: 60000 }
+      - class: budget_exhausted
+        terminal: true
+        outcome: failed

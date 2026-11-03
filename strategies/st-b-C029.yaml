@@ -1,0 +1,13 @@
+id: st-b-C029
+name: "工具结果清理 / 上下文编辑（tool result clearing / context editing）"
+tier: B
+claim: "工具结果清理/上下文编辑：接近上限时自动清除过期工具调用与结果，context editing 单独 +29%"
+claimed_value:
+  metric: "resolved_rate"
+  direction: up
+  context: "对照组保留全部工具输出直到溢出；实验组=接近上限自动清除过期工具调用与结果"
+sources: [S002, S155]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: needs_syntax
+needs_syntax_note: "缺「上下文编辑策略段」：v0.1 的 context.sections 是装载期声明（来源+视图策略+配额），没有运行期「清除」语义——无清除触发位、无保留窗口、无占位策略。\n扩展建议（示例，挂在节点 context 上）：\n  context:\n    editing:\n      trigger: { ratio: 0.80 }              # 接近窗口上限触发清理\n      clear_tool_results_after: 3           # 仅保留最近 3 条工具结果\n      keep_first_observation: true          # 首条观察留作锚点\n      on_clear: leave_placeholder           # 清除后留占位符（保消息结构）\n簇内提示：该手段与 S009 的「观测掩码/无损压缩」同族，落地时应与 LLM 摘要压缩（见 st-b-C028 的扩展建议）同台 A/B——摘要压缩有纯增成本 24–94% 的负面证据。"

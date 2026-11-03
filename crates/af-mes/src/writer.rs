@@ -17,13 +17,19 @@ use crate::schema::{
     DEFAULT_MAX_DELAY, DEFAULT_MAX_OUTBOX_BATCHES, DEFAULT_MAX_ROWS, TABLE_MES_EVENT,
 };
 use clickhouse::Client;
+use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::runtime::Runtime;
 
 /// 写入器配置。端点、时钟、阈值都由调用方注入。
-#[derive(Debug, Clone)]
+///
+/// 认证面（正式 API）：`user` / `password` 任一为 `None` 即匿名——与
+/// 未引入认证前的请求线逐字节一致；两者经 [`WriterConfig::with_auth`]
+/// 或直接字段赋值注入后，凭据以 `X-ClickHouse-User` / `X-ClickHouse-Key`
+/// 头进入官方客户端，明文只在内存与请求头，不落盘不打印（Debug 已脱敏）。
+#[derive(Clone)]
 pub struct WriterConfig {
     pub endpoint: String,
     pub database: String,
@@ -34,6 +40,27 @@ pub struct WriterConfig {
     pub max_buffered: usize,
     pub max_outbox_batches: usize,
     pub outbox_dir: PathBuf,
+    /// 口令认证用户名（None = 匿名，旧行为）。
+    pub user: Option<String>,
+    /// 口令认证密码（None = 匿名，旧行为）。Debug 输出脱敏为 "***"。
+    pub password: Option<String>,
+}
+
+impl fmt::Debug for WriterConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WriterConfig")
+            .field("endpoint", &self.endpoint)
+            .field("database", &self.database)
+            .field("table", &self.table)
+            .field("max_rows", &self.max_rows)
+            .field("max_delay", &self.max_delay)
+            .field("max_buffered", &self.max_buffered)
+            .field("max_outbox_batches", &self.max_outbox_batches)
+            .field("outbox_dir", &self.outbox_dir)
+            .field("user", &self.user)
+            .field("password", &self.password.as_ref().map(|_| "***"))
+            .finish()
+    }
 }
 
 impl WriterConfig {
@@ -47,7 +74,17 @@ impl WriterConfig {
             max_buffered: usize::try_from(DEFAULT_MAX_ROWS).unwrap_or(usize::MAX),
             max_outbox_batches: DEFAULT_MAX_OUTBOX_BATCHES,
             outbox_dir: outbox_dir.into(),
+            user: None,
+            password: None,
         }
+    }
+
+    /// 注入口令认证（builder）。凭据只进官方客户端与请求头，
+    /// 不落盘不打印；`None/None`（缺省）= 匿名，行为与旧版一致。
+    pub fn with_auth(mut self, user: impl Into<String>, password: impl Into<String>) -> Self {
+        self.user = Some(user.into());
+        self.password = Some(password.into());
+        self
     }
 }
 
@@ -82,7 +119,12 @@ impl MesWriter {
         ch::validate_ident(&database, "database")?;
         ch::validate_ident(&config.table, "table")?;
         let outbox = Outbox::open(&config.outbox_dir)?;
-        let client = ch::build_client(&config.endpoint, &database);
+        let client = ch::build_client_auth(
+            &config.endpoint,
+            &database,
+            config.user.as_deref(),
+            config.password.as_deref(),
+        );
         let runtime = ch::runtime()?;
         let mut config = config;
         config.database = database;

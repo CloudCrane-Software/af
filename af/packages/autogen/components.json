@@ -1,0 +1,36 @@
+{
+  "components": [
+    {
+      "class": "tool",
+      "name": "pkg.autogen.tool.search",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/autogen@1.0.0/tools/search.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.autogen.tool.calc",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "packages/autogen@1.0.0/tools/calc.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.autogen.team.stall_unit",
+      "version": "1",
+      "impl_ref": "packages/autogen@1.0.0/units/stall_unit.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.autogen.team.term_unit",
+      "version": "1",
+      "impl_ref": "packages/autogen@1.0.0/units/term_unit.py"
+    },
+    {
+      "class": "memory",
+      "name": "pkg.autogen.mem.list",
+      "version": "1",
+      "impl_ref": "packages/autogen@1.0.0/memory/list.py"
+    }
+  ]
+}

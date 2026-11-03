@@ -1,0 +1,30 @@
+version: 1
+meta:
+  name: farm_g
+  graph_version: '1'
+  entry: n1
+  input: T_in
+  output:
+    ref: T_out
+    from: n1
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+stores: []
+nodes: []
+edges: []
+policies: {}

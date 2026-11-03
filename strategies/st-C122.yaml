@@ -1,0 +1,16 @@
+id: st-C122
+name: "规则/技能极性治理：只写负向约束（「不要重构无关代码」），不写正向指令（「遵循代码风格」）"
+tier: C
+claim: "规则极性治理：随机规则与精编规则提升相当（均 +13.8pp），单独有益的全是负向约束、有害的全是正向指令"
+claimed_value:
+  metric: "（待投影：策略册无 metric 字段）"
+  direction: down
+  context: "（待投影：claimed_value 三维待投影补齐；direction 为 R1 闭集占位、非判读结论——见 needs_syntax_note）"
+sources: ["S161"]
+consensus: {corpora: 1, cards: 1}
+experiment:
+  status: inconclusive
+  exp_id: "EXP-1"
+  note: "终裁 inconclusive；n_p=23；main_diff_pp=0.0pp；mcnemar_p_one_sided=0.75；main_tost_cp90_pp=[-8.255294512711242, 8.255294512711242]pp；gate_fires=False；来源 exp1-aggregate-summary.json（镜像 sig=1dc540302dad，completed=143）；判定程序唯一性门 b-verdict-unique exit=0。主断言卡 S161 → 簇 C122（tier C）。"
+dsl_state: needs_syntax
+needs_syntax_note: "待投影：本条目由循环产线守护按 G4 契约自动初建（tier 照实=C、claim 取册内断言、experiment 填终裁 EXP-1/inconclusive）。claimed_value{metric,direction,context} 策略册无对应字段（direction 为 R1 闭集占位、非判读结论）；dsl_snippet 需 AFB 语义级撰写——投影补齐走既有待办路径（loop-state projection_todos），补前本条目不参与任何判读引用。"
