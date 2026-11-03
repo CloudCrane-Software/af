@@ -474,13 +474,21 @@ impl ExecuteUnit for GateExecuteUnit {
             GateVerdict::NeedsHuman => None,
         };
         let artifact_id = format!("{GATE_ARTIFACT_PREFIX}{}", stored.content_sha256);
+        // 基线合流对齐（feature/po-c-merge 上遗留的编译断裂，PoC-C 修复）：
+        // E 系列之后 WorkArtifact 的 content_sha256 私有、只能 from_bytes 对
+        // 实际字节计算，ExecOutput 须随附 artifact_contents。门工件沿用
+        // persist 同一 persistent_bytes（与 stored.content_sha256 同源同值），
+        // 不自报摘要。
+        let gate_bytes = result.persistent_bytes().map_err(gate_unit)?;
         Ok(ExecOutput {
-            artifacts: vec![WorkArtifact {
-                artifact_id: artifact_id.clone(),
-                is_final: true,
+            artifacts: vec![WorkArtifact::from_bytes(
+                artifact_id,
+                true,
                 // 红门/黄门也能诚实关单：这里只证明 CAS 工件结构有效，绝不表示被测通过。
-                qualified: true,
-            }],
+                true,
+                &gate_bytes,
+            )],
+            artifact_contents: vec![gate_bytes],
             outputs: vec![stored.path.clone()],
             note: format!(
                 "门工件有效=true；被测 verdict={:?}；门单执行单元成功=true（订单成功由 close 单独记）",
