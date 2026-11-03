@@ -2,8 +2,9 @@
 //!
 //! 公共 API：[`admit`]（`AdmissionRequest` → `AdmissionReceipt` | [`OrderError`]）+
 //! CLI 子命令 `af-order admit --request <admission.json> --state <dir>`（见
-//! [`crate::cli`]）。PoC-A2 骨架；决策校验链细则按任务分工留给 PoC-C（各占位
-//! 处写明交接注释与保留错误码）。
+//! [`crate::cli`]）。PoC-A2 骨架 + PoC-C 落地：OR2109/2110/2111 与 seq 单调门
+//! 已按下方口径实现（各函数 docstring 即判据）；模板语义匹配/资源可用性
+//! 等其余语义核对仍留后续批次（接口位与保留码不动）。
 //!
 //! # 固定校验顺序（钉死，不可重排）
 //!
@@ -19,10 +20,12 @@
 //!    （`WorkOrder::admission_decision_payload`）+ hash→角色上限→决策权限→
 //!    注册表真 ed25519 验签。门面不在进程内复刻校验。
 //! 4. **seq/expiry/basis/digest 复核**（OR2107/…/OR2110）：幂等窗查账
-//!    （同键同摘要 → 回执原 receipt；同 seq 异摘要 → OR2107）+ 决策有效期
+//!    （同键同摘要 → 回执原 receipt；同 seq 异摘要 → OR2107；新 seq 回退
+//!    （低于本源单已受理最大 seq）→ OR2107 单调门）+ 决策有效期
 //!    （validated_at ≥ expires_at → OR2108）；basis 逐项重算（OR2109）与
-//!    next_orders_digest 重算（OR2110）为 PoC-C 占位（接口位+保留码）。
-//! 5. **凭证求交**（OR2111，PoC-C 占位）：actor 凭证与订单凭证面求交的接口位。
+//!    next_orders_digest 重算（OR2110）（PoC-C 落地，见各自 docstring）。
+//! 5. **凭证求交**（OR2111，PoC-C 落地）：请求声明的受理所需凭证与源单持有
+//!    凭证面求交，交集为空即拒。
 //! 6. **全过后才写状态**：把 receipt 追加落盘
 //!    `<state>/orders/<id>/admissions.jsonl`（OR2112）。任一步失败 = 类型化
 //!    拒绝且**零外部效应**（不落 receipt、不动账本、不起别的进程）。
@@ -31,9 +34,10 @@
 //!
 //! `{source_stable_id}/admit/{decision_seq}/{decision_digest}`（digest = 工件
 //! canonical 字节的 SHA-256，见 [`decision_digest`]）。同键同摘要重放返回
-//! 原 receipt（`replayed=true`，零写入）；同 seq 异摘要 = OR2107 拒绝
-//! （seq 单调性细则 = PoC-C，见 [`AdmitReject::SeqConflict`] 交接注释）。
+//! 原 receipt（`replayed=true`，零写入）；同 seq 异摘要与 seq 回退（低于本
+//! 源单已受理最大 seq）= OR2107 拒绝（单调门细则见 [`AdmitReject::SeqConflict`]）。
 
+use std::collections::BTreeSet;
 use std::fs;
 
 use af_execline::{EngineClient, EngineOutcome, LedgerRecord, OrderLedger};
@@ -203,6 +207,13 @@ pub struct AdmissionRequest {
     pub resource_profile: ResourceProfileSpec,
     /// 门清单（第②步 schema）。
     pub gate_list: GateListSpec,
+    /// 计划面：本次准入声称的下一步订单集合（OR2110 重算 digest 的输入面；
+    /// 与工件内 `next_orders_digest` 必须一致，规范化口径见
+    /// [`canonical_next_orders_digest`]）。空清单 = 无后继订单（合法）。
+    pub next_orders: Vec<String>,
+    /// 凭证面：本次受理所需凭证 id 清单（OR2111 求交的请求侧；与源单持有
+    /// 凭证面求交，交集为空即拒）。至少须呈报一项源单确持有的凭证。
+    pub required_credentials: Vec<String>,
     /// 验签/受理时刻（RFC3339；缺省 = 系统钟）。调用方注入，不读工件自带时间。
     #[serde(default)]
     pub validated_at: Option<DateTime<Utc>>,
@@ -226,7 +237,9 @@ const REQUEST_FIELDS: &[&str] = &[
     "actor_registry",
     "decision",
     "gate_list",
+    "next_orders",
     "order_id",
+    "required_credentials",
     "resource_profile",
     "template",
     "validated_at",
@@ -255,6 +268,8 @@ pub fn parse_request(text: &str) -> Result<AdmissionRequest, RequestError> {
         "template",
         "resource_profile",
         "gate_list",
+        "next_orders",
+        "required_credentials",
     ] {
         if !obj.contains_key(field) {
             return Err(RequestError::MissingField(field.to_string()));
@@ -328,6 +343,40 @@ pub fn idempotency_key(source_stable_id: &str, decision_seq: u64, decision_diges
     format!("{source_stable_id}/admit/{decision_seq}/{decision_digest}")
 }
 
+/// next_orders 规范化线的域分离前缀（配方层文档口径的一部分，不另设文件）。
+pub const NEXT_ORDERS_DOMAIN: &str = "af-order/next-orders/v1";
+
+/// next_orders 计划面的确定规范化 + SHA-256（OR2110 的唯一重算口径）。
+///
+/// # 口径（PoC-C 落地，测试钉死）
+///
+/// 1. **逐项校验**：条目不得为空、不得含任何空白字符（下一步订单引用是
+///    单个 token，不是自由文本）——违反即 `Err`。
+/// 2. **确定顺序规范化**：条目按字典序排序去重（[`BTreeSet`]），消灭提交方
+///    列表顺序/重复项的漂移——`[a,b]` 与 `[b,a]`、`[a,a,b]` 规范化同线。
+/// 3. **域分离线格式**：`"{NEXT_ORDERS_DOMAIN}\n{条数}\n{逐行条目}"`，
+///    条数取去重后的行数；空清单 = 条数 0、无条目行。
+/// 4. digest = 规范化线 UTF-8 字节的 SHA-256 小写 hex。
+///
+/// 跨进程确定：同样输入必得同样 digest（生成侧 [`crate::adjudicate`] 与
+/// 受理侧本函数同用此口径，无第二套 hash）。
+pub fn canonical_next_orders_digest(next_orders: &[String]) -> Result<String, String> {
+    for entry in next_orders {
+        if entry.is_empty() || entry.chars().any(char::is_whitespace) {
+            return Err(format!("next_orders 条目不得为空或含空白: {entry:?}"));
+        }
+    }
+    let unique: BTreeSet<&str> = next_orders.iter().map(String::as_str).collect();
+    let mut canonical = format!("{NEXT_ORDERS_DOMAIN}\n{}\n", unique.len());
+    for (index, entry) in unique.iter().enumerate() {
+        if index > 0 {
+            canonical.push('\n');
+        }
+        canonical.push_str(entry);
+    }
+    Ok(sha256_hex(canonical.as_bytes()))
+}
+
 // ---------- 校验链 ----------
 
 /// admit 校验链的类型化拒绝（OR21xx 保留码表；PoC-C 占位变体已钉接口位）。
@@ -353,12 +402,11 @@ pub enum AdmitReject {
     /// 含 payload 绑定与真 ed25519 验签各层）。
     #[error("OR2106: DecisionArtifact 四层校验失败: {0}")]
     DecisionFourLayer(String),
-    /// OR2107：seq 复核失败——同 seq 异摘要（幂等冲突）。
-    ///
-    /// 交接 PoC-C：seq 单调性（新准入 seq 须 > 本源单已受理最大 seq）在同一
-    /// 查账窗落位——admissions.jsonl 已持久全部 (seq, digest)，单调门只需在此
-    /// 变体上扩判断；两个负例（同键重放回执/同 seq 异摘要拒绝）已钉死不可破。
-    #[error("OR2107: seq 复核失败（同 seq 异摘要）: {0}")]
+    /// OR2107：seq 复核失败——同 seq 异摘要（幂等冲突），或新 seq 回退
+    /// （低于本源单已受理最大 seq；PoC-C 单调门已落地在同一查账窗：
+    /// admissions.jsonl 已持久全部 (seq, digest)，单调门只在此变体上扩判断，
+    /// PoC-A 钉死的两负例——同键重放回执 / 同 seq 异摘要拒绝——不破）。
+    #[error("OR2107: seq 复核失败（同 seq 异摘要或 seq 回退）: {0}")]
     SeqConflict(String),
     /// OR2108：决策已过有效期（validated_at ≥ expires_at，恰在时刻即拒）。
     #[error("OR2108: 决策已过有效期: {0}")]
@@ -393,7 +441,7 @@ pub fn admit(
     let mut checks: Vec<String> = Vec::new();
 
     // ── 第①步：源单恢复与终态校验 ─────────────────────────────
-    let order = recover_source_order(state, &request.order_id)?;
+    let (order, records) = recover_source_order(state, &request.order_id)?;
     checks.push(CHECK_SOURCE_RECOVERY.into());
     let source_state = order.state();
     if source_state == OrderState::Cancelled {
@@ -424,12 +472,25 @@ pub fn admit(
         .iter()
         .any(|receipt| receipt.decision_seq == request.decision.decision_seq)
     {
-        // 同 seq 异摘要：幂等冲突，拒（OR2107）。seq 单调性细则 = PoC-C。
+        // 同 seq 异摘要：幂等冲突，拒（OR2107）。
         return Err(AdmitReject::SeqConflict(format!(
             "源单 {} 已受理过 seq={} 的决策（异摘要）：重放须同键同摘要，换内容须换 seq",
             request.order_id, request.decision.decision_seq
         ))
         .into());
+    }
+    // seq 单调门（OR2107，PoC-C 落地）：新准入 seq 必须 > 本源单已受理最大
+    // seq。同 seq 已被上方两臂接住（同键重放回执 / 异摘要拒绝），此处只剩
+    // 严格更小（或不可能的越序重放）——裁决被回退重放意味着旧结论盖新章，
+    // 一律拒。admissions.jsonl 已持久全部 (seq, digest)，查账即真值。
+    if let Some(max_seen) = prior.iter().map(|receipt| receipt.decision_seq).max() {
+        if request.decision.decision_seq < max_seen {
+            return Err(AdmitReject::SeqConflict(format!(
+                "源单 {} 的 decision_seq={} 回退（已受理最大 seq={}）：新 seq 必须单调递增",
+                request.order_id, request.decision.decision_seq, max_seen
+            ))
+            .into());
+        }
     }
 
     // ── 第②步：模板/资源画像/门清单 schema 校验 ────────────────
@@ -454,7 +515,7 @@ pub fn admit(
     checks.push(CHECK_DECISION_FOUR_LAYER.into());
 
     // ── 第④步：seq/expiry/basis/digest 复核 ───────────────────
-    // seq：幂等窗已处理重放/冲突；单调性细则 = PoC-C（见 SeqConflict 交接注释）。
+    // seq：幂等窗已处理重放/冲突/单调回退（见上方单调门）。
     checks.push(CHECK_SEQ_WINDOW.into());
     if now >= request.decision.expires_at {
         return Err(AdmitReject::Expired(format!(
@@ -464,13 +525,13 @@ pub fn admit(
         .into());
     }
     checks.push(CHECK_EXPIRY.into());
-    recheck_basis(&request.decision)?;
+    recheck_basis(&request.decision, &order, &records, state, &request.order_id)?;
     checks.push(CHECK_BASIS_RECHECK.into());
-    recheck_next_orders_digest(&request.decision)?;
+    recheck_next_orders_digest(&request.decision, &request.next_orders)?;
     checks.push(CHECK_DIGEST_RECHECK.into());
 
-    // ── 第⑤步：凭证求交（PoC-C 占位）──────────────────────────
-    intersect_credentials(&request.decision)?;
+    // ── 第⑤步：凭证求交（PoC-C 落地）──────────────────────────
+    intersect_credentials(&request.required_credentials, &order, state, &request.order_id)?;
     checks.push(CHECK_CREDENTIAL_INTERSECTION.into());
 
     // ── 第⑥步：全过后才写状态 ─────────────────────────────────
@@ -498,8 +559,14 @@ pub fn admit(
     Ok(receipt)
 }
 
-/// 从 state 目录恢复源单最近快照（ledger 最后一条带快照行）。
-fn recover_source_order(state: &StateDir, order_id: &str) -> Result<WorkOrder, OrderError> {
+/// 从 state 目录恢复源单最近快照与全量账本行（ledger 最后一条带快照行）。
+/// 账本行随快照一并返回：basis 的 `ledger:` 族条目按行重算摘要用（只读，
+/// 不重复落盘）。pub(crate)：裁决环 [`crate::adjudicate`] 的生成/闭环腿与
+/// admit 链同源恢复，不另造第二套恢复口径。
+pub(crate) fn recover_source_order(
+    state: &StateDir,
+    order_id: &str,
+) -> Result<(WorkOrder, Vec<LedgerRecord>), OrderError> {
     // order_id 过路径安全门（与 submit/show 同门：目录名不得越出 orders/）。
     crate::spec::validate_order_id(order_id).map_err(|err| {
         OrderError::from(AdmitReject::SourceRecovery(format!(
@@ -520,13 +587,14 @@ fn recover_source_order(state: &StateDir, order_id: &str) -> Result<WorkOrder, O
             ledger_path.display()
         )))
     })?;
-    latest_snapshot(&records).ok_or_else(|| {
+    let order = latest_snapshot(&records).ok_or_else(|| {
         OrderError::from(AdmitReject::SourceRecovery(format!(
             "全账本无订单快照（{} 共 {} 行），无从恢复源单",
             ledger_path.display(),
             records.len()
         )))
-    })
+    })?;
+    Ok((order, records))
 }
 
 /// 账本最后一条带快照的行 = 源单现态。
@@ -581,36 +649,265 @@ fn validate_decision_via_engine(
     }
 }
 
-/// 第④步-basis 复核（**PoC-C 落位**，保留码 OR2109）。
+// ---------- 第④⑤步重算细则（PoC-C 落地） ----------
+
+/// basis 条目文法的实体种类（`<kind>:<entity_id>:<sha256>` 的 kind 段）。
+const BASIS_KIND_ARTIFACT: &str = "artifact";
+const BASIS_KIND_VOUCHER: &str = "voucher";
+const BASIS_KIND_LEDGER: &str = "ledger";
+
+/// 源单工件实际字节所在目录内的文件名约定（af-execline 执行单元落盘形态：
+/// `<order_dir>/artifacts/<artifact_id>.json`；见 af-execline exec.rs stub 单元）。
+fn artifact_file_path(state: &StateDir, order_id: &str, artifact_id: &str) -> std::path::PathBuf {
+    state
+        .order_dir(order_id)
+        .join("artifacts")
+        .join(format!("{artifact_id}.json"))
+}
+
+/// BudgetVoucher 的内容摘要（canonical JSON 字节 SHA-256，字段序即 serde
+/// 声明序，跨进程确定）。`voucher:` 族 basis 与生成侧共用同一口径。
+pub fn budget_voucher_digest(voucher: &af_workorder::BudgetVoucher) -> String {
+    let bytes = serde_json::to_vec(voucher).expect("BudgetVoucher 只含可序列化字段");
+    sha256_hex(&bytes)
+}
+
+/// 账本行的内容摘要（canonical JSON 字节 SHA-256，行序字段即 serde 声明序，
+/// 跨进程确定）。`ledger:` 族 basis 与生成侧共用同一口径。
+pub fn ledger_record_digest(record: &LedgerRecord) -> String {
+    let bytes = serde_json::to_vec(record).expect("LedgerRecord 只含可序列化字段");
+    sha256_hex(&bytes)
+}
+
+/// 第④步-basis 复核（**PoC-C 落地**，保留码 OR2109）。
 ///
-/// 交接：逐条独立重算 basis 条目（条目引用的工件/快照以实际字节重算摘要，
-/// 不信工件自报），任一不符 → [`AdmitReject::BasisRecompute`]。本批骨架不执行
-/// 语义核对（占位恒过），但链位、保留码与调用点在链序第④步内已钉死不得移动。
-fn recheck_basis(_decision: &DecisionArtifact) -> Result<(), AdmitReject> {
+/// # 口径（docstring 即判据，测试钉死）
+///
+/// basis 是"决策依据"清单，每条必须独立重算通过，任一不符即拒：
+///
+/// 1. **非空**：basis 为空清单 → 拒（没有依据的决策不受理）。
+/// 2. **文法**：每条 = `<kind>:<entity_id>:<sha256>`，恰好三段（':' 分隔），
+///    三段皆非空，末段是 64 位小写 hex；kind ∈ {artifact, voucher, ledger}。
+///    文法不符 → 拒（伪造条目）。
+/// 3. **实体可解析**（源单工件/凭证/账本三处逐一查）：
+///    - `artifact:<artifact_id>:<digest>`：实体 = 源单快照上同 id 工件，查无 → 拒；
+///    - `voucher:<voucher_id>:<digest>`：实体 = 源单快照绑定的预算凭证，
+///      未绑凭证或 id 不符 → 拒；
+///    - `ledger:<seq>:<digest>`：实体 = 源单账本 seq 号匹配的行，查无 → 拒。
+/// 4. **摘要重算（不信声称）**：
+///    - artifact：先比快照 `content_sha256`（登记面）；盘上
+///      `artifacts/<artifact_id>.json` 在场时再对**实际字节**重算 SHA-256，
+///      字节摘要与登记面漂移 = 账面/实物不一致，一并拒——登记摘要只能由
+///      实际字节算出（af-workorder `WorkArtifact::from_bytes` 同纪律）；
+///    - voucher：比 [`budget_voucher_digest`]（canonical JSON）；
+///    - ledger：比 [`ledger_record_digest`]（canonical JSON）。
+///
+/// 链位、保留码与调用点在链序第④步内已钉死不得移动（PoC-A 交接约束）。
+fn recheck_basis(
+    decision: &DecisionArtifact,
+    order: &WorkOrder,
+    records: &[LedgerRecord],
+    state: &StateDir,
+    order_id: &str,
+) -> Result<(), AdmitReject> {
+    if decision.basis.is_empty() {
+        return Err(AdmitReject::BasisRecompute(
+            "basis 为空：决策必须逐条引用可解析的依据实体".into(),
+        ));
+    }
+    for entry in &decision.basis {
+        recheck_basis_entry(entry, order, records, state, order_id)?;
+    }
     Ok(())
 }
 
-/// 第④步-digest 复核（**PoC-C 落位**，保留码 OR2110）。
+/// 单条 basis 的独立重算（见 [`recheck_basis`] 口径 2-4；逐条互不影响）。
+fn recheck_basis_entry(
+    entry: &str,
+    order: &WorkOrder,
+    records: &[LedgerRecord],
+    state: &StateDir,
+    order_id: &str,
+) -> Result<(), AdmitReject> {
+    let reject = |reason: String| AdmitReject::BasisRecompute(format!("条目 {entry:?}: {reason}"));
+    let segments: Vec<&str> = entry.split(':').collect();
+    let &[kind, entity_id, claimed] = segments.as_slice() else {
+        return Err(reject(format!(
+            "文法不符：须为 <kind>:<entity_id>:<sha256>，实得 {} 段",
+            segments.len()
+        )));
+    };
+    if kind.is_empty() || entity_id.is_empty() {
+        return Err(reject("kind/entity_id 段为空".into()));
+    }
+    if !is_sha256_hex(claimed) {
+        return Err(reject("digest 段不是 64 位小写 SHA-256 hex".into()));
+    }
+    match kind {
+        BASIS_KIND_ARTIFACT => {
+            let artifact = order
+                .artifacts()
+                .iter()
+                .find(|artifact| artifact.artifact_id == entity_id)
+                .ok_or_else(|| {
+                    reject(format!(
+                        "实体不存在：源单 {} 无工件 {entity_id:?}",
+                        order.id()
+                    ))
+                })?;
+            let registered = artifact.content_sha256();
+            // 盘上实际字节在场时以字节为准重算；缺席时账本快照即恢复源
+            // （ADR-003：账本自成恢复源，登记摘要本就出自 attach 时实际字节）。
+            let artifact_path = artifact_file_path(state, order_id, entity_id);
+            if artifact_path.is_file() {
+                let bytes = fs::read(&artifact_path).map_err(|err| {
+                    reject(format!("工件字节读取失败 {}: {err}", artifact_path.display()))
+                })?;
+                let actual = sha256_hex(&bytes);
+                if actual != registered {
+                    return Err(reject(format!(
+                        "工件 {entity_id} 账面/字节漂移：登记 {registered}，实算 {actual}"
+                    )));
+                }
+            }
+            if claimed != registered {
+                return Err(reject(format!(
+                    "摘要不符：声称 {claimed}，实体 {registered}"
+                )));
+            }
+            Ok(())
+        }
+        BASIS_KIND_VOUCHER => {
+            let voucher = order.budget_voucher().ok_or_else(|| {
+                reject(format!("实体不存在：源单 {} 未绑定预算凭证", order.id()))
+            })?;
+            if voucher.voucher_id != entity_id {
+                return Err(reject(format!(
+                    "实体不存在：源单绑定凭证 id={}，条目指向 {entity_id:?}",
+                    voucher.voucher_id
+                )));
+            }
+            let actual = budget_voucher_digest(voucher);
+            if claimed != actual {
+                return Err(reject(format!(
+                    "摘要不符：声称 {claimed}，实体 {actual}"
+                )));
+            }
+            Ok(())
+        }
+        BASIS_KIND_LEDGER => {
+            let seq: u64 = entity_id.parse().map_err(|_| {
+                reject("ledger 条目的 entity_id 须是账本 seq（十进制 u64）".to_string())
+            })?;
+            let record = records.iter().find(|record| record.seq == seq).ok_or_else(|| {
+                reject(format!("实体不存在：账本无 seq={seq} 行（共 {} 行）", records.len()))
+            })?;
+            let actual = ledger_record_digest(record);
+            if claimed != actual {
+                return Err(reject(format!(
+                    "摘要不符：声称 {claimed}，实体 {actual}"
+                )));
+            }
+            Ok(())
+        }
+        other => Err(reject(format!(
+            "未知实体种类 {other:?}（artifact|voucher|ledger）"
+        ))),
+    }
+}
+
+/// 第④步-digest 复核（**PoC-C 落地**，保留码 OR2110）。
 ///
-/// 交接：对 next_orders 计划面独立重算 digest，与工件内 `next_orders_digest`
-/// 比对（防换计划面），不符 → [`AdmitReject::DigestRecompute`]。占位恒过。
-fn recheck_next_orders_digest(_decision: &DecisionArtifact) -> Result<(), AdmitReject> {
+/// 口径：对请求的计划面 [`AdmissionRequest::next_orders`] 按
+/// [`canonical_next_orders_digest`] 的确定规范化独立重算 SHA-256，与工件
+/// 被签字节里的 `next_orders_digest` 严格比对（大小写敏感）；不符 → 拒
+/// （防换计划面：签字的是 A 计划面，提交的却是 B 计划面）。
+fn recheck_next_orders_digest(
+    decision: &DecisionArtifact,
+    next_orders: &[String],
+) -> Result<(), AdmitReject> {
+    let actual = canonical_next_orders_digest(next_orders).map_err(|reason| {
+        AdmitReject::DigestRecompute(format!("计划面规范化失败: {reason}"))
+    })?;
+    if decision.next_orders_digest != actual {
+        return Err(AdmitReject::DigestRecompute(format!(
+            "计划面摘要不符：工件声称 {}，请求 next_orders 实算 {actual}",
+            decision.next_orders_digest
+        )));
+    }
     Ok(())
 }
 
-/// 第⑤步凭证求交（**PoC-C 落位**，保留码 OR2111）。
+/// 第⑤步凭证求交（**PoC-C 落地**，保留码 OR2111）。
 ///
-/// 交接：actor 凭证 ∩ 订单凭证面（voucher/credential 族的交集判定，Cedar
-/// 扩面前的注册表+真验签先行腿，T6 终裁），不交 →
-/// [`AdmitReject::CredentialIntersection`]。占位恒过。
-fn intersect_credentials(_decision: &DecisionArtifact) -> Result<(), AdmitReject> {
+/// # 口径
+///
+/// - **源单持有凭证面**：① 源单快照绑定的预算凭证 id（账本恢复源，必在）；
+///   ② 盘上 `voucher.json` 的凭证 id（submit 签发材料；缺席 = 不计入，
+///   在场但损坏 = fail-closed 拒绝，坏凭证材料不得被静默略过）。
+/// - **受理所需凭证**：[`AdmissionRequest::required_credentials`] 声明的 id
+///   清单（受理方呈报的凭证授权；空白条目 = 拒）。
+/// - **判定**：两集合按凭证 id 精确匹配求交；交集为空（含请求侧空清单）
+///   → 拒——受理必须落在源单自己的凭证链上，呈报一套与源单无关的凭证
+///   视为未获授权。
+fn intersect_credentials(
+    required: &[String],
+    order: &WorkOrder,
+    state: &StateDir,
+    order_id: &str,
+) -> Result<(), AdmitReject> {
+    let mut held: Vec<String> = Vec::new();
+    if let Some(voucher) = order.budget_voucher() {
+        held.push(voucher.voucher_id.clone());
+    }
+    let voucher_path = state.order_dir(order_id).join(crate::voucher::VOUCHER_FILE);
+    if voucher_path.is_file() {
+        let text = fs::read_to_string(&voucher_path).map_err(|err| {
+            AdmitReject::CredentialIntersection(format!(
+                "源单凭证材料读取失败 {}: {err}",
+                voucher_path.display()
+            ))
+        })?;
+        let record: crate::voucher::VoucherRecord =
+            serde_json::from_str(&text).map_err(|err| {
+                AdmitReject::CredentialIntersection(format!(
+                    "源单凭证材料损坏 {}（fail-closed）: {err}",
+                    voucher_path.display()
+                ))
+            })?;
+        held.push(record.voucher_id);
+    }
+    if required.is_empty() {
+        return Err(AdmitReject::CredentialIntersection(format!(
+            "受理所需凭证为空清单：须呈报至少一项源单持有的凭证（持有面 = {held:?}）"
+        )));
+    }
+    for entry in required {
+        if entry.trim().is_empty() {
+            return Err(AdmitReject::CredentialIntersection(
+                "受理所需凭证含空白条目".into(),
+            ));
+        }
+    }
+    let matched: Vec<&str> = required
+        .iter()
+        .map(String::as_str)
+        .filter(|entry| held.iter().any(|id| id == entry))
+        .collect();
+    if matched.is_empty() {
+        return Err(AdmitReject::CredentialIntersection(format!(
+            "凭证交集为空：呈报 {required:?}，源单持有面 {held:?}"
+        )));
+    }
     Ok(())
 }
 
 // ---------- 受理账本 ----------
 
 /// 读回全部已受理回执（缺文件 = 空清单；坏行 fail-loud 为状态读取失败）。
-fn load_receipts(state: &StateDir, order_id: &str) -> Result<Vec<AdmissionReceipt>, OrderError> {
+/// 公开给 [`crate::adjudicate`]：裁决环取"本源单已受理最大 seq"定下一笔
+/// 单调 seq，与 admit 链幂等窗同源同读，不另造第二套回执读取。
+pub fn load_receipts(state: &StateDir, order_id: &str) -> Result<Vec<AdmissionReceipt>, OrderError> {
     let path = admissions_path(state, order_id);
     if !path.is_file() {
         return Ok(Vec::new());
@@ -717,10 +1014,12 @@ mod tests {
             af_workorder::GraphVersion::new("g-1"),
             af_workorder::Sla::new(None, af_workorder::Priority::Normal),
         );
+        // PoC-C 口径：计划面 digest 由同一规范化函数现算，不再手抄占位 hex。
+        let next_orders = vec![format!("{order_id}-rw")];
         let attributes = af_workorder::DecisionAttributes::new(
             7,
-            vec!["artifact:fa-1:qualified".into()],
-            "a".repeat(64),
+            vec![format!("artifact:fa-1:{}", "a".repeat(64))],
+            canonical_next_orders_digest(&next_orders).unwrap(),
             time(DECISION_EXPIRY),
         );
         // 按 admission payload 真签（admit 链第③步绑定的是
@@ -762,6 +1061,8 @@ mod tests {
                     required: true,
                 }],
             },
+            next_orders,
+            required_credentials: vec![format!("bv-{order_id}")],
             validated_at: Some(time(NOW)),
         }
     }
@@ -842,6 +1143,8 @@ mod tests {
             "template": serde_json::to_value(valid_request("x").template).unwrap(),
             "resource_profile": serde_json::to_value(valid_request("x").resource_profile).unwrap(),
             "gate_list": serde_json::to_value(valid_request("x").gate_list).unwrap(),
+            "next_orders": ["wo-p-rw"],
+            "required_credentials": ["bv-wo-p"],
         });
         let text = serde_json::to_string(&base).unwrap();
         let parsed = parse_request(&text).expect("合法请求应可解析");
@@ -902,5 +1205,119 @@ mod tests {
         assert_eq!(digest.len(), 64);
         let key = idempotency_key("sid-abc", 7, &digest);
         assert_eq!(key, format!("sid-abc/admit/7/{digest}"));
+    }
+
+    /// OR2110 口径单元面：规范化确定（排序去重）、域分离、空白条目拒绝。
+    #[test]
+    fn canonical_next_orders_digest_is_sorted_deduped_and_domain_separated() {
+        let a = canonical_next_orders_digest(&["wo-b".into(), "wo-a".into()]).unwrap();
+        let b = canonical_next_orders_digest(&["wo-a".into(), "wo-b".into(), "wo-b".into()])
+            .unwrap();
+        assert_eq!(a, b, "排序去重后同集合同 digest");
+        let empty = canonical_next_orders_digest(&[]).unwrap();
+        assert_eq!(empty.len(), 64);
+        assert_ne!(empty, a, "空计划面与非空计划面摘要必不同");
+        // 域分离：线里含 domain 前缀与条数（对拍同线重算）。
+        let line = format!(
+            "{NEXT_ORDERS_DOMAIN}\n2\nwo-a\nwo-b"
+        );
+        assert_eq!(a, sha256_hex(line.as_bytes()));
+        assert!(canonical_next_orders_digest(&["含 空格".into()]).is_err());
+        assert!(canonical_next_orders_digest(&["".into()]).is_err());
+    }
+
+    /// OR2109 口径单元面：文法三段式 + 未知 kind + 非 hex digest。
+    #[test]
+    fn basis_entry_grammar_is_rejected_before_entity_lookup() {
+        let order = WorkOrder::new(
+            "wo-basis",
+            af_workorder::GraphVersion::new("g-1"),
+            af_workorder::Sla::new(None, af_workorder::Priority::Normal),
+        );
+        let recheck = |entry: &str| {
+            recheck_basis_entry(entry, &order, &[], &StateDir::new("/nonexistent"), "wo-basis")
+                .err()
+                .map(|err| err.to_string())
+        };
+        let text = recheck("没有分隔符").unwrap();
+        assert!(text.contains("OR2109") && text.contains("文法"), "{text}");
+        let text = recheck("artifact:fa-1").unwrap();
+        assert!(text.contains("文法"), "{text}");
+        let text = recheck("magic:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+            .unwrap();
+        assert!(text.contains("未知实体种类"), "{text}");
+        let text = recheck("artifact:fa-1:NOTHEX").unwrap();
+        assert!(text.contains("hex"), "{text}");
+        // 实体不存在（源单无工件/未绑凭证/空账本）。
+        let text = recheck("artifact:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+            .unwrap();
+        assert!(text.contains("实体不存在"), "{text}");
+        let text = recheck("voucher:bv-x:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+            .unwrap();
+        assert!(text.contains("实体不存在"), "{text}");
+        let text = recheck("ledger:0:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+            .unwrap();
+        assert!(text.contains("实体不存在"), "{text}");
+    }
+
+    /// OR2109 正例单元面：voucher 条目摘要 = canonical JSON 摘要；
+    /// ledger 条目摘要 = 账本行 canonical JSON 摘要（换行字节即红）。
+    #[test]
+    fn basis_voucher_and_ledger_entries_resolve_and_recompute() {
+        let mut order = WorkOrder::new(
+            "wo-basis-ok",
+            af_workorder::GraphVersion::new("g-1"),
+            af_workorder::Sla::new(None, af_workorder::Priority::Normal),
+        );
+        let voucher = af_workorder::BudgetVoucher {
+            voucher_id: "bv-ok".into(),
+            amount: 42,
+            signed: true,
+        };
+        order.attach_budget_voucher(voucher.clone()).unwrap();
+        let record = LedgerRecord {
+            seq: 0,
+            ts_ms: 1_767_225_600_000,
+            order_id: "wo-basis-ok".into(),
+            stable_id: order.stable_id().as_str().to_string(),
+            op: "create_order".into(),
+            idem_key: format!("{}/create_order", order.stable_id()),
+            ok: true,
+            state_after: Some("Created".into()),
+            error_kind: None,
+            error_detail: None,
+            order_after: None,
+        };
+        let records = vec![record.clone()];
+        let voucher_entry = format!("voucher:bv-ok:{}", budget_voucher_digest(&voucher));
+        recheck_basis_entry(
+            &voucher_entry,
+            &order,
+            &records,
+            &StateDir::new("/nonexistent"),
+            "wo-basis-ok",
+        )
+        .unwrap_or_else(|err| panic!("凭证条目应过: {err}"));
+        let ledger_entry = format!("ledger:0:{}", ledger_record_digest(&record));
+        recheck_basis_entry(
+            &ledger_entry,
+            &order,
+            &records,
+            &StateDir::new("/nonexistent"),
+            "wo-basis-ok",
+        )
+        .unwrap_or_else(|err| panic!("账本条目应过: {err}"));
+        // 摘要换一字节即红（重算口径真的在比内容）。
+        let bad_ledger = format!("ledger:0:{}", "0".repeat(64));
+        let text = recheck_basis_entry(
+            &bad_ledger,
+            &order,
+            &records,
+            &StateDir::new("/nonexistent"),
+            "wo-basis-ok",
+        )
+        .unwrap_err()
+        .to_string();
+        assert!(text.contains("摘要不符"), "{text}");
     }
 }
