@@ -2,7 +2,9 @@
 
 归属：v0.3 §二 阶段1 PoC D「事件层分工」+ T6 终裁落地。
 验收口径：Trigger 收件箱 → Fast Path 投递 → Router(Slow Path) 产 DecisionArtifact
-经 admit 生效，链路可跑（29/29 自检，tests/selfcheck.py）。
+经 admit 生效，链路可跑（自检 36/36：原批 29 + 修复批 7 新检，tests/selfcheck.py；
+原批两项高危〔收件端 secret 缺失空密钥降级 fail-open / 消费腿吃冗余 parsed body
+可篡改派单〕已于 2026-11-03 修复批修死，见 30-工件/janitor-20261103/pocd-fix-*.md）。
 
 ```
 webhook(HMAC) ──► tools/trigger-inbox.py（外层工作区，只读注册表+写 inbox）
@@ -26,8 +28,16 @@ webhook(HMAC) ──► tools/trigger-inbox.py（外层工作区，只读注册�
 - 桥：`bridge/`（独立 cargo 工程；策略不进桥，桥留显式 --role/--decision 仅供负例探针）
 - 皮：`router/slow_path.py`（六步编排）、`admit/guard.py`（三禁最小集+Reviser 钳制）、
   `cli/cli.py`（decide/probe/status/chat——chat 必拒）
-- 自检：`tests/selfcheck.py`（正例链路+负例必红+安灯两态，沙箱 AF_TRIGGER_HOME 隔离，
-  CHANGELOG monkeypatch 不写生产）；`tests/event-router-poCD.diff`=在役路由器改动全量 diff；
+- **三禁辖界（勿扩大读）**：不持 shell/root、release 唯一写者、凭证只收紧——三条
+  **只对本目录 poc/poc-super-agent/ 最小皮成立**（guard.py CAPABILITY_DENYLIST +
+  selfcheck S4 AST 级断言）。在役 event-router 进程既有 root SSH+shell=True 能力面是
+  **既有事实**，属遗留风险另档登记（30-工件/janitor-20261103/pocd-router-capability-debt.md），
+  不得以最小皮 denylist 冒充整个进程无此能力。
+- 自检：`tests/selfcheck.py`（正例链路+负例必红+安灯两态+修复批 7 新检，沙箱
+  AF_TRIGGER_HOME 隔离，CHANGELOG monkeypatch 不写生产+Z1 全程 sha 前后一致断言）；
+  `tests/event-router-poCD.diff`=在役路由器改动全量 diff（相对 `tools/event-router.py.20261103-pre-POCD.bak`：
+  原批 322 insertions/1 deletion，修复批后全量 406/1；可复跑
+  `git diff --no-index --numstat tools/event-router.py.20261103-pre-POCD.bak tools/event-router.py`）；
   `tools-mirror/trigger-inbox.py`=外层工具镜像（正本=工作区 tools/trigger-inbox.py）
 
 MES complete→裁决单消费腿=PoC-C 职责，本目录不含（两批不共改一函数）。

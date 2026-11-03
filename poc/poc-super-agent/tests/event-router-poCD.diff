@@ -1,5 +1,5 @@
 --- /home/pan-ding/workspace/agent黑灯工厂/tools/event-router.py.20261103-pre-POCD.bak	2026-11-03 19:02:07.516173313 +0800
-+++ /home/pan-ding/workspace/agent黑灯工厂/tools/event-router.py	2026-11-03 19:17:06.064851491 +0800
++++ /home/pan-ding/workspace/agent黑灯工厂/tools/event-router.py	2026-11-03 20:00:28.167717273 +0800
 @@ -276,7 +276,12 @@
                    # 收割子进程的 [otel] 逐条记账原被 `2>&1 | tail -1` 整段吃掉、汇总行里的
                    # otel 记账无人解析——现记在本键（summary=解析出的 spans/metrics/errors/
@@ -14,7 +14,7 @@
  
  
  def load_state():
-@@ -2450,6 +2455,315 @@
+@@ -2450,6 +2455,399 @@
      return len(stuck)
  
  
@@ -92,6 +92,100 @@
 +    同内容必然同单号——重放/重复投递在派单面天然幂等（状态文件之外的第三道对账锚）。"""
 +    h = hashlib.sha256("|".join([repo, suite, subject, recipe_digest]).encode("utf-8")).hexdigest()
 +    return f"{suite}-{repo.replace('/', '-')}-{h[:16]}"
++
++
++def _trigger_verify_envelope(env, source, delivery_id, reg):
++    """只读已验消息·信封核对（2026-11-03 修复批修死高危2：篡改派单）。
++    唯一可信载荷=body_b64（payload_sha256 自证）；派单决策输入
++    repo/event/delivery/subject/dedup_key **一律从重解析 body_b64 取**，
++    不消费信封冗余 parsed body（env['body'] 可被篡改而 hash 不破——信封
++    非自证）。信封冗余字段（event_type/delivery_id/dedup_key/thread_key/
++    body）逐项与重解析核对，任一不符=拒读（返回原因，调用方记拒读痕迹）。
++    推导公式=trigger-inbox envelope_for 的镜像（同仓两处，改公式须两处同步）。
++    返回 (facts, []) 或 (None, reasons)。"""
++    import base64
++    reasons = []
++    if env.get("contract") != TRIGGER_CONTRACT:
++        reasons.append(f"contract 不符: {str(env.get('contract'))[:40]!r}")
++    b64 = env.get("body_b64")
++    raw = None
++    if not isinstance(b64, str) or not b64:
++        reasons.append("body_b64 缺失/非字符串")
++    else:
++        try:
++            raw = base64.b64decode(b64, validate=True)
++        except Exception as e:
++            reasons.append(f"body_b64 非法 base64: {type(e).__name__}")
++    parsed = None
++    if raw is not None:
++        try:
++            parsed = json.loads(raw.decode("utf-8"))
++        except Exception as e:
++            reasons.append(f"body_b64 非 UTF-8 JSON: {type(e).__name__}")
++        if parsed is not None and not isinstance(parsed, dict):
++            reasons.append("body_b64 顶层非 JSON 对象")
++            parsed = None
++        if parsed is not None and env.get("payload_sha256") != hashlib.sha256(raw).hexdigest():
++            reasons.append("payload_sha256 对 body_b64 复算不符（篡改痕迹）")
++    if parsed is None or reasons:
++        return None, reasons
++    # ---- 从已验 body_b64 重解析推导（envelope_for 同公式） ----
++    repo_obj = parsed.get("repository") or {}
++    repo = str(repo_obj.get("full_name") or repo_obj.get("name") or "unknown-repo")
++    etype = parsed.get("event")
++    after = str(parsed.get("after") or parsed.get("sha") or "")
++    pr = parsed.get("pull_request") or {}
++    head = str((pr.get("head") or {}).get("sha") or parsed.get("head_sha") or "")
++    if etype == "push":
++        num = ""
++        subject = after or delivery_id
++        dedup_key = f"push:{repo}:{after}"
++    elif etype == "pull_request":
++        num = pr.get("number") or parsed.get("number") or "?"
++        subject = head or delivery_id
++        dedup_key = f"pull_request:{repo}:{num}:{head}"
++    else:
++        num = ""
++        subject = head or delivery_id
++        dedup_key = f"{etype}:{repo}"
++    # ---- 信封冗余字段逐项核对（被篡=拒读，不猜不改） ----
++    if not isinstance(etype, str) or not etype:
++        reasons.append("重解析 event 缺失/非字符串")
++    elif env.get("event_type") != etype:
++        reasons.append(f"event_type 信封={env.get('event_type')!r} ≠ 重解析={etype!r}")
++    if env.get("delivery_id") != delivery_id:
++        reasons.append(f"delivery_id 信封={env.get('delivery_id')!r} ≠ 文件名={delivery_id!r}")
++    v_del = parsed.get("delivery_id")
++    if isinstance(v_del, str) and v_del and v_del != delivery_id:
++        reasons.append(f"delivery_id body={v_del!r} ≠ 文件名={delivery_id!r}")
++    if env.get("dedup_key") != dedup_key:
++        reasons.append(f"dedup_key 信封={str(env.get('dedup_key'))[:60]!r} ≠ 重推导={dedup_key!r}")
++    if "body" in env and env.get("body") != parsed:
++        reasons.append("冗余 parsed body 与 body_b64 重解析不一致（篡改痕迹；"
++                       "本腿不消费 parsed body，仅核对）")
++    if etype in ("push", "pull_request"):
++        domain = "unknown"
++        for s in reg.get("sources", []):
++            if s.get("name") == source:
++                domain = s.get("domain") or "unknown"
++                break
++        tk = (f"{domain}:{repo}@{after[:12]}" if etype == "push"
++              else f"{domain}:{repo}#{num}")
++        if env.get("thread_key") != tk:
++            reasons.append(f"thread_key 信封={str(env.get('thread_key'))[:60]!r} ≠ 重推导={tk!r}")
++    if reasons:
++        return None, reasons
++    return {"repo": repo, "etype": etype, "action": str(parsed.get("action") or ""),
++            "subject": subject, "dedup_key": dedup_key}, []
++
++
++def _trigger_reject(st, dk, path, reason):
++    """拒读登记（不消费不派单；原因进状态面 trigger_leg.rejected，一次一条）。"""
++    leg = st.setdefault("trigger_leg", {})
++    rejected = leg.setdefault("rejected", {})
++    if dk not in rejected:
++        rejected[dk] = {"ts": time.time(), "reason": str(reason)[:300]}
++        log(f"拒读未验/不符消息（不消费不派单）: {path}: {str(reason)[:200]}")
 +
 +
 +def _trigger_consumed_ledger():
@@ -198,7 +292,10 @@
 +def poll_triggers(st):
 +    """Trigger 收件箱消费腿（PoC-D）：只读**已验消息**（trigger-inbox 落盘时已
 +    HMAC 验签+白名单；本腿再核信封完整性=contract 对+payload_sha256 对 body_b64
-+    复算——防收件箱文件被篡改），按注册表映射套件，产派单记录。**不执行门套件**。
++    复算，且**派单决策输入一律从已验 body_b64 重解析取**、信封冗余字段逐项核对
++    ——防收件箱文件被篡改；2026-11-03 修复批修死『篡改 parsed body 而保留合法
++    body_b64+hash 可按篡改字段派单』高危2），按注册表映射套件，产派单记录。
++    **不执行门套件**。
 +    防重放三道：consumed.jsonl 游标（真源）/dedup_key（业务内容）/order_id（确定性
 +    单号）。异常不带崩主循环（外层还有 try，这里内层再兜一层=与全线护栏一致）。"""
 +    from datetime import datetime, timezone
@@ -239,35 +336,22 @@
 +        dk = f"{source}/{delivery_id}"
 +        if dk in dids or delivery_id in (st["trigger_consumed"] or {}):
 +            continue
-+        # 只读已验消息：信封契约头 + payload_sha256 对 body_b64 复算
++        # 只读已验消息（高危2 修复批）：信封契约头 + payload_sha256 对 body_b64
++        # 复算，且派单决策输入（repo/event/delivery/subject/dedup_key）一律从
++        # **已验 body_b64 重解析**取——不消费信封冗余 parsed body；信封冗余字段
++        # 逐项与重解析核对，任一不符=拒读记原因（防收件箱文件被篡改后按篡改
++        # 字段派单：改 parsed body/信封字段而保留合法 body_b64+hash 旧版可过）。
 +        try:
 +            env = json.load(open(path, encoding="utf-8"))
 +        except Exception as e:
 +            log(f"触发信封不可读（跳过）: {path}: {type(e).__name__}: {str(e)[:80]}")
 +            continue
-+        import base64
-+        ok = (env.get("contract") == TRIGGER_CONTRACT and isinstance(env.get("body_b64"), str)
-+              and env.get("payload_sha256") == hashlib.sha256(
-+                  base64.b64decode(env["body_b64"])).hexdigest())
-+        if not ok:
-+            leg = st.setdefault("trigger_leg", {})
-+            rejected = leg.setdefault("rejected", {})
-+            if dk not in rejected:
-+                rejected[dk] = time.time()
-+                log(f"拒读未验消息（信封契约/哈希不符，不消费不派单）: {path}")
++        facts, mismatches = _trigger_verify_envelope(env, source, delivery_id, reg)
++        if facts is None:
++            _trigger_reject(st, dk, path, "; ".join(mismatches) or "未知原因")
 +            continue
-+        etype = env.get("event_type")
-+        body = env.get("body") if isinstance(env.get("body"), dict) else {}
-+        repo = str((body.get("repository") or {}).get("full_name")
-+                   or (body.get("repository") or {}).get("name") or "unknown-repo")
-+        action = str(body.get("action") or "")
-+        dedup_key = str(env.get("dedup_key") or f"{etype}:{repo}:{delivery_id}")
-+        if etype == "push":
-+            subject = str(body.get("after") or body.get("sha") or delivery_id)
-+        else:
-+            pr = body.get("pull_request") or {}
-+            subject = str((pr.get("head") or {}).get("sha") or body.get("head_sha")
-+                          or delivery_id)
++        etype, repo, action = facts["etype"], facts["repo"], facts["action"]
++        subject, dedup_key = facts["subject"], facts["dedup_key"]
 +        suite = _suite_for_event(reg, repo, etype, action)
 +        rec_common = {"delivery_id": delivery_id, "source": source, "event_type": etype,
 +                      "thread_key": env.get("thread_key"), "dedup_key": dedup_key,
@@ -330,7 +414,7 @@
  def main():
      st = load_state()
      # 版本钉（2026-11-03 在役换码批）：起跑即把「在役载入源码指纹」登记进状态面并落盘
-@@ -2508,6 +2822,13 @@
+@@ -2508,6 +2906,13 @@
                  arb_reissue_accounting(st)
              except Exception as e:  # noqa: BLE001 - 消费腿异常不许带崩主循环
                  log(f"零终裁重派账消费腿异常（不阻塞主循环）: {type(e).__name__}: {str(e)[:160]}")

@@ -9,8 +9,20 @@
         业务重放（同内容换 delivery）不重复派单、篡改信封拒读、
         无订单 chat 必拒、Reviser 签 Approve 内核必拒（四层第③层）、
         桥面裸 release 必拒（release 唯一写者）；
+  修复批新增负例（2026-11-03，两项高危修死）：
+        N12 未配 secret → /healthz 503 not_ready（不假绿）；
+        N13 未配 secret → 空密钥 HMAC 签名一律 401 + inbox 零落盘
+            （fail-closed；修死 trigger-inbox `or b""` 空密钥降级 fail-open）；
+        N14 已配 secret → 空密钥 HMAC 签名 401（空密钥≠真 secret 必拒）；
+        N15 篡改 parsed body（保留合法 body_b64+hash）→ router 拒读记原因、
+            零派单（修死 event-router 消费冗余 parsed body 的篡改派单面）；
+        N16 篡改 body_b64（hash 不符）→ 拒读零派单；
+  边界：S4 最小皮代码面零 shell/root 调用（AST 级；三禁只辖 poc/poc-super-agent/
+        最小皮，在役 event-router 进程既有 root SSH+shell=True 能力面=遗留风险
+        另档登记，见 30-工件/janitor-20261103/pocd-router-capability-debt.md）；
   安灯：活性判据文件落盘（green）；阈值=0 配方下转 amber + alarms.log 摘要行；
-  Slow Path：F1 派单记录 → 六步 → DecisionArtifact + Released（ReleaseGate::admit）。
+  Slow Path：F1 派单记录 → 六步 → DecisionArtifact + Released（ReleaseGate::admit）；
+  Z1 生产变更日志零误写（自检全程 sha 前后一致 + pocd 痕迹为零）。
 
 隔离：全程 AF_TRIGGER_HOME=<sandbox>（收件箱/注册表/派单/游标/安灯/慢路留档全在
 沙箱）；event-router 模块的 CHANGELOG 被 monkeypatch 到沙箱——**不写生产变更日志**
@@ -55,8 +67,8 @@ def check(name, ok, detail=""):
     return bool(ok)
 
 
-def post(body_bytes, sig=None, path="/inbox/gitea-webhook", hdr_delivery=None):
-    req = urllib.request.Request(BASE + path, data=body_bytes, method="POST")
+def post(body_bytes, sig=None, path="/inbox/gitea-webhook", hdr_delivery=None, base=BASE):
+    req = urllib.request.Request(base + path, data=body_bytes, method="POST")
     req.add_header("Content-Type", "application/json")
     if sig is not None:
         req.add_header("X-AF-Signature", "sha256=" + sig)
@@ -72,8 +84,63 @@ def post(body_bytes, sig=None, path="/inbox/gitea-webhook", hdr_delivery=None):
             return e.code, {}
 
 
+def get(base, path="/healthz"):
+    """GET（503 也带回 body——healthz 未就绪不是异常是事实）。"""
+    try:
+        with urllib.request.urlopen(base + path, timeout=5) as r:
+            return r.status, json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        try:
+            return e.code, json.loads(e.read().decode())
+        except Exception:
+            return e.code, {}
+
+
 def sign(body_bytes, secret=SECRET):
+    if secret is None:
+        return hmac.new(b"", body_bytes, hashlib.sha256).hexdigest()  # 空密钥（负例专用）
     return hmac.new(secret.encode(), body_bytes, hashlib.sha256).hexdigest()
+
+
+def skin_shell_root_scan():
+    """S4：最小皮代码面零 shell/root 调用（AST 级——只看真实调用/导入，
+    不看注释与文档字符串里的禁词表述）。三禁只辖 poc/poc-super-agent/ 最小皮；
+    在役 event-router 进程的 root SSH+shell=True 既有能力面不在此断言范围
+    （遗留风险，另档登记 pocd-router-capability-debt.md）。唯一合法进程出口=
+    slow_path._bridge 对固定桥二进制的 argv 列表调用（无 shell、无 sudo/ssh）。"""
+    import ast
+    py_files = [os.path.join(POC, d, f) for d in ("router", "admit", "cli")
+                for f in sorted(os.listdir(os.path.join(POC, d))) if f.endswith(".py")]
+    viol, argv_calls = [], 0
+    for fp in py_files:
+        tree = ast.parse(open(fp, encoding="utf-8").read())
+        base = os.path.relpath(fp, POC)
+        for node in ast.walk(tree):
+            mods = []
+            if isinstance(node, ast.Import):
+                mods = [a.name.split(".")[0] for a in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                mods = [node.module.split(".")[0]]
+            if any(m in ("pty", "paramiko", "socket", "fabric") for m in mods):
+                viol.append(f"{base}: import {'/'.join(mods)}（网络/终端能力面）")
+            if isinstance(node, ast.Attribute) and node.attr in (
+                    "system", "popen", "fork", "execv", "execve", "execvp", "spawnl"):
+                viol.append(f"{base}: *.{node.attr} 调用（shell/exec 能力面）")
+            if isinstance(node, ast.Call):
+                fn = node.func
+                is_sub_run = (isinstance(fn, ast.Attribute) and fn.attr == "run"
+                              and isinstance(fn.value, ast.Name)
+                              and fn.value.id == "subprocess")
+                if is_sub_run:
+                    argv_calls += 1
+                    if not (node.args and isinstance(node.args[0], ast.List)):
+                        viol.append(f"{base}: subprocess.run 非 argv 列表（字符串命令）")
+                    if any(kw.arg == "shell" for kw in node.keywords):
+                        viol.append(f"{base}: subprocess shell= 关键字在位")
+    rs = open(os.path.join(POC, "bridge", "src", "main.rs"), encoding="utf-8").read()
+    if "Command::new" in rs or "std::process::Command" in rs:
+        viol.append("bridge/src/main.rs: 进程派生（Command）在位")
+    return viol, argv_calls
 
 
 def run_router_leg(state=None, want_amber_test=False):
@@ -123,6 +190,9 @@ def slowpath_cli(dispatch_file, *extra):
 
 def main():
     # ---- 0) 环境 ----
+    # 生产变更日志基线（Z1 用：自检全程零误写的硬证据，CHANGELOG 已 monkeypatch）
+    CHANGELOG_PROD = os.path.join(WS, "计划", "变更日志.md")
+    cl_sha_before = hashlib.sha256(open(CHANGELOG_PROD, "rb").read()).hexdigest()
     shutil.rmtree(SANDBOX, ignore_errors=True)
     os.makedirs(HOME, exist_ok=True)
     os.makedirs(OBS, exist_ok=True)
@@ -136,6 +206,17 @@ def main():
     check("S0 STOP 熔断控制（静态：poll_triggers 在主循环 try 内、STOP 检查之后）",
           while_i < stop_i < call_i < save_i,
           "main() while 循环：STOP 在位即 continue（跳过全部 poll 腿）→poll_triggers→save_state")
+
+    # S4 最小皮代码面零 shell/root 调用（边界澄清：三禁只辖最小皮；denylist 保留）
+    sys.path.insert(0, os.path.join(POC, "admit"))
+    import guard as skin_guard  # noqa: E402
+    viol, argv_calls = skin_shell_root_scan()
+    check("S4 最小皮代码面零 shell/root 调用（三禁只辖最小皮，AST 级；denylist 保留）",
+          not viol and {"shell", "root"} <= set(skin_guard.CAPABILITY_DENYLIST)
+          and argv_calls >= 1,
+          f"违规={viol or '无'}；唯一进程出口=桥 argv 调用×{argv_calls}"
+          f"；denylist={skin_guard.CAPABILITY_DENYLIST}（在役 event-router 的既有"
+          f"root SSH+shell=True 能力面=遗留风险另档，不在此断言内）")
 
     # 注册表安装（正本→沙箱运行位）
     r = subprocess.run([sys.executable, os.path.join(HERE, "install_registry.py"),
@@ -199,6 +280,49 @@ def main():
         code, resp = post(badmsg2, sign(badmsg2))
         check("N5 非法 delivery_id 422", code == 422, resp)
 
+        # ---- 4b) 修复批负例：secret 未配置 fail-closed（修死 `or b""` 空密钥降级） ----
+        # N14 已配 secret 的主实例：空密钥 HMAC 签名必 401（不因签名形态合法而豁免）
+        code, resp = post(push, sig=sign(push, secret=None))
+        check("N14 已配 secret：空密钥 HMAC 签名 401（空密钥≠真 secret）", code == 401, resp)
+        # N12/N13 第二实例：同一注册表 + 追加一个 ghost source，全程不配任何 secret
+        HOME2 = os.path.join(SANDBOX, "triggers-nosecret")
+        os.makedirs(HOME2, exist_ok=True)
+        reg2 = json.load(open(os.path.join(HOME, "registry.json")))
+        reg2["sources"].append({"name": "ghost-nosecret", "domain": "git",
+                                "key_id": "pocd-ghost-key", "hmac": "sha256",
+                                "events": ["push"]})
+        json.dump(reg2, open(os.path.join(HOME2, "registry.json"), "w"),
+                  ensure_ascii=False)
+        PORT2 = PORT + 1
+        BASE2 = f"http://127.0.0.1:{PORT2}"
+        env2s = dict(os.environ)
+        env2s.update({"AF_TRIGGER_HOME": HOME2, "AF_TRIGGER_INBOX_PORT": str(PORT2)})
+        srv2 = subprocess.Popen([sys.executable, INBOX_TOOL], env=env2s,
+                                stdout=open(os.path.join(SANDBOX, "inbox-nosecret.log"), "w"),
+                                stderr=subprocess.STDOUT)
+        time.sleep(1.2)
+        try:
+            hc, hbody = get(BASE2)
+            check("N12 未配 secret：/healthz 503 not_ready（不假绿）",
+                  hc == 503 and hbody.get("status") == "not_ready"
+                  and set(hbody.get("secrets_missing") or []) == {"gitea-webhook", "ghost-nosecret"},
+                  hbody)
+            # 空密钥 HMAC 签名（修复前=202 accepted+落盘 的 fail-open 复现路径）
+            code, resp = post(push, sig=sign(push, secret=None), base=BASE2)
+            code2, resp2 = post(push, sig=sign(push, secret=None),
+                                path="/inbox/ghost-nosecret", base=BASE2)
+            inbox2 = os.path.join(HOME2, "inbox")
+            n_files = sum(len(fs) for _, _, fs in os.walk(inbox2)) \
+                if os.path.isdir(inbox2) else 0
+            check("N13 未配 secret：空密钥 HMAC 签名一律 401 + inbox 零落盘（fail-closed）",
+                  code == 401 and resp.get("error") == "secret_not_configured"
+                  and code2 == 401 and resp2.get("error") == "secret_not_configured"
+                  and n_files == 0,
+                  f"code={code}/{code2} 落盘={n_files}（修复前实测 202 accepted+落盘）")
+        finally:
+            srv2.send_signal(signal.SIGTERM)
+            srv2.wait(timeout=10)
+
         # ---- 5) 消费腿：F1/F2 派单 ----
         rr = run_router_leg()
         st = router_state(rr.stdout)
@@ -259,6 +383,47 @@ def main():
               and any("pocd-evil-tamper" not in k for k in st5["trigger_consumed"]),
               "拒读日志见 stdout")
 
+        # ---- 5b) 修复批负例：篡改派单面（修死消费腿吃冗余 parsed body） ----
+        # N15：真投一条合法 webhook → 落盘后只篡改 parsed body（body_b64/hash 全保留合法）
+        evil_src = json.dumps({"event": "push", "delivery_id": "pocd-evil-body-0009",
+                               "after": "4444444444444444444444444444444444444444",
+                               "repository": {"full_name": "acme/widget"}}).encode()
+        code, resp = post(evil_src, sign(evil_src))
+        f9 = os.path.join(HOME, "inbox", "gitea-webhook", "pocd-evil-body-0009.json")
+        env9 = json.load(open(f9))
+        env9["body"] = {"event": "push", "delivery_id": "pocd-evil-body-0009",
+                        "after": "9" * 40, "repository": {"full_name": "acme/evil"}}
+        json.dump(env9, open(f9, "w"), ensure_ascii=False)
+        rr9 = run_router_leg(state=st5)
+        st9 = router_state(rr9.stdout)
+        rej9 = (st9.get("trigger_leg") or {}).get("rejected") or {}
+        reason9 = str((rej9.get("gitea-webhook/pocd-evil-body-0009") or {}).get("reason"))
+        check("N15 篡改 parsed body（合法 body_b64+hash）拒读记原因、零派单",
+              code == 202 and len(glob.glob(os.path.join(HOME, "dispatch", "*.json"))) == 2
+              and "pocd-evil-body-0009" not in (st9.get("trigger_consumed") or {})
+              and "parsed body" in reason9,
+              f"投递={code} 拒读原因={reason9[:100]}（修复前实测按篡改字段派单 acme/evil）")
+        # N16：真投一条合法 webhook → 落盘后只篡改 body_b64（hash 仍指原 payload → 不符）
+        evil_src2 = json.dumps({"event": "push", "delivery_id": "pocd-evil-b64-0010",
+                                "after": "5555555555555555555555555555555555555555",
+                                "repository": {"full_name": "acme/widget"}}).encode()
+        code, resp = post(evil_src2, sign(evil_src2))
+        f10 = os.path.join(HOME, "inbox", "gitea-webhook", "pocd-evil-b64-0010.json")
+        env10 = json.load(open(f10))
+        env10["body_b64"] = base64.b64encode(json.dumps(
+            {"event": "push", "delivery_id": "pocd-evil-b64-0010", "after": "7" * 40,
+             "repository": {"full_name": "acme/pwned"}}).encode()).decode()
+        json.dump(env10, open(f10, "w"), ensure_ascii=False)
+        rr10 = run_router_leg(state=st9)
+        st10 = router_state(rr10.stdout)
+        rej10 = (st10.get("trigger_leg") or {}).get("rejected") or {}
+        reason10 = str((rej10.get("gitea-webhook/pocd-evil-b64-0010") or {}).get("reason"))
+        check("N16 篡改 body_b64（hash 不符）拒读、零派单",
+              code == 202 and len(glob.glob(os.path.join(HOME, "dispatch", "*.json"))) == 2
+              and "pocd-evil-b64-0010" not in (st10.get("trigger_consumed") or {})
+              and "payload_sha256" in reason10,
+              f"投递={code} 拒读原因={reason10[:100]}")
+
         # ---- 6) Slow Path 六步（F1 派单记录→DecisionArtifact→admit） ----
         rc, trail = slowpath_cli(f1[0])
         check("S1 Slow Path 六步：admitted（Released 经 ReleaseGate）",
@@ -316,6 +481,14 @@ def main():
     finally:
         srv.send_signal(signal.SIGTERM)
         srv.wait(timeout=10)
+
+    # Z1 生产变更日志零误写（CHANGELOG monkeypatch 全程在位的硬证据）
+    cl_sha_after = hashlib.sha256(open(CHANGELOG_PROD, "rb").read()).hexdigest()
+    cl_text = open(CHANGELOG_PROD, encoding="utf-8", errors="replace").read()
+    check("Z1 生产计划/变更日志.md 零误写（sha 前后一致 + pocd 痕迹=0）",
+          cl_sha_before == cl_sha_after and "pocd" not in cl_text,
+          f"sha 不变={cl_sha_before == cl_sha_after}（{cl_sha_before[:12]}…）"
+          f" pocd 计数={cl_text.count('pocd')}")
 
     n_ok = sum(1 for r in RESULTS if r["ok"])
     out = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "total": len(RESULTS),

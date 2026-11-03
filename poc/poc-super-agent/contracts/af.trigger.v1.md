@@ -54,6 +54,12 @@ Slow Path 归并判定按 thread_key 聚合（同 thread_key 只挂同一订单�
   `{"delivery_id","source","event_type","dedup_key","order_id","consumed_at"}`；
   重启/重放时读侧以该 JSONL 为游标（防重放真源），状态文件 `trigger_consumed`
   为加速缓存——两者不一致以 JSONL 为准。
+- **读侧只读已验消息（2026-11-03 修复批修死篡改派单面）**：消费腿的唯一可信载荷=
+  `body_b64`（`payload_sha256` 自证）；派单决策输入（repo/event/delivery/subject/
+  dedup_key）一律从**已验 body_b64 重解析**取，**不消费冗余 `body` 解析态**；信封
+  冗余字段（event_type/delivery_id/dedup_key/thread_key/body）逐项与重解析核对，
+  任一不符=拒读（记原因，不派单）。篡改 parsed body 而保留合法 body_b64+hash、
+  或篡改 body_b64 致 hash 不符——两者都必须拒读零派单（自检 N15/N16）。
 
 ## 5. HTTP 面（tools/trigger-inbox.py）
 
@@ -61,6 +67,10 @@ Slow Path 归并判定按 thread_key 聚合（同 thread_key 只挂同一订单�
 - 体积上限 1 MiB（超限 **413**）；HMAC-SHA256 验签头 `X-AF-Signature: sha256=<hex>`
   对原始 body 字节计算，密钥按 source 从环境变量 `AF_TRIGGER_SECRET_<SOURCE>`
   解析（注册表只登记 `key_id`，**秘密不落注册表**——T1 Ref 化纪律）；坏签名/缺头 **401**；
+  **secret 未配置（环境变量缺席）→ 该 source 一律 401（fail-closed，2026-11-03 修复批
+  修死空密钥降级：此前 `or b""` 使攻击者可用空密钥 HMAC 伪造通过，实测 202 落盘）**；
+  `GET /healthz` 对 secret 未配置的 source 报 **503 not_ready**（点名
+  `secrets_missing`），不假绿；
 - 白名单：`source` 必须在注册表；`event_type`（body 内 `event` 字段）必须在
   `sources[].events`；`delivery_id` 可解析——违者 **422**；
 - 合法 **202** `{"status":"accepted","delivery_id":...,"path":...}`；

@@ -10,6 +10,9 @@ Fast Path 收件端：HTTP 接收 webhook → 验签/白名单/幂等 → 原子
   体积>1MiB → 413；未知 source → 422；坏签名/缺头 → 401；
   坏消息（非 JSON/缺字段/事件类型不在白名单/delivery_id 非法）→ 422；
   重复 delivery → 200 duplicate（不重写不重派）；合法 → 202 accepted。
+  **secret 未配置 → 该 source 一律 401（fail-closed，2026-11-03 修复批）**：
+  绝不用空密钥降级验签（`or b""` 前科=空密钥 HMAC 可伪造通过，负例实证 202→已修死）；
+  /healthz 对 secret 未配置的 source 报 503 not_ready（不假绿）。
 幂等主键=<source>/<delivery_id>（文件存在即重复；网络重试语义）。
 业务去重（dedup_key）是消费腿的第二道，本工具只生成不判定。
 
@@ -77,11 +80,17 @@ def source_def(reg, source):
     return None
 
 
+def secret_env_name(source):
+    """source → 环境变量名（'- '/'.'→'_'，大写）。"""
+    return "AF_TRIGGER_SECRET_" + re.sub(r"[^A-Za-z0-9]", "_", source).upper()
+
+
 def secret_for(source):
-    """密钥解析：环境变量 AF_TRIGGER_SECRET_<SOURCE>（'- '→'_'，大写）。
-    注册表只登记 key_id（秘密不落表，T1）。取不到=None → 该 source 一律 401。"""
-    env = "AF_TRIGGER_SECRET_" + re.sub(r"[^A-Za-z0-9]", "_", source).upper()
-    v = os.environ.get(env)
+    """密钥解析：环境变量 AF_TRIGGER_SECRET_<SOURCE>。
+    注册表只登记 key_id（秘密不落表，T1）。取不到=None——**fail-closed 真值**：
+    调用方必须把 None 当拒绝（401），严禁 `or b""` 空密钥降级（2026-11-03
+    修复批修死：空密钥 HMAC 可伪造通过曾实证 202 accepted + 落盘）。"""
+    v = os.environ.get(secret_env_name(source))
     return v.encode() if v else None
 
 
@@ -161,9 +170,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/healthz":
             reg = load_registry()
-            self._reply(200, {"status": "ok", "contract": CONTRACT,
-                              "sources": [s["name"] for s in reg.get("sources", [])],
-                              "home": HOME})
+            # secret 未配置的 source 一律点名（fail-closed 的健康面：不假绿）
+            missing = [s["name"] for s in reg.get("sources", [])
+                       if secret_for(s["name"]) is None]
+            ready = not missing
+            self._reply(200 if ready else 503,
+                        {"status": "ok" if ready else "not_ready",
+                         "contract": CONTRACT,
+                         "sources": [s["name"] for s in reg.get("sources", [])],
+                         "secrets_missing": missing, "home": HOME})
         else:
             self._reply(404, {"error": "not_found"})
 
@@ -198,9 +213,20 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(422, {"error": "unknown_source", "detail": f"source 不在注册表: {source}"})
             self.close_connection = True
             return
-        # ③ HMAC 验签（对原始 body 字节；常时比较；缺头=401 同坏签名）
+        # ③ HMAC 验签（对原始 body 字节；常时比较；缺头=401 同坏签名）。
+        # secret 未配置 → 该 source 一律 401（fail-closed；修复批修死 `or b""`
+        # 空密钥降级——攻击者用空密钥 HMAC 伪造签名曾可 202 落盘，负例实证）。
+        sec = secret_for(source)
+        if sec is None:
+            self._reply(401, {"error": "secret_not_configured",
+                              "key_id": sdef.get("key_id"),
+                              "detail": (f"源 {source} 的 secret 未配置"
+                                         f"（{secret_env_name(source)}）——fail-closed 拒绝验签，"
+                                         f"不降级空密钥")})
+            self.close_connection = True
+            return
         sig_hdr = self.headers.get("X-AF-Signature") or ""
-        mac = hmac.new(secret_for(source) or b"", body_raw, hashlib.sha256).hexdigest()
+        mac = hmac.new(sec, body_raw, hashlib.sha256).hexdigest()
         want = sig_hdr[len("sha256="):] if sig_hdr.startswith("sha256=") else sig_hdr
         if not want or not hmac.compare_digest(mac.encode("ascii"), want.encode("ascii")):
             self._reply(401, {"error": "bad_signature", "key_id": sdef.get("key_id")})
@@ -262,9 +288,11 @@ def main():
     reg = load_registry()
     os.makedirs(HOME + "/inbox", exist_ok=True)
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    no_sec = [s["name"] for s in reg.get("sources", []) if secret_for(s["name"]) is None]
     log(f"trigger-inbox 起（127.0.0.1:{PORT}，home={HOME}，"
         f"sources={[s['name'] for s in reg.get('sources', [])]}，"
-        f"body 上限 {MAX_BODY // 1024}KiB，注册表只读）")
+        f"body 上限 {MAX_BODY // 1024}KiB，注册表只读；"
+        f"secret 未配置（该 source 一律 401，fail-closed）：{no_sec or '无'}）")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
