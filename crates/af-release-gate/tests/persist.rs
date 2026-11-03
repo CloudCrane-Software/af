@@ -52,6 +52,7 @@ fn cfg(upper: f64, lower: f64, night: Option<NightWindow>) -> GateConfig {
 fn item(id: u64, config: &str, weight: f64) -> Item {
     Item {
         id,
+        order_id: String::new(),
         config: config.to_string(),
         review_minutes: weight,
     }

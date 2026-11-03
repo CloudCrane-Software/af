@@ -20,6 +20,7 @@ fn build_schedule() -> Vec<(MinuteOfDay, Item)> {
             m,
             Item {
                 id: *id,
+                order_id: String::new(),
                 config: config.into(),
                 review_minutes: weight(*id),
             },
@@ -88,6 +89,7 @@ fn day_traffic_respects_caps_and_never_starves() {
     let start_inventory: Vec<Item> = (1..=15)
         .map(|i| Item {
             id: 10_000 + i,
+            order_id: String::new(),
             config: "v1".into(),
             review_minutes: weight(i),
         })
