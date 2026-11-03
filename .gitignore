@@ -5,6 +5,7 @@ poc/poc-temporal/logs
 poc/*/.venv
 *.tar.gz
 *.db
+/af-state/
 __pycache__/
 
 # ── 第二批补验大体积产物（报告/源码/配置/小体积证据保留；大产物可按各 REPORT.md ②节重建）
