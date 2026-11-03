@@ -7,6 +7,12 @@
 //!
 //! 这里没有 `OPTIMIZE TABLE … FINAL`。该语句不跨分区合并；跨分区去重
 //! 在读路径的 `SELECT … FINAL`（见 [`crate::select_final`]）。
+//!
+//! 事件表末列 `ingested_at` 是入库时刻锚（2026-11-03 修）：`MATERIALIZED now64(3)`
+//! 由服务端在写入时计算，插入方不可指定（列清单带上它即被 CH 拒绝）——此前全表
+//! 只有写手自报的 `occurred_at`（DEFAULT now64 仅缺省兜底），冒烟写手曾把 7 行
+//! 2027 未来戳直打生产库（202701 分区），与真实事件结构性不可分。对旧表由
+//! [`DDL_MES_EVENT_INGEST_ANCHOR`]（幂等 ADD COLUMN IF NOT EXISTS）补列。
 
 use std::time::Duration;
 
@@ -36,7 +42,8 @@ CREATE TABLE IF NOT EXISTS mes_event
     line_id String,
     station_id String,
     kind String,
-    quantity UInt64
+    quantity UInt64,
+    ingested_at DateTime64(3, 'UTC') MATERIALIZED now64(3)
 )
 ENGINE = MergeTree
 PARTITION BY toYYYYMM(occurred_at)
@@ -70,8 +77,22 @@ FROM mes_event
 GROUP BY line_id, hour
 ";
 
-/// 建表顺序：事件表、聚合目标、物化视图。视图依赖前两张表。
-pub const SCHEMA_STATEMENTS: &[&str] = &[DDL_MES_EVENT, DDL_MES_LINE_HOUR, DDL_MES_LINE_HOUR_MV];
+/// 已存在的旧 `mes_event`（无锚列）补上入库时刻锚。幂等（ADD COLUMN IF NOT
+/// EXISTS），随 [`SCHEMA_STATEMENTS`] 走 apply_schema——旧表每次 apply 即被补列。
+/// 只加列不改数据：存量行的值回填是一次性运维动作（`ALTER … MATERIALIZE COLUMN`，
+/// 重写数据部），不进本清单、不随 apply 反复跑。
+pub const DDL_MES_EVENT_INGEST_ANCHOR: &str = "\
+ALTER TABLE mes_event
+ADD COLUMN IF NOT EXISTS ingested_at DateTime64(3, 'UTC') MATERIALIZED now64(3)
+";
+
+/// 建表顺序：事件表、聚合目标、物化视图、旧表补锚列。视图依赖前两张表。
+pub const SCHEMA_STATEMENTS: &[&str] = &[
+    DDL_MES_EVENT,
+    DDL_MES_LINE_HOUR,
+    DDL_MES_LINE_HOUR_MV,
+    DDL_MES_EVENT_INGEST_ANCHOR,
+];
 
 #[cfg(test)]
 mod tests {
@@ -88,6 +109,35 @@ mod tests {
     }
 
     #[test]
+    fn event_table_has_server_side_ingest_anchor() {
+        // 入库时刻锚（2026-11-03 修）：MATERIALIZED now64(3) 由服务端写入时计算，
+        // 插入方不可指定——此前全表唯一时间轴是写手自报 occurred_at，冒烟写手
+        // 曾把 2027 未来戳直打生产库且与真实事件结构性不可分。
+        let anchor = "ingested_at DateTime64(3, 'UTC') MATERIALIZED now64(3)";
+        assert!(
+            DDL_MES_EVENT.contains(anchor),
+            "建表 DDL 必须带入库时刻锚: {DDL_MES_EVENT}"
+        );
+        // 锚必须是末列：RowBinary/列清单插入按位置映射普通列，末列追加不动既有列位。
+        assert!(
+            DDL_MES_EVENT
+                .contains("quantity UInt64,\n    ingested_at DateTime64(3, 'UTC') MATERIALIZED now64(3)\n)"),
+            "锚列必须排在 quantity 之后（列位兼容防回归）: {DDL_MES_EVENT}"
+        );
+        assert!(
+            DDL_MES_EVENT_INGEST_ANCHOR.contains("ALTER TABLE mes_event")
+                && DDL_MES_EVENT_INGEST_ANCHOR.contains(anchor)
+                && DDL_MES_EVENT_INGEST_ANCHOR.contains("ADD COLUMN IF NOT EXISTS"),
+            "旧表补锚列语句必须幂等且带同一定义的锚: {DDL_MES_EVENT_INGEST_ANCHOR}"
+        );
+        assert_eq!(
+            SCHEMA_STATEMENTS.last(),
+            Some(&DDL_MES_EVENT_INGEST_ANCHOR),
+            "补锚列语句必须在 apply 序列内，否则旧表永远缺锚"
+        );
+    }
+
+    #[test]
     fn materialized_view_aggregates_by_line_and_hour() {
         assert!(DDL_MES_LINE_HOUR.contains("ENGINE = SummingMergeTree"));
         assert!(DDL_MES_LINE_HOUR.contains("ORDER BY (line_id, hour)"));
@@ -98,7 +148,12 @@ mod tests {
         assert!(DDL_MES_LINE_HOUR_MV.contains("sum(quantity) AS quantity_sum"));
         assert_eq!(
             SCHEMA_STATEMENTS,
-            &[DDL_MES_EVENT, DDL_MES_LINE_HOUR, DDL_MES_LINE_HOUR_MV]
+            &[
+                DDL_MES_EVENT,
+                DDL_MES_LINE_HOUR,
+                DDL_MES_LINE_HOUR_MV,
+                DDL_MES_EVENT_INGEST_ANCHOR
+            ]
         );
     }
 

@@ -51,13 +51,15 @@ af/                          ← 本目录（仓库根）
 
 ## venv 状态
 
+> **2026-10-27 收敛更新（红队 W2-C-04 处置）**：下表三个 venv 连同 `poc/poc-sandbox/.venv` 已删（合计实测 504,927,580 B≈482MiB，df / 88%→88%）。一期 POC 结论已固化入 POC_SUMMARY.md 与各 RESULT.md，二期 Rust 栈零引用；本表保留作**重建配方登记**——版本号（dspy 3.4.1 / temporalio 1.34.0 / dbos 3.3.0）+ 注意事项 #7（pip 清华镜像、cp314 wheel 齐全）即完整重建路径。处置依据与安全核验全文：计划/30-遗产处置.md 批 1 同名条 + 删除记录 2026-10-27 行。
+
 | venv | 状态 | 内容 |
 |---|---|---|
-| `poc/poc-dspy/.venv` | ✅ 建成 | dspy 3.4.1 装入成功（Python 3.14.4 上 `import dspy` 通过；pip 走清华镜像，cp314 wheel 齐全，未遇到兼容失败） |
-| `poc/poc-temporal/.venv` | ✅ 建成 | temporalio 1.34.0 装入成功，`import temporalio` 通过 |
-| `poc/poc-dbos/.venv` | ✅ 建成 | dbos 3.3.0（原 dbos-transact 包名已消失）；配套 Postgres 18 走 apt（数据目录 /tmp/dbos-pgdata，起服 5544，见 poc-dbos/RESULT.md ②） |
+| `poc/poc-dspy/.venv` | 🗑️ 已删（2026-10-27 收敛，原 ✅ 建成） | 曾装入 dspy 3.4.1（Python 3.14.4 上 `import dspy` 通过；pip 走清华镜像，cp314 wheel 齐全，未遇到兼容失败） |
+| `poc/poc-temporal/.venv` | 🗑️ 已删（2026-10-27 收敛，原 ✅ 建成） | 曾装入 temporalio 1.34.0（`import temporalio` 通过） |
+| `poc/poc-dbos/.venv` | 🗑️ 已删（2026-10-27 收敛，原 ✅ 建成） | 曾装入 dbos 3.3.0（原 dbos-transact 包名已消失）；配套 Postgres 18 走 apt（数据目录 /tmp/dbos-pgdata 已不存在，历史见 poc-dbos/RESULT.md ②） |
 
-激活方式：`source poc/poc-dspy/.venv/bin/activate`（temporal 同理）。
+激活方式：（已失效，venv 已删）重建时先按注意事项 #7 `python3 -m venv .venv && pip install <上表版本号>`，再 `source poc/<名>/.venv/bin/activate`。
 
 ## 给后续代理的注意事项
 
