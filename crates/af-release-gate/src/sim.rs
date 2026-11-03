@@ -240,6 +240,10 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
                     report.rejects.canary += 1;
                     break; // 仍 gated,本 tick 探针位已满
                 }
+                // sim 流量不带工单标识（order_id 空），重复单查重对它恒不触发。
+                Err(AdmitError::DuplicateOrder { .. }) => {
+                    unreachable!("sim items carry no order id")
+                }
                 Err(AdmitError::WipCap { .. }) => break, // 无空位,下个 tick 再试
                 Err(AdmitError::NightThrottled { .. }) => {
                     canary_parked.pop_front();
@@ -270,6 +274,9 @@ pub fn run_day(schedule: &[(MinuteOfDay, Item)], cfg: SimConfig) -> SimReport {
                 Err(AdmitError::WipCap { .. }) => {
                     report.rejects.wip_cap += 1;
                     break; // 本 tick 无空位,下个 tick 完成后再试
+                }
+                Err(AdmitError::DuplicateOrder { .. }) => {
+                    unreachable!("sim items carry no order id")
                 }
                 Err(AdmitError::NightThrottled { .. }) => {
                     // 本窗口配额用尽:件扣到夜间暂存,不再重复请求(不烧信用)。

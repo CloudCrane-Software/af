@@ -30,9 +30,14 @@ use thiserror::Error;
 pub type MinuteOfDay = u32;
 
 /// 一件待审工单。`review_minutes` 是以"标准审阅分钟"计的工时权重。
+/// `order_id` 是工单标识（CONWIP 单位 = WorkOrder）：同一 order 在制期间最多一张
+/// 有效 Permit，重复投放被 [`AdmitError::DuplicateOrder`] 拒绝。
+/// 空串只允许出现在换日结转等无工单上下文的注入路径（[`ReleaseGate::seed_wip`]）。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Item {
     pub id: u64,
+    #[serde(default)]
+    pub order_id: String,
     pub config: String,
     pub review_minutes: f64,
 }
@@ -84,6 +89,9 @@ pub enum AdmitError {
     /// 渐放(gated)阶段探针件数已满。
     #[error("canary probe cap reached for config {config:?}: cap={cap}")]
     CanaryProbeCap { config: String, cap: usize },
+    /// 同一工单已在制（同一 order 最多一张有效 Permit）。
+    #[error("duplicate order {order_id:?} already in process as item {item_id}")]
+    DuplicateOrder { order_id: String, item_id: u64 },
     /// 仅由阻塞式 admit 产生:等待超时。
     #[error("blocking admit timed out")]
     TimedOut,
@@ -129,6 +137,9 @@ pub enum Reject {
     /// 夜间窗口信用不足。规则与 [`AdmitError::NightThrottled`] 相同。
     #[error("夜间窗口限流: ratio={ratio}")]
     NightThrottled { ratio: f64 },
+    /// 同一工单已在制（最多一张有效 Permit）。在制、信用、渐放游标都不变。
+    #[error("重复投放: 工单 {order_id} 已在制（item {item_id}）")]
+    DuplicateOrder { order_id: String, item_id: u64 },
     /// 权重不是有限正数，请求本身不成立，不进闸。
     #[error("审阅分钟权重非法: {weight}")]
     BadWeight { weight: f64 },
@@ -156,6 +167,8 @@ pub enum GateError {
 #[derive(Debug, Clone)]
 pub struct Ticket {
     pub item_id: u64,
+    /// 工单标识（CONWIP 单位 = WorkOrder）。释容按 `item_id`，对账按 `order_id`。
+    pub order_id: String,
     pub config: String,
     pub weight: f64,
     pub admitted_at: MinuteOfDay,
@@ -248,9 +261,40 @@ pub struct CanaryCursor {
 #[derive(Debug, Clone, PartialEq)]
 pub struct InProcessItem {
     pub id: u64,
+    pub order_id: String,
     pub config: String,
     pub weight: f64,
     pub admitted_at: MinuteOfDay,
+}
+
+/// 守恒对账读数：opening（结转注入）计入 admitted，闭式为
+/// `admitted = completed + cancelled + wip`（件数与权重同一把尺）。
+/// 任何操作序列后此式必须成立——这是投放闸的硬验收不变式。
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Conservation {
+    pub admitted_count: u64,
+    pub admitted_weight: f64,
+    pub completed_count: u64,
+    pub completed_weight: f64,
+    pub cancelled_count: u64,
+    pub cancelled_weight: f64,
+    pub wip_count: u64,
+    pub wip_minutes: f64,
+}
+
+impl Conservation {
+    /// 件数守恒：admitted == completed + cancelled + wip（精确相等）。
+    pub fn count_balanced(&self) -> bool {
+        self.admitted_count == self.completed_count + self.cancelled_count + self.wip_count
+    }
+
+    /// 权重守恒：admitted == completed + cancelled + wip。
+    /// 权重是 f64，比较容差取 1e-9 标准审阅分钟（闸门自身判上界用同一容差）。
+    pub fn weight_balanced(&self) -> bool {
+        (self.admitted_weight - (self.completed_weight + self.cancelled_weight + self.wip_minutes))
+            .abs()
+            <= 1e-9
+    }
 }
 
 /// 夜间信用与上一次窗口观察。`prev_in_window == None` 表示还没有调用过准入。
@@ -272,11 +316,22 @@ pub(crate) struct RuntimeSnapshot {
     pub prev_in_window: Option<bool>,
     pub refill_active: bool,
     pub canary: Option<CanarySnapshot>,
+    /// 持久化单调游标：下一个工单路径 item_id 从这里取，**不**按队列现存 max+1
+    /// （旧法在旧件完成出队后会把 id 发给新单，迟到的旧 complete 会误释新单）。
+    pub next_item_id: u64,
+    pub admitted_count: u64,
+    pub admitted_weight: f64,
+    pub completed_count: u64,
+    pub completed_weight: f64,
+    pub cancelled_count: u64,
+    pub cancelled_weight: f64,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct SnapshotItem {
     pub id: u64,
+    #[allow(dead_code)] // 与 wip_item.order_id 列对齐；对账在 try_admit 的重复查重里用。
+    pub order_id: String,
     pub config: String,
     pub weight: f64,
     pub admitted_at: MinuteOfDay,
@@ -312,6 +367,15 @@ pub struct ReleaseGate {
     refill_active: bool,
     prev_in_window: Option<bool>,
     events: Vec<GateEvent>,
+    /// 单调 item_id 游标（持久化）。1 起；每次成功准入越过所用 id。
+    next_item_id: u64,
+    // 守恒计数：admitted 计 opening（seed_wip 注入也计入），complete/cancel 分别累计。
+    admitted_count: u64,
+    admitted_weight: f64,
+    completed_count: u64,
+    completed_weight: f64,
+    cancelled_count: u64,
+    cancelled_weight: f64,
 }
 
 impl ReleaseGate {
@@ -345,6 +409,13 @@ impl ReleaseGate {
             refill_active: false,
             prev_in_window: None,
             events: Vec::new(),
+            next_item_id: 1,
+            admitted_count: 0,
+            admitted_weight: 0.0,
+            completed_count: 0,
+            completed_weight: 0.0,
+            cancelled_count: 0,
+            cancelled_weight: 0.0,
         })
     }
 
@@ -400,11 +471,31 @@ impl ReleaseGate {
             .iter()
             .map(|queued| InProcessItem {
                 id: queued.ticket.item_id,
+                order_id: queued.ticket.order_id.clone(),
                 config: queued.ticket.config.clone(),
                 weight: queued.ticket.weight,
                 admitted_at: queued.ticket.admitted_at,
             })
             .collect()
+    }
+
+    /// 守恒对账读数。`admitted_*` 含换日结转注入（opening）。
+    pub fn conservation(&self) -> Conservation {
+        Conservation {
+            admitted_count: self.admitted_count,
+            admitted_weight: self.admitted_weight,
+            completed_count: self.completed_count,
+            completed_weight: self.completed_weight,
+            cancelled_count: self.cancelled_count,
+            cancelled_weight: self.cancelled_weight,
+            wip_count: self.queue.len() as u64,
+            wip_minutes: self.wip_minutes(),
+        }
+    }
+
+    /// 单调 item_id 游标当前值（下一个工单路径准入将用这个 id）。
+    pub fn next_item_id(&self) -> u64 {
+        self.next_item_id
     }
 
     /// 夜间信用与窗口观察。判定仍走 [`Self::try_admit`] 里的既有顺序。
@@ -446,15 +537,20 @@ impl ReleaseGate {
     }
 
     /// 直接注入在制(换日结转/热迁移等场景),不走准入策略;不衡上限(调用方保证)。
+    /// 注入计入 admitted（守恒口径里的 opening），游标同样越过所用 id。
     pub fn seed_wip(&mut self, item: &Item) {
         self.queue.push_back(QueuedItem {
             ticket: Ticket {
                 item_id: item.id,
+                order_id: item.order_id.clone(),
                 config: item.config.clone(),
                 weight: item.review_minutes,
                 admitted_at: 0,
             },
         });
+        self.admitted_count += 1;
+        self.admitted_weight += item.review_minutes;
+        self.next_item_id = self.next_item_id.max(item.id.saturating_add(1));
     }
 
     fn sync_night_window(&mut self, now: MinuteOfDay) {
@@ -484,15 +580,53 @@ impl ReleaseGate {
         }
     }
 
-    /// 尝试准入(非阻塞)。受三道策略约束,顺序:canary → 夜间窗口 → WIP 上限。
+    /// 尝试准入(非阻塞)。受四道策略约束,顺序:重复单 → canary → 夜间窗口 → WIP 上限。
     pub fn try_admit(&mut self, item: &Item, now: MinuteOfDay) -> Result<Ticket, AdmitError> {
+        self.try_admit_inner(item, now, false)
+    }
+
+    /// 影子记账版：跳过 WIP 上限与渐放探针封顶两道（重复单/夜间照常）。
+    /// 供影子对照期把已发生的事实照实入账（现实里单已提交，闸只是记账晚到）：
+    /// wip 可短暂超上限、渐放 released 停在封顶值，均由调用方在对照记录里标注差异。
+    /// 不用于正式裁权——正式路径的"0≤wip≤upper"与探针封顶由 [`Self::try_admit`] 保证。
+    pub fn try_admit_shadow_record(
+        &mut self,
+        item: &Item,
+        now: MinuteOfDay,
+    ) -> Result<Ticket, AdmitError> {
+        self.try_admit_inner(item, now, true)
+    }
+
+    fn try_admit_inner(
+        &mut self,
+        item: &Item,
+        now: MinuteOfDay,
+        shadow_record: bool,
+    ) -> Result<Ticket, AdmitError> {
         self.sync_night_window(now);
 
-        // 1) 渐放:gated 阶段该配置探针件数已满则拒绝。
-        let probe_full = self
-            .canary
-            .as_ref()
-            .is_some_and(|c| !c.open && c.config == item.config && c.released >= c.max_probes);
+        // 0) 重复单：同一 order 在制期间最多一张有效 Permit（空 order_id 不查重，
+        //    只出现在结转注入等无工单上下文的路径）。
+        if !item.order_id.is_empty() {
+            if let Some(hit) = self
+                .queue
+                .iter()
+                .find(|queued| queued.ticket.order_id == item.order_id)
+            {
+                return Err(AdmitError::DuplicateOrder {
+                    order_id: item.order_id.clone(),
+                    item_id: hit.ticket.item_id,
+                });
+            }
+        }
+
+        // 1) 渐放:gated 阶段该配置探针件数已满则拒绝（影子记账跳过——封顶只该拦
+        //    正式裁权，不该拦"把已发生的提交补记进账本"）。
+        let probe_full = !shadow_record
+            && self
+                .canary
+                .as_ref()
+                .is_some_and(|c| !c.open && c.config == item.config && c.released >= c.max_probes);
         if probe_full {
             let c = self.canary.as_ref().unwrap();
             return Err(AdmitError::CanaryProbeCap {
@@ -516,7 +650,7 @@ impl ReleaseGate {
 
         // 3) WIP 上限:放入后不得超过。比较用的是当前队列的左折叠，入队后的和就是再加这一件。
         let wip = self.wip_minutes();
-        if wip + item.review_minutes > self.cfg.wip_upper_minutes + 1e-9 {
+        if !shadow_record && wip + item.review_minutes > self.cfg.wip_upper_minutes + 1e-9 {
             return Err(AdmitError::WipCap {
                 wip,
                 weight: item.review_minutes,
@@ -527,6 +661,7 @@ impl ReleaseGate {
         // 通过 → 准入。WIP 随队列重算，不在这里累加。
         let ticket = Ticket {
             item_id: item.id,
+            order_id: item.order_id.clone(),
             config: item.config.clone(),
             weight: item.review_minutes,
             admitted_at: now,
@@ -534,8 +669,14 @@ impl ReleaseGate {
         self.queue.push_back(QueuedItem {
             ticket: ticket.clone(),
         });
+        self.admitted_count += 1;
+        self.admitted_weight += item.review_minutes;
+        // 游标单调：显式 id 的调用方（sim/测试）也把游标推过去，防复用。
+        self.next_item_id = self.next_item_id.max(item.id.saturating_add(1));
         if let Some(c) = &mut self.canary {
-            if !c.open && c.config == item.config {
+            // 影子补记不是探针：released 只数正式路径放行的探针，封顶不破
+            // （账本侧 load_canary 校验 released<=max_probes，超了即坏账）。
+            if !c.open && c.config == item.config && (!shadow_record || c.released < c.max_probes) {
                 c.released += 1;
             }
         }
@@ -544,6 +685,9 @@ impl ReleaseGate {
     }
 
     /// 完成一件:释放容量;若属渐放配置,累积评估报告并跑谓词,通过则全量放行。
+    /// 幂等性由调用方 + 单调 item_id 保证：已出队的 id 再 complete 是
+    /// [`GateError::UnknownItem`]（不释容）；单调游标保证该 id 永不再属于新单，
+    /// 所以"重复 settle"绝不会释掉别人的容量。
     pub fn complete(
         &mut self,
         item_id: u64,
@@ -555,6 +699,8 @@ impl ReleaseGate {
             return Err(GateError::UnknownItem(item_id));
         };
         let q = self.queue.remove(idx).expect("idx validated above");
+        self.completed_count += 1;
+        self.completed_weight += q.ticket.weight;
         let completed = CompletedItem {
             ticket: q.ticket,
             completed_at: now,
@@ -587,6 +733,25 @@ impl ReleaseGate {
         }
         self.check_refill_needed(now);
         Ok(completed)
+    }
+
+    /// 取消一件（工单 Cancelled 终态）：与 complete 同样释容，但记入 cancelled
+    /// 账（CONWIP 单位=WorkOrder：Closed/Cancelled 才释量），不喂渐放谓词——
+    /// 取消的探针没有产出可评估。
+    pub fn cancel(&mut self, item_id: u64, now: MinuteOfDay) -> Result<CompletedItem, GateError> {
+        let idx = self.queue.iter().position(|q| q.ticket.item_id == item_id);
+        let Some(idx) = idx else {
+            return Err(GateError::UnknownItem(item_id));
+        };
+        let q = self.queue.remove(idx).expect("idx validated above");
+        self.cancelled_count += 1;
+        self.cancelled_weight += q.ticket.weight;
+        let cancelled = CompletedItem {
+            ticket: q.ticket,
+            completed_at: now,
+        };
+        self.check_refill_needed(now);
+        Ok(cancelled)
     }
 
     /// WIP 跌破下限 → 边沿触发 NeedRefill。
@@ -625,6 +790,7 @@ impl ReleaseGate {
                 .iter()
                 .map(|queued| SnapshotItem {
                     id: queued.ticket.item_id,
+                    order_id: queued.ticket.order_id.clone(),
                     config: queued.ticket.config.clone(),
                     weight: queued.ticket.weight,
                     admitted_at: queued.ticket.admitted_at,
@@ -643,10 +809,19 @@ impl ReleaseGate {
                 defects: canary.defects,
                 open: canary.open,
             }),
+            next_item_id: self.next_item_id,
+            admitted_count: self.admitted_count,
+            admitted_weight: self.admitted_weight,
+            completed_count: self.completed_count,
+            completed_weight: self.completed_weight,
+            cancelled_count: self.cancelled_count,
+            cancelled_weight: self.cancelled_weight,
         }
     }
 
     /// 用账本里的运行态覆盖空闸。不走准入策略，事件缓冲清空。
+    /// 游标与守恒计数原样带回；防御性把游标抬到 max(在制 id)+1 之上——
+    /// v1 账本迁移等历史库里游标可能落后于在制单。
     pub(crate) fn restore_runtime(
         &mut self,
         snap: RuntimeSnapshot,
@@ -660,10 +835,13 @@ impl ReleaseGate {
             return Err(RestoreError::InconsistentWip);
         }
         self.queue.clear();
+        let mut max_id = 0u64;
         for item in snap.items {
+            max_id = max_id.max(item.id);
             self.queue.push_back(QueuedItem {
                 ticket: Ticket {
                     item_id: item.id,
+                    order_id: item.order_id,
                     config: item.config,
                     weight: item.weight,
                     admitted_at: item.admitted_at,
@@ -678,6 +856,13 @@ impl ReleaseGate {
         self.prev_in_window = snap.prev_in_window;
         self.refill_active = snap.refill_active;
         self.events.clear();
+        self.next_item_id = snap.next_item_id.max(max_id.saturating_add(1)).max(1);
+        self.admitted_count = snap.admitted_count;
+        self.admitted_weight = snap.admitted_weight;
+        self.completed_count = snap.completed_count;
+        self.completed_weight = snap.completed_weight;
+        self.cancelled_count = snap.cancelled_count;
+        self.cancelled_weight = snap.cancelled_weight;
         self.canary = match (snap.canary, predicate) {
             (None, None) => None,
             (Some(canary), Some(predicate)) => Some(CanaryState {
@@ -804,7 +989,9 @@ impl ReleaseGate {
         }
 
         let item = Item {
-            id: self.next_item_id(),
+            // 持久化单调游标，不用"队列现存 max+1"（旧法在旧件出队后会复用 id）。
+            id: self.next_item_id,
+            order_id: order.id().to_string(),
             config: order.graph_version().as_str().to_string(),
             review_minutes,
         };
@@ -828,6 +1015,9 @@ impl ReleaseGate {
             Err(AdmitError::NightThrottled { ratio }) => {
                 return Err(Reject::NightThrottled { ratio });
             }
+            Err(AdmitError::DuplicateOrder { order_id, item_id }) => {
+                return Err(Reject::DuplicateOrder { order_id, item_id });
+            }
             Err(AdmitError::TimedOut) => unreachable!("try_admit does not block"),
         };
         let ramp = self.ramp_phase(&ticket.config);
@@ -842,15 +1032,6 @@ impl ReleaseGate {
             ticket,
             ramp,
         })
-    }
-
-    fn next_item_id(&self) -> u64 {
-        self.queue
-            .iter()
-            .map(|queued| queued.ticket.item_id)
-            .max()
-            .unwrap_or(0)
-            .saturating_add(1)
     }
 
     fn ramp_phase(&self, config: &str) -> RampPhase {

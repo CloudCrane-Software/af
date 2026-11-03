@@ -20,6 +20,7 @@ fn cfg(upper: f64, lower: f64, night: Option<NightWindow>) -> GateConfig {
 fn item(id: u64, weight: f64) -> Item {
     Item {
         id,
+        order_id: String::new(),
         config: "v1".into(),
         review_minutes: weight,
     }
@@ -205,6 +206,7 @@ fn canary_caps_probes_until_predicate_passes() {
         g.try_admit(
             &Item {
                 id: i,
+                order_id: String::new(),
                 config: "v2".into(),
                 review_minutes: 5.0,
             },
@@ -213,7 +215,7 @@ fn canary_caps_probes_until_predicate_passes() {
         .unwrap();
     }
     assert!(matches!(
-        err_of(g.try_admit(&Item { id: 9, config: "v2".into(), review_minutes: 5.0 }, 1)),
+        err_of(g.try_admit(&Item { id: 9, order_id: String::new(), config: "v2".into(), review_minutes: 5.0 }, 1)),
         AdmitError::CanaryProbeCap { config, cap } if config == "v2" && cap == 3
     ));
     // v1 不受影响。
@@ -225,6 +227,7 @@ fn canary_caps_probes_until_predicate_passes() {
     g.try_admit(
         &Item {
             id: 9,
+            order_id: String::new(),
             config: "v2".into(),
             review_minutes: 5.0,
         },
@@ -253,6 +256,7 @@ fn canary_defect_keeps_gate_gated() {
         g.try_admit(
             &Item {
                 id: i,
+                order_id: String::new(),
                 config: "v2".into(),
                 review_minutes: 5.0,
             },
@@ -267,6 +271,7 @@ fn canary_defect_keeps_gate_gated() {
         err_of(g.try_admit(
             &Item {
                 id: 9,
+                order_id: String::new(),
                 config: "v2".into(),
                 review_minutes: 5.0
             },

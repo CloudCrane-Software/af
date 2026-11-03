@@ -24,12 +24,12 @@ use thiserror::Error;
 use crate::clock::{Clock, SystemClock};
 use crate::gate::{
     sum_weights, AdmitError, CanaryCursor, CanaryPredicate, CanaryStatus, CompletedItem,
-    ConfigError, GateConfig, GateError, GateEvent, InProcessItem, Item, MinuteOfDay, NightView,
-    NightWindow, ReleaseGate, RestoreError, RuntimeSnapshot, Ticket,
+    ConfigError, Conservation, GateConfig, GateError, GateEvent, InProcessItem, Item, MinuteOfDay,
+    NightView, NightWindow, ReleaseGate, RestoreError, RuntimeSnapshot, Ticket,
 };
 
-/// 账本 schema。对不上就拒绝启动，不在这里迁移。
-pub const SCHEMA_VERSION: i64 = 1;
+/// 账本 schema。对不上就拒绝启动；唯一例外是 v1→v2 原地迁移（见 [`migrate_v1_to_v2`]）。
+pub const SCHEMA_VERSION: i64 = 2;
 
 const BUSY_TIMEOUT_MS: u64 = 5_000;
 
@@ -52,12 +52,20 @@ CREATE TABLE gate_meta (
     night_requests      INTEGER NOT NULL,
     night_admitted      INTEGER NOT NULL,
     prev_in_window      INTEGER CHECK (prev_in_window IS NULL OR prev_in_window IN (0, 1)),
+    next_item_id        INTEGER NOT NULL,
+    admitted_count      INTEGER NOT NULL,
+    admitted_weight_bits    INTEGER NOT NULL,
+    completed_count     INTEGER NOT NULL,
+    completed_weight_bits   INTEGER NOT NULL,
+    cancelled_count     INTEGER NOT NULL,
+    cancelled_weight_bits   INTEGER NOT NULL,
     updated_wall_ms     INTEGER NOT NULL
 );
 CREATE TABLE wip_item (
     seq           INTEGER PRIMARY KEY,
     gate_id       INTEGER NOT NULL REFERENCES gate_meta(id),
     item_id       INTEGER NOT NULL,
+    order_id      TEXT NOT NULL DEFAULT '',
     config        TEXT NOT NULL,
     weight_bits   INTEGER NOT NULL,
     admitted_at   INTEGER NOT NULL
@@ -130,6 +138,13 @@ struct Meta {
     night_requests: i64,
     night_admitted: i64,
     prev_in_window: Option<i64>,
+    next_item_id: i64,
+    admitted_count: i64,
+    admitted_weight_bits: i64,
+    completed_count: i64,
+    completed_weight_bits: i64,
+    cancelled_count: i64,
+    cancelled_weight_bits: i64,
     updated_wall_ms: i64,
 }
 
@@ -154,6 +169,23 @@ impl std::fmt::Debug for DurableGate {
 }
 
 impl DurableGate {
+    /// 读库内声明（不打开闸门）。CLI 每次调用用它消除"重开时声明漂移"：
+    /// admit/complete/status 不带 --upper/--lower 参数，按账本里的声明原样重开。
+    /// 库不存在或还没建表 → `None`（首启声明交给 serve）。
+    pub fn declaration_on_disk(path: impl AsRef<Path>) -> Result<Option<GateConfig>, PersistError> {
+        let conn = Connection::open(path.as_ref())?;
+        if !table_exists(&conn, "gate_meta")? {
+            return Ok(None);
+        }
+        let meta = read_meta(&conn)?;
+        let night = stored_night(&meta)?;
+        Ok(Some(GateConfig {
+            wip_upper_minutes: sql_to_f64(meta.wip_upper_bits),
+            wip_lower_minutes: sql_to_f64(meta.wip_lower_bits),
+            night_window: night,
+        }))
+    }
+
     /// 打开账本，墙钟用 [`SystemClock`]。
     pub fn open(
         path: impl AsRef<Path>,
@@ -289,6 +321,18 @@ impl DurableGate {
         result.map_err(PersistError::from)
     }
 
+    /// 影子记账版准入（跳过 WIP 上限与渐放探针封顶）。
+    /// 见 [`crate::gate::ReleaseGate::try_admit_shadow_record`]。
+    pub fn try_admit_shadow_record(
+        &mut self,
+        item: &Item,
+        now: MinuteOfDay,
+    ) -> Result<Ticket, PersistError> {
+        let result = self.gate.try_admit_shadow_record(item, now);
+        self.persist_if_changed()?;
+        result.map_err(PersistError::from)
+    }
+
     pub fn complete(
         &mut self,
         item_id: u64,
@@ -298,6 +342,27 @@ impl DurableGate {
         let result = self.gate.complete(item_id, now, defects);
         self.persist_if_changed()?;
         result.map_err(PersistError::from)
+    }
+
+    /// 取消一件（Cancelled 终态释容）。幂等语义与 complete 相同：未知 id 报错不释容。
+    pub fn cancel(
+        &mut self,
+        item_id: u64,
+        now: MinuteOfDay,
+    ) -> Result<CompletedItem, PersistError> {
+        let result = self.gate.cancel(item_id, now);
+        self.persist_if_changed()?;
+        result.map_err(PersistError::from)
+    }
+
+    /// 守恒对账读数（含 opening，即 seed 注入）。
+    pub fn conservation(&self) -> Conservation {
+        self.gate.conservation()
+    }
+
+    /// 单调 item_id 游标。重启后从账本带回，不重置。
+    pub fn next_item_id(&self) -> u64 {
+        self.gate.next_item_id()
     }
 
     fn persist_if_changed(&mut self) -> Result<(), PersistError> {
@@ -326,7 +391,14 @@ impl DurableGate {
                 night_requests = ?5,
                 night_admitted = ?6,
                 prev_in_window = ?7,
-                updated_wall_ms = ?8
+                next_item_id = ?8,
+                admitted_count = ?9,
+                admitted_weight_bits = ?10,
+                completed_count = ?11,
+                completed_weight_bits = ?12,
+                cancelled_count = ?13,
+                cancelled_weight_bits = ?14,
+                updated_wall_ms = ?15
              WHERE id = 1",
             params![
                 f64_to_sql(snap.wip),
@@ -336,6 +408,13 @@ impl DurableGate {
                 requests,
                 admitted,
                 snap.prev_in_window.map(i64::from),
+                u64_to_sql(snap.next_item_id),
+                u64_count_to_sql(snap.admitted_count, "admitted_count")?,
+                f64_to_sql(snap.admitted_weight),
+                u64_count_to_sql(snap.completed_count, "completed_count")?,
+                f64_to_sql(snap.completed_weight),
+                u64_count_to_sql(snap.cancelled_count, "cancelled_count")?,
+                f64_to_sql(snap.cancelled_weight),
                 wall_ms,
             ],
         )?;
@@ -348,14 +427,15 @@ impl DurableGate {
         tx.execute("DELETE FROM canary", [])?;
         {
             let mut stmt = tx.prepare(
-                "INSERT INTO wip_item (seq, gate_id, item_id, config, weight_bits, admitted_at)
-                 VALUES (?1, 1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO wip_item (seq, gate_id, item_id, order_id, config, weight_bits, admitted_at)
+                 VALUES (?1, 1, ?2, ?3, ?4, ?5, ?6)",
             )?;
             for (seq, item) in snap.items.iter().enumerate() {
                 let seq = usize_to_sql(seq, "seq")?;
                 stmt.execute(params![
                     seq,
                     u64_to_sql(item.id),
+                    item.order_id,
                     item.config,
                     f64_to_sql(item.weight),
                     i64::from(item.admitted_at),
@@ -398,6 +478,12 @@ fn open_prepared(
     let version = read_user_version(&conn)?;
     if version == SCHEMA_VERSION {
         ensure_journal_mode(&conn)?;
+        return open_existing(conn, declaration, gate, resume_predicate, clock);
+    }
+    // v1（无 order_id/单调游标/守恒计数的旧账本）原地升 v2。
+    if version == 1 {
+        ensure_journal_mode(&conn)?;
+        migrate_v1_to_v2(&mut conn)?;
         return open_existing(conn, declaration, gate, resume_predicate, clock);
     }
     if version != 0 {
@@ -514,6 +600,67 @@ fn map_restore(err: RestoreError) -> PersistError {
     }
 }
 
+/// v1 → v2 原地迁移（`BEGIN IMMEDIATE`，双开竞速时后到者在事务里复核版本即回滚）。
+///
+/// v2 相对 v1 的差异：
+/// - `gate_meta` 新增 `next_item_id`（持久化单调 item_id 游标）与守恒六计数；
+/// - `wip_item` 新增 `order_id`（CONWIP 单位=WorkOrder 的对账键，v1 行回填 `''`）。
+///
+/// 回填口径（如实登记，不是历史真相）：v1 账本没记过准入/完成流水，历史累计
+/// 不可追溯——守恒计数按"迁移时刻重定基"：admitted := 当前在制（件数=wip_item
+/// 行数、权重=wip_bits），completed/cancelled := 0。这样守恒式在迁移后成立，
+/// 且此后每次写库都由 [`load_runtime`] 复核。`next_item_id := max(item_id)+1`。
+fn migrate_v1_to_v2(conn: &mut Connection) -> Result<(), PersistError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if read_user_version(&tx)? != 1 {
+        // 另一个连接已经迁完。不重复执行 ALTER（会因列已存在报错）。
+        tx.rollback()?;
+        return Ok(());
+    }
+    tx.execute(
+        "ALTER TABLE gate_meta ADD COLUMN next_item_id INTEGER NOT NULL DEFAULT 1",
+        [],
+    )?;
+    tx.execute(
+        "ALTER TABLE gate_meta ADD COLUMN admitted_count INTEGER NOT NULL DEFAULT 0",
+        [],
+    )?;
+    tx.execute(
+        "ALTER TABLE gate_meta ADD COLUMN admitted_weight_bits INTEGER NOT NULL DEFAULT 0",
+        [],
+    )?;
+    tx.execute(
+        "ALTER TABLE gate_meta ADD COLUMN completed_count INTEGER NOT NULL DEFAULT 0",
+        [],
+    )?;
+    tx.execute(
+        "ALTER TABLE gate_meta ADD COLUMN completed_weight_bits INTEGER NOT NULL DEFAULT 0",
+        [],
+    )?;
+    tx.execute(
+        "ALTER TABLE gate_meta ADD COLUMN cancelled_count INTEGER NOT NULL DEFAULT 0",
+        [],
+    )?;
+    tx.execute(
+        "ALTER TABLE gate_meta ADD COLUMN cancelled_weight_bits INTEGER NOT NULL DEFAULT 0",
+        [],
+    )?;
+    tx.execute(
+        "ALTER TABLE wip_item ADD COLUMN order_id TEXT NOT NULL DEFAULT ''",
+        [],
+    )?;
+    tx.execute_batch(
+        "UPDATE gate_meta SET
+            next_item_id = (SELECT COALESCE(MAX(item_id), 0) + 1 FROM wip_item),
+            admitted_count = (SELECT COUNT(*) FROM wip_item),
+            admitted_weight_bits = wip_bits,
+            schema_version = 2;
+        PRAGMA user_version = 2;",
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 fn connection_pragmas(conn: &Connection) -> Result<(), PersistError> {
     conn.busy_timeout(Duration::from_millis(BUSY_TIMEOUT_MS))?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
@@ -574,8 +721,13 @@ fn insert_initial(
             night_start, night_end, night_ratio_bits,
             wip_bits, in_process_count, refill_active,
             night_credit_bits, night_requests, night_admitted,
-            prev_in_window, updated_wall_ms
-         ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+            prev_in_window,
+            next_item_id, admitted_count, admitted_weight_bits,
+            completed_count, completed_weight_bits,
+            cancelled_count, cancelled_weight_bits,
+            updated_wall_ms
+         ) VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13,
+                   ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
         params![
             SCHEMA_VERSION,
             f64_to_sql(declaration.wip_upper_minutes),
@@ -590,6 +742,13 @@ fn insert_initial(
             requests,
             admitted,
             snap.prev_in_window.map(i64::from),
+            u64_to_sql(snap.next_item_id),
+            u64_count_to_sql(snap.admitted_count, "admitted_count")?,
+            f64_to_sql(snap.admitted_weight),
+            u64_count_to_sql(snap.completed_count, "completed_count")?,
+            f64_to_sql(snap.completed_weight),
+            u64_count_to_sql(snap.cancelled_count, "cancelled_count")?,
+            f64_to_sql(snap.cancelled_weight),
             wall_ms,
         ],
     )?;
@@ -637,7 +796,11 @@ fn read_meta(conn: &Connection) -> Result<Meta, PersistError> {
                 night_start, night_end, night_ratio_bits,
                 wip_bits, in_process_count, refill_active,
                 night_credit_bits, night_requests, night_admitted,
-                prev_in_window, updated_wall_ms
+                prev_in_window,
+                next_item_id, admitted_count, admitted_weight_bits,
+                completed_count, completed_weight_bits,
+                cancelled_count, cancelled_weight_bits,
+                updated_wall_ms
          FROM gate_meta WHERE id = 1",
         [],
         |row| {
@@ -655,7 +818,14 @@ fn read_meta(conn: &Connection) -> Result<Meta, PersistError> {
                 night_requests: row.get(10)?,
                 night_admitted: row.get(11)?,
                 prev_in_window: row.get(12)?,
-                updated_wall_ms: row.get(13)?,
+                next_item_id: row.get(13)?,
+                admitted_count: row.get(14)?,
+                admitted_weight_bits: row.get(15)?,
+                completed_count: row.get(16)?,
+                completed_weight_bits: row.get(17)?,
+                cancelled_count: row.get(18)?,
+                cancelled_weight_bits: row.get(19)?,
+                updated_wall_ms: row.get(20)?,
             })
         },
     )
@@ -779,6 +949,54 @@ fn load_runtime(conn: &Connection, meta: &Meta) -> Result<RuntimeSnapshot, Persi
         None => None,
         Some(value) => Some(flag(value, "prev_in_window")?),
     };
+    let next_item_id = sql_to_u64(meta.next_item_id);
+    if next_item_id == 0 {
+        return Err(PersistError::Corrupt {
+            detail: "next_item_id must be >= 1".to_string(),
+        });
+    }
+    if let Some(max_id) = items.iter().map(|item| item.id).max() {
+        // max_id == u64::MAX 时无可更高 id，游标饱和停在 MAX 是唯一合法态。
+        if next_item_id <= max_id && max_id < u64::MAX {
+            return Err(PersistError::Corrupt {
+                detail: format!("next_item_id {next_item_id} not past in-process max {max_id}"),
+            });
+        }
+    }
+    let admitted_count = u64_count_from_sql(meta.admitted_count, "admitted_count")?;
+    let completed_count = u64_count_from_sql(meta.completed_count, "completed_count")?;
+    let cancelled_count = u64_count_from_sql(meta.cancelled_count, "cancelled_count")?;
+    if admitted_count != completed_count + cancelled_count + items.len() as u64 {
+        return Err(PersistError::Corrupt {
+            detail: format!(
+                "count conservation broken: admitted {admitted_count} != completed {completed_count} + cancelled {cancelled_count} + wip {}",
+                items.len()
+            ),
+        });
+    }
+    let admitted_weight = sql_to_f64(meta.admitted_weight_bits);
+    let completed_weight = sql_to_f64(meta.completed_weight_bits);
+    let cancelled_weight = sql_to_f64(meta.cancelled_weight_bits);
+    for (field, value) in [
+        ("admitted_weight", admitted_weight),
+        ("completed_weight", completed_weight),
+        ("cancelled_weight", cancelled_weight),
+    ] {
+        if !value.is_finite() {
+            return Err(PersistError::Corrupt {
+                detail: field.to_string(),
+            });
+        }
+    }
+    // 权重守恒：累加路径是逐件 `+=`，与在制左折叠重求和只差浮点舍入；
+    // 容差 1e-6 标准审阅分钟（远小于任何真实权重），超了就是账坏了。
+    if (admitted_weight - (completed_weight + cancelled_weight + wip)).abs() > 1e-6 {
+        return Err(PersistError::Corrupt {
+            detail: format!(
+                "weight conservation broken: admitted {admitted_weight} vs completed {completed_weight} + cancelled {cancelled_weight} + wip {wip}"
+            ),
+        });
+    }
     Ok(RuntimeSnapshot {
         wip,
         items,
@@ -788,12 +1006,19 @@ fn load_runtime(conn: &Connection, meta: &Meta) -> Result<RuntimeSnapshot, Persi
         prev_in_window,
         refill_active: flag(meta.refill_active, "refill_active")?,
         canary,
+        next_item_id,
+        admitted_count,
+        admitted_weight,
+        completed_count,
+        completed_weight,
+        cancelled_count,
+        cancelled_weight,
     })
 }
 
 fn load_items(conn: &Connection) -> Result<Vec<crate::gate::SnapshotItem>, PersistError> {
     let mut stmt = conn.prepare(
-        "SELECT gate_id, item_id, config, weight_bits, admitted_at
+        "SELECT gate_id, item_id, order_id, config, weight_bits, admitted_at
          FROM wip_item ORDER BY seq ASC",
     )?;
     let rows = stmt.query_map([], |row| {
@@ -801,13 +1026,14 @@ fn load_items(conn: &Connection) -> Result<Vec<crate::gate::SnapshotItem>, Persi
             row.get::<_, i64>(0)?,
             row.get::<_, i64>(1)?,
             row.get::<_, String>(2)?,
-            row.get::<_, i64>(3)?,
+            row.get::<_, String>(3)?,
             row.get::<_, i64>(4)?,
+            row.get::<_, i64>(5)?,
         ))
     })?;
     let mut items = Vec::new();
     for row in rows {
-        let (gate_id, item_id, config, weight_bits, admitted_at) = row?;
+        let (gate_id, item_id, order_id, config, weight_bits, admitted_at) = row?;
         if gate_id != 1 {
             return Err(PersistError::Corrupt {
                 detail: "wip_item.gate_id".to_string(),
@@ -821,6 +1047,7 @@ fn load_items(conn: &Connection) -> Result<Vec<crate::gate::SnapshotItem>, Persi
         }
         items.push(crate::gate::SnapshotItem {
             id: sql_to_u64(item_id),
+            order_id,
             config,
             weight,
             admitted_at: u32_from_sql(admitted_at, "admitted_at")?,

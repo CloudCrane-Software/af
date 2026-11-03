@@ -13,8 +13,8 @@ mod store;
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use gate::{
     AdmitError, CanaryCursor, CanaryPredicate, CanaryStatus, CompletedItem, ConfigError,
-    EvalReport, GateConfig, GateError, GateEvent, InProcessItem, Item, MinuteOfDay, NightView,
-    NightWindow, Permit, RampPhase, Reject, ReleaseGate, SharedGate, Ticket,
+    Conservation, EvalReport, GateConfig, GateError, GateEvent, InProcessItem, Item, MinuteOfDay,
+    NightView, NightWindow, Permit, RampPhase, Reject, ReleaseGate, SharedGate, Ticket,
 };
 pub use sim::{SimConfig, SimReport};
 pub use store::{DurableGate, OpenOutcome, PersistError, StorageProfile, SCHEMA_VERSION};

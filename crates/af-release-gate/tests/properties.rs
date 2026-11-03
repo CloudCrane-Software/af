@@ -187,6 +187,7 @@ fn arb_case() -> impl Strategy<Value = Case> {
 fn item(id: u64, config: &str, weight: f64) -> Item {
     Item {
         id,
+        order_id: String::new(),
         config: config.to_string(),
         review_minutes: weight,
     }
@@ -1093,6 +1094,12 @@ impl World {
             Err(AdmitError::TimedOut) => {
                 return Err(TestCaseError::fail(format!(
                     "step={step} try_admit does not time out"
+                )));
+            }
+            // 模型流量的 order_id 全空（item() 帮手），重复单查重恒不触发。
+            Err(AdmitError::DuplicateOrder { .. }) => {
+                return Err(TestCaseError::fail(format!(
+                    "step={step} model traffic carries no order id"
                 )));
             }
         }
