@@ -99,6 +99,49 @@ pub const SWEV_AGENT_CONTAINER_PIDS: &str = "512";
 pub const TB_CONTAINER_MEM: &str = "2g";
 pub const TB_CONTAINER_PIDS: &str = "256";
 
+// ---- bash 单命令超时（L3'：超时可调——缺省 180s / 上限 600s）----
+//
+// 口径（← fix3 `b3e1f56` 的 `crates/af-bench/src/tb.rs`（常量 + exec 夹取 +
+// 文案）+ `crates/af-bench/src/main.rs::bash_timeout_sec`（入参换算）逐条同语义）：
+// - **缺省 180s**：历史口径逐字不变（现役调用面零改动 ⇒ 判分读数可比）；
+// - **上限 600s**：硬闸，超出即裁到 600s——超时闸是护栏，不许做成"无上限"；
+// - **换算规则与 fix3 同**：入参毫秒缺失/非法/< 1000 → 缺省；否则整除到秒并
+//   夹到 [1, 600]（模型写错参数不放大资源占用）。
+//
+// 配置面（本代际与 fix3 不同，理由逐条见下）：环境变量 `AF_BASH_TIMEOUT_MS`
+// （单位毫秒——与 fix3 的工具入参 `timeout_ms` 同单位同换算）。
+// 为什么不走工具入参：① af-execline 的 bash 工具闭包只收 `&str` 命令
+// （`crate::agent::BashFn`），工具调用 JSON 的其余字段在 af-harness 侧解析后
+// 即丢弃，**无通路抵达 `exec`**（`suite/tb_unit.rs:287`、`suite/swev_unit.rs:374`
+// 是本 crate 仅有的两个调用点，均只传 command）；② `bash_tool_decl` 的 JSON 被
+// `tests/p1_comparison.rs:180-188` 与 af-bench 冻结件**逐字对拍**，加字段即破既有
+// 断言（本轮禁改既有测试断言）。故超时可调走环境变量，值域/换算/上限与 fix3 同。
+/// bash 工具单条命令的默认超时（秒）——历史口径，缺省不变。
+pub const DEFAULT_BASH_TIMEOUT_SEC: u32 = 180;
+/// bash 工具单条命令的超时上限（秒）——硬上限，超出即被裁到此处。
+pub const MAX_BASH_TIMEOUT_SEC: u32 = 600;
+/// bash 单命令超时的配置面（环境变量名，单位毫秒——同 fix3 工具入参 `timeout_ms`）。
+pub const BASH_TIMEOUT_ENV: &str = "AF_BASH_TIMEOUT_MS";
+
+/// bash 单命令超时秒数换算（纯函数，无副作用）。
+///
+/// ← fix3 `crates/af-bench/src/main.rs::bash_timeout_sec` 逐条同语义：
+/// - `requested_ms` 缺失/非法/< 1000 → 缺省 [`DEFAULT_BASH_TIMEOUT_SEC`]（180s）；
+/// - 否则整除到秒，夹到 `[1, MAX_BASH_TIMEOUT_SEC]`（600s 硬上限）。
+pub fn bash_timeout_sec(requested_ms: Option<u64>) -> u32 {
+    match requested_ms {
+        Some(ms) if ms >= 1_000 => ((ms / 1_000) as u32).clamp(1, MAX_BASH_TIMEOUT_SEC),
+        _ => DEFAULT_BASH_TIMEOUT_SEC,
+    }
+}
+
+/// 从配置面读 bash 单命令超时（环境变量 [`BASH_TIMEOUT_ENV`]）——未设置/非法 → 缺省。
+pub fn bash_timeout_sec_from_env() -> u32 {
+    let raw = std::env::var(BASH_TIMEOUT_ENV).ok();
+    let ms = raw.as_deref().and_then(|v| v.trim().parse::<u64>().ok());
+    bash_timeout_sec(ms)
+}
+
 /// TB system 提示（← af-bench main.rs:975 原样，一个字节不动——测量语义载荷）。
 /// fix2：完成协议随 harness 语义变更为"提交命令输出首行"——TB 提示同步；
 /// 与 swe-v 不同，TB 无 instance 纪律模板（main.rs:1015 user_message 即裸 prompt）。
@@ -219,13 +262,19 @@ impl TbEnv {
     ///   · 普通非零退出不教学（失败是常态信号，逐条指点只会加噪）；
     ///   · 截断附「换窄命令」指引（mini observation_template 同源）。
     /// （← af-bench tb.rs:178-222 原样，`ssh()` 换 `bridge.run()`。）
+    ///
+    /// L3'：单命令超时**可调**（缺省 180s / 上限 600s，配置面见
+    /// [`bash_timeout_sec_from_env`]）——桥接超时与超时文案里的秒数**跟着实际值走**
+    /// （文案不再留硬编码 "180"，否则超时可调后文案自相矛盾）。缺省未配置时
+    /// 仍为 180s，输出与基线逐字节一致。
     pub fn exec(&self, bridge: &dyn HostBridge, command: &str) -> String {
+        let timeout_sec = bash_timeout_sec_from_env();
         let script = format!(
             "docker exec {} bash -lc {}; echo __AF_RC=$?",
             self.container,
             shell_quote(&format!("cd {} && {}", self.workdir, command))
         );
-        let (mut text, rc) = match bridge.run(&self.host, &script, 180) {
+        let (mut text, rc) = match bridge.run(&self.host, &script, timeout_sec) {
             Ok((_, raw)) => split_rc(&raw),
             Err(err) => {
                 return format!(
@@ -235,9 +284,9 @@ impl TbEnv {
             }
         };
         if rc.is_none() {
-            text.push_str(
-                "\n[harness] The command was killed after exceeding the 180s timeout (no exit code was reported). Partial output (if any) is above. Re-run with a different approach: pipe input or use non-interactive flags (-y / -n / DEBIAN_FRONTEND=noninteractive), wrap long work in an explicit `timeout <secs> ...`, and avoid commands that never exit on their own (servers, watch loops, pagers).",
-            );
+            text.push_str(&format!(
+                "\n[harness] The command was killed after exceeding the {timeout_sec}s timeout (no exit code was reported). Partial output (if any) is above. Re-run with a different approach: pipe input or use non-interactive flags (-y / -n / DEBIAN_FRONTEND=noninteractive), wrap long work in an explicit `timeout <secs> ...`, and avoid commands that never exit on their own (servers, watch loops, pagers).",
+            ));
         }
         const CAP: usize = 12_000;
         if text.len() > CAP {
