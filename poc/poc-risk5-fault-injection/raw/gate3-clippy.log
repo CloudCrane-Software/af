@@ -1,0 +1,16 @@
+== 门3（复跑，修复后）: cargo clippy --workspace --all-targets --message-format.json（先 touch 全部 .rs 全量重 lint）==
+clippy_exit=0
+grep: warning: stray \ before "
+grep: warning: stray \ before "
+grep: warning: stray \ before "
+grep: warning: stray \ before "
+error 级消息数 = 0
+grep: warning: stray \ before "
+grep: warning: stray \ before "
+grep: warning: stray \ before "
+grep: warning: stray \ before "
+warning 级消息数 = 0
+
+== python3 -I ci/clippy_gate.py ==
+CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）
+gate_exit=0
