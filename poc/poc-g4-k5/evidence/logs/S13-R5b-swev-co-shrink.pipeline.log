@@ -1,0 +1,5 @@
+$ bash ci/gate_inputs_check.sh check --root S13-R5b-swev-co-shrink（真脚本+沙箱根）  （cwd=S13-R5b-swev-co-shrink）
+exit=1
+--- stdout ---
+--- stderr ---
+gate_inputs_check: 判据正本漂移：ci/scorechain-manifest.txt 期望 sha256=f34b3389a7a4… 实得 1b45bb5fbc19…——判据被改须走 update 同批评审重钉

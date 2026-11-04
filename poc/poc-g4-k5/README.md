@@ -4,6 +4,10 @@
 - 分支：`feature/g4-k5-derived`（普通 push，未动 product/main 指针）
 - 改动面：**仅 `ci/k5-path-lint.py`**（+109/−9，任务书写作 af/ci/，仓内实路径为 ci/）；
   本 poc/ 目录为证据件（新增，不属门码面）。零 cargo（未跑任何 cargo 命令）。
+- 返修批（2026-11-04，复核判不可收卷后，见 `REVIEW.md`）：F1 头注「跨锚」段如实
+  改写（**仅注释**，+11/−3，非注释行逐字节未变）+ 本 README §3/§4 断言改带边界
+  + S13 补证（R5/R5b 单门读数与管道级表钉红）+ 待裁决登记——见 §4.1/§8 与
+  `PENDING-ADJUDICATION.md`。
 - 原版快照：`before/k5-path-lint.orig.py`（sha256 `bbef41e7…`，逐字节=基线 288b0d9）
 
 ---
@@ -72,9 +76,21 @@
   的冻结锚声明）的文件 = 判分门本体。**内容型判定、非文件名判定**
   （af-credential/judge.rs 撞名不误伤；tests 里的 script_sha256 是构造 locator 不算门本体）。
   - **fail-closed**：该臂派生为空 = 红。
-- **互为跨锚（强度不弱于手写清单）**：下界只能通过「改判分链本体字节」收缩——
-  在册成员字节被腿1 的登记表 sha256 锚死，任何收缩动作先红腿1、走裁决
-  （冻结纪律不变；沙箱 S9 实证：协同换锚+摘标记的收缩在改前照绿、改后红）。
+- **跨锚关系与边界（返修批如实改写）**：原「强度不弱于手写清单 / 任何收缩动作
+  先红腿1」系 blanket 断言，被复核 R5/R5b 实证推翻（`REVIEW.md` P1/P2），改为
+  带边界表述：
+  - **仍成立**：在册成员字节被腿1 的登记表 sha256 锚死——改字节先红腿1、删行
+    留件先红下界、有意变更须走裁决（冻结纪律不变）。沙箱实证：S9 协同换锚+
+    摘标记（swev 臂全摘）改前照绿/改后红（fail-closed）；S6 新成员漏登记改前
+    照绿/改后红。
+  - **边界（R5/R5b，原 13 场景矩阵未覆盖的形态）**：「删成员文件+删登记行同批」
+    （部分臂协同收缩）改后下界随树收缩——report 臂仍有剩余成员、非空 ⇒ 不触发
+    fail-closed，腿1 又无行可查（登记行已同批摘）⇒ **k5 单门不红**（改前手工
+    清单是与树独立的第二锚、恰拦此形态）⇒ **单门防线 2 层→1 层**。该形态的
+    实际拦截者是 **step0 表钉**（`gate_inputs_check` 对 `scorechain-manifest.txt`
+    的 sha256 钉，exit=1，挂 `ci/run.sh` step0）⇒ **管道级无逃逸**。
+  - **口径**：派生下界解决的是「**新成员漏登记**」（漏钉面），**不覆盖**
+    「协同收缩」形态；单成员臂（swev 臂）删空仍红 fail-closed（S13-R5b）。
 
 **基线仓面实测**：派生集合 = 手写集合（恰四件），`派生 ⊇ 手写 = True`，
 双向差集 = ∅ —— 无「派生不出的手写成员」（故无需人工钉残留），无多余覆盖。
@@ -102,10 +118,33 @@
 | S11 af-credential/judge.rs 撞名非成员 | PASS 4 | PASS 4（不误伤） | 一致 |
 | S12 tests/ 面出现锚字段 | PASS 4 | PASS 4（不误扫） | 一致 |
 
-结论：**既有保护面 11/13 场景结论逐条一致**（S1/S2/S10 的红文案里
-「同批改 REQUIRED_MEMBERS 下界清单」→「同批改本文件下界派生规则」一处指针
-措辞随机制更新，红条件与 exit 逐字同）；仅 2 处按设计分叉且均为**改后更严**
-（S6=本 G4 要堵的漏钉；S9=派生 fail-closed 拦下协同收缩）。无任何场景改后变松。
+结论（返修批改为带边界表述——原「无任何场景改后变松」系 blanket 断言，被复核
+R5/R5b 推翻，`REVIEW.md` P1/P2）：**在已覆盖的 13 场景矩阵内只严不松**——
+11/13 场景结论逐条一致（S1/S2/S10 的红文案里「同批改 REQUIRED_MEMBERS 下界
+清单」→「同批改本文件下界派生规则」一处指针措辞随机制更新，红条件与 exit
+逐字同）；2 处按设计分叉均为**改后更严**（S6=本 G4 要堵的漏钉；S9=派生
+fail-closed 拦下 swev 臂协同收缩）。**矩阵外存在复核实证、S13 复跑确认的变松
+形态**：R5/R5b「删成员文件+删登记行同批」（部分臂协同收缩）在 **k5 单门由红
+转绿**（改前手工清单红 / 改后派生绿 `PASS（3 件）`），**单门防线 2 层→1 层**；
+该形态在**管道级由 step0 表钉拦红**（exit=1，见 §4.1）——**管道级无变松；
+单门级存在此一处已登记的变松**（§5.6、`PENDING-ADJUDICATION.md`）。
+
+### 4.1 S13 补证（返修批新造场景：R5/R5b 部分臂协同收缩双跑 + 管道级表钉）
+
+夹具为返修批**新造**（`run-s13.py`，沙箱形态照 S0-S12 同款 + 加装 step0 表钉
+面 12 件；未复制施工方/复核方沙箱）。每场景四读：管道对照（未攻击须绿 12 件，
+证沙箱忠实）→ 单门改前 → 单门改后 → 管道攻击（同批表改动过表钉面）。
+读数全录 `evidence/s13-scenarios.tsv` + `evidence/logs/S13-*`：
+
+| 场景 | 改前（手工清单版） | 改后（派生版）· 单门 | 管道级（step0 表钉） |
+|---|---|---|---|
+| S13-R5 report 臂：删 citation_unit.py **文件**+删登记行同批 | 红·被收缩（exit 1） | **`PASS（3 件）` exit 0——单门不红（防线 2→1）** | **红**（manifest 漂移 `121c1d09…→1b45bb5f…`，exit 1） |
+| S13-R5b swev 臂：删 judge.rs 文件+删登记行同批 | 红·被收缩（exit 1） | 红·swev 臂派生为空（exit 1——单成员臂删空，fail-closed 仍拦） | **红**（manifest 漂移 `f34b3389…→1b45bb5f…`，exit 1） |
+| S13-R5bak 复核 R5b 原形态：citation_unit.py 改名 `.bak`+删登记行同批 | 红·被收缩（exit 1） | **`PASS（3 件）` exit 0——单门不红（防线 2→1）** | **红**（manifest 漂移同 S13-R5，exit 1） |
+
+读数与复核员亲跑（`REVIEW.md` §3 表 R5/R5b 行）逐字吻合：**R5/R5bak 单门
+红→绿（改后防线 2→1），R5b（swev 臂变体）单门仍红（fail-closed）；三形态
+管道级均被 step0 表钉拦红（exit 1）⇒ 管道级无逃逸**。
 
 ## 5. 如实登记的边界
 
@@ -122,7 +161,18 @@
 4. **标记改名的合法演化会红**（设计内）：judge.rs 若裁决改名 `script_sha256`
    字段，臂2 派生为空即红——逼该裁决批同批改派生规则（S9 证明此门是故意收紧）。
 5. `mutations/registry.yaml` MUT-007 的期望（exit 1 + stderr 含「判分链登记表被收缩」）
-   由 S1 沙箱原样重放双绿（改前改后均中）；MUT-001（删门脚本）不受影响。
+  由 S1 沙箱原样重放双绿（改前改后均中）；MUT-001（删门脚本）不受影响。
+6. **R5/R5b 部分臂协同收缩是 k5 单门级的已知变松形态**（返修批登记；实证
+  §4.1 S13）：「删成员文件+删登记行同批」单门改后不红（防线 2→1），管道级由
+  step0 表钉拦。**是否恢复单门双层拦截（如本门自钉 manifest 摘要）属裁决题**，
+  已登记于 `PENDING-ADJUDICATION.md`（含技术分析与建议；裁决权在主代理/运营者，
+  本批不动判据、不偷偷加拦截层）。
+7. **`mutations/registry.yaml` MUT-007 description 仍指
+  `ci/k5-path-lint.py REQUIRED_MEMBERS`（陈旧指针）**：该机制已改为仓面派生
+  （`derive_required_members()`），`REQUIRED_MEMBERS` 已不存在（现收缩红文案
+  尾句已指向「本文件下界派生规则」）。registry 非本批可改面（复核 F3 列为
+  后续裁决批，本批零改动如实），登记于 `PENDING-ADJUDICATION.md` 待裁决批
+  顺手更新（同款先例=已修的收缩红文案指针）。
 
 ## 6. 门读数（任务书 §四）
 
@@ -147,3 +197,39 @@
 - 提交：见 `git log feature/g4-k5-derived`（提交号在交付报告回填）
 - 远端：`git push origin feature/g4-k5-derived`（普通 push，无 force）
 - 核验：`git ls-remote origin feature/g4-k5-derived` 与本地一致（交付报告回填读数）
+
+## 8. 返修批增补说明（2026-11-04：复核判不可收卷后的 F1/F2/S13/F3）
+
+**性质**：这是「如实修正说法 + 补证」批，**不是改判据批**。复核（`REVIEW.md`）
+判 P1（R5/R5b 单门红→绿）/P2（两处 blanket 断言失实）/P3（MUT-007 陈旧指针）
+后，本批按 fixes F1/F2/F3 落地：判据面（判定逻辑、红条件、exit 语义、派生
+规则、排除项）**零改动**——机械证明见 `evidence/noncomment-bytecheck.log`
+（剥离整行注释后与返修前提交 `f3cacdb` 逐字节相同，两侧剥离后 sha256 均
+`34612478…`）；`git diff f3cacdb -- crates/ mutations/` 为空，`ci/` 下除
+`k5-path-lint.py` 外零 diff。
+
+**改动清单**（逐文件性质归类）：
+
+| 件 | 性质 | 内容 |
+|---|---|---|
+| `ci/k5-path-lint.py` | **仅注释**（+11/−3） | 头注「互为跨锚」段如实改写（原「任何收缩动作先红腿1」→ R5 类形态边界：单门不红、防线 2→1、step0 表钉拦、管道级无逃逸、派生下界管漏钉不管协同收缩） |
+| `README.md`（本件） | 文档 | 头注追注返修批；§3 跨锚段带边界；§4 结论带边界 + §4.1 S13 表；§5 增 6/7 两条边界登记；本 §8 |
+| `run-s13.py`、`check-noncomment-bytes.py` | 新增证据工具 | S13 跑批器（新造夹具）；非注释行逐字节比对器 |
+| `evidence/s13-scenarios.tsv`、`evidence/logs/S13-*`、`evidence/sandboxes/S13-*` | 新增证据 | 三场景四读全录 + 沙箱终态 |
+| `evidence/noncomment-bytecheck.log`、`evidence/fix-batch-gates.log`、`evidence/fix-batch-changes.diff`、`evidence/claims-map.md` | 新增证据 | 机械证明读数 / 门读数 / 注释与 README 改前改后对照 / 逐条断言对应表 |
+| `PENDING-ADJUDICATION.md` | 新增登记件 | F3 两项待裁决（MUT-007 指针、单门双层拦截）与建议 |
+
+**门读数（返修批终读数，全部亲跑；`evidence/fix-batch-gates.log`）**：
+
+| 门 | 命令 | exit | 结论 |
+|---|---|---|---|
+| K5 判分链 lint（改前=返修前 `f3cacdb` / 改后） | `python3 -I ci/k5-path-lint.py` | 0 / 0 | 双跑 `PASS（4 件判分链成员逐位对锚）`，输出逐字节相同（仅注释改动） |
+| 门输入全集钉 | `bash ci/gate_inputs_check.sh check` | 0 | `判据正本钉对账一致: 12 件` |
+| clippy 门对应项 | `python3 -I ci/clippy_gate.py ci/out/step2-clippy.jsonl`（既有产物，零 cargo） | 0 | `CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内` |
+| S13 单门/管道级定点复算 | `python3 -I poc/poc-g4-k5/run-s13.py` | 0 | 见 §4.1（R5/R5bak 改后单门绿=如实记录的边界；三形态管道级表钉红 exit=1） |
+| 真树零改动核验 | `git status --porcelain` | — | 追踪件改动仅 `ci/k5-path-lint.py`（注释）+ `poc/poc-g4-k5/`（README 与新增证据）；`crates/`/`mutations/`/`ci/` 其余件零 diff |
+
+**既有结论的保留**（返修批不弱化已证实项）：派生替掉手工清单（REVIEW §1 过）、
+派生集合 ⊇ 手工集合且双向差集 ∅（主线树亦然）、真树改前改后输出一致、
+判据逐字未动（本批续证）、主线合流预演 PASS 4 件不误红、S0-S12 既有证据
+零改写（本批只新增）。逐条断言的证据/边界对应表：`evidence/claims-map.md`。

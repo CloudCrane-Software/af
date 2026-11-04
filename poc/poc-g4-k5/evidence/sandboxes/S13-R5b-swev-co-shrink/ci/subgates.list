@@ -1,0 +1,31 @@
+# ci/subgates.list — step14 共宿槽子门「单点名册」（红队终局轮 RT-E81 修复批，2026-11-02）
+#
+# 本件是 step14 子门全集的**唯一正本**。RT-E81 修复前，钉键
+# numbers.json gates.ci_step14_subgates 的 source 是**手写正则枚举**
+# （branches_check|xcheck|criteria_check|strategies_check）：「同名替换」攻击把 14d 的
+#   `(cd "$AF_ROOT" && python3 -B ci/strategies_check.py)` 换成
+#   `(cd "$AF_ROOT" && python3 -B ci/xcheck.py)` 时，枚举内仍 4 行匹配、复算值不变、
+#   step12 计数复算与 xcheck gates-exec-binding 全链照绿——14d 子门（策略库 schema +
+#   并集 index 完备性/计数对账 + af-dsl 编译断言）实际静默消失。
+# 本批起：子门集合以本名册为准，三处机检互为跨锚——
+#   ① ci/step12_check.py 第④节「名册绑定」：名册计数 == 正则计数 == 名册逐件在场数
+#      三者一致，且名册集合 == ci/run.sh step14 槽实际接线集合（双向），且接线行不带
+#      弱化标志（--skip-compile / --text-mode）。
+#   ② ci/xcheck.py 子门级在场断言（gates-exec-binding 增臂）：名册每件在 ci/run.sh
+#      有非注释接线行，缺件即硬红。
+#   ③ ci/gate_inputs_check.sh 的 GATE_INPUTS 清单含本件 → sha256 钉
+#      （ci/baselines/gate-inputs.sha256）：名册被静默增删即钉漂移红（fail-closed）。
+#
+# 格式纪律（改动前先读）：
+#   · 每行一个子检查脚本名，**不含 .py 后缀**；# 起始为注释行、空行忽略。
+#   · 只允许 [A-Za-z0-9_]+ 字符（与 ci/step12_check.py 的名册解析口径逐字一致）。
+#   · 增删子门须同批改：①本件 ②numbers.json 三键（gates.ci_step14_subgates /
+#     gates.ci_step14_subgates_regex / gates.ci_step14_subgates_roster）③ci/run.sh
+#     step14 接线 ④ci/baselines/gate-inputs.sha256（`bash ci/gate_inputs_check.sh
+#     update` 机生成重钉）——四件不同批即红（门数账自举纪律）。
+#   · step14 接线形态变更（`(cd "$AF_ROOT" && python3 …)` 改形）须同批改
+#     ci/step12_check.py / ci/xcheck.py 的接线抽取正则，否则名册对照面失效即红。
+branches_check
+xcheck
+criteria_check
+strategies_check
