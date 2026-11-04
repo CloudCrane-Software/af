@@ -1,0 +1,7 @@
+$ python3 -I ci/k5-path-lint.py  （cwd=S4-delete-member-file）
+exit=1
+--- stdout ---
+K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在
+ci/scorechain-manifest.txt 登记新锚 + 裁决出处）：
+  af/packages/reportkit/tools/render.py: 文件缺席（判分链成员被删/被移）——report 判分基准（R5 渲染器；W1-C61 入指纹门）
+--- stderr ---

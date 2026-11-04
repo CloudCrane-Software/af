@@ -1,0 +1,2 @@
+# clippy 警告基线 — 由 `python3 ci/clippy_gate.py <jsonl> --update` 生成
+# 策略: 只拦新增警告；修好现有警告后请用 --update 收紧基线

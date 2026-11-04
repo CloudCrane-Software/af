@@ -1,0 +1,21 @@
+# evidence/noncomment-bytecheck.log —— 判据面零弱化机械证明（G4 返修批，2026-11-04）
+# 基线 ref = 返修前提交 f3cacdb:ci/k5-path-lint.py（blob sha256 见下）
+
+$ git show f3cacdb:ci/k5-path-lint.py > /tmp/k5-baseline-f3cacdb.py && sha256sum /tmp/k5-baseline-f3cacdb.py
+899c57ef33332d6ea854b7ca7a743947adb719a9bc3a04c4cc3ba557480683b9  /tmp/k5-baseline-f3cacdb.py
+
+$ python3 -I poc/poc-g4-k5/check-noncomment-bytes.py /tmp/k5-baseline-f3cacdb.py ci/k5-path-lint.py
+基线 ref（/tmp/k5-baseline-f3cacdb.py）: 184 行，整行注释 58 行 → 剥离后 126 行
+工作树（ci/k5-path-lint.py）: 192 行，整行注释 66 行 → 剥离后 126 行
+剥离后 sha256（基线 ref）= 3461247892a4c280e51a512485df610f3014e4797e09470fab50b8a7aecd2691
+剥离后 sha256（工作树）  = 3461247892a4c280e51a512485df610f3014e4797e09470fab50b8a7aecd2691
+非注释行逐字节比对: IDENTICAL（判据面零改动）
+exit=0
+
+# git diff 行级分类：改动的 +/- 行是否全部为注释行（无输出=全部是注释行）
+$ git diff f3cacdb -- ci/k5-path-lint.py | grep -E "^[+-]" | grep -vE "^(\+\+\+|---)" | grep -vE "^[+-][[:space:]]*#" ; echo "exit=$?（1=无非注释改动行）"
+exit=1（1=无非注释改动行）
+
+$ git diff --stat f3cacdb -- ci/k5-path-lint.py
+ ci/k5-path-lint.py | 14 +++++++++++---
+ 1 file changed, 11 insertions(+), 3 deletions(-)

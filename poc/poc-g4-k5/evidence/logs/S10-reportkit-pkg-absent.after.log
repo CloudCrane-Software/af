@@ -1,0 +1,5 @@
+$ python3 -I ci/k5-path-lint.py  （cwd=S10-reportkit-pkg-absent）
+exit=1
+--- stdout ---
+--- stderr ---
+k5-path-lint: report 判分臂载体包缺席（af/packages/reportkit/）——下界无法派生即红（fail-closed，不静默缩面）

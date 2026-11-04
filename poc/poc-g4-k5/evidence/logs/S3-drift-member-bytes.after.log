@@ -1,0 +1,7 @@
+$ python3 -I ci/k5-path-lint.py  （cwd=S3-drift-member-bytes）
+exit=1
+--- stdout ---
+K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在
+ci/scorechain-manifest.txt 登记新锚 + 裁决出处）：
+  af/packages/reportkit/units/rubric_unit.py: sha256 漂移（表锚 e8b67eb676f6…，实得 f0011e6d2a7d…）——report 判分核（rubric；ReportJudgeLocator 同锚）——锚换版登记 2026-10-27 红队 W2-C-50 裁决（判分链加载侧自证补齐：import render 后校验实际执行模块防 pyc 影子；域分支 e78847f 有意变更，与 report_unit.rs:71 production 锚同步换版，合龙批补登）；再登记 2026-10-27 红队 W3-C-06 裁决（防再生：import render 前置 sys.dont_write_bytecode=True，裸跑无 -B 亦零字节码落盘，修复「已清是一次性动作」失实前提；有意变更，与 report_unit.rs production 锚同步换版）
+--- stderr ---

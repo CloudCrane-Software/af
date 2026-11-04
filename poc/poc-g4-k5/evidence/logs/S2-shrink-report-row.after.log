@@ -1,0 +1,5 @@
+$ python3 -I ci/k5-path-lint.py  （cwd=S2-shrink-report-row）
+exit=1
+--- stdout ---
+--- stderr ---
+k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/citation_unit.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改本文件下界派生规则）

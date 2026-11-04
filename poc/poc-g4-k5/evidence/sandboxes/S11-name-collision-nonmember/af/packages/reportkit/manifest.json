@@ -1,0 +1,6 @@
+{
+  "package": "reportkit",
+  "graphs": [
+    { "name": "paper_report", "version": "1.0", "source": "packages/reportkit/graphs/paper_report@1.0.afb" }
+  ]
+}

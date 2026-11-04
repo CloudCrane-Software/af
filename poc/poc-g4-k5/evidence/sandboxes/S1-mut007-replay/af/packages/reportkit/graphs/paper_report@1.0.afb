@@ -1,0 +1,191 @@
+version: 1
+meta:
+  name: paper_report
+  graph_version: "1.0"
+  entry: ingest
+  input: paper_input
+  output: { ref: research_report, from: study }
+  intent: "研究报告包 v1：论文摄取（URL/PDF 双工具）→ 受控研读环（reader→writer→引用核验→rubric，验证面安全点）→ 结构化报告工件（机器可解析、引用逐条可核验）；判定零 LLM 自评"
+
+types:
+  - name: paper_input
+    schema:
+      type: object
+      required: [focus]
+      properties:
+        url: { type: string }
+        local_path: { type: string }
+        focus: { type: string }
+  - name: paper_doc
+    schema:
+      type: object
+      required: [source_url, title, text_ref, sha256]
+      properties:
+        source_url: { type: string }
+        title: { type: string }
+        text_ref: { type: string }
+        sha256: { type: string }
+  - name: source_snapshot
+    schema:
+      type: object
+      required: [url, snapshot_ref, sha256]
+      properties:
+        url: { type: string }
+        snapshot_ref: { type: string }
+        sha256: { type: string }
+  - name: note_item
+    schema:
+      type: object
+      required: [point, anchor]
+      properties:
+        point: { type: string }
+        anchor: { type: string }
+  - name: research_report
+    schema:
+      type: object
+      required: [paper, sections, citations]
+      properties:
+        paper:
+          type: object
+          required: [url, title, sha256]
+          properties:
+            url: { type: string }
+            title: { type: string }
+            sha256: { type: string }
+        sections:
+          type: array
+          items:
+            type: object
+            required: [id, title, body_md]
+            properties:
+              id: { type: string }
+              title: { type: string }
+              body_md: { type: string }
+        citations:
+          type: array
+          items:
+            type: object
+            required: [n, url, quote, snapshot_sha256, snapshot_ref]
+            properties:
+              n: { type: integer }
+              url: { type: string }
+              quote: { type: string }
+              snapshot_sha256: { type: string }
+              snapshot_ref: { type: string }
+
+stores:
+  - name: sources
+    type: collection
+    item: source_snapshot
+    writer: ingest
+    lifecycle: run
+    retention: { max_items: 32 }
+  - name: notes
+    type: message_log
+    writer: study.reader
+    lifecycle: run
+    retention: { max_items: 64 }
+
+nodes:
+  - id: ingest
+    kind: task
+    uses:
+      tools: [pkg.report.web_fetch@1, pkg.report.pdf_extract@1]
+    writes: [sources]
+    emits: { paper: "envelope<paper_doc>" }
+  - id: study
+    kind: task
+    loop:
+      args: { paper: ingest.paper }
+      body:
+        nodes:
+          - id: reader
+            kind: task
+            # 裁决5：reader 以 artifact_contract 声明 sources 目录为工件产出
+            # （不进 store、进图记账）——emits sources 工件端口即契约面；快照
+            # 本体由 web_fetch/pdf_extract 工具副作用落 attempt_dir/sources/，
+            # cite_check 以 sources 全集兜底（§4.3-2）。
+            uses:
+              model: route.main@1
+              tools: [pkg.report.web_search@1, pkg.report.web_fetch@1]
+              memory: [pkg.report.mem.notes@1]
+            writes: [notes]
+            emits: { notes_out: "list<note_item>", sources: "envelope<source_snapshot>" }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.reportkit.reader_system, quota_tokens: 800 }
+                - { from: input, fields: [focus, url, local_path], policy: project, quota_tokens: 300 }
+                - { from: arg, name: paper, policy: project, quota_tokens: 1500 }
+                - { from: store, store: notes, policy: latest_k, args: { k: 12 }, quota_tokens: 3000 }
+          - id: writer
+            kind: task
+            uses: { model: route.main@1 }
+            consumes:
+              notes_in: "list<note_item>"
+              cite_feedback: research_report
+              rubric_feedback: research_report
+            emits: { draft: research_report }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.reportkit.writer_system, quota_tokens: 800 }
+                - { from: arg, name: paper, policy: project, quota_tokens: 800 }
+                - { from: edge, port: notes_in, policy: project, quota_tokens: 3000 }
+                - { from: edge, port: cite_feedback, policy: project, quota_tokens: 600, optional: true }
+                - { from: edge, port: rubric_feedback, policy: project, quota_tokens: 600, optional: true }
+          - id: cite_check
+            kind: check
+            uses: { unit: pkg.report.citation_unit@1 }
+            reads: [sources]
+            consumes: { draft: research_report }
+            emits: { verified: research_report }
+            route:
+              default: rubric_check
+              rules:
+                - { when: "cite_check.passed == false", goto: writer }
+          - id: rubric_check
+            kind: check
+            uses: { unit: pkg.report.rubric_unit@1 }
+            consumes: { verified: research_report }
+            emits: { report: research_report }
+            route:
+              default: exit
+              rules:
+                - { when: "rubric_check.passed == false", goto: writer }
+        edges:
+          - { from: reader, output: notes_out, to: writer, input: notes_in }
+          - { from: writer, output: draft, to: cite_check, input: draft }
+          - { from: cite_check, output: verified, to: rubric_check, input: verified }
+          - { from: cite_check, output: verified, to: writer, input: cite_feedback }
+          - { from: rubric_check, output: report, to: writer, input: rubric_feedback }
+      max_iterations: 3
+      carried:
+        - { store: notes, max_items: 64 }
+      safety_points:
+        - { node: cite_check, kind: check }
+      exit_when: "rubric_check.passed == true"
+      on_exhausted: fail
+    emits: { report: { from_body: rubric_check.report } }
+
+edges:
+  - { from: ingest, output: paper, to: study, input: paper }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 300 }
+    - { id: study_turns, dimension: turns, scope: loop:study, cap: 40 }
+    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 400000 }
+  stop:
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: schema_invalid
+      route: same_node
+      feedback: format_reminder
+      retry: { max: 2, backoff_ms: 0 }
+    - class: tool_error
+      route: same_node
+      feedback: error_observation
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

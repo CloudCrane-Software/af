@@ -1,0 +1,14 @@
+场景	改前exit	改前结论	改后exit	改后结论	判定	说明
+S0-pristine	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	一致	原样基线（改前改后必须同绿同文）
+S1-mut007-replay	1	k5-path-lint: 判分链登记表被收缩（必需成员缺席：crates/af-execline/src/judge.rs）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）	1	k5-path-lint: 判分链登记表被收缩（必需成员缺席：crates/af-execline/src/judge.rs）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改本文件下界派生规则）	一致	MUT-007 原样重放：删 judge.rs 登记行（必须双红「被收缩」）
+S2-shrink-report-row	1	k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/citation_unit.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）	1	k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/citation_unit.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改本文件下界派生规则）	一致	删 citation_unit.py 登记行（必须双红「被收缩」）
+S3-drift-member-bytes	1	K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在	1	K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在	一致	在册成员字节漂移（必须双红「sha256 漂移」）
+S4-delete-member-file	1	K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在	1	K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在	一致	删在册成员文件（必须双红「文件缺席」）
+S5-empty-manifest	1	k5-path-lint: 登记表为空（判分链保护面缺失）	1	k5-path-lint: 登记表为空（判分链保护面缺失）	一致	登记表只剩注释（必须双红「登记表为空」）
+S6-new-unregistered-member	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	1	k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/new_unit.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改本文件下界派生规则）	分叉(改后更严)	判分包内新增 .py 未登记（改前漏钉照绿 → 改后红：G4 修复点）
+S7-new-member-registered	0	K5 判分链路径 lint: PASS（5 件判分链成员逐位对锚）	0	K5 判分链路径 lint: PASS（5 件判分链成员逐位对锚）	一致	新增成员走正道登记新锚（必须双绿 5 件）
+S8-excluded-artifacts	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	一致	__pycache__/*.pyc 与 *.bak 快照（显式排除项，不扩面：双绿 4 件）
+S9-gate-body-marker-stripped	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	1	k5-path-lint: swev 判分臂派生为空（生产源无声明判分脚本 sha256 锚（script_sha256）的判分门本体）——下界无法派生即红（fail-closed，不静默缩面）	分叉(改后更严)	协同收缩：judge.rs 摘锚声明字段+登记行换新锚（改前照绿 → 改后红：fail-closed）
+S10-reportkit-pkg-absent	1	k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/citation_unit.py、af/packages/reportkit/units/rubric_unit.py、af/packages/reportkit/tools/render.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）	1	k5-path-lint: report 判分臂载体包缺席（af/packages/reportkit/）——下界无法派生即红（fail-closed，不静默缩面）	一致	判分包整目录删除+行同批摘（双红：手写版「被收缩」/派生版「载体包缺席」）
+S11-name-collision-nonmember	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	一致	af-credential/judge.rs 撞名非成员（内容型判定不误伤：双绿 4 件）
+S12-marker-in-tests-ignored	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	0	K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）	一致	tests/ 面出现锚字段（非生产源不扫：双绿 4 件）

@@ -17,6 +17,40 @@
 #   judge.rs 追加一行注释后仍 PASS）。故此处加「必需成员下界」：下界清单
 #   缺一即红（fail-closed）。有意移除判分链成员须走裁决并同批改本下界清单
 #   （代码 diff 即评审面——与登记表同款冻结纪律，两处分离互为跨锚）。
+#
+# 下界成员来源（G4 门自派生，2026-11-04）：下界不再手工维护成员清单——
+# 手写清单 ⇒ 仓面加新成员不会自动进清单、删成员清单也不会自动收敛，
+# 正是 RT-E6/E51 记的「只钉 N 件」同型漏钉（同类教训：跨树收口门的门族
+# 面已从手抄清单改为基线 ref 自派生，ci/fix_verify.py 机制③）。下界改为
+# 从仓面按规则现算全集（可复算、可解释，规则如下）：
+#   臂1 report 判分臂 = af/packages/reportkit/ 包内全部 *.py。判分包内的
+#       python 源即 report 判分脚本面：ReportJudgeLocator 装载/锚定的
+#       citation/rubric/render 三件全住此包（report_unit.rs production 的
+#       pkg_root 锚），登记表头亦钉「report 判分 = reportkit 三件」。包内
+#       新增 .py 自动入下界（不登记即红，fail-closed）。不稳定成分显式
+#       排除（按文件种类，同 fix_verify 排除面先例）：__pycache__/ 目录与
+#       *.bak（字节码产物/历史快照非正本——__pycache__ 运行侧另有 W2-C52
+#       在场性门独立守）。判分包目录缺席或该臂派生为空 = 红（保护面无法
+#       派生，不静默缩面）。
+#   臂2 swev 判分臂 = 生产源（crates/*/src/ 下 **.rs）中声明判分脚本
+#       sha256 锚（script_sha256 字段——judge.rs「判分脚本 sha256 锚」，
+#       即对仓外 swev-judge.py 的冻结锚）的文件 = 判分门本体（swev 判分核
+#       swev-judge.py 不在仓内，仓内保护面 = 冻结锚所在的门本体，登记表
+#       头规则）。内容型判定、非文件名判定：crates/af-credential/src/
+#       judge.rs 系权限交集判定器（Cedar∩biscuit），与判分链同名不同物，
+#       不因撞名入面；tests/ 下的 script_sha256 是测试构造 locator，非门
+#       本体，不在生产源扫描面。该臂派生为空 = 红。
+#   跨锚边界（如实；G4 复核 R5/R5b 实证改写——原「任何收缩动作先红腿1」
+#   断言对该形态不成立）：派生下界解决的是「新成员漏登记」（漏钉面），
+#   不覆盖「删成员文件+删登记行同批」的部分臂协同收缩——该形态下界随
+#   树收缩（report 臂仍有剩余成员、非空 ⇒ 不触发 fail-closed），腿1 又
+#   无行可查（登记行已同批摘）⇒ 本单门不红，单门防线 2 层→1 层（改前
+#   手工清单是与树独立的第二锚、恰拦此形态）。该形态的实际拦截者是
+#   step0 表钉（gate_inputs_check 对本登记表的 sha256 钉，exit=1，挂
+#   run.sh step0）⇒ 管道级无逃逸。单成员臂（swev 臂）删空仍红
+#   fail-closed（证据 poc/poc-g4-k5 S13）。在册成员字节仍被登记表
+#   sha256 锚死（腿1 逐位对锚）：删行留件先红下界、改字节先红腿1——
+#   有意变更须走裁决（代码 diff 即评审面，冻结纪律不变）。
 # =============================================================================
 import hashlib
 import pathlib
@@ -25,13 +59,81 @@ import sys
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 MANIFEST = REPO_ROOT / "ci" / "scorechain-manifest.txt"
 
-# 判分链必需成员下界（判分核 + 判分门本体；缺一即红——登记表收缩=逃逸通道）
-REQUIRED_MEMBERS = (
-    "crates/af-execline/src/judge.rs",
-    "af/packages/reportkit/units/citation_unit.py",
-    "af/packages/reportkit/units/rubric_unit.py",
-    "af/packages/reportkit/tools/render.py",
-)
+# ----------------------------------------------------------------------
+# 判分链必需成员下界——派生规则常量（规则全文与证据见文件头；G4，2026-11-04）：
+# ----------------------------------------------------------------------
+# 臂1 report 判分臂载体包（判分包内 *.py 全集 = report 判分脚本面）
+REPORT_ARM_PKG = pathlib.Path("af") / "packages" / "reportkit"
+# 臂2 swev 判分臂生产源面（crates/*/src/ 下 **.rs；tests/ 不在面内）
+GATE_SRC_PATTERN = "*/src"
+# 判分门本体的内容型标记：判分脚本 sha256 锚字段（judge.rs 声明，tests 只是
+# 构造非门本体；af-credential/judge.rs 无此标记不因撞名入面）
+GATE_BODY_MARKER = "script_sha256"
+# 派生排除面（按文件种类排除不稳定成分，同 ci/fix_verify.py 排除面先例）
+EXCLUDE_DIRNAMES = ("__pycache__",)  # 字节码产物目录（W2-C52 运行侧另有在场性门）
+EXCLUDE_SUFFIXES = (".bak",)  # 历史快照（任何位置的 .bak 都不是正本）
+
+
+def _excluded(relpath: pathlib.Path) -> bool:
+    """派生排除面：按文件种类判定（目录名/后缀），不按具体路径点名。"""
+    return (
+        any(part in EXCLUDE_DIRNAMES for part in relpath.parts)
+        or relpath.suffix in EXCLUDE_SUFFIXES
+    )
+
+
+def derive_report_arm() -> list:
+    """臂1：report 判分臂下界 = 判分包（af/packages/reportkit/）内全部 *.py。
+
+    包目录缺席/派生为空即红——保护面无法派生时不静默缩面（fail-closed）。"""
+    pkg = REPO_ROOT / REPORT_ARM_PKG
+    if not pkg.is_dir():
+        sys.exit(
+            "k5-path-lint: report 判分臂载体包缺席（"
+            + REPORT_ARM_PKG.as_posix()
+            + "/）——下界无法派生即红（fail-closed，不静默缩面）"
+        )
+    members = [
+        p.relative_to(REPO_ROOT).as_posix()
+        for p in sorted(pkg.rglob("*.py"))
+        if not _excluded(p.relative_to(REPO_ROOT))
+    ]
+    if not members:
+        sys.exit(
+            "k5-path-lint: report 判分臂派生为空（判分包内无 .py 判分脚本）"
+            "——下界无法派生即红（fail-closed，不静默缩面）"
+        )
+    return members
+
+
+def derive_swev_arm() -> list:
+    """臂2：swev 判分臂下界 = 生产源中声明判分脚本 sha256 锚的门本体文件。
+
+    内容型判定（GATE_BODY_MARKER 在文件字节内），非文件名判定；派生为空
+    即红（fail-closed）。"""
+    members = []
+    crates_dir = REPO_ROOT / "crates"
+    for gate_src in sorted(crates_dir.glob(GATE_SRC_PATTERN)):
+        for src in sorted(gate_src.rglob("*.rs")):
+            rel = src.relative_to(REPO_ROOT)
+            if _excluded(rel):
+                continue
+            if GATE_BODY_MARKER in src.read_text(encoding="utf-8"):
+                members.append(rel.as_posix())
+    if not members:
+        sys.exit(
+            "k5-path-lint: swev 判分臂派生为空（生产源无声明判分脚本 sha256 "
+            "锚（" + GATE_BODY_MARKER + "）的判分门本体）——下界无法派生即红"
+            "（fail-closed，不静默缩面）"
+        )
+    return members
+
+
+def derive_required_members() -> tuple:
+    """判分链必需成员下界（判分核 + 判分门本体；缺一即红）——仓面派生全集。
+
+    两臂并集，排序稳定（可复算：同仓面 ⇒ 同集合）。"""
+    return tuple(sorted(derive_report_arm() + derive_swev_arm()))
 
 
 def main() -> int:
@@ -49,14 +151,20 @@ def main() -> int:
 
     # 判分链成员下界对账：登记表被收缩（必需成员缺席）即红——否则被摘掉登记
     # 行的判分门本体脱离哈希锚保护面、任意改写而本门照绿（RT-E6/E51）。
+    # 下界成员自仓面派生（G4，2026-11-04；派生规则见文件头与
+    # derive_required_members）——判定逻辑与强度和手写清单版逐字同源。
     registered = {relpath for relpath, _anchor, _purpose in entries}
-    missing = [relpath for relpath in REQUIRED_MEMBERS if relpath not in registered]
+    missing = [
+        relpath
+        for relpath in derive_required_members()
+        if relpath not in registered
+    ]
     if missing:
         sys.exit(
             "k5-path-lint: 判分链登记表被收缩（必需成员缺席："
             + "、".join(missing)
             + "）——判分链成员脱离哈希锚保护面即红"
-            "（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）"
+            "（有意移除须走裁决并同批改本文件下界派生规则）"
         )
 
     drift = []

@@ -1,0 +1,21 @@
+{
+  "_comment": "budget-cast 白名单单一正本（G0-C 批落地；fix-scan.yaml sat-cast 族共读——SPEC 1 ⑧-6，防两份白名单漂移）。report_unit.rs:1112/1262 两处已由 G0-C 前置修复饱和化（开发计划 §2.2），不入白名单。在册 2 站点为红队摸排新发现（复盘未记载，SPEC 3 ④），挂 D-50（ci/debt-register.md 镜像在册，expires=v0.2-G0）。",
+  "entries": [
+    {
+      "path": "crates/af-execline/src/graph_unit.rs",
+      "line": 1068,
+      "pattern": "turns: stage.turns as u32,",
+      "debt": "D-50",
+      "reason": "stage.turns:u64（graph_unit.rs:1434）直转截断进 record turns:u32（record.rs:164）——u64→u32 超 2^32 即静默折小；SPEC 3 ④新发现站点，v0.2 迁钳位/饱和换算后销项",
+      "expires": "v0.2-G0"
+    },
+    {
+      "path": "crates/af-execline/src/shadow.rs",
+      "line": 392,
+      "pattern": "turns: row.get(\"turns\").and_then(Value::as_u64).map(|t| t as u32),",
+      "debt": "D-50",
+      "reason": "判分行投影 u64→u32 直转（SPEC 3 ④新发现站点）；v0.2 与 graph_unit.rs:1068 同族一并治理后销项",
+      "expires": "v0.2-G0"
+    }
+  ]
+}
