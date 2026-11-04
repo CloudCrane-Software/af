@@ -294,7 +294,105 @@ pub fn verify(
     let eval_sha256 = sha256_hex(&log_path);
     // 判分子进程调用收敛到唯一模块（方案 §3.2-1；← swev.rs:205-210 原样，
     // 硬编码路径换 locator 字段）。
-    match crate::judge::invoke(judge, task_json_path, &log_path, &diff_path) {
+    //
+    // L3''：judge **退避重试**加在**调用侧**——[`crate::judge::invoke`] 的签名与
+    // 语义一字未动（invoke 是契约收敛点）。缺省（配置面未开）= **同一个驱动跑 1 次**
+    // （= 基线单次调用，判分结论与注记逐字节不变 ⇒ 历史判分读数不可比的风险 = 0）。
+    let attempt = |_attempt_no: u32| {
+        judge_attempt(judge, task_json_path, &log_path, &diff_path, eval_timed_out)
+    };
+    let (resolved, note) = if judge_retry_enabled() {
+        match judge_call_with_retry(JUDGE_MAX_ATTEMPTS, &JUDGE_BACKOFF_SEC, attempt, |secs| {
+            std::thread::sleep(std::time::Duration::from_secs(secs))
+        }) {
+            JudgeCallOutcome::Terminal { resolved, note } => (resolved, note),
+            // 重试耗尽 → fix3 同款前缀（← fix3 `af-bench/src/judge.rs::run_judge`
+            // 末行 `JUDGE_ERROR: {last_err}`）。
+            JudgeCallOutcome::Exhausted { err } => (None, format!("JUDGE_ERROR: {err}")),
+        }
+    } else {
+        // 缺省路径：同一个驱动跑 1 次（不等待、不重试、不改注记）——基线逐字节等价。
+        match judge_call_with_retry(1, &[], attempt, |_| {}) {
+            JudgeCallOutcome::Terminal { resolved, note } => (resolved, note),
+            JudgeCallOutcome::Exhausted { err } => (None, err),
+        }
+    };
+    (resolved, note, eval_sha256)
+}
+
+/// judge 调用尝试的结果分类（L3''：终态 vs 瞬态失败）。
+///
+/// 分界与 fix3 `b3e1f56` 的 `crates/af-bench/src/judge.rs::run_judge` 逐条同：
+/// - **终态**（[`JudgeAttempt::Terminal`]）：判分器进程成功退出且 stdout 可解析为
+///   JSON——这是**判分结论本身**，**一律不重试**（重试终态即改判分语义）；
+/// - **瞬态失败**（[`JudgeAttempt::Transient`]）：判分器启动失败 / 非 0 退出 /
+///   输出非 JSON——供给面抖动（urllib3 Traceback、连接重置等），可重试。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JudgeAttempt {
+    /// 终态：判分结论（resolved=None 表示判分器没给出结论，仍是终态）。
+    Terminal {
+        resolved: Option<bool>,
+        note: String,
+    },
+    /// 瞬态失败：可重试（err 为末次错误原文，格式同基线注记）。
+    Transient { err: String },
+}
+
+/// 一次 judge 调用的结果（L3'' 重试驱动）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JudgeCallOutcome {
+    /// 拿到终态判分结论（不再重试）。
+    Terminal {
+        resolved: Option<bool>,
+        note: String,
+    },
+    /// 瞬态失败且重试耗尽（err = 末次错误原文；`JUDGE_ERROR:` 前缀由调用方按口径加）。
+    Exhausted { err: String },
+}
+
+/// L3''：judge 退避重试参数（← fix3 `b3e1f56` `crates/af-bench/src/judge.rs`
+/// 的 `JUDGE_MAX_ATTEMPTS` / `JUDGE_BACKOFF_SEC`，逐字同参）。
+///
+/// - 尝试 3 次（首次 + 2 次重试）；
+/// - 退避 5s / 15s。
+pub const JUDGE_MAX_ATTEMPTS: u32 = 3;
+pub const JUDGE_BACKOFF_SEC: [u64; 2] = [5, 15];
+/// L3''：judge 退避重试的**开关**配置面（环境变量）——**缺省关闭**。
+///
+/// 缺省关闭 = 基线单次调用（判分结论与注记逐字节不变 ⇒ 历史判分读数可比）。
+/// 显式开启（`AF_JUDGE_RETRY=1`）后的行为与 fix3 的 `run_judge` 逐条等价。
+/// 登记：本项与 fix3 的**唯一**刻意差异是 fix3 的重试为无条件开启，本代际按
+/// 「新配置项默认缺省不变」改为缺省关闭（开启后逐条等价）。
+pub const JUDGE_RETRY_ENV: &str = "AF_JUDGE_RETRY";
+
+/// 重试开关取值解析：仅 `1` / `true` / `yes` / `on`（大小写不敏感、两端空白忽略）
+/// 算开；其余（含未设置）算关——缺省即基线单次调用。
+pub fn judge_retry_enabled_from(raw: Option<&str>) -> bool {
+    matches!(
+        raw.map(str::trim).map(str::to_ascii_lowercase).as_deref(),
+        Some("1") | Some("true") | Some("yes") | Some("on")
+    )
+}
+
+/// 重试开关（读配置面 [`JUDGE_RETRY_ENV`]）。
+pub fn judge_retry_enabled() -> bool {
+    judge_retry_enabled_from(std::env::var(JUDGE_RETRY_ENV).ok().as_deref())
+}
+
+/// 单次 judge 调用（**不改** [`crate::judge::invoke`] 的签名与语义——只在其外
+/// 解读退出码/stdout），结果按终态/瞬态分类。
+///
+/// 注记文案与基线逐字一致（成功路径 `{notes}judge: {stdout}`；失败路径
+/// `judge 输出不是 JSON: …` / `judge 退出 …` / `judge 启动失败: …`），
+/// 故缺省（单次调用）路径的判分注记与基线逐字节等价。
+fn judge_attempt(
+    judge: &JudgeLocator,
+    task_json_path: &Path,
+    log_path: &Path,
+    diff_path: &Path,
+    eval_timed_out: bool,
+) -> JudgeAttempt {
+    match crate::judge::invoke(judge, task_json_path, log_path, diff_path) {
         Ok(output) if output.status.success() => {
             let text = String::from_utf8_lossy(&output.stdout);
             match serde_json::from_str::<serde_json::Value>(text.trim()) {
@@ -303,25 +401,21 @@ pub fn verify(
                     // 作为成功——含任务包判据被清空形态；口径与注记拼接序由
                     // verdict_tests 钉死）。
                     let (resolved, notes) = verdict_from_judge_row(&row, eval_timed_out);
-                    (
+                    JudgeAttempt::Terminal {
                         resolved,
-                        format!("{notes}judge: {}", text.trim()),
-                        eval_sha256,
-                    )
+                        note: format!("{notes}judge: {}", text.trim()),
+                    }
                 }
-                Err(err) => (
-                    None,
-                    format!(
+                Err(err) => JudgeAttempt::Transient {
+                    err: format!(
                         "judge 输出不是 JSON: {err}: {}",
                         &text[..text.len().min(200)]
                     ),
-                    eval_sha256,
-                ),
+                },
             }
         }
-        Ok(output) => (
-            None,
-            format!(
+        Ok(output) => JudgeAttempt::Transient {
+            err: format!(
                 "judge 退出 {}: {}",
                 output.status,
                 String::from_utf8_lossy(&output.stderr)
@@ -329,10 +423,56 @@ pub fn verify(
                     .take(300)
                     .collect::<String>()
             ),
-            eval_sha256,
-        ),
-        Err(err) => (None, format!("judge 启动失败: {err}"), eval_sha256),
+        },
+        Err(err) => JudgeAttempt::Transient {
+            err: format!("judge 启动失败: {err}"),
+        },
     }
+}
+
+/// 退避重试驱动（纯函数：注入尝试函数与等待函数，便于无副作用复跑）。
+///
+/// 语义（← fix3 `b3e1f56` `crates/af-bench/src/judge.rs::run_judge` 逐条同）：
+/// - 只重试**瞬态失败**；**终态**（判分结论）第一次拿到即返回，绝不重试；
+/// - 最多 `max_attempts` 次尝试，退避表 `backoff_sec`（第 n 次失败后等
+///   `backoff_sec[n-1]` 秒；末次失败不再等）；
+/// - 重试耗尽 → [`JudgeCallOutcome::Exhausted`]（错误原文，`JUDGE_ERROR:` 前缀
+///   由调用方加）。
+///
+/// 与 fix3 的差异仅一处：fix3 的等待是硬编码 `thread::sleep`，本函数把等待
+/// 做成注入参数（生产侧传 `thread::sleep`，测试侧传记录器）——**行为语义同**。
+pub fn judge_call_with_retry<F, W>(
+    max_attempts: u32,
+    backoff_sec: &[u64],
+    mut attempt: F,
+    mut wait: W,
+) -> JudgeCallOutcome
+where
+    F: FnMut(u32) -> JudgeAttempt,
+    W: FnMut(u64),
+{
+    let mut last_err = String::new();
+    for attempt_no in 1..=max_attempts {
+        match attempt(attempt_no) {
+            JudgeAttempt::Terminal { resolved, note } => {
+                return JudgeCallOutcome::Terminal { resolved, note };
+            }
+            JudgeAttempt::Transient { err } => {
+                last_err = err;
+                if attempt_no < max_attempts {
+                    let wait_sec = backoff_sec
+                        .get((attempt_no as usize).saturating_sub(1))
+                        .copied()
+                        .unwrap_or(0);
+                    eprintln!(
+                        "[judge] 判分器第 {attempt_no}/{max_attempts} 次失败（{last_err}），{wait_sec}s 后重试"
+                    );
+                    wait(wait_sec);
+                }
+            }
+        }
+    }
+    JudgeCallOutcome::Exhausted { err: last_err }
 }
 
 /// eval.log 的 sha256 十六进制串；读不到文件时 None（D-20 项 2）。
