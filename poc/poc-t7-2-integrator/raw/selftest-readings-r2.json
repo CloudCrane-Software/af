@@ -1,0 +1,1724 @@
+{
+  "failures": [],
+  "fixture": {
+    "base_commit": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+    "base_ref": "main",
+    "branch": "feat/2026-11-04-batchA",
+    "cand_commit": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+    "gate_exit": 0,
+    "gate_summary": "step1  PASS  1ms  fixture fmt\nstep2  PASS  1ms  fixture clippy\nPIPELINE-GREEN\n",
+    "repo": "/tmp/t7-2-fixture-drlkedmq/fixture-repo"
+  },
+  "readings": [
+    {
+      "case": "baseline-normal",
+      "exit": 0,
+      "expect": "exit 0（绿）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "OK",
+      "report": {
+        "actual": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "base_ref": "main",
+        "branch": "feat/2026-11-04-batchA",
+        "candidate_diff_paths": [
+          "crates/demo/extra.rs"
+        ],
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          },
+          {
+            "detail": "base_sha / source_sha / tested_tree / suite_digest",
+            "name": "四项绑定逐项相符",
+            "ok": true
+          },
+          {
+            "detail": "d71a142c11b8…",
+            "name": "候选树门覆盖成立（落地树 == 门跑过的树）",
+            "ok": true
+          },
+          {
+            "detail": "suite_digest=b9e2ff4a6f3e565e… 成员 3 件",
+            "name": "门没被换（候选树与落地树的门执行面逐字节同）",
+            "ok": true
+          }
+        ],
+        "expected": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "gate_summary_path": "/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt",
+        "gate_summary_readback": "磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文 三方一致",
+        "merge_mode": "fast-forward",
+        "merge_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e",
+        "merge_tree_sha256": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+        "note": "机器辅助核对结论；机器仲裁员首版不启用——合流与否由人工 integrator 依 docs/INTEGRATOR-SOP.md 决定。",
+        "reason_code": "OK",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record.json",
+        "record_sha256": "d746979532823b3883a184dc11bc5410a6cdbd96da81dd719d6f9e20c99ea2d6",
+        "remote": "/tmp/t7-2-fixture-drlkedmq/fixture-repo",
+        "result": "PASS",
+        "review_points": [
+          "候选树改动触及 1 件代码/门/判据面文件（人眼要看 diff 与门结论摘要）"
+        ],
+        "source_is_remote_head": true,
+        "source_origin": "/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头",
+        "suite_digest_algo": "af.gate_suite_digest.v1",
+        "suite_members": 3
+      },
+      "stderr": "",
+      "stdout": "{\n  \"actual\": {\n    \"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\",\n    \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\",\n    \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\",\n    \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\"\n  },\n  \"base_ref\": \"main\",\n  \"branch\": \"feat/2026-11-04-batchA\",\n  \"candidate_diff_paths\": [\n    \"crates/demo/extra.rs\"\n  ],\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha / source_sha / tested_tree / suite_digest\",\n      \"name\": \"四项绑定逐项相符\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"d71a142c11b8…\",\n      \"name\": \"候选树门覆盖成立（落地树 == 门跑过的树）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"suite_digest=b9e2ff4a6f3e565e… 成员 3 件\",\n      \"name\": \"门没被换（候选树与落地树的门执行面逐字节同）\",\n      \"ok\": true\n    }\n  ],\n  \"expected\": {\n    \"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\",\n    "
+    },
+    {
+      "case": "base_sha-改一位",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "BIND-MISMATCH",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-base_sha-改一位.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          }
+        ],
+        "detail": "四项绑定不符：{\"base_sha\": {\"expected\": \"e323580127f159ee0ceea419cf1c2e1cfa085de0\", \"actual\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\"}}",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "BIND-MISMATCH",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-base_sha-改一位.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-base_sha-改一位.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"四项绑定不符：{\\\"base_sha\\\": {\\\"expected\\\": \\\"e323580127f159ee0ceea419cf1c2e1cfa085de0\\\", \\\"actual\\\": \\\"e323580127f159ee0ceea419cf1c2e1cfa085de3\\\"}}\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"BIND-MISMATCH\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-base_sha-改一位.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "source_sha-改一位",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "BIND-MISMATCH",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-source_sha-改一位.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          }
+        ],
+        "detail": "四项绑定不符：{\"source_sha\": {\"expected\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa670\", \"actual\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\"}}",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "BIND-MISMATCH",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-source_sha-改一位.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-source_sha-改一位.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"四项绑定不符：{\\\"source_sha\\\": {\\\"expected\\\": \\\"37b0f04fb69d9b563ca8ec6acf888c39811fa670\\\", \\\"actual\\\": \\\"37b0f04fb69d9b563ca8ec6acf888c39811fa671\\\"}}\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"BIND-MISMATCH\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-source_sha-改一位.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "suite_digest-改一位",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "BIND-MISMATCH",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-suite_digest-改一位.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          }
+        ],
+        "detail": "四项绑定不符：{\"suite_digest\": {\"expected\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de40\", \"actual\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\"}}",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "BIND-MISMATCH",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-suite_digest-改一位.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-suite_digest-改一位.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"四项绑定不符：{\\\"suite_digest\\\": {\\\"expected\\\": \\\"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de40\\\", \\\"actual\\\": \\\"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\\\"}}\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"BIND-MISMATCH\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-suite_digest-改一位.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "tested_tree-换另一棵树",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "BIND-MISMATCH",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-tested_tree-换另一棵树.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=c9b33dec6d6a…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          }
+        ],
+        "detail": "四项绑定不符：{\"tested_tree\": {\"expected\": \"c9b33dec6d6ae0b2ffa66bf6dbf532e8fb34886b\", \"actual\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\"}}",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "BIND-MISMATCH",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-tested_tree-换另一棵树.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-tested_tree-换另一棵树.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=c9b33dec6d6a…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt（sha256=07bb0071617324ff…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"四项绑定不符：{\\\"tested_tree\\\": {\\\"expected\\\": \\\"c9b33dec6d6ae0b2ffa66bf6dbf532e8fb34886b\\\", \\\"actual\\\": \\\"d71a142c11b8326777dd108bc43b03df55cfc77e\\\"}}\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"BIND-MISMATCH\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-tested_tree-换另一棵树.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "verdict-\"fail\"",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "VERDICT-NOT-PASS",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-verdict-\"fail\".json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          }
+        ],
+        "detail": "verdict='fail'，必须严格等于 'pass'（大小写敏感）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "VERDICT-NOT-PASS",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-verdict-\"fail\".json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-verdict-\\\"fail\\\".json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"verdict='fail'，必须严格等于 'pass'（大小写敏感）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"VERDICT-NOT-PASS\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-verdict-\\\"fail\\\".json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "verdict-\"PASS\"（大小写）",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "VERDICT-NOT-PASS",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-verdict-\"PASS\"（大小写）.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          }
+        ],
+        "detail": "verdict='PASS'，必须严格等于 'pass'（大小写敏感）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "VERDICT-NOT-PASS",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-verdict-\"PASS\"（大小写）.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-verdict-\\\"PASS\\\"（大小写）.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"verdict='PASS'，必须严格等于 'pass'（大小写敏感）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"VERDICT-NOT-PASS\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-verdict-\\\"PASS\\\"（大小写）.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "verdict-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "VERDICT-NOT-PASS",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-verdict-空串.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          }
+        ],
+        "detail": "verdict=''，必须严格等于 'pass'（大小写敏感）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "VERDICT-NOT-PASS",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-verdict-空串.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-verdict-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"verdict=''，必须严格等于 'pass'（大小写敏感）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"VERDICT-NOT-PASS\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-verdict-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "base_sha-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "KEY-EMPTY",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-base_sha-空串.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          }
+        ],
+        "detail": "记录件字段 base_sha 为空或非字符串: ''",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "KEY-EMPTY",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-base_sha-空串.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-base_sha-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件字段 base_sha 为空或非字符串: ''\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-EMPTY\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-base_sha-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "base_sha-缺字段",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "KEY-MISSING",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-base_sha-缺字段.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          }
+        ],
+        "detail": "记录件缺字段 base_sha",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "KEY-MISSING",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-base_sha-缺字段.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-base_sha-缺字段.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺字段 base_sha\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-MISSING\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-base_sha-缺字段.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "source_sha-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "KEY-EMPTY",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-source_sha-空串.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          }
+        ],
+        "detail": "记录件字段 source_sha 为空或非字符串: ''",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "KEY-EMPTY",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-source_sha-空串.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-source_sha-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件字段 source_sha 为空或非字符串: ''\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-EMPTY\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-source_sha-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "source_sha-缺字段",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "KEY-MISSING",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-source_sha-缺字段.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          }
+        ],
+        "detail": "记录件缺字段 source_sha",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "KEY-MISSING",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-source_sha-缺字段.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-source_sha-缺字段.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺字段 source_sha\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-MISSING\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-source_sha-缺字段.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "tested_tree-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "KEY-EMPTY",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-tested_tree-空串.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          }
+        ],
+        "detail": "记录件字段 tested_tree 为空或非字符串: ''",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "KEY-EMPTY",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-tested_tree-空串.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-tested_tree-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件字段 tested_tree 为空或非字符串: ''\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-EMPTY\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-tested_tree-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "tested_tree-缺字段",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "KEY-MISSING",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-tested_tree-缺字段.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          }
+        ],
+        "detail": "记录件缺字段 tested_tree",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "KEY-MISSING",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-tested_tree-缺字段.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-tested_tree-缺字段.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺字段 tested_tree\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-MISSING\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-tested_tree-缺字段.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "suite_digest-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "KEY-EMPTY",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-suite_digest-空串.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          }
+        ],
+        "detail": "记录件字段 suite_digest 为空或非字符串: ''",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "KEY-EMPTY",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-suite_digest-空串.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-suite_digest-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件字段 suite_digest 为空或非字符串: ''\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-EMPTY\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-suite_digest-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "suite_digest-缺字段",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "KEY-MISSING",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-suite_digest-缺字段.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          }
+        ],
+        "detail": "记录件缺字段 suite_digest",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "KEY-MISSING",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-suite_digest-缺字段.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-suite_digest-缺字段.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺字段 suite_digest\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-MISSING\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-suite_digest-缺字段.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "门摘要-抹掉（门不可跑）",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-ABSENT",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-门摘要-抹掉（门不可跑）.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          }
+        ],
+        "detail": "记录件缺门摘要原文（或为空）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-SUMMARY-ABSENT",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-门摘要-抹掉（门不可跑）.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-门摘要-抹掉（门不可跑）.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺门摘要原文（或为空）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-ABSENT\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-门摘要-抹掉（门不可跑）.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "门摘要-被改（不自证）",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-DIGEST",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-门摘要-被改（不自证）.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          }
+        ],
+        "detail": "门摘要 sha256 不符（记录 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6' vs 实算 '2605cb4c24536f861c6b6a4f80abda735c1fdcd0328e7b7bb215e5f27a3843d2'）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-SUMMARY-DIGEST",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-门摘要-被改（不自证）.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-门摘要-被改（不自证）.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门摘要 sha256 不符（记录 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6' vs 实算 '2605cb4c24536f861c6b6a4f80abda735c1fdcd0328e7b7bb215e5f27a3843d2'）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-DIGEST\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-门摘要-被改（不自证）.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "门退出码-非零",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "GATE-EXIT-NONZERO",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-门退出码-非零.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          }
+        ],
+        "detail": "门退出码=1（期望 0）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-EXIT-NONZERO",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-门退出码-非零.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-门退出码-非零.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门退出码=1（期望 0）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-EXIT-NONZERO\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-门退出码-非零.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "记录件-缺席",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "RECORD-ABSENT"
+    },
+    {
+      "case": "词表绿-emit-PASS",
+      "exit": 0,
+      "expect": "exit 0（绿：真绿状态必须能写出记录件）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "",
+      "stderr": "",
+      "stdout": "{\"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\", \"record\": \"/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-PASS.json\", \"record_sha256\": \"d1352ddec44b01af22cae548b409da7f7ea25cfdae7ea15d23346b4ff106af09\", \"result\": \"RECORD-WRITTEN\", \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\", \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\", \"suite_members\": 3, \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\", \"verdict\": \"pass\"}\n"
+    },
+    {
+      "case": "词表绿-verify-PASS",
+      "exit": 0,
+      "expect": "exit 0（绿）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "OK",
+      "report": {
+        "actual": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "base_ref": "main",
+        "branch": "feat/2026-11-04-batchA",
+        "candidate_diff_paths": [
+          "crates/demo/extra.rs"
+        ],
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-PASS.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-PASS.txt（sha256=9ff6b4ce2af33083…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          },
+          {
+            "detail": "base_sha / source_sha / tested_tree / suite_digest",
+            "name": "四项绑定逐项相符",
+            "ok": true
+          },
+          {
+            "detail": "d71a142c11b8…",
+            "name": "候选树门覆盖成立（落地树 == 门跑过的树）",
+            "ok": true
+          },
+          {
+            "detail": "suite_digest=b9e2ff4a6f3e565e… 成员 3 件",
+            "name": "门没被换（候选树与落地树的门执行面逐字节同）",
+            "ok": true
+          }
+        ],
+        "expected": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "gate_summary_path": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-PASS.txt",
+        "gate_summary_readback": "磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文 三方一致",
+        "merge_mode": "fast-forward",
+        "merge_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e",
+        "merge_tree_sha256": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+        "note": "机器辅助核对结论；机器仲裁员首版不启用——合流与否由人工 integrator 依 docs/INTEGRATOR-SOP.md 决定。",
+        "reason_code": "OK",
+        "record": "/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-PASS.json",
+        "record_sha256": "d1352ddec44b01af22cae548b409da7f7ea25cfdae7ea15d23346b4ff106af09",
+        "remote": "/tmp/t7-2-fixture-drlkedmq/fixture-repo",
+        "result": "PASS",
+        "review_points": [
+          "候选树改动触及 1 件代码/门/判据面文件（人眼要看 diff 与门结论摘要）"
+        ],
+        "source_is_remote_head": true,
+        "source_origin": "/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头",
+        "suite_digest_algo": "af.gate_suite_digest.v1",
+        "suite_members": 3
+      },
+      "stderr": "",
+      "stdout": "{\n  \"actual\": {\n    \"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\",\n    \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\",\n    \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\",\n    \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\"\n  },\n  \"base_ref\": \"main\",\n  \"branch\": \"feat/2026-11-04-batchA\",\n  \"candidate_diff_paths\": [\n    \"crates/demo/extra.rs\"\n  ],\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-PASS.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-PASS.txt（sha256=9ff6b4ce2af33083…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha / source_sha / tested_tree / suite_digest\",\n      \"name\": \"四项绑定逐项相符\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"d71a142c11b8…\",\n      \"name\": \"候选树门覆盖成立（落地树 == 门跑过的树）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"suite_digest=b9e2ff4a6f3e565e… 成员 3 件\",\n      \"name\": \"门没被换（候选树与落地树的门执行面逐字节同）\",\n      \"ok\": true\n    }\n  ],\n  \"expected\": {\n    \"base_sha\": \"e323580127f159ee0ceea4"
+    },
+    {
+      "case": "词表绿-emit-ADVISORY-PASS",
+      "exit": 0,
+      "expect": "exit 0（绿：真绿状态必须能写出记录件）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "",
+      "stderr": "",
+      "stdout": "{\"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\", \"record\": \"/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-ADVISORY-PASS.json\", \"record_sha256\": \"aa9be86470fb2f9b638e65a3be802a74f27dee7f75ee1ca92fee55e9979e8e31\", \"result\": \"RECORD-WRITTEN\", \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\", \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\", \"suite_members\": 3, \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\", \"verdict\": \"pass\"}\n"
+    },
+    {
+      "case": "词表绿-verify-ADVISORY-PASS",
+      "exit": 0,
+      "expect": "exit 0（绿）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "OK",
+      "report": {
+        "actual": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "base_ref": "main",
+        "branch": "feat/2026-11-04-batchA",
+        "candidate_diff_paths": [
+          "crates/demo/extra.rs"
+        ],
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-ADVISORY-PASS.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-ADVISORY-PASS.txt（sha256=7b0c87ce0590efb4…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          },
+          {
+            "detail": "base_sha / source_sha / tested_tree / suite_digest",
+            "name": "四项绑定逐项相符",
+            "ok": true
+          },
+          {
+            "detail": "d71a142c11b8…",
+            "name": "候选树门覆盖成立（落地树 == 门跑过的树）",
+            "ok": true
+          },
+          {
+            "detail": "suite_digest=b9e2ff4a6f3e565e… 成员 3 件",
+            "name": "门没被换（候选树与落地树的门执行面逐字节同）",
+            "ok": true
+          }
+        ],
+        "expected": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "gate_summary_path": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-ADVISORY-PASS.txt",
+        "gate_summary_readback": "磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文 三方一致",
+        "merge_mode": "fast-forward",
+        "merge_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e",
+        "merge_tree_sha256": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+        "note": "机器辅助核对结论；机器仲裁员首版不启用——合流与否由人工 integrator 依 docs/INTEGRATOR-SOP.md 决定。",
+        "reason_code": "OK",
+        "record": "/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-ADVISORY-PASS.json",
+        "record_sha256": "aa9be86470fb2f9b638e65a3be802a74f27dee7f75ee1ca92fee55e9979e8e31",
+        "remote": "/tmp/t7-2-fixture-drlkedmq/fixture-repo",
+        "result": "PASS",
+        "review_points": [
+          "候选树改动触及 1 件代码/门/判据面文件（人眼要看 diff 与门结论摘要）"
+        ],
+        "source_is_remote_head": true,
+        "source_origin": "/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头",
+        "suite_digest_algo": "af.gate_suite_digest.v1",
+        "suite_members": 3
+      },
+      "stderr": "",
+      "stdout": "{\n  \"actual\": {\n    \"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\",\n    \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\",\n    \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\",\n    \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\"\n  },\n  \"base_ref\": \"main\",\n  \"branch\": \"feat/2026-11-04-batchA\",\n  \"candidate_diff_paths\": [\n    \"crates/demo/extra.rs\"\n  ],\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-ADVISORY-PASS.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-ADVISORY-PASS.txt（sha256=7b0c87ce0590efb4…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha / source_sha / tested_tree / suite_digest\",\n      \"name\": \"四项绑定逐项相符\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"d71a142c11b8…\",\n      \"name\": \"候选树门覆盖成立（落地树 == 门跑过的树）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"suite_digest=b9e2ff4a6f3e565e… 成员 3 件\",\n      \"name\": \"门没被换（候选树与落地树的门执行面逐字节同）\",\n      \"ok\": true\n    }\n  ],\n  \"expected\": {\n    \"base_sha\": \"e323"
+    },
+    {
+      "case": "词表绿-emit-ADVISORY-WARN",
+      "exit": 0,
+      "expect": "exit 0（绿：真绿状态必须能写出记录件）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "",
+      "stderr": "",
+      "stdout": "{\"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\", \"record\": \"/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-ADVISORY-WARN.json\", \"record_sha256\": \"c9ab492ff193cea1ba5dd52771c7ba4a6cacf22496bf00a396ede4aba5eede34\", \"result\": \"RECORD-WRITTEN\", \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\", \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\", \"suite_members\": 3, \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\", \"verdict\": \"pass\"}\n"
+    },
+    {
+      "case": "词表绿-verify-ADVISORY-WARN",
+      "exit": 0,
+      "expect": "exit 0（绿）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "OK",
+      "report": {
+        "actual": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "base_ref": "main",
+        "branch": "feat/2026-11-04-batchA",
+        "candidate_diff_paths": [
+          "crates/demo/extra.rs"
+        ],
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-ADVISORY-WARN.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-ADVISORY-WARN.txt（sha256=8cd8ed2817b8fd99…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          },
+          {
+            "detail": "base_sha / source_sha / tested_tree / suite_digest",
+            "name": "四项绑定逐项相符",
+            "ok": true
+          },
+          {
+            "detail": "d71a142c11b8…",
+            "name": "候选树门覆盖成立（落地树 == 门跑过的树）",
+            "ok": true
+          },
+          {
+            "detail": "suite_digest=b9e2ff4a6f3e565e… 成员 3 件",
+            "name": "门没被换（候选树与落地树的门执行面逐字节同）",
+            "ok": true
+          }
+        ],
+        "expected": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "gate_summary_path": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-ADVISORY-WARN.txt",
+        "gate_summary_readback": "磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文 三方一致",
+        "merge_mode": "fast-forward",
+        "merge_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e",
+        "merge_tree_sha256": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+        "note": "机器辅助核对结论；机器仲裁员首版不启用——合流与否由人工 integrator 依 docs/INTEGRATOR-SOP.md 决定。",
+        "reason_code": "OK",
+        "record": "/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-ADVISORY-WARN.json",
+        "record_sha256": "c9ab492ff193cea1ba5dd52771c7ba4a6cacf22496bf00a396ede4aba5eede34",
+        "remote": "/tmp/t7-2-fixture-drlkedmq/fixture-repo",
+        "result": "PASS",
+        "review_points": [
+          "候选树改动触及 1 件代码/门/判据面文件（人眼要看 diff 与门结论摘要）",
+          "门摘要含 ADVISORY-WARN 行（工具缺席类 advisory，人眼确认缺席原因可接受）"
+        ],
+        "source_is_remote_head": true,
+        "source_origin": "/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头",
+        "suite_digest_algo": "af.gate_suite_digest.v1",
+        "suite_members": 3
+      },
+      "stderr": "",
+      "stdout": "{\n  \"actual\": {\n    \"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\",\n    \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\",\n    \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\",\n    \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\"\n  },\n  \"base_ref\": \"main\",\n  \"branch\": \"feat/2026-11-04-batchA\",\n  \"candidate_diff_paths\": [\n    \"crates/demo/extra.rs\"\n  ],\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-ADVISORY-WARN.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-ADVISORY-WARN.txt（sha256=8cd8ed2817b8fd99…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha / source_sha / tested_tree / suite_digest\",\n      \"name\": \"四项绑定逐项相符\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"d71a142c11b8…\",\n      \"name\": \"候选树门覆盖成立（落地树 == 门跑过的树）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"suite_digest=b9e2ff4a6f3e565e… 成员 3 件\",\n      \"name\": \"门没被换（候选树与落地树的门执行面逐字节同）\",\n      \"ok\": true\n    }\n  ],\n  \"expected\": {\n    \"base_sha\": \"e323"
+    },
+    {
+      "case": "词表绿-emit-PASS-WITH-WARN",
+      "exit": 0,
+      "expect": "exit 0（绿：真绿状态必须能写出记录件）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "",
+      "stderr": "",
+      "stdout": "{\"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\", \"record\": \"/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-PASS-WITH-WARN.json\", \"record_sha256\": \"8702718fa7b1bfda0dd0dc3994051a4a7a0a9d471406e47e5de44d135bfeb921\", \"result\": \"RECORD-WRITTEN\", \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\", \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\", \"suite_members\": 3, \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\", \"verdict\": \"pass\"}\n"
+    },
+    {
+      "case": "词表绿-verify-PASS-WITH-WARN",
+      "exit": 0,
+      "expect": "exit 0（绿）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "OK",
+      "report": {
+        "actual": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "base_ref": "main",
+        "branch": "feat/2026-11-04-batchA",
+        "candidate_diff_paths": [
+          "crates/demo/extra.rs"
+        ],
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-PASS-WITH-WARN.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-PASS-WITH-WARN.txt（sha256=e8435f5c3762e1a9…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          },
+          {
+            "detail": "base_sha / source_sha / tested_tree / suite_digest",
+            "name": "四项绑定逐项相符",
+            "ok": true
+          },
+          {
+            "detail": "d71a142c11b8…",
+            "name": "候选树门覆盖成立（落地树 == 门跑过的树）",
+            "ok": true
+          },
+          {
+            "detail": "suite_digest=b9e2ff4a6f3e565e… 成员 3 件",
+            "name": "门没被换（候选树与落地树的门执行面逐字节同）",
+            "ok": true
+          }
+        ],
+        "expected": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "gate_summary_path": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-PASS-WITH-WARN.txt",
+        "gate_summary_readback": "磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文 三方一致",
+        "merge_mode": "fast-forward",
+        "merge_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e",
+        "merge_tree_sha256": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+        "note": "机器辅助核对结论；机器仲裁员首版不启用——合流与否由人工 integrator 依 docs/INTEGRATOR-SOP.md 决定。",
+        "reason_code": "OK",
+        "record": "/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-PASS-WITH-WARN.json",
+        "record_sha256": "8702718fa7b1bfda0dd0dc3994051a4a7a0a9d471406e47e5de44d135bfeb921",
+        "remote": "/tmp/t7-2-fixture-drlkedmq/fixture-repo",
+        "result": "PASS",
+        "review_points": [
+          "候选树改动触及 1 件代码/门/判据面文件（人眼要看 diff 与门结论摘要）",
+          "门摘要含 PASS-WITH-WARN 行（step14 机读一致性批 rc=2=advisory WARN；门仍绿，但人眼要看 ci/out/step14.log 里的 WARN 项）"
+        ],
+        "source_is_remote_head": true,
+        "source_origin": "/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头",
+        "suite_digest_algo": "af.gate_suite_digest.v1",
+        "suite_members": 3
+      },
+      "stderr": "",
+      "stdout": "{\n  \"actual\": {\n    \"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\",\n    \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\",\n    \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\",\n    \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\"\n  },\n  \"base_ref\": \"main\",\n  \"branch\": \"feat/2026-11-04-batchA\",\n  \"candidate_diff_paths\": [\n    \"crates/demo/extra.rs\"\n  ],\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/record-vocab-PASS-WITH-WARN.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-PASS-WITH-WARN.txt（sha256=e8435f5c3762e1a9…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha / source_sha / tested_tree / suite_digest\",\n      \"name\": \"四项绑定逐项相符\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"d71a142c11b8…\",\n      \"name\": \"候选树门覆盖成立（落地树 == 门跑过的树）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"suite_digest=b9e2ff4a6f3e565e… 成员 3 件\",\n      \"name\": \"门没被换（候选树与落地树的门执行面逐字节同）\",\n      \"ok\": true\n    }\n  ],\n  \"expected\": {\n    \"base_sha\": \"e3"
+    },
+    {
+      "case": "词表红-emit-FAIL",
+      "exit": 2,
+      "expect": "exit 非 0（红：门红 ⇒ 不许写绿记录件）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step14  FAIL  1ms  fixture machine batch",
+      "stderr": "ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step14  FAIL  1ms  fixture machine batch\n",
+      "stdout": ""
+    },
+    {
+      "case": "词表红-verify-FAIL",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "GATE-VERDICT",
+      "pass": true,
+      "reason_code": "GATE-VERDICT",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-词表红-verify-FAIL.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-FAIL.txt（sha256=fe4e0427bdb68525…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          }
+        ],
+        "detail": "门摘要判不出绿：step 非绿: step14  FAIL  1ms  fixture machine batch",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-VERDICT",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-词表红-verify-FAIL.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-词表红-verify-FAIL.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-FAIL.txt（sha256=fe4e0427bdb68525…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门摘要判不出绿：step 非绿: step14  FAIL  1ms  fixture machine batch\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-VERDICT\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-词表红-verify-FAIL.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "词表红-emit-ADVISORY-FAIL",
+      "exit": 2,
+      "expect": "exit 非 0（红：门红 ⇒ 不许写绿记录件）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step9  ADVISORY-FAIL  1ms  fixture advisory",
+      "stderr": "ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step9  ADVISORY-FAIL  1ms  fixture advisory\n",
+      "stdout": ""
+    },
+    {
+      "case": "词表红-verify-ADVISORY-FAIL",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "GATE-VERDICT",
+      "pass": true,
+      "reason_code": "GATE-VERDICT",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-词表红-verify-ADVISORY-FAIL.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-ADVISORY-FAIL.txt（sha256=3d67aa2a4d4d6b02…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          }
+        ],
+        "detail": "门摘要判不出绿：step 非绿: step9  ADVISORY-FAIL  1ms  fixture advisory",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-VERDICT",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-词表红-verify-ADVISORY-FAIL.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-词表红-verify-ADVISORY-FAIL.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/vocab/SUMMARY-vocab-ADVISORY-FAIL.txt（sha256=3d67aa2a4d4d6b02…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门摘要判不出绿：step 非绿: step9  ADVISORY-FAIL  1ms  fixture advisory\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-VERDICT\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-词表红-verify-ADVISORY-FAIL.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "三方比对-基线一致（文件↔内嵌sha↔内嵌原文）",
+      "exit": 0,
+      "expect": "exit 0（绿）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "OK",
+      "report": {
+        "actual": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "base_ref": "main",
+        "branch": "feat/2026-11-04-batchA",
+        "candidate_diff_paths": [
+          "crates/demo/extra.rs"
+        ],
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-基线一致（文件↔内嵌sha↔内嵌原文）.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt（sha256=07bb0071617324ff…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          },
+          {
+            "detail": "base_sha / source_sha / tested_tree / suite_digest",
+            "name": "四项绑定逐项相符",
+            "ok": true
+          },
+          {
+            "detail": "d71a142c11b8…",
+            "name": "候选树门覆盖成立（落地树 == 门跑过的树）",
+            "ok": true
+          },
+          {
+            "detail": "suite_digest=b9e2ff4a6f3e565e… 成员 3 件",
+            "name": "门没被换（候选树与落地树的门执行面逐字节同）",
+            "ok": true
+          }
+        ],
+        "expected": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "gate_summary_path": "/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt",
+        "gate_summary_readback": "磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文 三方一致",
+        "merge_mode": "fast-forward",
+        "merge_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e",
+        "merge_tree_sha256": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+        "note": "机器辅助核对结论；机器仲裁员首版不启用——合流与否由人工 integrator 依 docs/INTEGRATOR-SOP.md 决定。",
+        "reason_code": "OK",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-基线一致（文件↔内嵌sha↔内嵌原文）.json",
+        "record_sha256": "a94383e21cd8d471ce78e7cfdac981b3e236c60c58fc393a1d5661ae9cd353ca",
+        "remote": "/tmp/t7-2-fixture-drlkedmq/fixture-repo",
+        "result": "PASS",
+        "review_points": [
+          "候选树改动触及 1 件代码/门/判据面文件（人眼要看 diff 与门结论摘要）"
+        ],
+        "source_is_remote_head": true,
+        "source_origin": "/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头",
+        "suite_digest_algo": "af.gate_suite_digest.v1",
+        "suite_members": 3
+      },
+      "stderr": "",
+      "stdout": "{\n  \"actual\": {\n    \"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\",\n    \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\",\n    \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\",\n    \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\"\n  },\n  \"base_ref\": \"main\",\n  \"branch\": \"feat/2026-11-04-batchA\",\n  \"candidate_diff_paths\": [\n    \"crates/demo/extra.rs\"\n  ],\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-基线一致（文件↔内嵌sha↔内嵌原文）.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt（sha256=07bb0071617324ff…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（/tmp/t7-2-fixture-drlkedmq/fixture-repo refs/heads/feat/2026-11-04-batchA 的远端头）; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha / source_sha / tested_tree / suite_digest\",\n      \"name\": \"四项绑定逐项相符\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"d71a142c11b8…\",\n      \"name\": \"候选树门覆盖成立（落地树 == 门跑过的树）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"suite_digest=b9e2ff4a6f3e565e… 成员 3 件\",\n      \"name\": \"门没被换（候选树与落地树的门执行面逐字节同）\",\n      \"ok\": true\n    }\n  ],\n  \"expected\": {\n    \"base_sha\": \"e323580127f159ee0ceea41"
+    },
+    {
+      "case": "三方比对-磁盘文件被改（记录件不动）",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "GATE-SUMMARY-DIGEST",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-DIGEST",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-磁盘文件被改（记录件不动）.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          }
+        ],
+        "detail": "门摘要回读不符：磁盘文件 sha256 'c792950038edfd943d5c924b6e4a11e1b1aa512892cb655746ee124694bee949' != 记录件内嵌 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6'（/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY-tampered.txt）⇒ 门摘要文件与记录件描述的不是同一份内容",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-SUMMARY-DIGEST",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-磁盘文件被改（记录件不动）.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-磁盘文件被改（记录件不动）.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门摘要回读不符：磁盘文件 sha256 'c792950038edfd943d5c924b6e4a11e1b1aa512892cb655746ee124694bee949' != 记录件内嵌 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6'（/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY-tampered.txt）⇒ 门摘要文件与记录件描述的不是同一份内容\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-DIGEST\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-磁盘文件被改（记录件不动）.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "三方比对-内嵌摘要被改且sha同步重算",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "GATE-SUMMARY-DIGEST",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-DIGEST",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-内嵌摘要被改且sha同步重算.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          }
+        ],
+        "detail": "门摘要回读不符：磁盘文件 sha256 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6' != 记录件内嵌 'c792950038edfd943d5c924b6e4a11e1b1aa512892cb655746ee124694bee949'（/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt）⇒ 门摘要文件与记录件描述的不是同一份内容",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-SUMMARY-DIGEST",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-内嵌摘要被改且sha同步重算.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-内嵌摘要被改且sha同步重算.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门摘要回读不符：磁盘文件 sha256 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6' != 记录件内嵌 'c792950038edfd943d5c924b6e4a11e1b1aa512892cb655746ee124694bee949'（/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt）⇒ 门摘要文件与记录件描述的不是同一份内容\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-DIGEST\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-内嵌摘要被改且sha同步重算.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "三方比对-内嵌sha256被改",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "GATE-SUMMARY-DIGEST",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-DIGEST",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-内嵌sha256被改.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          }
+        ],
+        "detail": "门摘要 sha256 不符（记录 '0000000000000000000000000000000000000000000000000000000000000000' vs 实算 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6'）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-SUMMARY-DIGEST",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-内嵌sha256被改.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-内嵌sha256被改.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门摘要 sha256 不符（记录 '0000000000000000000000000000000000000000000000000000000000000000' vs 实算 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6'）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-DIGEST\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-内嵌sha256被改.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "三方比对-记录件缺摘要路径",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "GATE-SUMMARY-ABSENT",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-ABSENT",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-记录件缺摘要路径.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          }
+        ],
+        "detail": "记录件缺 gate_summary_path 且未给 --gate-summary（无法回读门摘要文件）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-SUMMARY-ABSENT",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-记录件缺摘要路径.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-记录件缺摘要路径.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺 gate_summary_path 且未给 --gate-summary（无法回读门摘要文件）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-ABSENT\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-记录件缺摘要路径.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "三方比对-摘要文件缺席",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "GATE-SUMMARY-ABSENT",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-ABSENT",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-摘要文件缺席.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          }
+        ],
+        "detail": "门摘要文件读不出（回读不成立）：/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY-absent.txt（试过：/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY-absent.txt）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-SUMMARY-ABSENT",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-摘要文件缺席.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-摘要文件缺席.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门摘要文件读不出（回读不成立）：/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY-absent.txt（试过：/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY-absent.txt）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-ABSENT\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-摘要文件缺席.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "三方比对-显式gate-summary指向异内容",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "GATE-SUMMARY-DIGEST",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-DIGEST",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-显式gate-summary指向异内容.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          }
+        ],
+        "detail": "门摘要回读不符：磁盘文件 sha256 'c792950038edfd943d5c924b6e4a11e1b1aa512892cb655746ee124694bee949' != 记录件内嵌 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6'（/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY-tampered.txt）⇒ 门摘要文件与记录件描述的不是同一份内容",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "GATE-SUMMARY-DIGEST",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-三方比对-显式gate-summary指向异内容.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-显式gate-summary指向异内容.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门摘要回读不符：磁盘文件 sha256 'c792950038edfd943d5c924b6e4a11e1b1aa512892cb655746ee124694bee949' != 记录件内嵌 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6'（/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY-tampered.txt）⇒ 门摘要文件与记录件描述的不是同一份内容\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-DIGEST\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-三方比对-显式gate-summary指向异内容.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "source绕口-未加allow-local-source",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "expect_reason": "LOCAL-SOURCE-NOT-ALLOWED",
+      "pass": true,
+      "reason_code": "LOCAL-SOURCE-NOT-ALLOWED",
+      "report": {
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-source绕口-未加allow-local-source.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt（sha256=07bb0071617324ff…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          }
+        ],
+        "detail": "--source '37b0f04fb69d9b563ca8ec6acf888c39811fa671' 会把候选头从「远端头」换成本地提交（绕过远端绑定）⇒ 须显式加 --allow-local-source 才生效（或不用 --source）",
+        "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+        "reason_code": "LOCAL-SOURCE-NOT-ALLOWED",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-source绕口-未加allow-local-source.json",
+        "result": "REJECT"
+      },
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-source绕口-未加allow-local-source.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt（sha256=07bb0071617324ff…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"--source '37b0f04fb69d9b563ca8ec6acf888c39811fa671' 会把候选头从「远端头」换成本地提交（绕过远端绑定）⇒ 须显式加 --allow-local-source 才生效（或不用 --source）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"LOCAL-SOURCE-NOT-ALLOWED\",\n  \"record\": \"/tmp/t7-2-fixture-drlkedmq/record-source绕口-未加allow-local-source.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "source绕口-加allow-local-source",
+      "exit": 0,
+      "expect": "exit 0（绿）",
+      "expect_reason": "",
+      "pass": true,
+      "reason_code": "OK",
+      "report": {
+        "actual": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "base_ref": "main",
+        "branch": "feat/2026-11-04-batchA",
+        "candidate_diff_paths": [
+          "crates/demo/extra.rs"
+        ],
+        "checks": [
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/record-source绕口-加allow-local-source.json",
+            "name": "记录件可读且 schema 正确",
+            "ok": true
+          },
+          {
+            "detail": "base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…",
+            "name": "记录侧四项齐全且非空",
+            "ok": true
+          },
+          {
+            "detail": "'pass'",
+            "name": "verdict 严格等于 'pass'",
+            "ok": true
+          },
+          {
+            "detail": "/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt（sha256=07bb0071617324ff…）",
+            "name": "门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）",
+            "ok": true
+          },
+          {
+            "detail": "gate_exit=0",
+            "name": "门摘要自证绿（回读原文 + sha256 + step 全非红）",
+            "ok": true
+          },
+          {
+            "detail": "source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（本地提交 37b0f04fb69d9b563ca8ec6acf888c39811fa671（--allow-local-source；**未绑定远端头**））; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)",
+            "name": "实测侧四项自算完成",
+            "ok": true
+          },
+          {
+            "detail": "e323580127f1…",
+            "name": "主线未前移（门跑时的目标头 == 现目标头）",
+            "ok": true
+          },
+          {
+            "detail": "base_sha / source_sha / tested_tree / suite_digest",
+            "name": "四项绑定逐项相符",
+            "ok": true
+          },
+          {
+            "detail": "d71a142c11b8…",
+            "name": "候选树门覆盖成立（落地树 == 门跑过的树）",
+            "ok": true
+          },
+          {
+            "detail": "suite_digest=b9e2ff4a6f3e565e… 成员 3 件",
+            "name": "门没被换（候选树与落地树的门执行面逐字节同）",
+            "ok": true
+          }
+        ],
+        "expected": {
+          "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+          "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+          "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+          "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e"
+        },
+        "gate_summary_path": "/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt",
+        "gate_summary_readback": "磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文 三方一致",
+        "merge_mode": "fast-forward",
+        "merge_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e",
+        "merge_tree_sha256": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+        "note": "机器辅助核对结论；机器仲裁员首版不启用——合流与否由人工 integrator 依 docs/INTEGRATOR-SOP.md 决定。",
+        "reason_code": "OK",
+        "record": "/tmp/t7-2-fixture-drlkedmq/record-source绕口-加allow-local-source.json",
+        "record_sha256": "a94383e21cd8d471ce78e7cfdac981b3e236c60c58fc393a1d5661ae9cd353ca",
+        "remote": "/tmp/t7-2-fixture-drlkedmq/fixture-repo",
+        "result": "PASS",
+        "review_points": [
+          "候选树改动触及 1 件代码/门/判据面文件（人眼要看 diff 与门结论摘要）",
+          "★ 候选头取自**本地提交**（本地提交 37b0f04fb69d9b563ca8ec6acf888c39811fa671（--allow-local-source；**未绑定远端头**））⇒ 未与远端头绑定；须人工确认该提交已推送到候选分支（否则远端跑的不是被测的那个提交）"
+        ],
+        "source_is_remote_head": false,
+        "source_origin": "本地提交 37b0f04fb69d9b563ca8ec6acf888c39811fa671（--allow-local-source；**未绑定远端头**）",
+        "suite_digest_algo": "af.gate_suite_digest.v1",
+        "suite_members": 3
+      },
+      "stderr": "",
+      "stdout": "{\n  \"actual\": {\n    \"base_sha\": \"e323580127f159ee0ceea419cf1c2e1cfa085de3\",\n    \"source_sha\": \"37b0f04fb69d9b563ca8ec6acf888c39811fa671\",\n    \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\",\n    \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\"\n  },\n  \"base_ref\": \"main\",\n  \"branch\": \"feat/2026-11-04-batchA\",\n  \"candidate_diff_paths\": [\n    \"crates/demo/extra.rs\"\n  ],\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/record-source绕口-加allow-local-source.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=e323580127f1…, source_sha=37b0f04fb69d…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"/tmp/t7-2-fixture-drlkedmq/goodsum/SUMMARY.txt（sha256=07bb0071617324ff…）\",\n      \"name\": \"门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（回读原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=37b0f04fb69d9b563ca8ec6acf888c39811fa671（本地提交 37b0f04fb69d9b563ca8ec6acf888c39811fa671（--allow-local-source；**未绑定远端头**））; base_sha=merge-base(main@e323580127f1…, 37b0f04fb69d…)=e323580127f1…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"e323580127f1…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha / source_sha / tested_tree / suite_digest\",\n      \"name\": \"四项绑定逐项相符\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"d71a142c11b8…\",\n      \"name\": \"候选树门覆盖成立（落地树 == 门跑过的树）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"suite_digest=b9e2ff4a6f3e565e… 成员 3 件\",\n      \"name\": \"门没被换（候选树与落地树的门执行面逐字节同）\",\n      \"ok\": true\n    }\n  ],\n  \"expected\": {\n    \"base_sha\": \"e323580127f159ee0ce"
+    }
+  ],
+  "record": {
+    "base_ref": "main",
+    "base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+    "branch": "feat/2026-11-04-batchA",
+    "gate_base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3",
+    "gate_command": "bash ci/run.sh",
+    "gate_exit": 0,
+    "gate_id": "fixture-fast",
+    "gate_summary_path": "/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt",
+    "gate_summary_sha256": "07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6",
+    "gate_summary_text": "step1  PASS  1ms  fixture fmt\nstep2  PASS  1ms  fixture clippy\nPIPELINE-GREEN\n",
+    "recorded_at": "2026-11-05T00:05:44+08:00",
+    "recorded_by": "t7-2-selftest",
+    "remote": "/tmp/t7-2-fixture-drlkedmq/fixture-repo",
+    "schema_version": "af.integrator_bind_record.v1",
+    "source_origin": "本地提交 37b0f04fb69d9b563ca8ec6acf888c39811fa671（emit 侧显式指定；verify 侧仍独立读远端头比对）",
+    "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671",
+    "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+    "suite_digest_algo": "af.gate_suite_digest.v1",
+    "suite_members": 3,
+    "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e",
+    "verdict": "pass"
+  },
+  "verdict": "SELFTEST-GREEN"
+}

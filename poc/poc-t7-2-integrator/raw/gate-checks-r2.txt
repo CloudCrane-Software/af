@@ -1,0 +1,170 @@
+════ 门 1：cargo fmt --check --all ════
+工作树：/home/pan-ding/workspace/af-wt-t7-2
+exit=0  （期望 0；本批不改 Rust ⇒ 这门必绿）
+
+════ 门 2：本批新增面自跑门（复核器自证）════
+[夹具] 门跑完 exit=0；SUMMARY=/tmp/t7-2-fixture-drlkedmq/gate-out/SUMMARY.txt
+[夹具] emit exit=0 {"base_sha": "e323580127f159ee0ceea419cf1c2e1cfa085de3", "record": "/tmp/t7-2-fixture-drlkedmq/record.json", "record_sha256": "d746979532823b3883a184dc11bc5410a6cdbd96da81dd719d6f9e20c99ea2d6", "result": "RECORD-WRITTEN", "source_sha": "37b0f04fb69d9b563ca8ec6acf888c39811fa671", "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49", "suite_members": 3, "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e", "verdict": "pass"} 
+[自证] OK  baseline-normal              exit=0 reason_code=OK
+[自证] OK  base_sha-改一位                 exit=1 reason_code=BIND-MISMATCH
+[自证] OK  source_sha-改一位               exit=1 reason_code=BIND-MISMATCH
+[自证] OK  suite_digest-改一位             exit=1 reason_code=BIND-MISMATCH
+[自证] OK  tested_tree-换另一棵树            exit=1 reason_code=BIND-MISMATCH
+[自证] OK  verdict-"fail"               exit=1 reason_code=VERDICT-NOT-PASS
+[自证] OK  verdict-"PASS"（大小写）          exit=1 reason_code=VERDICT-NOT-PASS
+[自证] OK  verdict-空串                   exit=1 reason_code=VERDICT-NOT-PASS
+[自证] OK  base_sha-空串                  exit=1 reason_code=KEY-EMPTY
+[自证] OK  base_sha-缺字段                 exit=1 reason_code=KEY-MISSING
+[自证] OK  source_sha-空串                exit=1 reason_code=KEY-EMPTY
+[自证] OK  source_sha-缺字段               exit=1 reason_code=KEY-MISSING
+[自证] OK  tested_tree-空串               exit=1 reason_code=KEY-EMPTY
+[自证] OK  tested_tree-缺字段              exit=1 reason_code=KEY-MISSING
+[自证] OK  suite_digest-空串              exit=1 reason_code=KEY-EMPTY
+[自证] OK  suite_digest-缺字段             exit=1 reason_code=KEY-MISSING
+[自证] OK  门摘要-抹掉（门不可跑）                 exit=1 reason_code=GATE-SUMMARY-ABSENT
+[自证] OK  门摘要-被改（不自证）                  exit=1 reason_code=GATE-SUMMARY-DIGEST
+[自证] OK  门退出码-非零                      exit=1 reason_code=GATE-EXIT-NONZERO
+[自证] OK  记录件-缺席              exit=1
+[自证] OK  词表绿-emit-PASS                exit=0 reason_code=
+[自证] OK  词表绿-verify-PASS              exit=0 reason_code=OK
+[自证] OK  词表绿-emit-ADVISORY-PASS       exit=0 reason_code=
+[自证] OK  词表绿-verify-ADVISORY-PASS     exit=0 reason_code=OK
+[自证] OK  词表绿-emit-ADVISORY-WARN       exit=0 reason_code=
+[自证] OK  词表绿-verify-ADVISORY-WARN     exit=0 reason_code=OK
+[自证] OK  词表绿-emit-PASS-WITH-WARN      exit=0 reason_code=
+[自证] OK  词表绿-verify-PASS-WITH-WARN    exit=0 reason_code=OK
+[自证] OK  词表红-emit-FAIL                exit=2 reason_code=ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step14  FAIL  1ms  fixture machine batch
+[自证] OK  词表红-verify-FAIL              exit=1 reason_code=GATE-VERDICT
+[自证] OK  词表红-emit-ADVISORY-FAIL       exit=2 reason_code=ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step9  ADVISORY-FAIL  1ms  fixture advisory
+[自证] OK  词表红-verify-ADVISORY-FAIL     exit=1 reason_code=GATE-VERDICT
+[自证] OK  三方比对-基线一致（文件↔内嵌sha↔内嵌原文）     exit=0 reason_code=OK
+[自证] OK  三方比对-磁盘文件被改（记录件不动）           exit=1 reason_code=GATE-SUMMARY-DIGEST
+[自证] OK  三方比对-内嵌摘要被改且sha同步重算          exit=1 reason_code=GATE-SUMMARY-DIGEST
+[自证] OK  三方比对-内嵌sha256被改              exit=1 reason_code=GATE-SUMMARY-DIGEST
+[自证] OK  三方比对-记录件缺摘要路径                exit=1 reason_code=GATE-SUMMARY-ABSENT
+[自证] OK  三方比对-摘要文件缺席                  exit=1 reason_code=GATE-SUMMARY-ABSENT
+[自证] OK  三方比对-显式gate-summary指向异内容     exit=1 reason_code=GATE-SUMMARY-DIGEST
+[自证] OK  source绕口-未加allow-local-source exit=1 reason_code=LOCAL-SOURCE-NOT-ALLOWED
+[自证] OK  source绕口-加allow-local-source exit=0 reason_code=OK
+[自证] OK  source-origin-留痕             source_origin=本地提交 37b0f04fb69d9b563ca8ec6acf888c39811fa671（--allow-local-source；**未绑定远端头**）
+
+[自证] 结论：SELFTEST-GREEN；读数落盘 /home/pan-ding/workspace/af-wt-t7-2/poc/poc-t7-2-integrator/raw/selftest-readings-r2.json
+selftest exit=0  （期望 0：正常记录件绿 + 削弱变体逐个红 + 真实词表 + 三方比对 + --source 绕口）
+
+-- 门 2a：复核员实测场景的独立复现（返修批新增）--
+=== v0.3-T7② 返修批：复核员实测场景复现读数 ===
+命令：python3 -I poc/poc-t7-2-integrator/r2_repro.py --out /home/pan-ding/workspace/af-wt-t7-2/poc/poc-t7-2-integrator/raw
+夹具：/tmp/t7-2-r2-fixture-p3ty_r9r/fixture-repo（门摘要真文件）
+夹具门摘要原文：
+step1  PASS  1ms  门摘要复现
+step9  ADVISORY-PASS  1ms  FV advisory
+step14  PASS-WITH-WARN  2ms  机读一致性批
+──────────────
+[复现] OK  复现1-emit-PASS-WITH-WARN（初版 exit=2 假红）
+        说明：门摘要 step1 PASS / step9 ADVISORY-PASS / step14 PASS-WITH-WARN（run.sh:615 rc=2 ⇒ 门仍绿）
+        命令退出码=0  reason_code=（无/绿）  期望=exit 0（绿）
+[复现] OK  复现1-verify-同一记录件（回读通过⇒绿）
+        说明：复核**强制回读**门摘要文件：磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文 三方一致 ⇒ 绿
+        命令退出码=0  reason_code=OK  期望=exit 0（绿）
+[复现] OK  复现2-洗内嵌摘要并重算sha（初版 exit=0/OK）
+        说明：记录件作者可控的'门摘要原文'必须被回读比对挡住（磁盘文件未动）
+        命令退出码=1  reason_code=GATE-SUMMARY-DIGEST  期望=exit 非 0（红）
+[复现] OK  复现3-磁盘门摘要文件被改（记录件不动）
+        说明：门摘要文件被换 ⇒ 回读三方不一致 ⇒ 红
+        命令退出码=1  reason_code=GATE-SUMMARY-DIGEST  期望=exit 非 0（红）
+[复现] OK  复现4-verify--source本地提交（初版 exit=0 绕开远端绑定）
+        说明：候选头取自本地提交 ⇒ 必须显式 --allow-local-source 才生效
+        命令退出码=1  reason_code=LOCAL-SOURCE-NOT-ALLOWED  期望=exit 非 0（红）
+[复现] OK  复现5-verify--source--allow-local-source（显式承认）
+        说明：显式承认本地来源 ⇒ 绿；输出须留 source_origin=本地提交…
+        命令退出码=0  reason_code=OK  期望=exit 0（绿）
+[复现] OK  复现5-source_origin 留痕：本地提交 dd154fbbc91a0f2dc80b02264af14655f58b66ff（--allow-local-source；**未绑定远端头**）
+[复现] OK  复现6-emit-FAIL（红词表必须拒写记录件）
+        说明：词表项 FAIL 不在白名单 ⇒ 门红 ⇒ emit 拒写绿记录件
+        命令退出码=2  reason_code=ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step14  FAIL  1ms  机读一致性批  期望=exit 非 0（红）
+[复现] OK  复现6-emit-ADVISORY-FAIL（红词表必须拒写记录件）
+        说明：词表项 ADVISORY-FAIL 不在白名单 ⇒ 门红 ⇒ emit 拒写绿记录件
+        命令退出码=2  reason_code=ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step9  ADVISORY-FAIL  1ms  FV advisory  期望=exit 非 0（红）
+──────────────
+结论：R2-REPRO-GREEN；failures=[]
+
+r2_repro exit=0  （期望 0：R2-REPRO-GREEN；failures=[]）
+
+-- 门 2b：复核器在真实 af 仓（真实远端 origin）上的读数 --
+   [2b-1] actual：对真实远端分支 feature/poc-e-codeadapter 自算实测侧
+{
+  "base_head": "56ff52a57c022983d74d994fd4e1c63e98f45235",
+  "base_ref": "origin/product/main",
+  "base_sha": "f14e79e1123fdcd8fd8b0781fd52298b9c6daaa9",
+  "branch": "feature/poc-e-codeadapter",
+  "merge_mode": "merge-commit",
+  "merge_tree": "13883f0d1e295dda08078e8ec5fbc1a6e4ecb029",
+  "merge_tree_equals_source_tree": false,
+  "note": "实测侧自算读数（无记录侧 ⇒ 不构成复核结论）",
+  "remote": "origin",
+  "source_origin": "origin refs/heads/feature/poc-e-codeadapter 的远端头",
+  "source_sha": "f14e79e1123fdcd8fd8b0781fd52298b9c6daaa9",
+  "suite_digest": "80e7578c9d6f83db1b81b219c8459ca9d12523640b6b838504dea8b91cf0dee3",
+  "suite_digest_of_source_tree": "400ac09f58b33c49b907b750d3dcdc09ff7717bf6dc4f389c3226dcf9cdbb6e6",
+  "suite_members": 44,
+  "suite_members_of_source_tree": 42,
+  "tested_tree": "3516c675b2eb6f22787ed03b3a74a911ba1debef"
+}
+   [2b-2] verify：真实仓上**无记录件**场景（历史合流无记录面 ⇒ 必须拒绝，不是跳过）
+{
+  "checks": [],
+  "detail": "记录件缺席: /tmp/t7-2-no-such-record.json",
+  "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+  "reason_code": "RECORD-ABSENT",
+  "record": "/tmp/t7-2-no-such-record.json",
+  "result": "REJECT"
+}
+   [2b-2] exit=1  （期望非 0 / RECORD-ABSENT）
+
+════ 门 3：af 主仓零改动核 ════
+-- git status --porcelain（主仓）--
+?? redteam/scans/2026-11-04-e4484537/
+   ↑ 期望：只有开工前既存的 untracked（redteam/scans/2026-11-04-e4484537/）
+-- HEAD --
+   主仓 HEAD = 56ff52a57c022983d74d994fd4e1c63e98f45235  （开工时读数 56ff52a57c022983d74d994fd4e1c63e98f45235）
+-- refs --
+   主仓本地分支数 = 94
+   ★ 返修批改写（证据可复核性）：初版写「开工时 93 ⇒ 只多本批这一条 = 94」但
+     「开工前 93」**无可独立复核的快照** ⇒ 现改为「当前 94，本批仅新增 1 条」，
+     不再引用无来源的「开工前 93」。
+   本批新建分支   = refs/heads/feat/t7-2-integrator-bind-check → 56ff52a57c022983d74d994fd4e1c63e98f45235（= origin/product/main 56ff52a，未 commit）
+   product/main    = 56ff52a57c022983d74d994fd4e1c63e98f45235  （禁改：与开工时同值）
+   main（对照线）  = f37311348842465c087cc2562e954812d46295e1  （只读归档线，未动）
+   远端 product/main = 56ff52a57c022983d74d994fd4e1c63e98f45235（禁 push：与本地同值 = 未推任何东西）
+-- PoC-E 参考件 blob 逐字未动 --
+   origin/product/main 的 blob = ebc01dac0da81f9755990c1caa7207dc3ac7f929
+   主仓工作树的 blob           = ebc01dac0da81f9755990c1caa7207dc3ac7f929
+   ⇒ 逐字未动 ✓
+
+════ 门 4：判据面零弱化 ════
+-- ci/ 下相对 origin/product/main 的 diff（只应多出本批新增件）--
+-- ci/run.sh 是否被改（改了就可能是新增 step 编号）--
+   ↑ 空 = 未改（未新增 step 编号）
+-- ci/clippy-baseline.txt sha256 --
+   origin/product/main 版 = a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4
+   本工作树版             = a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4
+   ⇒ 未变 ✓
+-- crates/ 相对 origin/product/main 的 diff --
+   ↑ 空 = crates/ 零改动
+   crate 数：origin = 22 / 本工作树 = 22（同一提交 ⇒ 同一数）
+   新增 crate 检查：0 条差异
+-- 本工作树新增的未跟踪文件（本批新增面）--
+?? ci/integrator_bind_check.py
+?? docs/INTEGRATOR-SOP.md
+?? poc/poc-t7-2-integrator/
+
+-- 门 4b：SOP §一.3 词表 vs 代码 STEP_STATUS_ALLOWED **逐字一致**（返修批新增）--
+   代码 STEP_STATUS_ALLOWED = ['ADVISORY-PASS', 'ADVISORY-WARN', 'PASS', 'PASS-WITH-WARN']
+   SOP §一.3 未逐字列出的词 = （无）
+   ⇒  逐字一致 ✓
+
+════ 门 5（未跑项，如实登记）════
+· cargo build / cargo test / cargo clippy：**未跑**。
+  理由：本批硬约束禁改 crates/ ⇒ 这三项的产物由主线全量门复验批承担（anolis 在跑，
+  tip 56ff52a）；且本机 14G 内存禁高并发编译，不在本地跑重编译。
+  ⇒ 不写成「已跑」；本批新增面（Python）由门 2 自跑门覆盖。

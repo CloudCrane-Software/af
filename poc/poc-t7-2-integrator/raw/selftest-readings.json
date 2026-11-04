@@ -1,0 +1,215 @@
+{
+  "failures": [],
+  "fixture": {
+    "base_commit": "64cbfb8f93ca213c17149c5bf8bb8fb55a39d1d9",
+    "base_ref": "main",
+    "branch": "feat/2026-11-04-batchA",
+    "cand_commit": "3ed4ea9bdc4b3367600abfed17c675973d11e2cd",
+    "gate_exit": 0,
+    "gate_summary": "step1  PASS  1ms  fixture fmt\nstep2  PASS  1ms  fixture clippy\nPIPELINE-GREEN\n",
+    "repo": "/tmp/t7-2-fixture-o8c30bj6/fixture-repo"
+  },
+  "readings": [
+    {
+      "case": "baseline-normal",
+      "exit": 0,
+      "expect": "exit 0（绿）",
+      "pass": true,
+      "reason_code": "OK",
+      "stderr": "",
+      "stdout": "{\n  \"actual\": {\n    \"base_sha\": \"64cbfb8f93ca213c17149c5bf8bb8fb55a39d1d9\",\n    \"source_sha\": \"3ed4ea9bdc4b3367600abfed17c675973d11e2cd\",\n    \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\",\n    \"tested_tree\": \"d71a142c11b8326777dd108bc43b03df55cfc77e\"\n  },\n  \"base_ref\": \"main\",\n  \"branch\": \"feat/2026-11-04-batchA\",\n  \"candidate_diff_paths\": [\n    \"crates/demo/extra.rs\"\n  ],\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（内嵌原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=3ed4ea9bdc4b3367600abfed17c675973d11e2cd（/tmp/t7-2-fixture-o8c30bj6/fixture-repo refs/heads/feat/2026-11-04-batchA）; base_sha=merge-base(main@64cbfb8f93ca…, 3ed4ea9bdc4b…)=64cbfb8f93ca…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"64cbfb8f93ca…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha / source_sha / tested_tree / suite_digest\",\n      \"name\": \"四项绑定逐项相符\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"d71a142c11b8…\",\n      \"name\": \"候选树门覆盖成立（落地树 == 门跑过的树）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"suite_digest=b9e2ff4a6f3e565e… 成员 3 件\",\n      \"name\": \"门没被换（候选树与落地树的门执行面逐字节同）\",\n      \"ok\": true\n    }\n  ],\n  \"expected\": {\n    \"base_sha\": \"64cbfb8f93ca213c17149c5bf8bb8fb55a39d1d9\",\n    \"source_sha\": \"3ed4ea9bdc4b3367600abfed17c675973d11e2cd\",\n    \"suite_digest\": \"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\",\n    \"tested_tree\": \"d71a142c11b832"
+    },
+    {
+      "case": "base_sha-改一位",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "BIND-MISMATCH",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-base_sha-改一位.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（内嵌原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=3ed4ea9bdc4b3367600abfed17c675973d11e2cd（/tmp/t7-2-fixture-o8c30bj6/fixture-repo refs/heads/feat/2026-11-04-batchA）; base_sha=merge-base(main@64cbfb8f93ca…, 3ed4ea9bdc4b…)=64cbfb8f93ca…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"64cbfb8f93ca…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"四项绑定不符：{\\\"base_sha\\\": {\\\"expected\\\": \\\"64cbfb8f93ca213c17149c5bf8bb8fb55a39d1d0\\\", \\\"actual\\\": \\\"64cbfb8f93ca213c17149c5bf8bb8fb55a39d1d9\\\"}}\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"BIND-MISMATCH\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-base_sha-改一位.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "source_sha-改一位",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "BIND-MISMATCH",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-source_sha-改一位.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（内嵌原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=3ed4ea9bdc4b3367600abfed17c675973d11e2cd（/tmp/t7-2-fixture-o8c30bj6/fixture-repo refs/heads/feat/2026-11-04-batchA）; base_sha=merge-base(main@64cbfb8f93ca…, 3ed4ea9bdc4b…)=64cbfb8f93ca…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"64cbfb8f93ca…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"四项绑定不符：{\\\"source_sha\\\": {\\\"expected\\\": \\\"3ed4ea9bdc4b3367600abfed17c675973d11e2c0\\\", \\\"actual\\\": \\\"3ed4ea9bdc4b3367600abfed17c675973d11e2cd\\\"}}\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"BIND-MISMATCH\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-source_sha-改一位.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "suite_digest-改一位",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "BIND-MISMATCH",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-suite_digest-改一位.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（内嵌原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=3ed4ea9bdc4b3367600abfed17c675973d11e2cd（/tmp/t7-2-fixture-o8c30bj6/fixture-repo refs/heads/feat/2026-11-04-batchA）; base_sha=merge-base(main@64cbfb8f93ca…, 3ed4ea9bdc4b…)=64cbfb8f93ca…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"64cbfb8f93ca…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"四项绑定不符：{\\\"suite_digest\\\": {\\\"expected\\\": \\\"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de40\\\", \\\"actual\\\": \\\"b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49\\\"}}\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"BIND-MISMATCH\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-suite_digest-改一位.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "tested_tree-换另一棵树",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "BIND-MISMATCH",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-tested_tree-换另一棵树.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=c9b33dec6d6a…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"gate_exit=0\",\n      \"name\": \"门摘要自证绿（内嵌原文 + sha256 + step 全非红）\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"source_sha=3ed4ea9bdc4b3367600abfed17c675973d11e2cd（/tmp/t7-2-fixture-o8c30bj6/fixture-repo refs/heads/feat/2026-11-04-batchA）; base_sha=merge-base(main@64cbfb8f93ca…, 3ed4ea9bdc4b…)=64cbfb8f93ca…; tested_tree=d71a142c11b8…; 合并树=d71a142c11b8…(fast-forward, 门集成员 3 件)\",\n      \"name\": \"实测侧四项自算完成\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"64cbfb8f93ca…\",\n      \"name\": \"主线未前移（门跑时的目标头 == 现目标头）\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"四项绑定不符：{\\\"tested_tree\\\": {\\\"expected\\\": \\\"c9b33dec6d6ae0b2ffa66bf6dbf532e8fb34886b\\\", \\\"actual\\\": \\\"d71a142c11b8326777dd108bc43b03df55cfc77e\\\"}}\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"BIND-MISMATCH\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-tested_tree-换另一棵树.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "verdict-\"fail\"",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "VERDICT-NOT-PASS",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-verdict-\\\"fail\\\".json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"verdict='fail'，必须严格等于 'pass'（大小写敏感）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"VERDICT-NOT-PASS\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-verdict-\\\"fail\\\".json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "verdict-\"PASS\"（大小写）",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "VERDICT-NOT-PASS",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-verdict-\\\"PASS\\\"（大小写）.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"verdict='PASS'，必须严格等于 'pass'（大小写敏感）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"VERDICT-NOT-PASS\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-verdict-\\\"PASS\\\"（大小写）.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "verdict-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "VERDICT-NOT-PASS",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-verdict-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"verdict=''，必须严格等于 'pass'（大小写敏感）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"VERDICT-NOT-PASS\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-verdict-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "base_sha-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "KEY-EMPTY",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-base_sha-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件字段 base_sha 为空或非字符串: ''\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-EMPTY\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-base_sha-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "base_sha-缺字段",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "KEY-MISSING",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-base_sha-缺字段.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺字段 base_sha\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-MISSING\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-base_sha-缺字段.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "source_sha-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "KEY-EMPTY",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-source_sha-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件字段 source_sha 为空或非字符串: ''\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-EMPTY\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-source_sha-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "source_sha-缺字段",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "KEY-MISSING",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-source_sha-缺字段.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺字段 source_sha\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-MISSING\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-source_sha-缺字段.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "tested_tree-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "KEY-EMPTY",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-tested_tree-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件字段 tested_tree 为空或非字符串: ''\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-EMPTY\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-tested_tree-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "tested_tree-缺字段",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "KEY-MISSING",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-tested_tree-缺字段.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺字段 tested_tree\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-MISSING\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-tested_tree-缺字段.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "suite_digest-空串",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "KEY-EMPTY",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-suite_digest-空串.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件字段 suite_digest 为空或非字符串: ''\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-EMPTY\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-suite_digest-空串.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "suite_digest-缺字段",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "KEY-MISSING",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-suite_digest-缺字段.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺字段 suite_digest\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"KEY-MISSING\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-suite_digest-缺字段.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "门摘要-抹掉（门不可跑）",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-ABSENT",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-门摘要-抹掉（门不可跑）.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"记录件缺门摘要原文（或为空）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-ABSENT\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-门摘要-抹掉（门不可跑）.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "门摘要-被改（不自证）",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "GATE-SUMMARY-DIGEST",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-门摘要-被改（不自证）.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门摘要 sha256 不符（记录 '07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6' vs 实算 '2605cb4c24536f861c6b6a4f80abda735c1fdcd0328e7b7bb215e5f27a3843d2'）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-SUMMARY-DIGEST\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-门摘要-被改（不自证）.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "门退出码-非零",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "GATE-EXIT-NONZERO",
+      "stderr": "",
+      "stdout": "{\n  \"checks\": [\n    {\n      \"detail\": \"/tmp/t7-2-fixture-o8c30bj6/record-门退出码-非零.json\",\n      \"name\": \"记录件可读且 schema 正确\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"base_sha=64cbfb8f93ca…, source_sha=3ed4ea9bdc4b…, tested_tree=d71a142c11b8…, suite_digest=b9e2ff4a6f3e…\",\n      \"name\": \"记录侧四项齐全且非空\",\n      \"ok\": true\n    },\n    {\n      \"detail\": \"'pass'\",\n      \"name\": \"verdict 严格等于 'pass'\",\n      \"ok\": true\n    }\n  ],\n  \"detail\": \"门退出码=1（期望 0）\",\n  \"note\": \"fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。\",\n  \"reason_code\": \"GATE-EXIT-NONZERO\",\n  \"record\": \"/tmp/t7-2-fixture-o8c30bj6/record-门退出码-非零.json\",\n  \"result\": \"REJECT\"\n}\n"
+    },
+    {
+      "case": "记录件-缺席",
+      "exit": 1,
+      "expect": "exit 非 0（红）",
+      "pass": true,
+      "reason_code": "RECORD-ABSENT"
+    }
+  ],
+  "record": {
+    "base_ref": "main",
+    "base_sha": "64cbfb8f93ca213c17149c5bf8bb8fb55a39d1d9",
+    "branch": "feat/2026-11-04-batchA",
+    "gate_base_sha": "64cbfb8f93ca213c17149c5bf8bb8fb55a39d1d9",
+    "gate_command": "bash ci/run.sh",
+    "gate_exit": 0,
+    "gate_id": "fixture-fast",
+    "gate_summary_path": "/tmp/t7-2-fixture-o8c30bj6/gate-out/SUMMARY.txt",
+    "gate_summary_sha256": "07bb0071617324ff8d8973c55f704e8811363323defab6745a16d8a614b025e6",
+    "gate_summary_text": "step1  PASS  1ms  fixture fmt\nstep2  PASS  1ms  fixture clippy\nPIPELINE-GREEN\n",
+    "recorded_at": "2026-11-04T23:48:57+08:00",
+    "recorded_by": "t7-2-selftest",
+    "remote": "/tmp/t7-2-fixture-o8c30bj6/fixture-repo",
+    "schema_version": "af.integrator_bind_record.v1",
+    "source_sha": "3ed4ea9bdc4b3367600abfed17c675973d11e2cd",
+    "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49",
+    "suite_digest_algo": "af.gate_suite_digest.v1",
+    "suite_members": 3,
+    "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e",
+    "verdict": "pass"
+  },
+  "verdict": "SELFTEST-GREEN"
+}
