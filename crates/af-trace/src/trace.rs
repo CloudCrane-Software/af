@@ -1348,6 +1348,55 @@ mod tests {
         assert!(!err.is_empty());
     }
 
+    /// 风险#4 探针：[`Trace::write_critical`] 的 `Ok` 只代表事件已入有界内存缓冲，
+    /// 不代表已 append、更不代表已 sync——盘上此刻没有它的任何痕迹。
+    /// 持久确认点是 [`Trace::shutdown`] 返回 `Ok`（消费线程清空后才对账）。
+    #[test]
+    fn poc_probe_ok_means_enqueued_not_persisted() {
+        let dir = TempDir::new("poc-ok-semantics");
+        let t = Trace::spawn(TraceConfig {
+            critical_capacity: 8,
+            normal_capacity: 8,
+            critical_consume_delay_us: 0,
+            normal_consume_delay_us: 0,
+            dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
+        })
+        .unwrap();
+        let hold = t.hold_consumers();
+        let mut oks = Vec::new();
+        for i in 0..3 {
+            let seq = t.write_critical("poc.audit", json!({ "i": i })).unwrap();
+            println!("[probe] write_critical(i={i}) -> Ok(seq={seq})，此刻事件仅在内存队列");
+            oks.push(seq);
+        }
+        let on_disk = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        println!(
+            "[probe] 3 个 Ok 之后、释放消费者之前：critical.jsonl 行数 = {}",
+            on_disk.len()
+        );
+        assert!(
+            on_disk.is_empty(),
+            "Ok 只代表入队：此刻文件必须为空，实际已有 {} 行",
+            on_disk.len()
+        );
+        drop(hold);
+        let report = t.shutdown().unwrap();
+        let file = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        let seqs: HashSet<u64> = file.iter().map(|event| event.seq).collect();
+        for seq in &oks {
+            assert!(seqs.contains(seq), "shutdown Ok 后 seq={seq} 必须已在文件里");
+        }
+        assert_eq!(report.critical_persisted, 3, "镜像行数 = Ok 的写入数");
+        println!(
+            "[probe] shutdown Ok 后：critical.jsonl 行数 = {}，critical_persisted = {}",
+            file.len(),
+            report.critical_persisted
+        );
+    }
+
     /// 端点空白：lane 离线，只计落盘成功的 normal，critical 不计数，缺口不变。
     #[test]
     fn offline_lane_counts_persisted_normals_and_skips_critical() {
