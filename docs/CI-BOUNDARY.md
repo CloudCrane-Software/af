@@ -68,3 +68,23 @@ v0.3 T7 终裁①：**CI 执行器 Gitea Actions 先行，Actions 只跑 F1 快�
 规则：**merged → 清**（worktree 目录与分支登记后移除）；**aborted → 留证 48h**
 （保留现场与留痕文件，48h 后可清）；**超时 → 止损**（lease 过期即强制回收）。
 **lease TTL 到期 ≠ 删树**：TTL 只重置认领，删树只走上述三路。详见脚本头注。
+
+## 五、合流目标与 PR 基线口径（L1' 治理登记，2026-11-04）
+
+产品仓 af 的**唯一合流目标是 `product/main`**。远端 `main` 是 **fix3 代际对照线**：
+非默认分支、非合流目标、勿直接回合（merge/rebase/cherry-pick 回 `main` 一律禁止）。
+本节只新增口径与事实，不改 §一—§四 任何既有语义。据此：
+
+- **开 PR 的 base 必须显式写 `product/main`**。Gitea 的「默认 base」跟随仓设置
+  default_branch——实测（只读 GET `/api/v1/repos/opchadmin/af`，2026-11-04，
+  凭据指纹化取证 `poc/poc-ci-diffbase-fix/readings/gitea-readonly.json`）该值
+  **仍为 `main`**：不写 base 的 PR 会默认对准对照线 `main`。改仓设置属运营者
+  签认项（L2），非本批动作。
+- **F1 快速门只在 base=product/main 时触发**（`.gitea/workflows/f1.yml` 实况：
+  `on.pull_request.branches: [product/main]`）。base 落到 `main` 的 PR **拿不到
+  F1 快速反馈**——静默失门，而非降级运行。
+- 关联缺陷（L1，同批修复）：`ci/fix_scan.py --diff-base` 缺省曾误取 `origin/main`
+  （对照线），致 step13a diff 档路径过滤失效——本仓两线无 merge-base，基点恒
+  不可解析 → 恒回落 full；若基点可解析亦属按对照线全树差集恒全族触发。缺省已改
+  `HEAD~1`（与 mutations 门 `MUT_BASE` 同款，run.sh:167 先例），「基点不可解析
+  时 fail-safe 回落 full」语义逐字保持。

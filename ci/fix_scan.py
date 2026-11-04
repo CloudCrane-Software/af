@@ -6,7 +6,7 @@
 
 子命令：
   --validate [--config ci/fix-scan.yaml]   schema+白名单校验（任何字段违例 exit 2）
-  --run --mode diff|full [--diff-base origin/main] [--family ID]
+  --run --mode diff|full [--diff-base HEAD~1] [--family ID]
                                           逐族扫描；diff 档=trigger_globs 命中的族才跑，
                                           full 档=全族全量；产物落 redteam/scans/<batch>/
   --verify-artifacts [--config ...]       合流门钩子：最新 batch 各族产物存在且 sha256 一致
@@ -561,7 +561,11 @@ def main() -> int:
     ap.add_argument("--verify-artifacts", action="store_true", help="合流门钩子：最新 batch 产物+sha256 核查")
     ap.add_argument("--config", default=DEFAULT_CONFIG)
     ap.add_argument("--mode", choices=["diff", "full"], default="diff")
-    ap.add_argument("--diff-base", default="origin/main")
+    # 基点缺省 HEAD~1（本次改动面）——与同仓 mutations 门 MUT_BASE 缺省同款（run.sh
+    # 「基点缺省 HEAD~1；基点不可解析时 fail-safe 判 full」先例）；origin/main 是
+    # fix3 代际对照线，取它当基点=diff 档路径过滤失效。不可解析时 changed_files
+    # 返 None → 回落 full（宁多扫不漏扫），fail-safe 语义保持不变。
+    ap.add_argument("--diff-base", default="HEAD~1")
     ap.add_argument("--family", default=None, help="只跑指定族（配合 --run）")
     ap.add_argument("--whitelist-json", default=DEFAULT_WHITELIST_JSON,
                     help="sat-cast 白名单单一正本（ci/budget-cast-whitelist.json）")

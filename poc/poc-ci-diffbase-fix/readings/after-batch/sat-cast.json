@@ -1,0 +1,21 @@
+{
+  "family": "sat-cast",
+  "mode": "diff",
+  "batch": "2026-11-04-25429293",
+  "ts": "2026-11-04T10:00:31+00:00",
+  "git_commit": "25429293b0671460d394cb217290f5cebf024a52",
+  "scan_roots": [
+    "."
+  ],
+  "hits": [
+    {
+      "path": "crates/af-execline/src/graph_unit.rs",
+      "line": 1167,
+      "reason": "族模式命中（suggested_debt: D-53）",
+      "text": "turns: stage.turns as u32,"
+    }
+  ],
+  "whitelist_applied": [],
+  "method_a_summary": null,
+  "method_b_summary": null
+}
