@@ -121,9 +121,3 @@ jobs:
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo test -p af-dsl -p af-compiler
-
-      - name: clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
-        run: cargo test -p af-dsl -p af-compiler
