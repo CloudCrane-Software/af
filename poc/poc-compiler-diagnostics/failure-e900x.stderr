@@ -1,0 +1,1 @@
+计划生成失败：绑定未过（2 条 E900x 违例）：E9001 节点 "worker" 引用 "route.main@1"：组件 "route.main" 未注册（注册表共 0 条声明）；E9001 节点 "worker" 引用 "pkg.kit.hammer@1"：组件 "pkg.kit.hammer" 未注册（注册表共 0 条声明）

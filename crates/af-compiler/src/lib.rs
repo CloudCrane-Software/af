@@ -19,6 +19,7 @@ pub mod bind;
 pub mod components;
 pub mod construction;
 pub mod decode;
+pub mod diagnostics;
 pub mod ir;
 pub mod lower;
 pub mod package;
@@ -37,6 +38,10 @@ pub use construction::{
     task_json, ConstructionSpec, CONSTRUCTION_GRAPH_YAML, PROTOCOL_TEACHING,
 };
 pub use decode::{decode_ir, IrParseError};
+pub use diagnostics::{
+    from_bind_violations, from_load_error, from_validate_report, stamp_source_file, DiagLocation,
+    Diagnostic, DiagnosticsFile, Phase, Severity, DIAGNOSTICS_SCHEMA,
+};
 pub use ir::{IrProgram, IR_VERSION};
 pub use lower::{lower, LowerError};
 pub use package::{

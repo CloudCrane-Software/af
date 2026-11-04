@@ -1,0 +1,33 @@
+{
+  "schema": "af.diagnostics.v1",
+  "diagnostics": [
+    {
+      "code": "E9001",
+      "severity": "error",
+      "message": "组件 \"route.main\" 未注册（注册表共 0 条声明）",
+      "phase": "bind",
+      "location": {
+        "file": "poc/poc-compiler-diagnostics/inputs/failure-e900x.yaml",
+        "line": null,
+        "column": null
+      },
+      "node": "worker",
+      "reference": "route.main@1",
+      "rule": null
+    },
+    {
+      "code": "E9001",
+      "severity": "error",
+      "message": "组件 \"pkg.kit.hammer\" 未注册（注册表共 0 条声明）",
+      "phase": "bind",
+      "location": {
+        "file": "poc/poc-compiler-diagnostics/inputs/failure-e900x.yaml",
+        "line": null,
+        "column": null
+      },
+      "node": "worker",
+      "reference": "pkg.kit.hammer@1",
+      "rule": null
+    }
+  ]
+}
