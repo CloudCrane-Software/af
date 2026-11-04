@@ -1,0 +1,51 @@
+# 读数 09（返修批新增）：复核员 P01–P09 九个探针变体 + 返修批自加 P10–P14 的逐条读数
+# 日期：2026-11-05 · G1 返修批
+# 探针本体：`poc/poc-g1-github-pr-surface/probe-p01-p09.py`（可复跑）
+# 口径：把削弱形态落到现役 workflow 上 ⇒ **实跑** `ci/gh_workflow_check.py --root <变体目录>`
+#       ⇒ 逐条给「红 / 仍绿」读数（仍绿就如实写仍绿）。
+$ python3 -I poc/poc-g1-github-pr-surface/probe-p01-p09.py
+== 正例（现役面）==
+POSITIVE exit=0（期望 0）
+== 探针（削弱面 ⇒ 必须红；仍绿就如实写仍绿）==
+P01 红 exit=1 expected_rule=R08 hit=yes failed_rules=R08 | 注释掉 fmt 命令行（语义件被注释掉 = 判据弱化）
+P02 红 exit=1 expected_rule=R09 hit=yes failed_rules=R09 | 注释掉 clippy 命令行
+P03 红 exit=1 expected_rule=R10 hit=yes failed_rules=R10 | 注释掉快速测试命令行
+P04 红 exit=1 expected_rule=R08 hit=yes failed_rules=R21,R08,R08 | fmt 命令行吞红：`|| true`
+P05 红 exit=1 expected_rule=R09 hit=yes failed_rules=R21,R09,R09 | clippy 命令行吞红：`|| true`
+P06 红 exit=1 expected_rule=R18 hit=yes failed_rules=R18,R14 | 语义 step 带 `if: false` 抑制条件（把 always() 换成 false）
+P07 红 exit=1 expected_rule=R19 hit=yes failed_rules=R19 | job 级 `if: false`（整门恒不跑）
+P08 红 exit=1 expected_rule=R20 hit=yes failed_rules=R20 | on.pull_request 收窄：`types: [opened]`
+P09 红 exit=1 expected_rule=R20 hit=yes failed_rules=R20 | on.pull_request 收窄：`paths-ignore`
+P10 红 exit=1 expected_rule=R08 hit=yes failed_rules=R21,R08,R08 | 【补充】fmt 命令行吞红：`; true`
+P11 红 exit=1 expected_rule=R21 hit=yes failed_rules=R21 | 【补充】clippy step 里 `set +e`（关掉 errexit ⇒ R21 命中；命令本身未被改故 R09 仍在位）
+P12 红 exit=1 expected_rule=R22 hit=yes failed_rules=R22 | 【补充】整块删掉「判据面自检」step（自检面形同虚设）
+P13 红 exit=1 expected_rule=R21 hit=yes failed_rules=R21 | 【补充】自检命令吞红：`|| true`
+P14 红 exit=1 expected_rule=R02 hit=yes failed_rules=R02 | 【补充】重复键夹带：在语义 step 里塞第二个 `if:`（后者覆盖前者）
+PROBE SUMMARY: probes=14 still_green=0
+exit=0
+
+# ── 逐条判读（红 = 机器抓住；仍绿 = 如实写仍绿）──────────────────────────────
+#   P01 红  R08     注释掉 fmt 命令行（语义件被注释掉）
+#   P02 红  R09     注释掉 clippy 命令行
+#   P03 红  R10     注释掉快速测试命令行
+#   P04 红  R08+R21 fmt 命令行 `|| true`（吞红 ⇒ 语义件不算在位 + 吞红写法命中）
+#   P05 红  R09+R21 clippy 命令行 `|| true`
+#   P06 红  R18+R14 语义 step 的 `if: ${{ always() }}` 换成 `if: false`（抑制条件）
+#   P07 红  R19     job 级 `if: false`（整门恒不跑）
+#   P08 红  R20     on.pull_request 加 `types: [opened]`（触发面收窄）
+#   P09 红  R20     on.pull_request 加 `paths-ignore`（触发面收窄）
+#   ── 以下 P10–P14 为返修批自加（超出复核员九项），覆盖同类 fail-open 路径 ──
+#   P10 红  R08+R21 fmt 命令行 `; true`
+#   P11 红  R21     clippy step 里 `set +e`（R09 仍判在位：命令本身未被改）
+#   P12 红  R22     整块删掉「判据面自检」step（自检面形同虚设）
+#   P13 红  R21     自检命令 `|| true`（吞掉自检 ⇒ 恒绿）
+#   P14 红  R02     重复键夹带：语义 step 里塞第二个 `if:`（后者覆盖前者 ⇒ 解析歧义 fail-closed）
+#
+# ★ **P06 的一次修正（如实留痕）**：P06 初版写成「在 clippy step 里**再插一行**
+#   `if: false`」⇒ 实测**仍绿**。原因：同一映射内出现**重复键**，YAML 解析器
+#   （PyYAML 与本检查器内建解析器一致）**后者覆盖前者** ⇒ 生效条件仍是后面的
+#   `${{ always() }}` ⇒ 该变异在语义上**不生效**。处置：
+#   ① P06 改成复核员本意（把 `if: ${{ always() }}` **替换**成 `if: false`）⇒ 转红（R18）；
+#   ② 另立 P14 专门覆盖「重复键夹带」形态 ⇒ 在**解析层** fail-closed（R02），
+#      因为重复键在 GitHub 侧会被判为 workflow 非法（解析歧义 ⇒ 不放行）。
+#   ⇒ 两处修法都是**判据变严**，不是放宽。

@@ -1,0 +1,24 @@
+# 读数 11（返修批新增）：返修批产物指纹（sha256）
+# 日期：2026-11-05 · G1 返修批 · 工作树 /home/pan-ding/workspace/af-wt-g1github
+# 分支 feat/g1-github-pr-surface（未 commit、未 push）
+
+$ git rev-parse HEAD product/main origin/product/main
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+
+$ sha256sum <返修批产物面>
+e45fad8fe6fd52a4c176e6e927acbd025b292c59d391b0f5f1c0ce60e4a7bbcf  ci/gh_workflow_check.py
+9f5711b5dd93d8d8d21c0d37a8bb60c9c9df6b5357f728920a9f0e3c293771f6  .github/workflows/f1.yml
+49fbe18ff6c5be06ead1609be5115950c4b195f8aa6c6517c8ed3b777223e0a0  docs/CI-BOUNDARY.md
+9b44162298ed5c5941bef5508702985bf8b4d2db7c699d01d2a24e9569273c45  poc/poc-g1-github-pr-surface/README.md
+eb9c52235a6f6aaa70a20362d1469780b1b7f4d003f9a445d0fb012369a48358  poc/poc-g1-github-pr-surface/probe-p01-p09.py
+6ae81439edeadaf1e1b72a064017814c0ffc9acb5d798efaf98dcf28c03e7b05  poc/poc-g1-github-pr-surface/readings/00-github-branch-probe.txt
+592f4a3646a951ef794f53573d7e353c56bf7bcc37a0b769d46287dbcdb5bcec  poc/poc-g1-github-pr-surface/readings/07-fix-failopen-closed.txt
+822c0bee88e3e807687dc37f7945c73f8906c1fba56935b0111da521997bcf20  poc/poc-g1-github-pr-surface/readings/08-fix-selftest-23-variants.txt
+4b3760f3a0a14d170c1bfddb86e2b6b33da34475f680433b7c0466273d225961  poc/poc-g1-github-pr-surface/readings/09-fix-probe-p01-p14.txt
+45bb822057b8b5e2b1ffc124df0cdf85ec504366bb185d5c1d5718fca95d1e6a  poc/poc-g1-github-pr-surface/readings/10-fix-gates-and-zero-change.txt
+
+$ sha256sum .gitea/workflows/f1.yml ci/clippy-baseline.txt   （基线正本面：未变）
+4002392f221aff4aa125d0d1df95600ba83e6190065422cc65ad5cac886292d2  .gitea/workflows/f1.yml
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  ci/clippy-baseline.txt

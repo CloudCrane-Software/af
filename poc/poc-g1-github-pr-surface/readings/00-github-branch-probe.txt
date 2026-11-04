@@ -1,0 +1,105 @@
+# 读数 00：GitHub 侧默认分支名核验（不许假设）
+# 命令：git ls-remote --symref https://github.com/Feasy898/af.git HEAD
+# 命令：git ls-remote --heads https://github.com/Feasy898/af.git（分支全集，用于核 product/main 是否存在）
+# 时间：2026-11-04（本批会话内实测；只读查询，未 push、未改任何远端）
+
+$ git ls-remote --symref https://github.com/Feasy898/af.git HEAD
+exit=124
+
+$ git ls-remote --heads https://github.com/Feasy898/af.git   （分支全集）
+e0a7a13434c93ed6ba72caca6f9d7c7cc64e2d71	refs/heads/fix4-align-r1
+9ba2263ff8d1d90787e75bdbe069892eea651e61	refs/heads/fix4-align-r2
+727bafb848d1bf82613a0c429926ebe21a76a317	refs/heads/fix4-align2
+bf96b88b963680d75763bbef1616b2c73e4ee86e	refs/heads/fix4-align2-p00
+68442f4676ffa9b5a05f4cb9131c9b71c5688859	refs/heads/fix4-align2-p01
+bf96b88b963680d75763bbef1616b2c73e4ee86e	refs/heads/fix4-align2-r1
+0558a2f31caecc1a29c16dfc7e4b6053b2931f73	refs/heads/fix4-align2-tier0
+79d7337a8ee271ae75215997bba7976525f48c51	refs/heads/fix4-align2-v8
+24e07bba4f811be3364f1f959a34919e5a8d8d63	refs/heads/fix4-align4-p0
+dbfe23d6e2c422a0c46cd4f527e8cb5cc63e65d2	refs/heads/fix4-align4-p1
+e8e956609e90fee721ccdec362993da4b7d31f1a	refs/heads/fix4-container-names
+693f4a0a3404c4f6aa4c733e63fbbcb5d0abb419	refs/heads/fix4-obs-fix1
+20ac02aa3816bc28e330bcca5aff2949c0590628	refs/heads/fix4-observability
+bd9148ce2a18edcd8fe92fb453027bcfd4ca3f6c	refs/heads/fix4-sprint-g2
+965bc6ca8b19f67e4504f600a35d4511facdded5	refs/heads/fix4-sprint-g3
+41fca4896a5473cbb49b02d6ec3058ae91019832	refs/heads/guardrail-fix1
+a29b529113ee86bdadb9fb2b35e93193653f52d9	refs/heads/guardrail-fix2
+3b202ad84d5a2c7beb3d76d33f1a66f99a24558c	refs/heads/longcat-profile
+3b202ad84d5a2c7beb3d76d33f1a66f99a24558c	refs/heads/main
+5f10f8045f4a0050e078cd6b78108fed5391a6bf	refs/heads/phase2
+a29b529113ee86bdadb9fb2b35e93193653f52d9	refs/heads/phase2-dsl
+9616746f873bc5e400a00f8ba294dfdfa2d8b529	refs/heads/phase2-order
+da419254c1136b4efb635751ace9909c7ededcc4	refs/heads/probe/anolis-roundtrip
+f199f1c667cd959b37432d4d077b3541f8955fb2	refs/heads/wave1-merge
+exit=0
+
+$ ... | grep -c 'product/main'   （0 = GitHub 侧无 product/main 分支 ⇒ 按实际写 main）
+
+$ 对上文已完整取到的分支清单就地统计（不重新 fetch）
+分支总数 = 24
+其中含 product/main 的分支数 = 0
+（0 = GitHub 侧披露镜像无 product/main 分支 ⇒ 按实际写 main）
+
+# =============================================================================
+# §B 返修追加（2026-11-05 · G1 返修批）：symref 命令的**成功**原始输出
+# =============================================================================
+# 背景（为何要补这一条）：
+#   §A 里 `git ls-remote --symref https://github.com/Feasy898/af.git HEAD` 的记录是
+#   **exit=124（超时、无输出）** ⇒ §A 的留存原始读数**不支持**任何「默认分支 = main」的引用。
+#   事实本身为真：复核员亲跑同一条命令 = exit 0、输出 `ref: refs/heads/main	HEAD`。
+#   本条 = 该命令的**成功**原始输出（首次超时、复跑成功 = 如实留痕；**§A 原记录一字未删**）。
+#
+# ★ 命令形态差异（如实登记，不含糊）：
+#   本条走 remote **别名** `github`：`git remote -v` → `github  https://github.com/Feasy898/af.git`
+#   ⇒ 与 §A 的直连 URL 是**同一个仓**；差别在仓内 `remote.github.proxy=http://100.64.0.8:7890`
+#   （仓内配置）生效 ⇒ 直连 URL 形态在本机**无 proxy ⇒ 仍超时**（下方「复跑直连 URL」条为证）。
+#   复跑直连 URL 形态（原始 §A 同款命令）：`timeout 60 git ls-remote --symref https://github.com/Feasy898/af.git HEAD`
+#   ⇒ exit=124（超时无输出，与 §A 一致）。
+#
+# 结论（供 .github/workflows/f1.yml 注释与 README §2.3 引用）：
+#   ① GitHub 披露镜像的默认分支 = `main`（symref 实证，exit 0）；
+#   ② 分支全集 = **24**（§A 的汇总也写 24 —— §A 的 `--heads` 全量清单 24 行与本条一致）；
+#   ③ 含 `product/main` 的分支数 = **0** ⇒ GitHub 侧不存在 `product/main`。
+# =============================================================================
+
+$ git ls-remote --symref github HEAD
+ref: refs/heads/main	HEAD
+3b202ad84d5a2c7beb3d76d33f1a66f99a24558c	HEAD
+exit=0
+
+$ git ls-remote --heads github
+e0a7a13434c93ed6ba72caca6f9d7c7cc64e2d71	refs/heads/fix4-align-r1
+9ba2263ff8d1d90787e75bdbe069892eea651e61	refs/heads/fix4-align-r2
+727bafb848d1bf82613a0c429926ebe21a76a317	refs/heads/fix4-align2
+bf96b88b963680d75763bbef1616b2c73e4ee86e	refs/heads/fix4-align2-p00
+68442f4676ffa9b5a05f4cb9131c9b71c5688859	refs/heads/fix4-align2-p01
+bf96b88b963680d75763bbef1616b2c73e4ee86e	refs/heads/fix4-align2-r1
+0558a2f31caecc1a29c16dfc7e4b6053b2931f73	refs/heads/fix4-align2-tier0
+79d7337a8ee271ae75215997bba7976525f48c51	refs/heads/fix4-align2-v8
+24e07bba4f811be3364f1f959a34919e5a8d8d63	refs/heads/fix4-align4-p0
+dbfe23d6e2c422a0c46cd4f527e8cb5cc63e65d2	refs/heads/fix4-align4-p1
+e8e956609e90fee721ccdec362993da4b7d31f1a	refs/heads/fix4-container-names
+693f4a0a3404c4f6aa4c733e63fbbcb5d0abb419	refs/heads/fix4-obs-fix1
+20ac02aa3816bc28e330bcca5aff2949c0590628	refs/heads/fix4-observability
+bd9148ce2a18edcd8fe92fb453027bcfd4ca3f6c	refs/heads/fix4-sprint-g2
+965bc6ca8b19f67e4504f600a35d4511facdded5	refs/heads/fix4-sprint-g3
+41fca4896a5473cbb49b02d6ec3058ae91019832	refs/heads/guardrail-fix1
+a29b529113ee86bdadb9fb2b35e93193653f52d9	refs/heads/guardrail-fix2
+3b202ad84d5a2c7beb3d76d33f1a66f99a24558c	refs/heads/longcat-profile
+3b202ad84d5a2c7beb3d76d33f1a66f99a24558c	refs/heads/main
+5f10f8045f4a0050e078cd6b78108fed5391a6bf	refs/heads/phase2
+a29b529113ee86bdadb9fb2b35e93193653f52d9	refs/heads/phase2-dsl
+9616746f873bc5e400a00f8ba294dfdfa2d8b529	refs/heads/phase2-order
+da419254c1136b4efb635751ace9909c7ededcc4	refs/heads/probe/anolis-roundtrip
+f199f1c667cd959b37432d4d077b3541f8955fb2	refs/heads/wave1-merge
+exit=0
+$ ... | wc -l
+24
+$ ... | grep -c 'product/main'
+0
+
+# ── 附：同款直连 URL 命令在本机的复跑（首次超时 ⇒ 仍超时，如实留痕）─────────────
+$ timeout 60 git ls-remote --symref https://github.com/Feasy898/af.git HEAD
+exit=124
+（无输出 = 超时。⇒ 本机直连 URL 形态超时；走 remote 别名 `github`（带仓内 proxy 配置）才 exit 0。
+  两次（§A 与本条）直连形态均 exit=124，两次 remote 形态均 exit=0 —— 差别只在 proxy 生效与否。）

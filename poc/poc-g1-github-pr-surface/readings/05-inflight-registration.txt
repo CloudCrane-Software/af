@@ -1,0 +1,27 @@
+# 读数 05：在飞工作树登记面（本批施工树的租约背书登记）——防既有跨树收口门因本批新增工作树而假红
+# 时间：2026-11-04
+
+### 5.1 租约领用（机读输出，无凭据）
+$ python3 poc/poc-supply/lease_store.py --db af-state/resources/leases.db acquire --lease-id wt-g1gh-20261104-a --resource pandev/tmp --interval 'worktree:feat/g1-github-pr-surface' --profile '{...}' --holder g1-github-pr-surface --reserved-bytes 0 --ttl-ms 86400000
+（输出见 §5.3 租约面实测行；profile 只含 node_id/schema_version，非凭据）
+
+### 5.2 登记行（af-state/resources/inflight-worktrees.list 追加行）
+inflight | feat/g1-github-pr-surface | /home/pan-ding/workspace/af-wt-g1github | G1-GitHubPR端反馈面-20261104 | wt-g1gh-20261104-a | 1793893189203 | 1793806792442 | g1-github-pr-surface | pandev/tmp | G1 批 GitHub 端 PR 反馈面施工树（分支 feat/g1-github-pr-surface，基线 origin/product/main=56ff52a）：落 .github/workflows/f1.yml + ci/gh_workflow_check.py + 证据面；本批零 push 零 commit，diff 留给主代理。TTL 24h，到期未续租即自动翻红，续租=lease_store heartbeat --lease-id wt-g1gh-20261104-a --holder g1-github-pr-surface 后按新 lease_until_ms 逐字重登记本行
+
+### 5.3 租约面实测（只读查询）
+('wt-g1gh-20261104-a', 'pandev/tmp', 'worktree:feat/g1-github-pr-surface', 'g1-github-pr-surface', 'active', 1793893189203, '{"node_id":"pandev","schema_version":"af.resources/v1"}')
+
+### 5.4 既有跨树收口门对本树的判定（机器面）
+$ python3 -I ci/fix_verify.py --repo /home/pan-ding/workspace/agent黑灯工厂/af | grep 'g1-github-pr-surface'
+（全文见 05b-fixverify-full-output.txt）
+[PASS] [feat/g1-github-pr-surface] 在飞登记背书成立：租约 wt-g1gh-20261104-a 活跃（until=1793893189203ms，holder=g1-github-pr-surface，resource=pandev/tmp，槽位 worktree:feat/g1-github-pr-surface，批次 G1-GitHubPR端反馈面-20261104，登记于 1793806792442ms，理由：G1 批 GitHub 端 PR 反馈面施工树（分支 feat/g1-github-pr-surface，基线 origin/product/main=56ff52a）：落 .github/workflows/f1.yml + ci/gh_workflow_check.py + 证据面；本批零 push 零 commit，diff 留给主代理。TTL 24h，到期未续租即自动翻红，续租=lease_store heartbeat --lease-id wt-g1gh-20261104-a --holder g1-github-pr-surface 后按新 lease_until_ms 逐字重登记本行）——漏登记红不触发（豁免由租约面背书，TTL 到期自动翻红）
+### 5.5 该门整体读数（红项均为**其它批次**的在飞工作树，与本批无关；本批未新增红）
+== fix-verify: 绿 19 / 警告 0 / 红 7（工作树 16 棵，名册 11 条）
+漏登记红项数=7
+  [FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-fmtfix（分支 feature/mainline-fmt-zero-v2-fix）——缩名册即旁路，红
+  [FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-l3l3（分支 feat/l3-l3-independent-port）——缩名册即旁路，红
+  [FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-l3l3-base（分支 (detached)）——缩名册即旁路，红
+  [FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-review-mainline（分支 (detached)）——缩名册即旁路，红
+  [FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-satcast（分支 fix/sat-cast-whitelist-line）——缩名册即旁路，红
+  [FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-t5t6（分支 feat/t5-2-t6-3-trigger-resident）——缩名册即旁路，红
+  [FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-t7-2（分支 feat/t7-2-integrator-bind-check）——缩名册即旁路，红

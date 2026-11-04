@@ -1,0 +1,53 @@
+# 读数 06：本批产物指纹 + 零凭据形态自核 + 产物清单
+# 时间：2026-11-04
+
+### 6.1 产物指纹（sha256）
+11d67838c23e8ee7024134e9816bc3d4ddedef81335346aaf4880b394d464dfb  .github/workflows/f1.yml
+e7c933cb47bed43275a3a30bc652d30bd708864e814c136f32391c310c82b5cd  ci/gh_workflow_check.py
+5bc2eff3a690f5cb428ba6a2b3c51afb3e0303a982563d3e7dd9ed40743153b7  docs/CI-BOUNDARY.md
+
+### 6.2 产物清单（工作树面）
+ci/gh_workflow_check.py
+.github/workflows/f1.yml
+poc/poc-g1-github-pr-surface/readings/00-github-branch-probe.txt
+poc/poc-g1-github-pr-surface/readings/01-checker-positive.txt
+poc/poc-g1-github-pr-surface/readings/02-selftest-variants.txt
+poc/poc-g1-github-pr-surface/readings/03-zero-change-and-fmt.txt
+poc/poc-g1-github-pr-surface/readings/04-gitea-f1-anchors.txt
+poc/poc-g1-github-pr-surface/readings/05b-fixverify-full-output.txt
+poc/poc-g1-github-pr-surface/readings/05-inflight-registration.txt
+poc/poc-g1-github-pr-surface/readings/06-artifacts-and-fingerprints.txt
+poc/poc-g1-github-pr-surface/README.md
+
+### 6.3 零凭据形态自核（模拟镜像披露终扫的形态探测；只判形态，不打印任何命中值）
+$ grep -rnE 'gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----' <本批产物面>
+（无输出=零命中）
+
+### 6.4 引用检查：GitHub 端 workflow 未引任何 action / secret
+$ grep -nE 'uses:|secrets\.' .github/workflows/f1.yml
+34:#   - **零长期凭据**：不引用任何 secrets.*（含 GITHUB_TOKEN 也不引——本仓为公开
+（无输出=零 action + 零 secret 引用）
+
+### 6.5 语义件逐条在位（GitHub 端 workflow）
+20:# ★ 触发：仅 pull_request 且 base = 本仓 GitHub 侧默认分支 `main`。
+29:#   - **禁用 pull_request_target**：它拿 base 仓上下文跑不可信 PR 代码 = 典型提权面。
+30:#     本 workflow 只用 pull_request（PR 头树 + 只读 token + 无 secret 依赖）。
+31:#   - **禁用 pull_request 之外的任何触发**（无 push / workflow_dispatch / schedule /
+33:#   - **permissions 收窄到只读**（顶层 + 每个 job 均 contents: read）。
+48:run-name: "F1 快速门 @ ${{ github.event.pull_request.head.ref || github.ref_name }}"
+51:  pull_request:
+52:    branches:
+56:permissions:
+61:  group: f1-${{ github.event.pull_request.head.ref || github.ref_name }}
+62:  cancel-in-progress: true
+71:    timeout-minutes: 45
+73:    permissions:
+93:          AF_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+94:          AF_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+95:          AF_HEAD_CLONE_URL: ${{ github.event.pull_request.head.repo.clone_url }}
+101:            echo "取不到 PR 头分支（事件上下文缺 pull_request.head.ref）" >&2
+142:          cargo fmt --check --all
+150:          cargo clippy --workspace --all-targets -- -D warnings
+156:          cargo test -p af-dsl -p af-compiler
+159:        # 机器面：谁把本文件的判据面改弱（去掉 clippy -D warnings / 放宽 permissions /
+160:        # 引入 action / 去掉超时或并发 / 改成 pull_request_target …），本 step 即红。
