@@ -1,0 +1,3 @@
+task_package_manifest_check: 组包域闭包不成立：注册表组包产物−{package_manifest.json}=['meta.json', 'plan.json', 'task.json'] ≠ 层1 运行时 manifest 实钉面 ['plan.json', 'task.json']——组包新增产物而运行时 manifest 不钉它=半覆盖破窗（层1 须同步扩钉）
+task_package_manifest_check: 清单有条目、盘面无产物：meta.json（组包产物缺席——漏产物破窗）
+exit=1

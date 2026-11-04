@@ -1,0 +1,2 @@
+task_package_manifest_check: 任务包组包覆盖面对账一致：生产写入点在册 57 点（组包域 2 点、产物 ['package_manifest.json', 'plan.json', 'task.json']），扫描面实得 57 点，回环核对绿（ci/baselines/task-package-writepoints.json）
+exit=0

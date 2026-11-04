@@ -1,0 +1,542 @@
+{
+  "format_version": 1,
+  "title": "生产写入点全集（任务包组包覆盖面正本——G3 债收口）",
+  "generated_by": "ci/task_package_manifest_check.py inventory（扫描面）+ 逐点人工分类",
+  "discipline": "增删条目/改锚=改本表，须同批更新 ci/task_package_manifest_check.py 的 REGISTRY_SHA256 并同批评审（清单即造册，漏造册=门红；与 GATE_INPUTS 同纪律）。domain=package 条目 = 任务包组包写入点：artifacts 须与实际产物逐位一致，且（除 package_manifest.json 自身）被层1 运行时 manifest 钉面覆盖——组包新增产物而层1 不钉=半覆盖破窗，门红。",
+  "scan_apis": [
+    "fs::write",
+    "File::create",
+    "fs::create_dir_all",
+    "OpenOptions::new(",
+    "fs::rename",
+    "fs::copy"
+  ],
+  "entries": [
+    {
+      "file": "crates/af-bench/src/main.rs",
+      "fn": "run_injec",
+      "domain": "bench",
+      "artifacts": [
+        "runs/ 目录",
+        "results.jsonl"
+      ],
+      "note": "注入基准运行：runs 目录 + results.jsonl 追加"
+    },
+    {
+      "file": "crates/af-bench/src/main.rs",
+      "fn": "run_swev",
+      "domain": "bench",
+      "artifacts": [
+        "runs/ 目录",
+        "results.jsonl"
+      ],
+      "note": "SWE 基准运行：runs 目录 + results.jsonl 追加"
+    },
+    {
+      "file": "crates/af-bench/src/main.rs",
+      "fn": "run_tb",
+      "domain": "bench",
+      "artifacts": [
+        "runs/ 目录",
+        "results.jsonl"
+      ],
+      "note": "TB 基准运行：runs 目录 + results.jsonl 追加"
+    },
+    {
+      "file": "crates/af-bench/src/swev.rs",
+      "fn": "capture_diff",
+      "domain": "bench",
+      "artifacts": [
+        "agent.diff"
+      ],
+      "note": "SWE 评测：agent diff 落盘"
+    },
+    {
+      "file": "crates/af-bench/src/swev.rs",
+      "fn": "verify",
+      "domain": "bench",
+      "artifacts": [
+        "eval.sh",
+        "eval.log"
+      ],
+      "note": "SWE 评测：判分脚本落盘 + 日志建档"
+    },
+    {
+      "file": "crates/af-compiler/src/construction.rs",
+      "fn": "assemble_construction_package",
+      "domain": "package",
+      "artifacts": [
+        "plan.json",
+        "task.json"
+      ],
+      "note": "组包一体入口：四段全链编译→plan.json+task.json 落盘→写 manifest（唯一任务包生产写入接线；af-order cli.rs run_submit 为其调用方非写入点）"
+    },
+    {
+      "file": "crates/af-compiler/src/diagnostics.rs",
+      "fn": "write_to",
+      "domain": "compiler-diag",
+      "artifacts": [
+        "<--diagnostics-out 指定路径>（动态）"
+      ],
+      "note": "机读诊断产物出口（CLI af-compiler-plan/snapshot --diagnostics-out；非任务包成员）"
+    },
+    {
+      "file": "crates/af-compiler/src/package.rs",
+      "fn": "write_package_manifest",
+      "domain": "package",
+      "artifacts": [
+        "package_manifest.json"
+      ],
+      "note": "层1 运行时 manifest 落盘（task/plan sha256+plan_id+compiler_version；经 PACKAGE_MANIFEST_FILE 常量）"
+    },
+    {
+      "file": "crates/af-credential/src/root.rs",
+      "fn": "acquire",
+      "domain": "credential",
+      "artifacts": [
+        "目录锁文件"
+      ],
+      "note": "凭证目录锁（DirLock）"
+    },
+    {
+      "file": "crates/af-credential/src/root.rs",
+      "fn": "move_staged",
+      "domain": "credential",
+      "artifacts": [
+        "staged→正式（rename）"
+      ],
+      "note": "staged 转正"
+    },
+    {
+      "file": "crates/af-credential/src/root.rs",
+      "fn": "open_inner",
+      "domain": "credential",
+      "artifacts": [
+        "凭证根目录"
+      ],
+      "note": "凭证根目录创建"
+    },
+    {
+      "file": "crates/af-credential/src/root.rs",
+      "fn": "rename_aside",
+      "domain": "credential",
+      "artifacts": [
+        "旧件 aside（rename）"
+      ],
+      "note": "旧件搁置"
+    },
+    {
+      "file": "crates/af-credential/src/root.rs",
+      "fn": "write_atomic",
+      "domain": "credential",
+      "artifacts": [
+        "凭证件（tmp+rename 原子）"
+      ],
+      "note": "凭证原子写"
+    },
+    {
+      "file": "crates/af-credential/src/root.rs",
+      "fn": "write_ready",
+      "domain": "credential",
+      "artifacts": [
+        "ready 标记"
+      ],
+      "note": "就绪标记"
+    },
+    {
+      "file": "crates/af-eval/src/gate.rs",
+      "fn": "persist",
+      "domain": "eval",
+      "artifacts": [
+        "判分门留档"
+      ],
+      "note": "判分门结果落盘"
+    },
+    {
+      "file": "crates/af-execline/src/driver.rs",
+      "fn": "execute",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "artifacts 目录"
+      ],
+      "note": "驱动工件目录"
+    },
+    {
+      "file": "crates/af-execline/src/driver.rs",
+      "fn": "load_or_create_instance",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "实例档案（tag）"
+      ],
+      "note": "驱动实例档案一次性建档（create_new 0600）"
+    },
+    {
+      "file": "crates/af-execline/src/driver.rs",
+      "fn": "open_with_sink",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "out_dir 目录"
+      ],
+      "note": "驱动输出目录"
+    },
+    {
+      "file": "crates/af-execline/src/engine.rs",
+      "fn": "write_trust_anchor",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "<engine>.sha256 锚（tmp+rename 原子）"
+      ],
+      "note": "引擎二进制信任锚"
+    },
+    {
+      "file": "crates/af-execline/src/exec.rs",
+      "fn": "execute",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "节点工件"
+      ],
+      "note": "节点执行工件写"
+    },
+    {
+      "file": "crates/af-execline/src/gate_unit.rs",
+      "fn": "persist_gate_order_metrics",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "门单指标留档"
+      ],
+      "note": "门序指标落盘"
+    },
+    {
+      "file": "crates/af-execline/src/graph_unit.rs",
+      "fn": "commit",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "envelope 工件"
+      ],
+      "note": "commit envelope 工件写"
+    },
+    {
+      "file": "crates/af-execline/src/graph_unit.rs",
+      "fn": "drive_all",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "attempt 目录",
+        "artifacts 目录"
+      ],
+      "note": "图执行目录面"
+    },
+    {
+      "file": "crates/af-execline/src/graph_unit.rs",
+      "fn": "drive_check_node",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "check work 目录"
+      ],
+      "note": "图检查节点工作目录"
+    },
+    {
+      "file": "crates/af-execline/src/graph_unit.rs",
+      "fn": "drive_task_node",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "node 目录"
+      ],
+      "note": "图任务节点目录"
+    },
+    {
+      "file": "crates/af-execline/src/graph_unit.rs",
+      "fn": "persist_declaration_artifacts",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "declare envelope 工件"
+      ],
+      "note": "declare 工件先落盘（E1 缺口⑤）"
+    },
+    {
+      "file": "crates/af-execline/src/judge.rs",
+      "fn": "invoke",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "判分镜像目录"
+      ],
+      "note": "判分镜像目录"
+    },
+    {
+      "file": "crates/af-execline/src/ledger.rs",
+      "fn": "append",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "账本行"
+      ],
+      "note": "账本追加"
+    },
+    {
+      "file": "crates/af-execline/src/mes.rs",
+      "fn": "append_event",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "MES 事件"
+      ],
+      "note": "MES 事件追加"
+    },
+    {
+      "file": "crates/af-execline/src/pkg/sweng.rs",
+      "fn": "publish_task_finished",
+      "domain": "sweng-evidence",
+      "artifacts": [
+        "work 目录"
+      ],
+      "note": "SWE 工作目录"
+    },
+    {
+      "file": "crates/af-execline/src/pkg/sweng.rs",
+      "fn": "test_unit",
+      "domain": "sweng-evidence",
+      "artifacts": [
+        "test.log",
+        "test-evidence.json"
+      ],
+      "note": "判据留档（观测+摘要）"
+    },
+    {
+      "file": "crates/af-execline/src/record.rs",
+      "fn": "open",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "results.jsonl",
+        "records.jsonl"
+      ],
+      "note": "双轨记录开档（不存在则建）"
+    },
+    {
+      "file": "crates/af-execline/src/record.rs",
+      "fn": "open_append",
+      "domain": "exec-runtime",
+      "artifacts": [
+        "results.jsonl / records.jsonl"
+      ],
+      "note": "append 模式开档"
+    },
+    {
+      "file": "crates/af-execline/src/suite/report_unit.rs",
+      "fn": "draft_fn_real_ring",
+      "domain": "report",
+      "artifacts": [
+        "ring 目录",
+        "草稿"
+      ],
+      "note": "报告真环草稿"
+    },
+    {
+      "file": "crates/af-execline/src/suite/report_unit.rs",
+      "fn": "drive_all",
+      "domain": "report",
+      "artifacts": [
+        "attempt 目录",
+        "report.json",
+        "report.md",
+        "verify.log"
+      ],
+      "note": "报告套件驱动产物面"
+    },
+    {
+      "file": "crates/af-execline/src/suite/report_unit.rs",
+      "fn": "write_snapshot",
+      "domain": "report",
+      "artifacts": [
+        "快照文件"
+      ],
+      "note": "报告快照落盘"
+    },
+    {
+      "file": "crates/af-execline/src/suite/swev.rs",
+      "fn": "capture_diff",
+      "domain": "bench",
+      "artifacts": [
+        "agent.diff"
+      ],
+      "note": "套件 SWE 臂：agent diff 落盘"
+    },
+    {
+      "file": "crates/af-execline/src/suite/swev.rs",
+      "fn": "verify",
+      "domain": "bench",
+      "artifacts": [
+        "eval.sh",
+        "eval.log"
+      ],
+      "note": "套件 SWE 臂：判分脚本 + 日志"
+    },
+    {
+      "file": "crates/af-execline/src/suite/swev_unit.rs",
+      "fn": "execute",
+      "domain": "bench",
+      "artifacts": [
+        "attempt 目录"
+      ],
+      "note": "SWE 单元尝试目录"
+    },
+    {
+      "file": "crates/af-execline/src/suite/tb_unit.rs",
+      "fn": "execute",
+      "domain": "bench",
+      "artifacts": [
+        "attempt 目录"
+      ],
+      "note": "TB 单元尝试目录"
+    },
+    {
+      "file": "crates/af-harness/src/run.rs",
+      "fn": "open_with_clock",
+      "domain": "harness",
+      "artifacts": [
+        "harness.db（RunStore）"
+      ],
+      "note": "harness 运行档案开档（含建目录）"
+    },
+    {
+      "file": "crates/af-mes/src/outbox.rs",
+      "fn": "open",
+      "domain": "mes",
+      "artifacts": [
+        "outbox 目录"
+      ],
+      "note": "发件箱目录"
+    },
+    {
+      "file": "crates/af-mes/src/outbox.rs",
+      "fn": "park",
+      "domain": "mes",
+      "artifacts": [
+        "partial→最终名（rename 原子）"
+      ],
+      "note": "发件箱驻留（partial 写完 rename）"
+    },
+    {
+      "file": "crates/af-order/src/adjudicate.rs",
+      "fn": "append",
+      "domain": "order",
+      "artifacts": [
+        "意图账 JSONL"
+      ],
+      "note": "意图账追加"
+    },
+    {
+      "file": "crates/af-order/src/adjudicate.rs",
+      "fn": "persist",
+      "domain": "order",
+      "artifacts": [
+        "裁决单 JSON"
+      ],
+      "note": "裁决单落盘"
+    },
+    {
+      "file": "crates/af-order/src/admit.rs",
+      "fn": "append_receipt",
+      "domain": "order",
+      "artifacts": [
+        "受理回执 JSONL"
+      ],
+      "note": "受理账本追加"
+    },
+    {
+      "file": "crates/af-order/src/cli.rs",
+      "fn": "run_submit",
+      "domain": "order",
+      "artifacts": [
+        "订单目录"
+      ],
+      "note": "submit 订单目录创建"
+    },
+    {
+      "file": "crates/af-order/src/router.rs",
+      "fn": "append_consumed",
+      "domain": "order",
+      "artifacts": [
+        "消费游标 JSONL"
+      ],
+      "note": "路由消费游标追加"
+    },
+    {
+      "file": "crates/af-order/src/router_liveness.rs",
+      "fn": "write_json_atomic",
+      "domain": "order",
+      "artifacts": [
+        "活体读数 JSON（tmp+rename 原子）"
+      ],
+      "note": "路由活体原子写"
+    },
+    {
+      "file": "crates/af-order/src/router_liveness.rs",
+      "fn": "write_snapshot",
+      "domain": "order",
+      "artifacts": [
+        "活体快照（tmp+rename 原子）"
+      ],
+      "note": "路由活体快照原子写"
+    },
+    {
+      "file": "crates/af-order/src/voucher.rs",
+      "fn": "issue_or_load",
+      "domain": "credential",
+      "artifacts": [
+        "凭证 JSON"
+      ],
+      "note": "预算凭证落盘"
+    },
+    {
+      "file": "crates/af-order/src/voucher.rs",
+      "fn": "load_or_create_seed",
+      "domain": "credential",
+      "artifacts": [
+        "ed25519 种子（create_new 0600）"
+      ],
+      "note": "签名种子建档"
+    },
+    {
+      "file": "crates/af-release-gate/src/bin/release-gate.rs",
+      "fn": "append_event",
+      "domain": "trace",
+      "artifacts": [
+        "events JSONL"
+      ],
+      "note": "发布门事件追加"
+    },
+    {
+      "file": "crates/af-trace/src/anchor.rs",
+      "fn": "append_receipt",
+      "domain": "trace",
+      "artifacts": [
+        "锚回执 JSONL"
+      ],
+      "note": "锚回执追加"
+    },
+    {
+      "file": "crates/af-trace/src/anchor.rs",
+      "fn": "atomic_write",
+      "domain": "trace",
+      "artifacts": [
+        "锚件（tmp+rename 原子）"
+      ],
+      "note": "锚原子写"
+    },
+    {
+      "file": "crates/af-trace/src/trace.rs",
+      "fn": "open_log",
+      "domain": "trace",
+      "artifacts": [
+        "trace JSONL"
+      ],
+      "note": "trace 日志开档（append）"
+    },
+    {
+      "file": "crates/af-trace/src/trace.rs",
+      "fn": "open_prepared",
+      "domain": "trace",
+      "artifacts": [
+        "trace 目录"
+      ],
+      "note": "trace 目录"
+    }
+  ]
+}

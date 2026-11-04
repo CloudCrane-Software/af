@@ -1,0 +1,3 @@
+task_package_manifest_check: 组包写入点产出未入册产物：crates/af-compiler/src/construction.rs::assemble_construction_package 写 ['meta.json']（不在册面）——组包路径产物全集须与注册表逐位一致
+task_package_manifest_check: 盘面有产物、清单无条目：meta.json（未造册产物——多产物破窗）
+exit=1
