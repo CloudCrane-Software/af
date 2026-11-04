@@ -1,0 +1,11 @@
+version: 1
+library: af-strategies
+batch: r3-nofloor-fixture
+source: "P3-A1 夹具：1 条 + 同步 counts，证明 R3 无总量下限"
+note: "dsl_state/tier 与条目文件实测一致"
+entries:
+  - { id: st-b-C058, file: st-b-C058.yaml, tier: B, topic: 工具与接口, dsl_state: not_applicable, rank: 12 }
+counts:
+  total: 1
+  tiers: { B: 1 }
+  dsl_states: { not_applicable: 1 }

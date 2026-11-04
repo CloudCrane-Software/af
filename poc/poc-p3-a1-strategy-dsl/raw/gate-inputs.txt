@@ -1,0 +1,3 @@
+===== GATE_INPUTS =====
+gate_inputs_check: 判据正本钉对账一致: 12 件（ci/baselines/gate-inputs.sha256）
+gate_inputs_exit=0

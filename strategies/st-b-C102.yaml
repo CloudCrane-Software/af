@@ -49,9 +49,9 @@ dsl_snippet: |
     - name: test_verdict
       schema:
         type: object
-        required: [passed, failures]
+        required: [pass, failures]
         properties:
-          passed: { type: boolean }
+          pass: { type: boolean }
           failures: { type: array, items: { type: string } }
   nodes:
     - id: analyze

@@ -1,0 +1,488 @@
+{
+  "v": 1,
+  "body": {
+    "plan_id": "plan.coder_role_task_graph@1.0+573fcbaaa072",
+    "compiled_from": {
+      "dsl_digest": "573fcbaaa07266c5917de4ab0c8423a5cc27734c91a59360dffec4ab2943ac18",
+      "compiler_version": "0.1.0",
+      "graph_version": "1.0",
+      "registry_digest": "0bf4f475e53daf7b2b9f980298034df847612d85641aa3965c09d950e6b94fbe"
+    },
+    "line": {
+      "line_id": null,
+      "line_version": null,
+      "domain_pack_digest": null
+    },
+    "order": {
+      "id": "",
+      "stable_id": "",
+      "run_id": "",
+      "state": "Created",
+      "graph_version": "1.0",
+      "line": null,
+      "budget_voucher": null,
+      "artifacts": [],
+      "sla": {
+        "deadline": null,
+        "priority": "Normal"
+      },
+      "supersedes": null,
+      "history": []
+    },
+    "graph": {
+      "graph_version": "1.0",
+      "name": "coder_role_task_graph",
+      "entry": "analyze",
+      "nodes": [
+        {
+          "id": "analyze",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "locate",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "patch_role",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "review",
+          "kind": "task",
+          "capability_refs": []
+        },
+        {
+          "id": "verify",
+          "kind": "check",
+          "capability_refs": []
+        }
+      ],
+      "edges": [
+        {
+          "from": "analyze",
+          "output": "analysis",
+          "to": "locate",
+          "input": "analysis",
+          "checkpoint": false
+        },
+        {
+          "from": "analyze",
+          "output": "analysis",
+          "to": "patch_role",
+          "input": "analysis",
+          "checkpoint": false
+        },
+        {
+          "from": "locate",
+          "output": "report",
+          "to": "patch_role",
+          "input": "report",
+          "checkpoint": false
+        },
+        {
+          "from": "patch_role",
+          "output": "patch",
+          "to": "review",
+          "input": "patch",
+          "checkpoint": false
+        },
+        {
+          "from": "review",
+          "output": "reviewed",
+          "to": "verify",
+          "input": "patch",
+          "checkpoint": false
+        }
+      ],
+      "subgraphs": {}
+    },
+    "interface": {
+      "input_type": "coder_input",
+      "output_type": "test_verdict",
+      "output_from": "verify",
+      "intent": "五角色预定义任务图：分析→定位→修补→复审→验证，角色间工件经类型化边交接"
+    },
+    "types": {
+      "analysis": {
+        "properties": {
+          "root_cause": {
+            "type": "string"
+          },
+          "suspect_files": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "root_cause",
+          "suspect_files"
+        ],
+        "type": "object"
+      },
+      "coder_input": {
+        "properties": {
+          "issue": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue"
+        ],
+        "type": "object"
+      },
+      "locate_report": {
+        "properties": {
+          "hits": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "hits"
+        ],
+        "type": "object"
+      },
+      "patch": {
+        "properties": {
+          "diff_ref": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "diff_ref"
+        ],
+        "type": "object"
+      },
+      "test_verdict": {
+        "properties": {
+          "failures": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "pass": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "pass",
+          "failures"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {},
+    "node_exec": [
+      {
+        "node_id": "analyze",
+        "unit": null,
+        "components": {
+          "model_route": "route.strong@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.coder.analyze_system"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 900,
+            "fields": [
+              "issue"
+            ],
+            "policy": "project"
+          }
+        ],
+        "budget": [],
+        "artifact_contract": [
+          {
+            "name": "analysis",
+            "is_final": false,
+            "type": "analysis",
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "locate",
+        "unit": null,
+        "components": {
+          "model_route": "route.cheap@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [
+            {
+              "reference": "pkg.sweng.locate@1",
+              "effect_class": "pure"
+            }
+          ],
+          "context_compaction": null
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 400,
+            "template_ref": "pkg.coder.locate_system"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1500,
+            "fields": [
+              "root_cause",
+              "suspect_files"
+            ],
+            "port": "analysis",
+            "policy": "project"
+          }
+        ],
+        "budget": [],
+        "consumes": {
+          "analysis": "analysis"
+        },
+        "artifact_contract": [
+          {
+            "name": "report",
+            "is_final": false,
+            "type": "locate_report",
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "patch_role",
+        "unit": null,
+        "components": {
+          "model_route": "route.strong@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [
+            {
+              "reference": "pkg.sweng.edit@1",
+              "effect_class": "persist"
+            }
+          ],
+          "context_compaction": null
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 600,
+            "template_ref": "pkg.coder.patch_system"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 900,
+            "fields": [
+              "root_cause"
+            ],
+            "port": "analysis",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 1500,
+            "fields": [
+              "hits"
+            ],
+            "port": "report",
+            "policy": "project"
+          }
+        ],
+        "budget": [],
+        "consumes": {
+          "analysis": "analysis",
+          "report": "locate_report"
+        },
+        "artifact_contract": [
+          {
+            "name": "patch",
+            "is_final": false,
+            "type": "patch",
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "review",
+        "unit": null,
+        "components": {
+          "model_route": "route.mid@1",
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 500,
+            "template_ref": "pkg.coder.review_system"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 2000,
+            "fields": [
+              "ref",
+              "diff_ref"
+            ],
+            "port": "patch",
+            "policy": "project"
+          }
+        ],
+        "budget": [],
+        "consumes": {
+          "patch": "patch"
+        },
+        "artifact_contract": [
+          {
+            "name": "reviewed",
+            "is_final": false,
+            "type": "patch",
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      },
+      {
+        "node_id": "verify",
+        "unit": {
+          "unit_id": "pkg.sweng.test_unit",
+          "unit_version": "1"
+        },
+        "components": {
+          "model_route": null,
+          "loop_policy": null,
+          "memory": [],
+          "tools": [],
+          "context_compaction": null
+        },
+        "context": [],
+        "budget": [
+          {
+            "id": "verify_turns",
+            "dimension": "turns",
+            "cap": 30
+          }
+        ],
+        "consumes": {
+          "patch": "patch"
+        },
+        "artifact_contract": [
+          {
+            "name": "verdict",
+            "is_final": true,
+            "type": "test_verdict",
+            "qualified_by": null,
+            "provenance": null
+          }
+        ],
+        "retry": null
+      }
+    ],
+    "budget": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 700
+        },
+        {
+          "id": "verify_turns",
+          "dimension": "turns",
+          "scope": "node:verify",
+          "cap": 30
+        }
+      ],
+      "stop": [],
+      "failures": [
+        {
+          "class": "schema_invalid",
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "resources": {
+      "gates": [],
+      "limits": []
+    },
+    "observation": {
+      "span_tree": [
+        "invoke_workflow",
+        "invoke_agent",
+        "chat",
+        "execute_tool"
+      ],
+      "ctx_propagation": "env",
+      "otel": {
+        "enabled": false,
+        "endpoint": null,
+        "batch_size": 512
+      },
+      "events": {
+        "root_env": "AF_OBS_ROOT",
+        "line": "",
+        "index": true,
+        "manifest": true
+      },
+      "mes": {
+        "endpoint_ref": "env:MES_CH_URL",
+        "database": "af_mes",
+        "line_id": "",
+        "station_id": ""
+      }
+    },
+    "recovery": {
+      "node_retry": null,
+      "resume_source": [
+        "run_store",
+        "record_stream",
+        "mes_events"
+      ],
+      "safety_points": [],
+      "failures": [
+        {
+          "class": "schema_invalid",
+          "route": "same_node",
+          "feedback": "format_reminder"
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {}
+  }
+}

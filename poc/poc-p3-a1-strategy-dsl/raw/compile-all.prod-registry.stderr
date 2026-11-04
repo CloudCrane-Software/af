@@ -1,0 +1,1 @@
+用法：p3a1-seam compile-all <repo> <registry_root> | run-one <repo> <id> <registry_root> <work_dir>

@@ -1,0 +1,1 @@
+{"envelope":"v1","from":"analyze","port":"analysis","payload":{"root_cause":"strategy→DSL loop seam missing: no plan-compile wiring","suspect_files":["poc/poc-p3-a1-strategy-dsl/seam/src/main.rs"]}}
