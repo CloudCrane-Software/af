@@ -1,14 +1,16 @@
-//! E1 缺口②：任务包内容 hash 进提交校验（防重放语义内置编译链）。
+//! E1 缺口② + G3：任务包内容 hash 进提交校验（防重放语义内置编译链）。
 //!
 //! 语义（E1-报告缺口② + W2-C55）：任务包任何改动须清态换号重提——
 //! manifest 在组包一刻留档 task.json/plan.json 内容 sha256；提交侧重算
-//! 核对，不符即拒并点名行动指令。manifest 缺席 = 不核对（旧包同口径）。
+//! 核对，不符即拒并点名行动指令。G3 起 manifest 缺席 = 显式
+//! `ManifestVerification::Absent`（未核对状态，可机检、不与「核对过」
+//! 同形）；要求核对的路径（af-order preflight）对缺席 fail-closed 拒绝。
 
 use std::path::PathBuf;
 
 use af_compiler::{
-    build_package_manifest, verify_package_manifest, write_package_manifest, PACKAGE_MANIFEST_FILE,
-    PACKAGE_MANIFEST_VERSION,
+    build_package_manifest, verify_package_manifest, write_package_manifest,
+    ManifestVerification, PACKAGE_MANIFEST_FILE, PACKAGE_MANIFEST_VERSION,
 };
 
 fn fixture() -> PathBuf {
@@ -39,9 +41,9 @@ fn manifest_write_then_verify_roundtrip() {
     assert_eq!(manifest.plan_id, "plan.x@1.0+abc123");
     assert!(dir.join(PACKAGE_MANIFEST_FILE).is_file());
 
-    let verified = verify_package_manifest(&dir)
-        .unwrap()
-        .expect("manifest 在场应返回留档");
+    let ManifestVerification::Verified(verified) = verify_package_manifest(&dir).unwrap() else {
+        panic!("manifest 在场且一致应 Verified");
+    };
     assert_eq!(verified, manifest);
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -83,12 +85,17 @@ fn verify_rejects_tampered_task_or_plan_with_replay_contract_wording() {
 }
 
 #[test]
-fn verify_passes_through_when_manifest_absent() {
+fn verify_marks_absent_manifest_as_explicit_absent_state() {
     let dir = fixture();
+    // G3（原 verify_passes_through_when_manifest_absent：断言 Ok(None)
+    // 「缺席 = 不核对」——正是本批关掉的破窗口径）。缺席现返回显式
+    // Absent：可机检、不报错、不可与「核对过且通过」（Verified 携留档，
+    // roundtrip 测试覆盖）混同；要求核对的路径由调用方对 Absent
+    // fail-closed（af-order preflight 集成测试覆盖）。
     assert_eq!(
         verify_package_manifest(&dir).unwrap(),
-        None,
-        "manifest 缺席 = 不核对（旧任务包零破窗）"
+        ManifestVerification::Absent,
+        "manifest 缺席 = 显式 Absent（未核对）状态，非静默通过"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -17,7 +17,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use af_compiler::components::ComponentRegistry;
-use af_compiler::{bind, generate_plan, lower};
+use af_compiler::{bind, decode_plan, generate_plan, lower, write_package_manifest};
 use serde_json::Value;
 
 fn repo_packages_root() -> PathBuf {
@@ -67,7 +67,8 @@ impl Fixture {
         let task_dir = data_root.join("E2G-demo");
         fs::create_dir_all(&task_dir).unwrap();
         // 任务包：计划 = 编译产物直落（非 afb 源形）；task.json 只带通用字段。
-        fs::write(task_dir.join("plan.json"), compile_construction_plan()).unwrap();
+        let plan_src = compile_construction_plan();
+        fs::write(task_dir.join("plan.json"), &plan_src).unwrap();
         fs::write(
             task_dir.join("task.json"),
             serde_json::to_string_pretty(&serde_json::json!({
@@ -80,6 +81,11 @@ impl Fixture {
             .unwrap(),
         )
         .unwrap();
+        // G3：graph 档提交链要求核对 manifest（缺席 fail-closed 拒）——
+        // 夹具对落盘的编译产物现算留档，使本测试继续测它本要测的干跑链
+        // （摘要钉死/装订预检/档案预检），而非缺席拒路径。
+        let plan = decode_plan(&plan_src).expect("编译产物应是可提交计划形");
+        write_package_manifest(&task_dir, plan.body.plan_id.clone()).unwrap();
         let spec = root.join("order.json");
         fs::write(
             &spec,
@@ -194,6 +200,11 @@ fn dryrun_rejects_broken_plan_package_without_side_effects() {
     // 信封/一致性；内容级防偷换 = 缺口②的任务包 manifest 链（见
     // package_manifest 测试），那才是 W2-C55 语义内置编译链的落点。
     fs::write(fx.task_dir.join("plan.json"), b"{\"v\":1,\"body\":broken").unwrap();
+    // G3：对破损后的计划面现算补 manifest 留档——本测试要测的是装订预检
+    // 对非编译产物形的 fail-loud；不补会在 manifest preflight 处先被缺席
+    // 拒（fail-closed），测不到装订面。留档针对现状文件，manifest 核对
+    // 过关，失败点仍落在装订预检（测试本意不变，断言不动）。
+    write_package_manifest(&fx.task_dir, "plan.factory_construction_build@1.0+broken").unwrap();
 
     let err = af_order::cli::run(&fx.dryrun_args()).unwrap_err();
     let msg = err.to_string();
