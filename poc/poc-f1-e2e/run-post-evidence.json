@@ -1,0 +1,37 @@
+{
+  "_说明": "证据提交(18dd327, 本目录首次入库)本身触发的 synchronize run——追加证据：含证据文件的提交同样过 F1 三件门。原文见 run152-final.json / run152-jobs.json。",
+  "id": 152,
+  "run_number": 10,
+  "event": "pull_request",
+  "head_sha": "18dd327df3dcf51eee02a2ba0682e852e30e2e27",
+  "status": "completed",
+  "conclusion": "success",
+  "created_at": "2026-11-04T05:32:41Z",
+  "updated_at": "2026-11-04T05:34:51Z",
+  "steps": [
+    {
+      "name": "分工声明（F1 快速门在此跑；F2 全量门不走 Actions）",
+      "conclusion": "success"
+    },
+    {
+      "name": "checkout（PR 头树；零外部 action 依赖，不用 actions/checkout）",
+      "conclusion": "success"
+    },
+    {
+      "name": "工具链供给（runner 容器无 rust——按仓内钉住版自举；已装则直接复用）",
+      "conclusion": "success"
+    },
+    {
+      "name": "fmt --check（硬门；主线预存红见 ci/REPORT.md，红即如实亮红）",
+      "conclusion": "success"
+    },
+    {
+      "name": "clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）",
+      "conclusion": "success"
+    },
+    {
+      "name": "快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）",
+      "conclusion": "success"
+    }
+  ]
+}
