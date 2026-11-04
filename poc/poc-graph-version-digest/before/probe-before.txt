@@ -1,0 +1,67 @@
+   Compiling af-workorder v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-graph-version-digest/crates/af-workorder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.33s
+     Running tests/_probe_baseline.rs (/data/bench/targets/risk-graph-version-digest/debug/deps/_probe_baseline-eafb402cecd80f71)
+
+running 1 test
+PROBE graph_version wire = "g-3"
+PROBE 依赖版本进路数 = 0(WorkOrder/GraphVersion 公开 API 无依赖输入面)
+test probe_graph_version_lock_is_bare_string_equality ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT_WORKORDER_PROBE=0
+   Compiling parking_lot_core v0.9.12
+   Compiling memchr v2.8.3
+   Compiling scopeguard v1.2.0
+   Compiling syn v3.0.9
+   Compiling smallvec v1.16.3
+   Compiling byteorder v1.5.0
+   Compiling bit-vec v0.8.0
+   Compiling syn v2.0.119
+   Compiling lock_api v0.4.14
+   Compiling murmur3 v0.4.1
+   Compiling thiserror v1.0.69
+   Compiling bit-set v0.8.0
+   Compiling lazy_static v1.5.1
+   Compiling typed-arena v2.0.2
+   Compiling paste v1.0.15
+   Compiling regex-syntax v0.8.11
+   Compiling uuid v1.28.0
+   Compiling parking_lot v0.12.5
+   Compiling better_any v0.2.1
+   Compiling aho-corasick v1.1.5
+   Compiling hashbrown v0.17.1
+   Compiling antlr4rust v0.3.0-rc2
+   Compiling equivalent v1.0.3
+   Compiling minimal-lexical v0.2.1
+   Compiling nom v7.1.3
+   Compiling indexmap v2.14.2
+   Compiling ryu v1.0.23
+   Compiling unsafe-libyaml v0.2.11
+   Compiling serde_json v1.0.154
+   Compiling regex-automata v0.4.18
+   Compiling cel-parser v0.10.1
+   Compiling thiserror-impl v1.0.69
+   Compiling serde_derive v1.0.229
+   Compiling regex v1.13.1
+   Compiling serde v1.0.229
+   Compiling chrono v0.4.45
+   Compiling serde_yaml v0.9.34+deprecated
+   Compiling cel-interpreter v0.10.0
+   Compiling af-dsl v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-graph-version-digest/crates/af-dsl)
+   Compiling af-compiler v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-graph-version-digest/crates/af-compiler)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.86s
+     Running tests/_probe_baseline.rs (/data/bench/targets/risk-graph-version-digest/debug/deps/_probe_baseline-3d9bc56ee1b1c424)
+
+running 2 tests
+PROBE requires 字段装载结果 = Err(components.json 非法 /tmp/af-probe-baseline-d-508347/components.json: unknown field `requires`, expected one of `class`, `name`, `version`, `effect_class`, `impl_ref`, `endpoint` at line 2 column 73)
+test probe_component_decl_has_no_dependency_field ... ok
+PROBE registry_digest(表A) = fe084f42be3f58546a4562569e1ccec68a14b97ca0fa9ee8e174a17a7d3f5ab7
+PROBE registry_digest(表A 重装) = fe084f42be3f58546a4562569e1ccec68a14b97ca0fa9ee8e174a17a7d3f5ab7
+PROBE registry_digest(表B=表A,图取向@1→@2) = fe084f42be3f58546a4562569e1ccec68a14b97ca0fa9ee8e174a17a7d3f5ab7
+PROBE registry_digest(表C=表A+无关组件) = ef4173c71716900ec7b1904813e18fb5f92a509ebb561a524c373dca38e21591
+test probe_registry_digest_is_whole_table_not_closure ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+EXIT_COMPILER_PROBE=0

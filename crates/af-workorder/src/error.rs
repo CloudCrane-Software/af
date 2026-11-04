@@ -228,3 +228,18 @@ pub enum OrderDecodeError {
     #[error("工单载荷字段无法读入:{0}")]
     Invalid(String),
 }
+
+/// graph_version 传递依赖锁([`crate::graph_deps`])的错误。
+/// 闭包解析与 digest 构造 fail-loud:引用表外组件、非法引用段、
+/// 重复声明都拒绝,不给"半个闭包"的 digest。
+#[derive(Debug, Clone, PartialEq, Eq, Error, Serialize, Deserialize)]
+pub enum GraphDepsError {
+    #[error("依赖引用的 {part} {value:?} 非法:非空必填且不得含 '@'(组合引用保留分隔符)")]
+    InvalidReference { part: String, value: String },
+    #[error("依赖 {reference} 在依赖表中未声明,闭包解析拒绝")]
+    UnknownDependency { reference: String },
+    #[error("依赖 {reference} 重复声明:不覆盖、不静默合并")]
+    DuplicateDeclaration { reference: String },
+    #[error("依赖锁 digest {0:?} 不是 64 位小写十六进制,拒绝读入")]
+    InvalidDigest(String),
+}
