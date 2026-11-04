@@ -1,0 +1,21 @@
+== RT-E138 现役面存在性搜索 2026-11-05T00:39:22+08:00 ==
+== 全盘（排除 /proc /sys）文件/目录名搜索 ==
+$ find / -name 'otlp-assert.py' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'all-gates.sh' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'gate-pins.list' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'otel-production.json' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'factory-keepalive.py' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'factory-watch.py' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'deploy-consistency-probe.sh' -not -path '/proc/*' -not -path '/sys/*'
