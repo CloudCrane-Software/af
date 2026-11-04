@@ -1,0 +1,23 @@
+== 五门读数（2026-11-04，工作树 feature/risk7-liveness，基线 origin/product/main=2542929）==
+
+门1 cargo fmt --check --all → exit 0（改前基线亦 exit 0；rustfmt 仅归一本批新增文件）
+
+门2 cargo test --workspace --no-fail-fast → exit 0；三元组：passed=1565 failed=0 ignored=9（157 个 test-result-ok 段）
+
+门3 cargo clippy --workspace --all-targets --message-format=json（先 find crates -name "*.rs" -exec touch {} + 防缓存平凡绿）
+   clippy exit=0；error 级=0 条；warning 级=0 条
+   python3 -I ci/clippy_gate.py /tmp/risk7-clippy.jsonl → CLIPPY GATE: PASS（现有 0 条警告 / 0 签名，均在基线内；基线 0 签名）
+
+门4 判据面零弱化：
+   ci/clippy-baseline.txt sha256（现读）= a48639e75b5203fe…
+   （与改前快照 a48639e75b5203fef… 全等；ci/baselines/clippy-baseline.sha256 钉在门内对账过）
+   crates/ 目录 crate 数：22
+   （改前 22，零新增 crate）
+   既有 af-order/tests/*.rs 改动：
+   （零改动——仅新增 router_liveness_scenarios.rs）
+   （router.rs 无输出行=零 diff）
+
+门5 定点复算：
+   单元测试：test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.00s
+   四场景集成：test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Rust↔Python 对拍：判据字段 50/50 逐字一致（align-result.txt；正本=仓内 diff 镜像逐字提取 sha256 b821014c…）

@@ -1,0 +1,12 @@
+{
+ "ts": "2023-11-15 06:13:20",
+ "ts_epoch": 1700000000,
+ "tool": "af-order/router-liveness",
+ "status": "green",
+ "message": "收件箱活性正常（最新投递 0min 前，阈 240min）",
+ "alarm_code": "trigger-inbox-live",
+ "newest_delivery_age_s": 0,
+ "threshold_min": 240,
+ "inbox_dir": "/home/pan-ding/af-dev/af/wt/risk7-liveness/poc/poc-risk7-liveness/out/fixtures-j95bs9jc/s2-just-started/triggers/inbox",
+ "since_epoch": 1700000000
+}

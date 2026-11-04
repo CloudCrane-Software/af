@@ -1,0 +1,1 @@
+{"ts": "2023-11-15 06:13:22", "level": "amber", "code": "trigger-inbox-silent", "message": "Trigger 收件箱静默 0.0h（>阈 0min）——Fast Path 断供：无事件可路由；恢复=事件源重投/检查 webhook 出口", "since": "2023-11-15 06:13:20"}

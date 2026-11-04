@@ -1,0 +1,12 @@
+{
+ "ts": "2023-11-15 10:24:20",
+ "ts_epoch": 1700015060,
+ "tool": "event-router/trigger-leg",
+ "status": "amber",
+ "message": "Trigger 收件箱静默 4.2h（>阈 240min）——Fast Path 断供：无事件可路由；恢复=事件源重投/检查 webhook 出口",
+ "alarm_code": "trigger-inbox-silent",
+ "newest_delivery_age_s": 15060,
+ "threshold_min": 240,
+ "inbox_dir": "/home/pan-ding/af-dev/af/wt/risk7-liveness/poc/poc-risk7-liveness/out/fixtures-j95bs9jc/s3-stale-anchor/triggers/inbox",
+ "since_epoch": 1700000000
+}

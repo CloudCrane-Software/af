@@ -1,0 +1,2 @@
+status=green silent_s=-300.000 threshold_min=240 since_epoch_s=1700000300.000 anchor_source=newest_delivery anchor_created=true alarm_code=trigger-inbox-live
+status=green silent_s=60.000 threshold_min=240 since_epoch_s=1700000300.000 anchor_source=newest_delivery anchor_created=false alarm_code=trigger-inbox-live
