@@ -135,6 +135,10 @@ struct Inner {
     pending_gap: Mutex<Option<GapInfo>>,
     persist_error: Mutex<Option<String>>,
     unpersisted: Mutex<Vec<TraceEvent>>,
+    /// 本次进程 critical 通道已完成 append + fsync 的条数（含 gap span 行，不含重开前历史）。只增。
+    critical_durable: AtomicU64,
+    /// 最近一次 critical 落盘成功的注入钟时刻（`wall_ms`）。`0` = 本次进程尚未落盘过。
+    critical_durable_ms: AtomicU64,
     clock: Arc<dyn Clock>,
     store: Mutex<Store>,
     fail_critical_after: AtomicU64,
@@ -228,6 +232,8 @@ impl Trace {
         };
         let critical_file = open_log(&critical_path)?;
         let normal_file = open_log(&normal_path)?;
+        // trace.db 与两个 JSONL 都已打开（可能刚建）：目录项 fsync 一次，全部钉住。
+        sync_dir(&cfg.dir)?;
 
         let (critical_tx, critical_rx) = sync_channel(cfg.critical_capacity);
         let (normal_tx, normal_rx) = sync_channel(cfg.normal_capacity);
@@ -246,6 +252,8 @@ impl Trace {
             pending_gap: Mutex::new(None),
             persist_error: Mutex::new(None),
             unpersisted: Mutex::new(Vec::new()),
+            critical_durable: AtomicU64::new(0),
+            critical_durable_ms: AtomicU64::new(0),
             clock,
             store: Mutex::new(store),
             fail_critical_after: AtomicU64::new(NO_INJECTED_FAIL),
@@ -318,6 +326,22 @@ impl Trace {
     /// OTel lane 离线时只含磁盘丢弃。lane 在线时还含导出失败和该 lane 队列满。
     pub fn gap_counter(&self) -> u64 {
         self.inner.gap_counter.load(Ordering::Relaxed)
+    }
+
+    /// 本次进程 critical 通道已完成 append + fsync 的条数（含 gap span 行，
+    /// 不含重开前的历史）。只增不删；落盘失败后冻结不再推进。
+    ///
+    /// 这是「`Ok` 只代表入队」的运行中对账读数：恒有
+    /// `critical_durable() <= 本次已 Ok 的 critical 条数`，干净 shutdown 后
+    /// `== ShutdownReport::critical_persisted`。
+    pub fn critical_durable(&self) -> u64 {
+        self.inner.critical_durable.load(Ordering::Relaxed)
+    }
+
+    /// 最近一次 critical 落盘成功的注入钟时刻（[`Clock::wall_ms`]）。
+    /// `0` 表示本次进程尚未落盘过（或落盘时刻恰好为 0，工程上不区分）。
+    pub fn critical_durable_ms(&self) -> u64 {
+        self.inner.critical_durable_ms.load(Ordering::Relaxed)
     }
 
     pub fn otel_mode(&self) -> OtelMode {
@@ -397,12 +421,16 @@ impl Trace {
         }
     }
 
-    /// **critical：移交同步，落盘线程同步写盘后再确认。fail-closed。**
+    /// **critical：移交同步，`Ok` = 已入队（fail-closed）；持久确认点是 shutdown。**
     ///
     /// 有界缓冲满时立即返回 `Err(TraceError::CriticalFull)`，事件原样退还。
-    /// `Ok(seq)` 表示事件已进入缓冲；落盘线程会在 [`Trace::shutdown`] 返回 `Ok` 之前
-    /// 把它追加进 `critical.jsonl` 并 `sync_data`。写盘失败时事件留在
-    /// [`TraceError::PersistFailed`] 里，不进文件。
+    /// `Ok(seq)` 只表示事件已进入有界内存缓冲——**不代表已写盘，也不代表已 fsync**：
+    /// 此刻盘上没有它的任何痕迹。落盘线程随后把它 append 进 `critical.jsonl` 并
+    /// `sync_all`（fsync：数据与 inode 元数据；新建文件的目录项由打开路径的目录
+    /// fsync 钉住），成功后才记入镜像与 [`Trace::critical_durable`]。
+    /// 全部已 `Ok` 事件完成 append + fsync 的确认点是 [`Trace::shutdown`] 返回 `Ok`；
+    /// 运行中的落盘进度读数是 [`Trace::critical_durable`] / [`Trace::critical_durable_ms`]。
+    /// 写盘失败时事件留在 [`TraceError::PersistFailed`] 里退还调用方，不进文件、不计缺口。
     /// 落盘一旦失败，后续 `write_critical` 直接退还新事件，不再入队。
     #[allow(clippy::result_large_err)]
     pub fn write_critical(
@@ -573,6 +601,14 @@ impl Inner {
 
     fn persist_detail(&self) -> Option<String> {
         self.persist_error.lock().unwrap().clone()
+    }
+
+    /// 记一次 critical 落盘成功（该事件已完成 append + `sync_all` fsync，即将进镜像）。
+    /// 只增读数的唯一写入点；时刻用注入钟，供调用方核「最近一次落盘」。
+    fn note_critical_durable(&self) {
+        self.critical_durable.fetch_add(1, Ordering::Relaxed);
+        self.critical_durable_ms
+            .store(self.clock.wall_ms(), Ordering::Relaxed);
     }
 
     fn persist_failed(&self) -> bool {
@@ -770,16 +806,28 @@ fn open_log(path: &Path) -> Result<File, TraceError> {
         .map_err(|err| TraceError::Open(format!("打开 {}: {err}", path.display())))
 }
 
-fn append_line(file: &mut File, line: &str, sync: bool) -> Result<(), String> {
+/// 追加一行 JSONL。`sync_all` 为真时用 `sync_all`（fsync：数据 + inode 元数据），
+/// 而不是 `sync_data`（fdatasync）——fdatasync 不保证全部元数据落盘。
+/// 新建文件的目录项（文件名可见性）不在文件 fsync 覆盖内，由打开路径的 [`sync_dir`] 钉住。
+fn append_line(file: &mut File, line: &str, sync_all: bool) -> Result<(), String> {
     let mut bytes = Vec::with_capacity(line.len() + 1);
     bytes.extend_from_slice(line.as_bytes());
     bytes.push(b'\n');
     file.write_all(&bytes).map_err(|err| err.to_string())?;
     file.flush().map_err(|err| err.to_string())?;
-    if sync {
-        file.sync_data().map_err(|err| err.to_string())?;
+    if sync_all {
+        file.sync_all().map_err(|err| err.to_string())?;
     }
     Ok(())
+}
+
+/// fsync 目录本身，把本次打开新建的文件（两个 JSONL、`trace.db`）的目录项钉到介质上。
+/// 文件内容的 fsync 不覆盖目录项：没有这一步，掉电窗口内新建的 `critical.jsonl`
+/// 可能整个文件名都不在目录里。失败即 [`TraceError::Open`]，启动停止（fail-closed）。
+fn sync_dir(dir: &Path) -> Result<(), TraceError> {
+    File::open(dir)
+        .and_then(|dir_file| dir_file.sync_all())
+        .map_err(|err| TraceError::Open(format!("目录 fsync {}: {err}", dir.display())))
 }
 
 fn join_consumer(slot: &Mutex<Option<JoinHandle<()>>>, name: &str) -> Result<(), TraceError> {
@@ -791,7 +839,7 @@ fn join_consumer(slot: &Mutex<Option<JoinHandle<()>>>, name: &str) -> Result<(),
     Ok(())
 }
 
-/// 落盘线程。critical：写 JSONL 并 `sync_data`，成功后才推进镜像。
+/// 落盘线程。critical：写 JSONL 并 `sync_all`（fsync），成功后才推进镜像与 durable 读数。
 /// normal：追加 JSONL（不逐条 fsync）；写失败按缺口计数，不让生产者看见错误。
 ///
 /// 先模拟耗时再 recv，保证“突发写入期间消费者一条都处理不完”。
@@ -836,7 +884,10 @@ fn spawn_consumer(
                             Ok(()) => {
                                 written = written.saturating_add(1);
                                 match lane {
-                                    Lane::Critical => inner.submit_critical_for_anchor(event),
+                                    Lane::Critical => {
+                                        inner.note_critical_durable();
+                                        inner.submit_critical_for_anchor(event);
+                                    }
                                     Lane::Normal => inner.submit_normal_persisted(event),
                                 }
                                 guard.push(line);
@@ -1346,6 +1397,284 @@ mod tests {
         let mut file = OpenOptions::new().write(true).open("/dev/full").unwrap();
         let err = append_line(&mut file, "{}", true).unwrap_err();
         assert!(!err.is_empty());
+    }
+
+    /// 风险#4 探针：[`Trace::write_critical`] 的 `Ok` 只代表事件已入有界内存缓冲，
+    /// 不代表已 append、更不代表已 sync——盘上此刻没有它的任何痕迹。
+    /// 持久确认点是 [`Trace::shutdown`] 返回 `Ok`（消费线程清空后才对账）。
+    #[test]
+    fn poc_probe_ok_means_enqueued_not_persisted() {
+        let dir = TempDir::new("poc-ok-semantics");
+        let t = Trace::spawn(TraceConfig {
+            critical_capacity: 8,
+            normal_capacity: 8,
+            critical_consume_delay_us: 0,
+            normal_consume_delay_us: 0,
+            dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
+        })
+        .unwrap();
+        let hold = t.hold_consumers();
+        let mut oks = Vec::new();
+        for i in 0..3 {
+            let seq = t.write_critical("poc.audit", json!({ "i": i })).unwrap();
+            println!("[probe] write_critical(i={i}) -> Ok(seq={seq})，此刻事件仅在内存队列");
+            oks.push(seq);
+        }
+        let on_disk = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        println!(
+            "[probe] 3 个 Ok 之后、释放消费者之前：critical.jsonl 行数 = {}",
+            on_disk.len()
+        );
+        assert!(
+            on_disk.is_empty(),
+            "Ok 只代表入队：此刻文件必须为空，实际已有 {} 行",
+            on_disk.len()
+        );
+        drop(hold);
+        let report = t.shutdown().unwrap();
+        let file = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        let seqs: HashSet<u64> = file.iter().map(|event| event.seq).collect();
+        for seq in &oks {
+            assert!(seqs.contains(seq), "shutdown Ok 后 seq={seq} 必须已在文件里");
+        }
+        assert_eq!(report.critical_persisted, 3, "镜像行数 = Ok 的写入数");
+        println!(
+            "[probe] shutdown Ok 后：critical.jsonl 行数 = {}，critical_persisted = {}",
+            file.len(),
+            report.critical_persisted
+        );
+    }
+
+    /// 落地后语义：`Ok` = 已入队；durable 读数滞后于 Ok，排空后追平，时刻走注入钟。
+    /// shutdown Ok 是持久确认点：durable == critical_persisted == 文件行数。
+    #[test]
+    fn ok_means_enqueued_durable_reads_lag_until_shutdown() {
+        let dir = TempDir::new("ok-semantics");
+        let clock = ManualClock::new(1_700_000_000_042);
+        let (trace, _) = Trace::open_with_clock(
+            TraceConfig {
+                critical_capacity: 8,
+                ..cfg_in(dir.path())
+            },
+            clock,
+        )
+        .unwrap();
+        let hold = trace.hold_consumers();
+        let mut oks = Vec::new();
+        for i in 0..3 {
+            oks.push(trace.write_critical("audit", json!({ "i": i })).unwrap());
+        }
+        assert_eq!(
+            trace.critical_durable(),
+            0,
+            "Ok 只代表入队：消费者被挡住时 durable 必须为 0"
+        );
+        assert_eq!(
+            trace.critical_durable_ms(),
+            0,
+            "尚未落盘过，最近落盘时刻必须为 0"
+        );
+        drop(hold);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while trace.critical_durable() < 3 {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "释放消费者后 durable 应追平 Ok 数，实际 {}",
+                trace.critical_durable()
+            );
+            std::thread::yield_now();
+        }
+        assert!(trace.critical_durable() <= 3, "durable 不得超过 Ok 数");
+        assert_eq!(
+            trace.critical_durable_ms(),
+            1_700_000_000_042,
+            "最近落盘时刻用注入钟"
+        );
+        let report = trace.shutdown().unwrap();
+        assert_eq!(report.critical_persisted, 3);
+        assert_eq!(
+            trace.critical_durable(),
+            report.critical_persisted as u64,
+            "干净 shutdown 后 durable == critical_persisted"
+        );
+        let file = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        let seqs: HashSet<u64> = file.iter().map(|event| event.seq).collect();
+        assert!(oks.iter().all(|seq| seqs.contains(seq)));
+    }
+
+    /// 落盘失败路径：durable 冻结不再推进，已入队事件全部从 PersistFailed 退还，
+    /// critical 失败从不进 fail-open 的丢弃路径（gap_counter 恒 0）。
+    #[test]
+    fn critical_persist_failure_freezes_durable_and_keeps_gap_zero() {
+        let dir = TempDir::new("durable-freeze");
+        let trace = Trace::spawn(cfg_in(dir.path())).unwrap();
+        let first = trace.write_critical("audit", json!({ "k": "first" })).unwrap();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while trace.critical_durable() < 1 {
+            assert!(std::time::Instant::now() < deadline, "首条应正常落盘");
+            std::thread::yield_now();
+        }
+        trace.inject_critical_fail_after(1);
+        // 后续写入：失败置位前是 Ok（入队后由消费者收进 unpersisted），置位后直接 Err 退还。
+        let mut accepted_after_fail = Vec::new();
+        let mut rejected = Vec::new();
+        for i in 0..4 {
+            match trace.write_critical("audit", json!({ "k": i })) {
+                Ok(seq) => accepted_after_fail.push(seq),
+                Err(err) => {
+                    assert!(
+                        matches!(err, TraceError::PersistFailed { .. }),
+                        "置位后新写入必须 PersistFailed 退还，实际 {err:?}"
+                    );
+                    rejected.push(err.event().unwrap().seq);
+                }
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert!(!accepted_after_fail.is_empty() || !rejected.is_empty());
+        assert_eq!(
+            trace.critical_durable(),
+            1,
+            "落盘失败后 durable 冻结在首条"
+        );
+        assert_eq!(
+            trace.gap_counter(),
+            0,
+            "critical 落盘失败绝不能走丢弃计数（fail-closed，不是 fail-open）"
+        );
+        let err = trace.shutdown().unwrap_err();
+        match err {
+            TraceError::PersistFailed { detail, events } => {
+                assert_eq!(detail, INJECTED_CRITICAL_FAIL);
+                assert!(
+                    !events.is_empty(),
+                    "失败后入队的事件必须原样退还（至少一条）"
+                );
+                let seqs: HashSet<u64> = events.iter().map(|event| event.seq).collect();
+                for seq in &accepted_after_fail {
+                    assert!(seqs.contains(seq), "入队未落盘的 seq={seq} 必须在 Err 里");
+                }
+                assert!(
+                    !seqs.contains(&first),
+                    "已成功落盘的首条不在退还列表里"
+                );
+            }
+            other => panic!("期望 PersistFailed，实际 {other:?}"),
+        }
+        let file = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        assert_eq!(file.len(), 1, "只有首条真正进了文件");
+        assert_eq!(file[0].seq, first);
+        assert_eq!(sum_gap_counts(&file), 0, "文件里不产生任何 gap span");
+    }
+
+    /// 队列满路径：Err(CriticalFull) 退还不计缺口、durable 不超过 Ok 数，
+    /// 被拒事件从未落盘。
+    #[test]
+    fn critical_full_does_not_touch_gap_or_durable() {
+        let dir = TempDir::new("full-no-gap");
+        let trace = Trace::spawn(TraceConfig {
+            critical_capacity: 4,
+            normal_capacity: 16,
+            critical_consume_delay_us: 500_000,
+            normal_consume_delay_us: 0,
+            dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
+        })
+        .unwrap();
+        let mut oks = Vec::new();
+        let mut refused = Vec::new();
+        for i in 0..6 {
+            match trace.write_critical("audit", json!({ "i": i })) {
+                Ok(seq) => oks.push(seq),
+                Err(err) => {
+                    assert!(
+                        matches!(err, TraceError::CriticalFull(_)),
+                        "满缓冲必须 CriticalFull，实际 {err:?}"
+                    );
+                    refused.push(err.event().unwrap().seq);
+                }
+            }
+        }
+        assert_eq!(oks.len(), 4);
+        assert_eq!(refused.len(), 2);
+        assert_eq!(
+            trace.gap_counter(),
+            0,
+            "缓冲满是 fail-closed 退还，不是丢弃计数"
+        );
+        assert!(
+            trace.critical_durable() <= 4,
+            "durable 不得超过 Ok 数，实际 {}",
+            trace.critical_durable()
+        );
+        let report = trace.shutdown().unwrap();
+        let file = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        let seqs: HashSet<u64> = file.iter().map(|event| event.seq).collect();
+        assert_eq!(file.len(), 4);
+        assert!(oks.iter().all(|seq| seqs.contains(seq)));
+        assert!(
+            refused.iter().all(|seq| !seqs.contains(seq)),
+            "被拒事件必须从未落盘"
+        );
+        assert_eq!(report.critical_persisted, 4);
+        assert_eq!(report.gap_counter, 0);
+        assert_eq!(trace.critical_durable(), 4);
+    }
+
+    /// 缺口计数只增未删：normal 溢出 + 写盘失败混合下，采样序列单调不减，
+    /// 终值与 Σ(gap span.count)、文件、镜像四方对账。
+    #[test]
+    fn gap_counter_only_increases_across_normal_failures() {
+        let dir = TempDir::new("gap-monotonic");
+        let trace = Trace::spawn(TraceConfig {
+            critical_capacity: 256,
+            normal_capacity: 8,
+            critical_consume_delay_us: 0,
+            normal_consume_delay_us: 200_000,
+            dir: dir.path().to_path_buf(),
+            otel_endpoint: None,
+            otel_batch_size: 512,
+            anchor: AnchorSettings::default(),
+        })
+        .unwrap();
+        let mut samples = Vec::new();
+        for i in 0..20 {
+            trace.write_normal("step", json!({ "i": i }));
+            samples.push(trace.gap_counter());
+        }
+        assert!(
+            samples.windows(2).all(|pair| pair[0] <= pair[1]),
+            "gap_counter 采样必须单调不减: {samples:?}"
+        );
+        assert!(
+            samples.last().copied().unwrap_or(0) >= 12,
+            "容量 8 写 20 条应至少丢 12，实际 {:?}",
+            samples.last()
+        );
+        trace.inject_normal_fail_after(1);
+        for i in 20..24 {
+            trace.write_normal("step", json!({ "i": i }));
+        }
+        assert!(
+            trace.gap_counter() >= samples.last().copied().unwrap_or(0),
+            "写盘失败只增计数"
+        );
+        let report = trace.shutdown().unwrap();
+        assert_eq!(report.gap_counter, trace.gap_counter());
+        assert_eq!(report.gap_reported, report.gap_counter);
+        let crit = read_trace_log(&critical_log_path(dir.path())).unwrap();
+        assert_eq!(sum_gap_counts(&crit), report.gap_counter);
+        assert_eq!(
+            nonempty_lines(&normal_log_path(dir.path())),
+            report.normal_persisted
+        );
+        let accounted = report.normal_persisted as u64 + report.gap_counter;
+        assert_eq!(accounted, 24, "落盘 + 缺口 = 发送总数");
     }
 
     /// 端点空白：lane 离线，只计落盘成功的 normal，critical 不计数，缺口不变。
