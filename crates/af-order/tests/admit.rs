@@ -20,7 +20,7 @@ use af_order::admit::{
 use af_order::{parse_request, OrderError, StateDir};
 use af_workorder::{
     Decision, DecisionArtifact, DecisionAttributes, Ed25519Keypair, GraphVersion, LineBinding,
-    Priority, Role, Sla, TrustedActor, TrustedActorRegistry, WorkArtifact, WorkOrder,
+    Permission, Priority, Role, Sla, TrustedActor, TrustedActorRegistry, WorkArtifact, WorkOrder,
 };
 use serde_json::{json, Value};
 
@@ -998,4 +998,290 @@ fn latest_order(state: &Path, order_id: &str) -> WorkOrder {
         .rev()
         .find_map(|record| record.order_after.clone())
         .unwrap()
+}
+
+// ---------------------------------------------------------------------------
+// --decision/--role 面（admit_seal 补参后的受理链验收）：Reject / Revise /
+// Arbiter 三路径正例与负例。负例一律断言零写入（admissions.jsonl 不落盘）。
+// 配对判据 = af_workorder 既有权限面（Role::can_decide 与四层校验第③层
+// 同源），受理侧不因工具面收窄而放宽。
+// ---------------------------------------------------------------------------
+
+/// 指定角色的受信注册表（actor 角色与工件角色一致——admit_seal 工具侧
+/// --role 同款组法：注册表与工件同取所选角色）。
+fn registry_with_role(role: Role) -> TrustedActorRegistry {
+    TrustedActorRegistry::new(vec![TrustedActor::new(
+        "user-a",
+        role,
+        &Ed25519Keypair::from_seed(&SEED_TRUSTED).public_key(),
+        time(KEY_EXPIRY),
+    )])
+    .unwrap()
+}
+
+/// 按指定 role × decision 配对真签（admit_seal --role/--decision 同款面：
+/// permissions 取角色默认集、payload 绑定 admission_decision_payload、
+/// digest 由计划面同一规范化现算，与工具侧 DecisionArtifact::seal 同口径）。
+fn seal_decision_as(
+    order: &WorkOrder,
+    role: Role,
+    decision: Decision,
+    seq: u64,
+    next_orders: &[String],
+) -> DecisionArtifact {
+    let digest = canonical_next_orders_digest(next_orders).expect("测试计划面应可规范化");
+    DecisionArtifact::seal(
+        "user-a",
+        role,
+        decision,
+        &order.admission_decision_payload(),
+        &Ed25519Keypair::from_seed(&SEED_TRUSTED),
+        DecisionAttributes::new(seq, valid_basis(order), digest, time(DECISION_EXPIRY)),
+    )
+}
+
+/// Reject 正例：Approver 真签 Reject（Reject 与 Approve 同需 Approve 权），
+/// admit 全链真验签受理，工件面 role/decision/permissions 与所选一致，
+/// receipt.decision 如实记 "Reject"。
+#[test]
+fn admit_accepts_approver_signed_reject_and_records_decision() {
+    let state = scratch("reject-pos");
+    let order_id = "wo-admit-rej-pos";
+    seed_released_order(&state, order_id);
+    let order = latest_order(&state, order_id);
+    let next_orders = default_next_orders(order_id);
+    let decision = seal_decision_as(&order, Role::Approver, Decision::Reject, 1, &next_orders);
+    assert_eq!(decision.role, Role::Approver);
+    assert_eq!(decision.decision, Decision::Reject);
+    assert_eq!(
+        decision.permissions,
+        vec![Permission::Read, Permission::Approve]
+    );
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry_with_role(Role::Approver),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
+    let receipt = af_order::admit::admit(
+        &request,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_or_else(|err| panic!("Approver×Reject 应全链受理: {err}"));
+    assert_eq!(receipt.decision, "Reject");
+    assert_eq!(receipt.actor_id, "user-a");
+    assert!(!receipt.replayed);
+    assert!(receipt.checks.contains(&"decision_four_layer".to_string()));
+    let admissions = fs::read_to_string(admissions_path(&StateDir::new(&state), order_id))
+        .expect("admissions.jsonl 应已落盘");
+    assert_eq!(admissions.lines().count(), 1, "恰一笔受理");
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// Reject 负例：Reviser 无 Approve 权——Reviser×Reject 越权工件在四层第③层
+/// 被拒（OR2106，拒因点名决策权限不足），状态树零写入。
+#[test]
+fn admit_rejects_reviser_signed_reject_with_or2106_and_zero_writes() {
+    let state = scratch("reject-neg");
+    let order_id = "wo-admit-rej-neg";
+    seed_released_order(&state, order_id);
+    let order = latest_order(&state, order_id);
+    let next_orders = default_next_orders(order_id);
+    let decision = seal_decision_as(&order, Role::Reviser, Decision::Reject, 1, &next_orders);
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry_with_role(Role::Reviser),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
+    let err = af_order::admit::admit(
+        &request,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_err();
+    let text = err.to_string();
+    assert_admit_err(err, "OR2106");
+    assert!(
+        text.contains("决策权限不足"),
+        "拒因应点名决策权限不足: {text}"
+    );
+    assert!(
+        !admissions_path(&StateDir::new(&state), order_id).exists(),
+        "第③步拒绝零写入"
+    );
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// Revise 正例：Reviser 真签 Revise（Revise 权在 Reviser 权限面内），
+/// admit 全链受理，receipt.decision 如实记 "Revise"，permissions=[Read, Revise]。
+#[test]
+fn admit_accepts_reviser_signed_revise_and_records_decision() {
+    let state = scratch("revise-pos");
+    let order_id = "wo-admit-rvs-pos";
+    seed_released_order(&state, order_id);
+    let order = latest_order(&state, order_id);
+    let next_orders = default_next_orders(order_id);
+    let decision = seal_decision_as(&order, Role::Reviser, Decision::Revise, 1, &next_orders);
+    assert_eq!(decision.role, Role::Reviser);
+    assert_eq!(decision.decision, Decision::Revise);
+    assert_eq!(
+        decision.permissions,
+        vec![Permission::Read, Permission::Revise]
+    );
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry_with_role(Role::Reviser),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
+    let receipt = af_order::admit::admit(
+        &request,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_or_else(|err| panic!("Reviser×Revise 应全链受理: {err}"));
+    assert_eq!(receipt.decision, "Revise");
+    assert!(!receipt.replayed);
+    assert!(receipt.checks.contains(&"decision_four_layer".to_string()));
+    let admissions = fs::read_to_string(admissions_path(&StateDir::new(&state), order_id))
+        .expect("admissions.jsonl 应已落盘");
+    assert_eq!(admissions.lines().count(), 1, "恰一笔受理");
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// Revise 负例：Approver 无 Revise 权——Approver×Revise 越权工件在四层第③层
+/// 被拒（OR2106），状态树零写入。
+#[test]
+fn admit_rejects_approver_signed_revise_with_or2106_and_zero_writes() {
+    let state = scratch("revise-neg");
+    let order_id = "wo-admit-rvs-neg";
+    seed_released_order(&state, order_id);
+    let order = latest_order(&state, order_id);
+    let next_orders = default_next_orders(order_id);
+    let decision = seal_decision_as(&order, Role::Approver, Decision::Revise, 1, &next_orders);
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry_with_role(Role::Approver),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
+    let err = af_order::admit::admit(
+        &request,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_err();
+    let text = err.to_string();
+    assert_admit_err(err, "OR2106");
+    assert!(
+        text.contains("决策权限不足"),
+        "拒因应点名决策权限不足: {text}"
+    );
+    assert!(
+        !admissions_path(&StateDir::new(&state), order_id).exists(),
+        "第③步拒绝零写入"
+    );
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// Arbiter 正例：Arbiter 全权——同一源单连续受理 Arbiter 真签的 Reject 与
+/// Revise（seq 单调 1→2），两笔回执 decision 分别如实记 "Reject"/"Revise"，
+/// 工件 permissions = 角色全量默认集 [Read, Approve, Revise, Arbitrate]。
+#[test]
+fn admit_accepts_arbiter_signed_reject_then_revise_with_monotonic_seq() {
+    let state = scratch("arbiter-pos");
+    let order_id = "wo-admit-arb-pos";
+    seed_released_order(&state, order_id);
+    let order = latest_order(&state, order_id);
+    let client = engine_client();
+    let next_orders = default_next_orders(order_id);
+    let registry = registry_with_role(Role::Arbiter);
+    for (seq, kind) in [(1u64, Decision::Reject), (2u64, Decision::Revise)] {
+        let decision = seal_decision_as(&order, Role::Arbiter, kind, seq, &next_orders);
+        assert_eq!(decision.role, Role::Arbiter);
+        assert_eq!(decision.decision, kind);
+        assert_eq!(
+            decision.permissions,
+            vec![
+                Permission::Read,
+                Permission::Approve,
+                Permission::Revise,
+                Permission::Arbitrate,
+            ]
+        );
+        let request = parse(&request_json(
+            &order,
+            &decision,
+            &registry,
+            &next_orders,
+            &[held_credential(&order)],
+        ));
+        let receipt = af_order::admit::admit(&request, &StateDir::new(&state), &client, time(NOW))
+            .unwrap_or_else(|err| panic!("Arbiter seq={seq} {kind:?} 应全链受理: {err}"));
+        assert_eq!(
+            receipt.decision,
+            serde_json::to_value(kind)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_string(),
+            "回执 decision 应与所选一致"
+        );
+        assert_eq!(receipt.decision_seq, seq);
+        assert!(!receipt.replayed);
+    }
+    let admissions = fs::read_to_string(admissions_path(&StateDir::new(&state), order_id))
+        .expect("admissions.jsonl 应已落盘");
+    assert_eq!(admissions.lines().count(), 2, "两笔受理（seq 单调）");
+    let _ = fs::remove_dir_all(&state);
+}
+
+/// Arbiter 负例：工件声称 Arbiter 但注册表只登记 Approver——签名虽真，
+/// 角色冒升在四层第④层被拒（OR2106，拒因点名角色越权），状态树零写入。
+/// （工具面 admit_seal 的注册表与工件同取 --role，不产此形态；此负例钉住
+/// 受理侧对"自带角色提权工件"的兜底。）
+#[test]
+fn admit_rejects_claimed_arbiter_not_backed_by_registry_with_or2106_and_zero_writes() {
+    let state = scratch("arbiter-neg");
+    let order_id = "wo-admit-arb-neg";
+    seed_released_order(&state, order_id);
+    let order = latest_order(&state, order_id);
+    let next_orders = default_next_orders(order_id);
+    let decision = seal_decision_as(&order, Role::Arbiter, Decision::Reject, 1, &next_orders);
+    // 注册表登记的是 Approver（与工件声称的 Arbiter 不符）。
+    let request = parse(&request_json(
+        &order,
+        &decision,
+        &registry_with_role(Role::Approver),
+        &next_orders,
+        &[held_credential(&order)],
+    ));
+    let err = af_order::admit::admit(
+        &request,
+        &StateDir::new(&state),
+        &engine_client(),
+        time(NOW),
+    )
+    .unwrap_err();
+    let text = err.to_string();
+    assert_admit_err(err, "OR2106");
+    assert!(
+        text.contains("角色越权"),
+        "拒因应点名角色越权（注册表 vs 工件声称）: {text}"
+    );
+    assert!(
+        !admissions_path(&StateDir::new(&state), order_id).exists(),
+        "第③步拒绝零写入"
+    );
+    let _ = fs::remove_dir_all(&state);
 }

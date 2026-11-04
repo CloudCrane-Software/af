@@ -1,0 +1,3 @@
+# 凭证签名种子不入库（联调面密钥材料；evidence-sha256.txt 同样不含它，
+# 与 poc-router-adjudicate 同纪律）。
+run/state/orders/*/voucher-key.seed

@@ -1,0 +1,133 @@
+{
+  "order_id": "wo-asr-poc-1",
+  "decision": {
+    "actor_id": "user-a",
+    "role": "Arbiter",
+    "permissions": [
+      "Read",
+      "Approve",
+      "Revise",
+      "Arbitrate"
+    ],
+    "decision": "Reject",
+    "payload_hash": "2c64a66a55d866265009924dfe6f8f77e417eb5a6593ee21fb8272df9a9bbbe2",
+    "decision_seq": 9,
+    "basis": [
+      "artifact:fa-wo-asr-poc-1:b65b4fde7b63309f81c204d9bdec1121f7bf5db6609582165f5bbef5041de394",
+      "voucher:bv-wo-asr-poc-1:8328ba7a2c12366a36a99e64ef0dac1b888f43ddc835b438dbe037b193d844ab"
+    ],
+    "next_orders_digest": "bb5d39beea4c656271a6a3fc8c0542ee5064cd911cd6554fe803c5e79f79bebc",
+    "expires_at": "2027-01-01T00:00:00Z",
+    "signature": {
+      "algorithm": "ed25519",
+      "key_id": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+      "bytes": [
+        16,
+        72,
+        54,
+        239,
+        214,
+        39,
+        144,
+        134,
+        39,
+        138,
+        85,
+        37,
+        30,
+        65,
+        128,
+        201,
+        31,
+        190,
+        68,
+        137,
+        105,
+        120,
+        218,
+        189,
+        77,
+        222,
+        215,
+        97,
+        120,
+        44,
+        44,
+        185,
+        83,
+        34,
+        225,
+        179,
+        219,
+        38,
+        104,
+        189,
+        140,
+        9,
+        175,
+        5,
+        135,
+        191,
+        161,
+        235,
+        243,
+        60,
+        97,
+        157,
+        215,
+        25,
+        112,
+        53,
+        101,
+        213,
+        8,
+        30,
+        74,
+        229,
+        218,
+        3
+      ]
+    }
+  },
+  "actor_registry": {
+    "actors": [
+      {
+        "actor_id": "user-a",
+        "role": "Arbiter",
+        "public_key_hex": "17cb79fb2b4120f2b1ec65e4198d6e08b28e813feb01e4a400839b85e18080ce",
+        "key_expires_at": "2027-01-01T00:00:00Z"
+      }
+    ]
+  },
+  "template": {
+    "template_id": "tpl-adjudication-v1",
+    "template_version": "1.0",
+    "doc_kind": "裁决单",
+    "body_sha256": "3c58bcb158769e7218c50f2cedc17833adae2b69b92e93994bee7031aa05ffe4"
+  },
+  "resource_profile": {
+    "profile_id": "rp-poc",
+    "profile_version": "1.0",
+    "claims": [
+      {
+        "resource": "glm-cp",
+        "units": 1
+      }
+    ]
+  },
+  "gate_list": {
+    "gates": [
+      {
+        "gate_id": "F1",
+        "kind": "fast",
+        "required": true
+      }
+    ]
+  },
+  "next_orders": [
+    "wo-asr-poc-1-rw"
+  ],
+  "required_credentials": [
+    "bv-wo-asr-poc-1"
+  ]
+}
