@@ -1,0 +1,23 @@
+
+running 1 test
+### E1-absent-dryrun :: Err（干跑拒绝）
+报错：OR1001: 用法错误: OR1001: 任务包缺 package_manifest.json（/tmp/g3-probe-e1-733672-1793770062484392039/pkg/E2G-demo/package_manifest.json）：G3 fail-closed——要求核对的路径上 manifest 缺席 = 拒，不放行（未组包或 manifest 被移除均不可静默当「核对过」；删 manifest 曾可绕过内容核对）；请经 af-compiler 组包（assemble_construction_package：组包即留档 task/plan 内容 sha256）重产任务包，勿手工拼包后直接提交（用法: af-order submit --spec <order.json> --state <dir> | af-order admit --request <admission.json> --state <dir> | af-order list --state <dir> | af-order show <order-id> --state <dir>）
+state 残留 = 0
+
+### E2-absent-submit :: Err
+报错：OR1001: 用法错误: OR1001: 任务包缺 package_manifest.json（/tmp/g3-probe-e2-733672-1793770062501259676/pkg/E2G-demo/package_manifest.json）：G3 fail-closed——要求核对的路径上 manifest 缺席 = 拒，不放行（未组包或 manifest 被移除均不可静默当「核对过」；删 manifest 曾可绕过内容核对）；请经 af-compiler 组包（assemble_construction_package：组包即留档 task/plan 内容 sha256）重产任务包，勿手工拼包后直接提交（用法: af-order submit --spec <order.json> --state <dir> | af-order admit --request <admission.json> --state <dir> | af-order list --state <dir> | af-order show <order-id> --state <dir>）
+state 残留 = 0（>0 = 越过 preflight 后才死）
+
+### E3-tampered-dryrun :: Err（应拒）
+报错：OR1001: 用法错误: OR1001: 任务包内容已改（plan.json）：manifest 留档 3235de0856804cd0c900582346b2044559db361de2e437d33685c900bd8a4957 ≠ 实得 a65516c0c91cf5d5ec0b82e1cb1617f51d50c0afddbc384d3c0fa4f4ccb25f89——防重放契约违例（W2-C55 语义内置编译链）：改动任务包须清态换号重提，不得在原订单号上重放（用法: af-order submit --spec <order.json> --state <dir> | af-order admit --request <admission.json> --state <dir> | af-order list --state <dir> | af-order show <order-id> --state <dir>）
+state 残留 = 0
+
+### E4-present-dryrun :: Ok（应过）
+package_manifest.plan_id = "plan.factory_construction_build@1.0+x"
+checks 含 package_manifest = true
+state 残留 = 0
+
+test g3_probe_scenarios ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+

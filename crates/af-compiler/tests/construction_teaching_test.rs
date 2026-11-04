@@ -5,7 +5,8 @@
 
 use af_compiler::{
     assemble_construction_package, compile_construction_plan, decode_plan, output_contract_block,
-    task_book, verify_package_manifest, ConstructionSpec, PROTOCOL_TEACHING,
+    task_book, verify_package_manifest, ConstructionSpec, ManifestVerification,
+    PROTOCOL_TEACHING,
 };
 
 fn repo_packages_root() -> std::path::PathBuf {
@@ -108,8 +109,12 @@ fn assemble_package_end_to_end_teaching_package_verifies() {
         assert!(task.get(swe).is_none(), "task.json 不应要求 {swe}");
     }
 
-    // 缺口②闭环：组包即留档，现场核对过；改一字即拒（清态换号重提）。
-    assert!(verify_package_manifest(&dir).unwrap().is_some());
+    // 缺口②闭环：组包即留档，现场核对过（G3：核对过 = Verified 显式
+    // 状态，与缺席 Absent 分形态）；改一字即拒（清态换号重提）。
+    assert!(matches!(
+        verify_package_manifest(&dir).unwrap(),
+        ManifestVerification::Verified(_)
+    ));
     let plan_bad = plan_src.replace("factory_construction_build", "factory_construction_build ");
     std::fs::write(dir.join("plan.json"), plan_bad).unwrap();
     let err = verify_package_manifest(&dir).unwrap_err();

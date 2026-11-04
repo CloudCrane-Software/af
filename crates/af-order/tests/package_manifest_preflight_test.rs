@@ -1,9 +1,11 @@
-//! E1 缺口②：提交前任务包内容 hash 一致性（防重放语义内置提交链）。
+//! E1 缺口② + G3：提交前任务包内容 hash 一致性（防重放语义内置提交链）。
 //!
 //! 链：af-compiler 组包写 manifest（task.json/plan.json 内容 sha256 留档）
 //! → af-order submit（正式 + 干跑两路）在一切副作用之前重算核对——
 //! 不符即 OR1001 拒、文案点名「清态换号重提」、零残留。
-//! 缺席 = 不核对（旧任务包同口径，见 manifest_absent_passes_through）。
+//! G3 收口：manifest 缺席在 graph/report 档（要求核对的路径）fail-closed
+//! 拒（见 manifest_absent_is_rejected_fail_closed…）；不适用档（无
+//! RealExec / 非 graph-report）干跑留证显式 "not_applicable"。
 
 use std::fs;
 use std::path::PathBuf;
@@ -172,19 +174,83 @@ fn submit_preflight_rejects_tampered_package_before_any_side_effect() {
 }
 
 #[test]
-fn manifest_absent_passes_through() {
+fn manifest_absent_is_rejected_fail_closed_before_any_side_effect() {
     let fx = Fx::new();
-    // 旧式任务包（无 manifest）：不核对，干跑其余预检照过。
-    let out = af_order::cli::run(&fx.args(true)).unwrap();
+    // G3（原 manifest_absent_passes_through：旧口径断言缺席 = 干跑放行、
+    // checks 不点名、evidence null——正是本批关掉的未组包破窗：改前
+    // 实证（poc/poc-g3-manifest/）缺席包在正式路可越过 preflight 一路
+    // 真跑到引擎）。现口径：graph 档 = 要求核对的路径，缺席 fail-closed。
+    // 干跑路：拒 + 点名缺席文件 + 零残留。
+    let err = af_order::cli::run(&fx.args(true)).unwrap_err();
+    let msg = err.to_string();
+    assert!(msg.contains("OR1001"), "应 OR1001：{msg}");
+    assert!(
+        msg.contains("package_manifest.json"),
+        "应点名缺席文件：{msg}"
+    );
+    assert!(
+        msg.contains("缺席"),
+        "缺席语义必须在文案面（不得看似核对过）：{msg}"
+    );
+    assert_eq!(Fx::residue(&fx.state), 0, "拒于一切副作用之前：零残留");
+    assert!(!fx.state.exists());
+
+    // 正式路同点同拒（改前：缺席包越过 preflight，整单真跑消耗预算）。
+    let err2 = af_order::cli::run(&fx.args(false)).unwrap_err();
+    let msg2 = err2.to_string();
+    assert!(
+        msg2.contains("OR1001") && msg2.contains("package_manifest.json"),
+        "正式路同样缺席拒：{msg2}"
+    );
+    assert_eq!(Fx::residue(&fx.state), 0, "正式路同样零残留");
+    let _ = fs::remove_dir_all(&fx.root);
+}
+
+#[test]
+fn non_verifying_unit_dryrun_reports_manifest_check_not_applicable() {
+    // G3：允许无 manifest 的路径——缺省 stub 档（无 RealExec 三件套，
+    // manifest 核对不适用）。干跑留证面显式 "not_applicable"（机检可辨），
+    // 不再是含混 null，更不可与「核对过」（manifest 留档对象）混同。
+    let root = std::env::temp_dir().join(format!(
+        "af-order-pkgmanifest-na-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let spec = root.join("order.json");
+    fs::write(
+        &spec,
+        r#"{"order_id":"E2G-NA-1","line":{"line_id":"line-A","line_version":"1.0"},"budget":300}"#,
+    )
+    .unwrap();
+    let out = af_order::cli::run(&[
+        "submit".into(),
+        "--spec".into(),
+        spec.display().to_string(),
+        "--state".into(),
+        root.join("state").display().to_string(),
+        "--dry-run".into(),
+        "true".into(),
+    ])
+    .unwrap();
     let evidence: Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(
+        evidence["package_manifest"],
+        serde_json::json!("not_applicable"),
+        "不适用档留证应显式 not_applicable：{}",
+        evidence["package_manifest"]
+    );
     let checks = evidence["checks"].as_array().unwrap();
     assert!(
         !checks.iter().any(|c| c == "package_manifest"),
-        "manifest 缺席 = 不核对（checks 不点名）：{checks:?}"
+        "不适用档不得点名核对：{checks:?}"
     );
-    assert_eq!(evidence["package_manifest"], serde_json::Value::Null);
-    assert_eq!(Fx::residue(&fx.state), 0);
-    let _ = fs::remove_dir_all(&fx.root);
+    assert!(!root.join("state").exists(), "干跑零残留");
+    let _ = fs::remove_dir_all(&root);
 }
 
 #[test]

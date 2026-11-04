@@ -328,10 +328,11 @@ fn run_submit(
     let plan_digest = pin_plan_digest(&selected, exec);
     let plan_graph_version = read_plan_graph_version(&selected, exec)
         .unwrap_or_else(|| DEFAULT_GRAPH_VERSION.to_string());
-    // E1 缺口②：任务包内容 hash 一致性（W2-C55 防重放语义内置提交链）——
-    // 任务包 manifest（编译链组包时留档 task.json/plan.json 内容 sha256）在场
-    // 即重算核对，不符拒于一切副作用之前（清态换号重提指令在 af-compiler
-    // verify 正本文案面）；manifest 缺席 = 不核对（旧任务包同口径）。
+    // E1 缺口② + G3：任务包内容 hash 一致性（W2-C55 防重放语义内置提交链）
+    // ——任务包 manifest（编译链组包时留档 task.json/plan.json 内容 sha256）
+    // 在场即重算核对，不符拒于一切副作用之前（清态换号重提指令在
+    // af-compiler verify 正本文案面）；G3 起 graph/report 档 manifest 缺席
+    // 不再「= 不核对」放行，preflight fail-closed 拒绝（见其注释）。
     let package_manifest = preflight_package_manifest(&selected, exec)?;
     // W1-C64：stub 冒烟档 MES line_id 加 stub: 前缀——冒烟单与真单此前在
     // MES 账面逐字段不可区分（同 kind/quantity/station/line），下游
@@ -535,7 +536,8 @@ fn run_submit(
 /// ② graph 臂：任务包材料面装配（`graph_unit_for`：task.json/plan.json 布
 ///    局 + registry_root 解析 + 生产判分锚接线）；
 /// ③ 任务包 manifest 一致性（E1 缺口②：编译链留档的内容 sha256 重算核对，
-///    不符即拒——清态换号重提）+ 计划装订预检（`planbind_bind` 全四核对：
+///    不符即拒——清态换号重提；G3：缺席亦拒，fail-closed）+ 计划装订预检
+///    （`planbind_bind` 全四核对：
 ///    信封 decode/E9004 注册表 digest/一致性/模板清单）；
 /// ④ 基座档案可解析（装载期同款门）。
 ///
@@ -557,9 +559,16 @@ fn run_submit_dryrun(
         "pin_plan_digest",
         "read_plan_graph_version",
     ];
-    if package_manifest.is_some() {
-        checks.push("package_manifest");
-    }
+    // G3：留证面不许把「不适用」写成含混的 null——核对过 = manifest 留档
+    // 对象；不适用（非 graph/report 档或无 RealExec）= 显式 "not_applicable"。
+    // 缺席不会走到这里：要求核对的路径上缺席已在 preflight 拒绝。
+    let package_manifest_evidence = match package_manifest {
+        Some(manifest) => {
+            checks.push("package_manifest");
+            serde_json::to_value(manifest).unwrap_or_else(|_| serde_json::json!("serialize_failed"))
+        }
+        None => serde_json::json!("not_applicable"),
+    };
     let unit_detail = match selected {
         SelectedUnit::Graph => {
             let exec = exec.expect("resolve 已保证 Graph 携三件套");
@@ -622,7 +631,7 @@ fn run_submit_dryrun(
         "task_sha256": task_digest,
         "plan_sha256": plan_digest,
         "graph_version": plan_graph_version,
-        "package_manifest": package_manifest,
+        "package_manifest": package_manifest_evidence,
         "checks": checks,
         "note": "干跑档：零副作用（无状态目录/凭证/引擎），编译→提交一跳预检留证，不真下单",
     });
@@ -1027,13 +1036,18 @@ mod tests {
 
 // ---------- 红队批（W1）辅助：判据面摘要钉死 + 计划图版本读取 ----------
 
-/// E1 缺口②：提交前任务包 manifest 一致性核对（W2-C55 防重放语义内置
-/// 提交链的编译链侧补齐）。任务包 `package_manifest.json`（编译链组包时由
-/// af-compiler 写入，留档 task.json/plan.json 内容 sha256）在场即重算核对——
-/// 任一文件与留档不符 = 内容被改（E2G2 实证：预算帽全在 plan.json，换计划面
-/// = 放宽预算），拒于一切副作用之前，文案点名「清态换号重提」。manifest
-/// 缺席 = 不核对（与 W1-C59/W2-C55「文件缺席 = None」既定语义同口径）。
-/// 正式 submit 与 --dry-run 两路同点调用（本函数在干跑分支之前）。
+/// E1 缺口② + G3 收口：提交前任务包 manifest 一致性核对（W2-C55 防重放
+/// 语义内置提交链的编译链侧补齐）。任务包 `package_manifest.json`（编译链
+/// 组包时由 af-compiler 写入，留档 task.json/plan.json 内容 sha256）在场即
+/// 重算核对——任一文件与留档不符 = 内容被改（E2G2 实证：预算帽全在
+/// plan.json，换计划面 = 放宽预算），拒于一切副作用之前，文案点名「清态
+/// 换号重提」。G3：graph/report 档（携带 RealExec）是**要求核对**的路径——
+/// manifest 缺席不再「= 不核对」静默放行（旧口径下删 manifest 即绕过核对，
+/// 实证可整单真跑），而是 fail-closed 拒绝；缺席与核对过在 af-compiler
+/// `ManifestVerification` 类型上分开。非 graph/report 档或无 RealExec =
+/// 核对不适用，返回 None（干跑留证面以 "not_applicable" 显式标注，不与
+/// 「核对过」混同）。正式 submit 与 --dry-run 两路同点调用（本函数在干跑
+/// 分支之前）。
 fn preflight_package_manifest(
     selected: &SelectedUnit,
     exec: Option<&RealExec>,
@@ -1044,11 +1058,24 @@ fn preflight_package_manifest(
     if !matches!(selected, SelectedUnit::Graph | SelectedUnit::Report) {
         return Ok(None);
     }
-    af_compiler::verify_package_manifest(&exec.data_root.join(&exec.task)).map_err(|err| {
-        OrderError::Usage {
+    let task_dir = exec.data_root.join(&exec.task);
+    let manifest_path = task_dir.join(af_compiler::PACKAGE_MANIFEST_FILE);
+    match af_compiler::verify_package_manifest(&task_dir) {
+        Ok(af_compiler::ManifestVerification::Verified(manifest)) => Ok(Some(manifest)),
+        Ok(af_compiler::ManifestVerification::Absent) => Err(OrderError::Usage {
+            detail: format!(
+                "OR1001: 任务包缺 {}（{}）：G3 fail-closed——要求核对的路径上 manifest 缺席 = \
+                 拒，不放行（未组包或 manifest 被移除均不可静默当「核对过」；删 manifest 曾可\
+                 绕过内容核对）；请经 af-compiler 组包（assemble_construction_package：组包即\
+                 留档 task/plan 内容 sha256）重产任务包，勿手工拼包后直接提交",
+                af_compiler::PACKAGE_MANIFEST_FILE,
+                manifest_path.display(),
+            ),
+        }),
+        Err(err) => Err(OrderError::Usage {
             detail: format!("OR1001: {err}"),
-        }
-    })
+        }),
+    }
 }
 
 /// W2-C55：任务包计划面 sha256（graph/report 档 = `<data_root>/<task>/plan.json`）

@@ -13,8 +13,12 @@
 //!   在一切副作用之前重算两份摘要并与 manifest 核对——不符即 fail-loud，
 //!   点名「任务包内容已改，须清态换号重提」（防重放契约的完整句：
 //!   改动任务包 = 清状态、换订单号、重新提交）；
-//! - manifest 缺席 = 不核对（与 W1-C59/W2-C55「文件缺席 = None，不核对」
-//!   的既定语义同口径——旧任务包零破窗）。
+//! - manifest 缺席 = [`ManifestVerification::Absent`]（G3 收口）：不再与
+//!   「核对过且通过」同住一个 `Ok(Some(..))/Ok(None)` 形态——缺席是显式
+//!   可机检的「未核对」状态，要求核对的路径（af-order preflight）对它
+//!   fail-closed 拒绝，不许静默放行（旧口径「缺席 = 不核对，旧任务包
+//!   零破窗」在 G3 前是未组包破窗：删 manifest 即绕过核对，实证可整单
+//!   真跑）。
 //!
 //! 确定性纪律：manifest 键序固定（BTree 序列化），同内容同字节。
 
@@ -82,6 +86,23 @@ impl fmt::Display for PackageError {
 
 impl std::error::Error for PackageError {}
 
+/// manifest 核对结果（G3：「核对过且通过」与「缺席 = 未核对」在类型上分开）。
+///
+/// 旧形态 `Result<Option<Manifest>, _>` 里 `Ok(None)`（缺席）与
+/// `Ok(Some(_))`（核对过且通过）同为「成功」——调用方不 match 就无从
+/// 区分，未组包/被删 manifest 的任务包静默拿到「成功但什么都没核对」。
+/// 本枚举让缺席成为显式可见、可机检的状态：`Absent` **不是通过**——
+/// 要求核对的路径必须拒绝它（fail-closed）；确实允许缺席的路径必须把它
+/// 如实标注为「未核对」，不得与 [`ManifestVerification::Verified`] 混同。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ManifestVerification {
+    /// manifest 在场，task.json/plan.json 内容 sha256 与留档逐位一致。
+    Verified(TaskPackageManifest),
+    /// manifest 文件缺席 = 未核对（既不是通过、也不是不适用——调用方
+    /// 必须显式处理本状态）。
+    Absent,
+}
+
 /// 任务包目录内单文件内容 sha256（读不到即 fail-loud）。
 fn file_digest(path: &Path) -> Result<String, PackageError> {
     let bytes = std::fs::read(path).map_err(|err| PackageError::PackageFileRead {
@@ -127,15 +148,17 @@ pub fn write_package_manifest(
     Ok(manifest)
 }
 
-/// 提交侧核对：manifest 缺席 = 不核对（旧任务包同口径）；在场即重算
-/// task.json/plan.json 内容 sha256 与留档逐位比对——任一不符即
-/// [`PackageError::ContentTampered`]（文案含「清态换号重提」行动指令）。
+/// 提交侧核对：在场即重算 task.json/plan.json 内容 sha256 与留档逐位
+/// 比对——任一不符即 [`PackageError::ContentTampered`]（文案含「清态换号
+/// 重提」行动指令）。manifest 缺席返回 [`ManifestVerification::Absent`]
+/// ——显式「未核对」状态（G3：不是 `Ok(None)` 时代的静默不核对，调用方
+/// 必须处理；要求核对的路径对它 fail-closed 拒绝）。
 pub fn verify_package_manifest(
     task_dir: &Path,
-) -> Result<Option<TaskPackageManifest>, PackageError> {
+) -> Result<ManifestVerification, PackageError> {
     let path = task_dir.join(PACKAGE_MANIFEST_FILE);
     if !path.is_file() {
-        return Ok(None);
+        return Ok(ManifestVerification::Absent);
     }
     let manifest: TaskPackageManifest =
         serde_json::from_str(&std::fs::read_to_string(&path).map_err(|err| {
@@ -171,5 +194,5 @@ pub fn verify_package_manifest(
             actual: actual_plan,
         });
     }
-    Ok(Some(manifest))
+    Ok(ManifestVerification::Verified(manifest))
 }
