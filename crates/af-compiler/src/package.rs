@@ -153,9 +153,7 @@ pub fn write_package_manifest(
 /// 重提」行动指令）。manifest 缺席返回 [`ManifestVerification::Absent`]
 /// ——显式「未核对」状态（G3：不是 `Ok(None)` 时代的静默不核对，调用方
 /// 必须处理；要求核对的路径对它 fail-closed 拒绝）。
-pub fn verify_package_manifest(
-    task_dir: &Path,
-) -> Result<ManifestVerification, PackageError> {
+pub fn verify_package_manifest(task_dir: &Path) -> Result<ManifestVerification, PackageError> {
     let path = task_dir.join(PACKAGE_MANIFEST_FILE);
     if !path.is_file() {
         return Ok(ManifestVerification::Absent);

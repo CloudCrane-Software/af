@@ -9,8 +9,8 @@
 use std::path::PathBuf;
 
 use af_compiler::{
-    build_package_manifest, verify_package_manifest, write_package_manifest,
-    ManifestVerification, PACKAGE_MANIFEST_FILE, PACKAGE_MANIFEST_VERSION,
+    build_package_manifest, verify_package_manifest, write_package_manifest, ManifestVerification,
+    PACKAGE_MANIFEST_FILE, PACKAGE_MANIFEST_VERSION,
 };
 
 fn fixture() -> PathBuf {

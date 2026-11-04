@@ -5,8 +5,7 @@
 
 use af_compiler::{
     assemble_construction_package, compile_construction_plan, decode_plan, output_contract_block,
-    task_book, verify_package_manifest, ConstructionSpec, ManifestVerification,
-    PROTOCOL_TEACHING,
+    task_book, verify_package_manifest, ConstructionSpec, ManifestVerification, PROTOCOL_TEACHING,
 };
 
 fn repo_packages_root() -> std::path::PathBuf {
