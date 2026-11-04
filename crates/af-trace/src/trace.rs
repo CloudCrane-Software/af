@@ -1438,7 +1438,10 @@ mod tests {
         let file = read_trace_log(&critical_log_path(dir.path())).unwrap();
         let seqs: HashSet<u64> = file.iter().map(|event| event.seq).collect();
         for seq in &oks {
-            assert!(seqs.contains(seq), "shutdown Ok 后 seq={seq} 必须已在文件里");
+            assert!(
+                seqs.contains(seq),
+                "shutdown Ok 后 seq={seq} 必须已在文件里"
+            );
         }
         assert_eq!(report.critical_persisted, 3, "镜像行数 = Ok 的写入数");
         println!(
@@ -1511,7 +1514,9 @@ mod tests {
     fn critical_persist_failure_freezes_durable_and_keeps_gap_zero() {
         let dir = TempDir::new("durable-freeze");
         let trace = Trace::spawn(cfg_in(dir.path())).unwrap();
-        let first = trace.write_critical("audit", json!({ "k": "first" })).unwrap();
+        let first = trace
+            .write_critical("audit", json!({ "k": "first" }))
+            .unwrap();
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         while trace.critical_durable() < 1 {
             assert!(std::time::Instant::now() < deadline, "首条应正常落盘");
@@ -1535,11 +1540,7 @@ mod tests {
             std::thread::sleep(Duration::from_millis(10));
         }
         assert!(!accepted_after_fail.is_empty() || !rejected.is_empty());
-        assert_eq!(
-            trace.critical_durable(),
-            1,
-            "落盘失败后 durable 冻结在首条"
-        );
+        assert_eq!(trace.critical_durable(), 1, "落盘失败后 durable 冻结在首条");
         assert_eq!(
             trace.gap_counter(),
             0,
@@ -1557,10 +1558,7 @@ mod tests {
                 for seq in &accepted_after_fail {
                     assert!(seqs.contains(seq), "入队未落盘的 seq={seq} 必须在 Err 里");
                 }
-                assert!(
-                    !seqs.contains(&first),
-                    "已成功落盘的首条不在退还列表里"
-                );
+                assert!(!seqs.contains(&first), "已成功落盘的首条不在退还列表里");
             }
             other => panic!("期望 PersistFailed，实际 {other:?}"),
         }
