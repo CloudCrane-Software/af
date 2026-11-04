@@ -1,0 +1,27 @@
+{
+  "idempotency_key": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50/admit/10/da2485eced1686bac19a7318e64bca189626f7d6562d4460c79799ef63a6b18d",
+  "order_id": "wo-asr-poc-1",
+  "source_stable_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50",
+  "decision_seq": 10,
+  "decision_digest": "da2485eced1686bac19a7318e64bca189626f7d6562d4460c79799ef63a6b18d",
+  "source_state": "Closed",
+  "actor_id": "user-a",
+  "decision": "Approve",
+  "admitted_at": "2026-11-04T00:00:00Z",
+  "engine_version": "0.2.0",
+  "checks": [
+    "source_recovery",
+    "terminal_state",
+    "template_schema",
+    "resource_profile_schema",
+    "gate_list_schema",
+    "decision_four_layer",
+    "seq_window",
+    "expiry",
+    "basis_recheck",
+    "digest_recheck",
+    "credential_intersection"
+  ],
+  "replayed": false,
+  "engine_bin": "/data/bench/af-target/debug/af-engine"
+}

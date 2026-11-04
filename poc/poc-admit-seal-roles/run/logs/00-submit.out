@@ -1,0 +1,17 @@
+{
+  "order_id": "wo-asr-poc-1",
+  "stable_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50",
+  "state": "Closed",
+  "replayed": false,
+  "voucher_id": "bv-wo-asr-poc-1",
+  "voucher_key_id": "e3b56e761f5ffa8124a202f03727d7b8baee0edf073d683a1da57d5483ecdf11",
+  "exec": null,
+  "verdict": null,
+  "record": null,
+  "evidence": [],
+  "mes_ch": null,
+  "ledger_ops_appended": 8,
+  "mes_events_emitted": 4,
+  "order_dir": "/home/pan-ding/af-dev/af/poc/poc-admit-seal-roles/run/state/orders/wo-asr-poc-1",
+  "engine_bin": "/data/bench/af-target/debug/af-engine"
+}

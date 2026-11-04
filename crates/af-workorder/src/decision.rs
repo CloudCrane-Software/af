@@ -61,6 +61,16 @@ impl Role {
     pub fn default_permissions(self) -> Vec<Permission> {
         self.allowed_permissions().to_vec()
     }
+
+    /// 该角色能否合法作出此决策。判据就是本文件既有的权限映射
+    /// （[`Decision::required_permission`] ∈ [`Role::allowed_permissions`]），
+    /// 不另设第二套角色阶梯——与 [`DecisionArtifact::validate_against`]
+    /// 第③层（决策权限）同一判据：签发侧（如 admit_seal 工具面）用它把
+    /// 非法配对拦在签出之前，受理侧四层校验同判据兜底。
+    pub fn can_decide(self, decision: Decision) -> bool {
+        self.allowed_permissions()
+            .contains(&decision.required_permission())
+    }
 }
 
 /// 决策结论。每种决策对应一种必需权限。
@@ -719,5 +729,63 @@ mod tests {
             art
         );
         assert_eq!(art.signature.algorithm, SIGNATURE_ALGORITHM_ED25519);
+    }
+
+    /// 角色×决策配对矩阵（判据 = 既有权限面，[`Role::can_decide`] 与四层
+    /// 校验第③层同源）：Approver 可 Approve/Reject（同需 Approve 权）；
+    /// Reviser 只可 Revise（无 Approve 权故 Reject 也不可）；Arbiter 全权
+    /// （Arbitrate 仅 Arbiter——只有 Arbiter 能 pivot）；Reader 只读，
+    /// 任何决策都不可。签发侧工具面（admit_seal --role/--decision）的
+    /// 非法配对拒绝以此矩阵为准。
+    #[test]
+    fn role_decision_pairing_matrix_matches_permission_face() {
+        let table: &[(Role, Decision, bool)] = &[
+            // Approver：审批面（Approve 与 Reject 同权）。
+            (Role::Approver, Decision::Approve, true),
+            (Role::Approver, Decision::Reject, true),
+            (Role::Approver, Decision::Revise, false),
+            (Role::Approver, Decision::Arbitrate, false),
+            // Reviser：只有 Revise；Reject 需要 Approve 权，越权。
+            (Role::Reviser, Decision::Revise, true),
+            (Role::Reviser, Decision::Approve, false),
+            (Role::Reviser, Decision::Reject, false),
+            (Role::Reviser, Decision::Arbitrate, false),
+            // Arbiter：全权（含 pivot）。
+            (Role::Arbiter, Decision::Approve, true),
+            (Role::Arbiter, Decision::Reject, true),
+            (Role::Arbiter, Decision::Revise, true),
+            (Role::Arbiter, Decision::Arbitrate, true),
+            // Reader：只读，任何决策都无权限。
+            (Role::Reader, Decision::Approve, false),
+            (Role::Reader, Decision::Reject, false),
+            (Role::Reader, Decision::Revise, false),
+            (Role::Reader, Decision::Arbitrate, false),
+        ];
+        for &(role, decision, expected) in table {
+            assert_eq!(
+                role.can_decide(decision),
+                expected,
+                "{role:?} × {decision:?} 配对判定应为 {expected}"
+            );
+            // 与四层校验第③层同判据：can_decide=false 的配对，用角色默认
+            // 权限集签出的工件必在 Decision 权限层被拒。
+            if !expected {
+                let art = DecisionArtifact::seal(
+                    "user-x",
+                    role,
+                    decision,
+                    PAYLOAD,
+                    &keypair(),
+                    attributes(),
+                );
+                assert!(
+                    matches!(
+                        art.validate_against(PAYLOAD, &registry(), time(NOW)),
+                        Err(DecisionError::PermissionDenied { .. })
+                    ),
+                    "{role:?} × {decision:?} 应被四层第③层拒绝"
+                );
+            }
+        }
     }
 }

@@ -1,0 +1,1 @@
+admit_seal: 非法配对：--role reviser 不能签 --decision reject——Reject 所需权限 Approve 不在 Reviser 角色的权限面 [Read, Revise] 内（根本法角色阶梯 Reader < Approver < Reviser < Arbiter，只有 Arbiter 全权；Reviser 无 Approve 权，Reject 与 Approve 同需 Approve 权）。拒绝签发：未读账本、未写任何文件

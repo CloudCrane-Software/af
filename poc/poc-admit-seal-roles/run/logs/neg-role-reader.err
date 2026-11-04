@@ -1,0 +1,1 @@
+admit_seal: --role 只接受 approver|reviser|arbiter（收到 "reader"；reader 只读，对任何裁决都无权限，不开放）

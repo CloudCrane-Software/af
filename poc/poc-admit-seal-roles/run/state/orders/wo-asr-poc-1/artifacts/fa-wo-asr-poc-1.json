@@ -1,0 +1,11 @@
+{
+  "unit_id": "stub-unit",
+  "order_id": "wo-asr-poc-1",
+  "stable_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50",
+  "line_id": "stub:line-poc",
+  "artifact": {
+    "artifact_id": "fa-wo-asr-poc-1",
+    "is_final": true,
+    "qualified": true
+  }
+}
