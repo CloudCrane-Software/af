@@ -22,11 +22,11 @@ use std::path::{Path, PathBuf};
 use af_execline::EngineClient;
 use af_order::adjudicate::{
     generate_adjudication_doc, loop_gate_list, loop_resource_profile, reconcile_adjudications,
-    run_steward_loop, template_body_sha256, AdjudicationJournal, AdjudicationSeed,
-    CommittedFact, LoopFacilities, PreparedIntent, ReconcileStatus, JOURNAL_SUFFIX, STEWARD_ROLE,
+    run_steward_loop, template_body_sha256, AdjudicationJournal, AdjudicationSeed, CommittedFact,
+    LoopFacilities, PreparedIntent, ReconcileStatus, JOURNAL_SUFFIX, STEWARD_ROLE,
 };
 use af_order::admit::{
-    admit, decision_digest, idempotency_key, load_receipts, AdmissionRequest, AdjudicationTemplate,
+    admit, decision_digest, idempotency_key, load_receipts, AdjudicationTemplate, AdmissionRequest,
 };
 use af_order::{cli, StateDir};
 use af_station::{State as TaskState, Station};
@@ -187,19 +187,12 @@ fn walk_first_leg_to_crash(
         doc.next_orders_digest.clone(),
         time(DECISION_EXPIRY),
     );
-    let signed = DecisionArtifact::seal(
-        "steward-a",
-        role,
-        decision,
-        &payload,
-        &keypair,
-        attributes,
-    );
+    let signed =
+        DecisionArtifact::seal("steward-a", role, decision, &payload, &keypair, attributes);
     let digest = decision_digest(&signed);
     let stable_id = source.stable_id().as_str().to_string();
     let receipt_key = idempotency_key(&stable_id, seq, &digest);
-    let mut journal =
-        AdjudicationJournal::open(&state, order_id, &doc.adjudication_id).unwrap();
+    let mut journal = AdjudicationJournal::open(&state, order_id, &doc.adjudication_id).unwrap();
     journal
         .append_prepared(PreparedIntent {
             adjudication_id: doc.adjudication_id.clone(),
@@ -311,8 +304,7 @@ fn materialize_rework(state: &StateDir, source: &WorkOrder, rework_id: &str) {
         .unwrap();
     let dir = state.order_dir(rework_id);
     fs::create_dir_all(&dir).unwrap();
-    let mut ledger =
-        af_execline::OrderLedger::open(&dir.join("ledger.jsonl")).unwrap();
+    let mut ledger = af_execline::OrderLedger::open(&dir.join("ledger.jsonl")).unwrap();
     ledger
         .append(af_execline::LedgerRecord {
             seq: 0,
@@ -334,10 +326,8 @@ fn materialize_rework(state: &StateDir, source: &WorkOrder, rework_id: &str) {
 fn cancel_source(state: &StateDir, source: &mut WorkOrder) {
     source.cancel().unwrap();
     let order_id = source.id().to_string();
-    let mut ledger = af_execline::OrderLedger::open(
-        &state.order_dir(&order_id).join("ledger.jsonl"),
-    )
-    .unwrap();
+    let mut ledger =
+        af_execline::OrderLedger::open(&state.order_dir(&order_id).join("ledger.jsonl")).unwrap();
     ledger
         .append(af_execline::LedgerRecord {
             seq: 0,
@@ -410,16 +400,17 @@ fn fault_w2_crash_before_complete_replays_without_double_admission() {
         .unwrap()
         .into_station();
     let client = engine_client();
-    let walked =
-        walk_first_leg_to_crash(
-            &root,
-            &seed(order_id, Decision::Approve, vec![], Role::Approver),
-            &station,
-            &client,
-            CrashAt::CommittedWritten,
-        );
+    let walked = walk_first_leg_to_crash(
+        &root,
+        &seed(order_id, Decision::Approve, vec![], Role::Approver),
+        &station,
+        &client,
+        CrashAt::CommittedWritten,
+    );
     assert_eq!(
-        load_receipts(&StateDir::new(&root), order_id).unwrap().len(),
+        load_receipts(&StateDir::new(&root), order_id)
+            .unwrap()
+            .len(),
         1,
         "崩溃时受理账恰 1 笔"
     );
@@ -432,7 +423,14 @@ fn fault_w2_crash_before_complete_replays_without_double_admission() {
     // 注入租约到期（不睡眠）→ 运维重试 = run_steward_loop（会生成新裁决单
     // adj-2 入队，但认领按 rowid 先拿到回炉的旧任务 adj-1）。
     clock.advance(CRASH_LEASE_MS + 1_000);
-    let outcome = retry_loop(&root, &station, &client, order_id, Decision::Approve, Role::Approver);
+    let outcome = retry_loop(
+        &root,
+        &station,
+        &client,
+        order_id,
+        Decision::Approve,
+        Role::Approver,
+    );
     assert_eq!(outcome.task_id, walked.adjudication_id, "重试认领到旧任务");
     assert!(
         outcome.receipt.replayed,
@@ -453,12 +451,9 @@ fn fault_w2_crash_before_complete_replays_without_double_admission() {
         TaskState::Done,
         "重放臂完成任务收敛"
     );
-    let journal = AdjudicationJournal::open(
-        &StateDir::new(&root),
-        order_id,
-        &walked.adjudication_id,
-    )
-    .unwrap();
+    let journal =
+        AdjudicationJournal::open(&StateDir::new(&root), order_id, &walked.adjudication_id)
+            .unwrap();
     assert!(journal.is_completed(), "意图账应收口 completed");
     let _ = fs::remove_dir_all(&root);
 }
@@ -478,7 +473,12 @@ fn fault_w1_crash_after_admit_reconcile_settles_and_replay_converges() {
     let rework_id = format!("{order_id}-rw");
     let walked = walk_first_leg_to_crash(
         &root,
-        &seed(order_id, Decision::Revise, vec![rework_id.clone()], Role::Reviser),
+        &seed(
+            order_id,
+            Decision::Revise,
+            vec![rework_id.clone()],
+            Role::Reviser,
+        ),
         &station,
         &client,
         CrashAt::Admitted,
@@ -495,13 +495,15 @@ fn fault_w1_crash_after_admit_reconcile_settles_and_replay_converges() {
     println!("[after/W1] reconcile 报告 = {reports:?}");
     assert_eq!(reports.len(), 1, "恰一份意图账在飞");
     assert_eq!(reports[0].adjudication_id, walked.adjudication_id);
-    assert!(matches!(reports[0].status, ReconcileStatus::LeaseHeld { .. }));
+    assert!(matches!(
+        reports[0].status,
+        ReconcileStatus::LeaseHeld { .. }
+    ));
     assert!(
         state.order_dir(&rework_id).join("ledger.jsonl").exists(),
         "reconcile 应幂等结算 Revise 分支（物化 rework）"
     );
-    let journal =
-        AdjudicationJournal::open(&state, order_id, &walked.adjudication_id).unwrap();
+    let journal = AdjudicationJournal::open(&state, order_id, &walked.adjudication_id).unwrap();
     assert!(journal.latest_committed().is_some(), "committed 线应补缺");
     assert_eq!(
         journal.latest_committed().unwrap().rework_order_ids,
@@ -510,19 +512,27 @@ fn fault_w1_crash_after_admit_reconcile_settles_and_replay_converges() {
 
     // 租约到期 → 重试：重放臂按 committed 线复用事实收敛（不再物化第二张）。
     clock.advance(CRASH_LEASE_MS + 1_000);
-    let outcome = retry_loop(&root, &station, &client, order_id, Decision::Revise, Role::Reviser);
+    let outcome = retry_loop(
+        &root,
+        &station,
+        &client,
+        order_id,
+        Decision::Revise,
+        Role::Reviser,
+    );
     assert_eq!(outcome.rework_order_ids, vec![rework_id.clone()]);
     assert_eq!(
         load_receipts(&state, order_id).unwrap().len(),
         1,
         "重放不得产生第二笔受理"
     );
-    let rework_records = af_execline::OrderLedger::load(
-        &state.order_dir(&rework_id).join("ledger.jsonl"),
-    )
-    .unwrap();
+    let rework_records =
+        af_execline::OrderLedger::load(&state.order_dir(&rework_id).join("ledger.jsonl")).unwrap();
     assert_eq!(
-        rework_records.iter().filter(|r| r.op == "create_order").count(),
+        rework_records
+            .iter()
+            .filter(|r| r.op == "create_order")
+            .count(),
         1,
         "rework 不得双物化"
     );
@@ -560,11 +570,21 @@ fn fault_w0_crash_before_admit_residue_detected_then_first_walk_succeeds() {
 
     let reports = reconcile_adjudications(&state, &station).unwrap();
     println!("[after/W0] reconcile 报告 = {reports:?}");
-    assert!(matches!(reports[0].status, ReconcileStatus::PreparedResidue { .. }));
+    assert!(matches!(
+        reports[0].status,
+        ReconcileStatus::PreparedResidue { .. }
+    ));
 
     // 租约到期 → 重试按首走处理（无 committed 证据）：真签真受理，1 笔收敛。
     clock.advance(CRASH_LEASE_MS + 1_000);
-    let outcome = retry_loop(&root, &station, &client, order_id, Decision::Approve, Role::Approver);
+    let outcome = retry_loop(
+        &root,
+        &station,
+        &client,
+        order_id,
+        Decision::Approve,
+        Role::Approver,
+    );
     assert_eq!(outcome.task_id, walked.adjudication_id);
     assert!(!outcome.receipt.replayed, "首走真受理，非重放");
     assert_eq!(load_receipts(&state, order_id).unwrap().len(), 1);
@@ -595,15 +615,16 @@ fn fault_w3_crash_after_complete_reconcile_closes_journal_idempotently() {
         CrashAt::TaskCompleted,
     );
     let state = StateDir::new(&root);
-    let journal =
-        AdjudicationJournal::open(&state, order_id, &walked.adjudication_id).unwrap();
+    let journal = AdjudicationJournal::open(&state, order_id, &walked.adjudication_id).unwrap();
     assert!(!journal.is_completed(), "崩溃时收口线未落");
 
     let reports = reconcile_adjudications(&state, &station).unwrap();
     println!("[after/W3] reconcile 报告 = {reports:?}");
-    assert!(matches!(reports[0].status, ReconcileStatus::ClosedByReconcile));
-    let journal =
-        AdjudicationJournal::open(&state, order_id, &walked.adjudication_id).unwrap();
+    assert!(matches!(
+        reports[0].status,
+        ReconcileStatus::ClosedByReconcile
+    ));
+    let journal = AdjudicationJournal::open(&state, order_id, &walked.adjudication_id).unwrap();
     assert!(journal.is_completed(), "reconcile 应补收口线");
 
     // 幂等：重复扫描对已收敛账是 no-op。
@@ -643,8 +664,7 @@ fn fault_reject_abort_is_idempotent_across_crash_window() {
         source.release().unwrap();
         let dir = StateDir::new(&root).order_dir(order_id);
         fs::create_dir_all(&dir).unwrap();
-        let mut ledger =
-            af_execline::OrderLedger::open(&dir.join("ledger.jsonl")).unwrap();
+        let mut ledger = af_execline::OrderLedger::open(&dir.join("ledger.jsonl")).unwrap();
         ledger
             .append(af_execline::LedgerRecord {
                 seq: 0,
@@ -676,10 +696,8 @@ fn fault_reject_abort_is_idempotent_across_crash_window() {
         CrashAt::CommittedWritten,
     );
     let state = StateDir::new(&root);
-    let records = af_execline::OrderLedger::load(
-        &state.order_dir(order_id).join("ledger.jsonl"),
-    )
-    .unwrap();
+    let records =
+        af_execline::OrderLedger::load(&state.order_dir(order_id).join("ledger.jsonl")).unwrap();
     assert_eq!(
         records.iter().filter(|r| r.op == "cancel").count(),
         1,
@@ -693,11 +711,12 @@ fn fault_reject_abort_is_idempotent_across_crash_window() {
     // reconcile：committed 线已在 → 只判读任务面（LeaseHeld），不动分支。
     let reports = reconcile_adjudications(&state, &station).unwrap();
     println!("[after/Reject] reconcile 报告 = {reports:?}");
-    assert!(matches!(reports[0].status, ReconcileStatus::LeaseHeld { .. }));
-    let records = af_execline::OrderLedger::load(
-        &state.order_dir(order_id).join("ledger.jsonl"),
-    )
-    .unwrap();
+    assert!(matches!(
+        reports[0].status,
+        ReconcileStatus::LeaseHeld { .. }
+    ));
+    let records =
+        af_execline::OrderLedger::load(&state.order_dir(order_id).join("ledger.jsonl")).unwrap();
     assert_eq!(
         records.iter().filter(|r| r.op == "cancel").count(),
         1,
@@ -706,14 +725,19 @@ fn fault_reject_abort_is_idempotent_across_crash_window() {
 
     // 租约到期 → 重试重放臂：源单已 Cancelled，重放不重 abort、不重受理。
     clock.advance(CRASH_LEASE_MS + 1_000);
-    let outcome = retry_loop(&root, &station, &client, order_id, Decision::Reject, Role::Approver);
+    let outcome = retry_loop(
+        &root,
+        &station,
+        &client,
+        order_id,
+        Decision::Reject,
+        Role::Approver,
+    );
     assert!(outcome.aborted, "重放按 committed 线复用 abort 事实");
     assert!(outcome.receipt.replayed);
     assert_eq!(load_receipts(&state, order_id).unwrap().len(), 1);
-    let records = af_execline::OrderLedger::load(
-        &state.order_dir(order_id).join("ledger.jsonl"),
-    )
-    .unwrap();
+    let records =
+        af_execline::OrderLedger::load(&state.order_dir(order_id).join("ledger.jsonl")).unwrap();
     assert_eq!(
         records.iter().filter(|r| r.op == "cancel").count(),
         1,
@@ -737,8 +761,7 @@ fn journal_files_do_not_disturb_adjudication_numbering() {
         generate_adjudication_doc(&state, order_id, vec![], time(DECISION_EXPIRY)).unwrap();
     doc1.persist(&state).unwrap();
     // 人为落一份意图账（模拟在飞残留），再生成下一份裁决单。
-    let mut journal =
-        AdjudicationJournal::open(&state, order_id, &doc1.adjudication_id).unwrap();
+    let mut journal = AdjudicationJournal::open(&state, order_id, &doc1.adjudication_id).unwrap();
     journal
         .append_prepared(PreparedIntent {
             adjudication_id: doc1.adjudication_id.clone(),
@@ -748,7 +771,11 @@ fn journal_files_do_not_disturb_adjudication_numbering() {
             decision: Decision::Approve,
             decision_seq: 1,
             decision_digest: "0".repeat(64),
-            receipt_idempotency_key: format!("{}/admit/1/{}", doc1.source_stable_id, "0".repeat(64)),
+            receipt_idempotency_key: format!(
+                "{}/admit/1/{}",
+                doc1.source_stable_id,
+                "0".repeat(64)
+            ),
             next_orders: vec![],
             ts_ms: 0,
         })

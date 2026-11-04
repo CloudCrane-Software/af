@@ -339,14 +339,13 @@ impl AdjudicationJournal {
                 if trimmed.is_empty() {
                     continue;
                 }
-                let parsed: JournalLine =
-                    serde_json::from_str(trimmed).map_err(|err| {
-                        AdjudicateError::Doc(format!(
-                            "意图账第 {} 行不是合法记录（{}）: {err}",
-                            index + 1,
-                            path.display()
-                        ))
-                    })?;
+                let parsed: JournalLine = serde_json::from_str(trimmed).map_err(|err| {
+                    AdjudicateError::Doc(format!(
+                        "意图账第 {} 行不是合法记录（{}）: {err}",
+                        index + 1,
+                        path.display()
+                    ))
+                })?;
                 lines.push(parsed);
             }
         }
@@ -360,9 +359,8 @@ impl AdjudicationJournal {
         let text = serde_json::to_string(&line)
             .map_err(|err| AdjudicateError::Doc(format!("意图账序列化失败: {err}")))?;
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(|err| {
-                AdjudicateError::Doc(format!("创建 {}: {err}", parent.display()))
-            })?;
+            fs::create_dir_all(parent)
+                .map_err(|err| AdjudicateError::Doc(format!("创建 {}: {err}", parent.display())))?;
         }
         let mut file = fs::OpenOptions::new()
             .create(true)
@@ -375,10 +373,7 @@ impl AdjudicationJournal {
             .and_then(|()| file.write_all(b"\n"))
             .and_then(|()| file.sync_all())
             .map_err(|err| {
-                AdjudicateError::Doc(format!(
-                    "意图账落盘失败 {}: {err}",
-                    self.path.display()
-                ))
+                AdjudicateError::Doc(format!("意图账落盘失败 {}: {err}", self.path.display()))
             })?;
         self.lines.push(line);
         Ok(())
@@ -643,11 +638,8 @@ pub fn run_steward_loop(
     // ── 重放幂等臂（风险#5）：认领到的裁决单若已过跨库提交点，不再重签/
     //    重受理——那是同一裁决单的二次受理（双写）。按意图账收敛剩余面后
     //    返回原回执。提交点判据见 [`committed_receipt`]。──────────────
-    let mut journal = AdjudicationJournal::open(
-        f.state,
-        &claimed.source_order_id,
-        &claimed.adjudication_id,
-    )?;
+    let mut journal =
+        AdjudicationJournal::open(f.state, &claimed.source_order_id, &claimed.adjudication_id)?;
     if let Some(receipt) = committed_receipt(f.state, &journal, &claimed)? {
         return steward_replay(
             f,
@@ -918,18 +910,20 @@ fn spawn_rework_order(
         .map_err(|err| AdjudicateError::Queue(format!("rework 单号不合法 {rework_id:?}: {err}")))?;
     let order_dir = state.order_dir(rework_id);
     if order_dir.join(LEDGER_FILE).is_file() {
-        let records = af_execline::OrderLedger::load(&order_dir.join(LEDGER_FILE)).map_err(
-            |err| {
+        let records =
+            af_execline::OrderLedger::load(&order_dir.join(LEDGER_FILE)).map_err(|err| {
                 AdjudicateError::Queue(format!(
                     "rework 单 {rework_id} 已落账但账本不可读（对不上后继关系）: {err}"
                 ))
-            },
-        )?;
+            })?;
         let existing = records
             .iter()
             .rev()
             .find_map(|record| record.order_after.clone());
-        if existing.as_ref().is_some_and(|order| order.supersedes() == Some(source.id())) {
+        if existing
+            .as_ref()
+            .is_some_and(|order| order.supersedes() == Some(source.id()))
+        {
             return Ok(());
         }
         return Err(AdjudicateError::Queue(format!(
@@ -1157,12 +1151,8 @@ fn reconcile_one(
     if journal.latest_committed().is_none() {
         let (mut source, _records) =
             crate::admit::recover_source_order(state, &prepared.source_order_id)?;
-        let (rework_order_ids, aborted) = settle_decision_branches(
-            state,
-            &mut source,
-            prepared.decision,
-            &prepared.next_orders,
-        )?;
+        let (rework_order_ids, aborted) =
+            settle_decision_branches(state, &mut source, prepared.decision, &prepared.next_orders)?;
         journal.append_committed(CommittedFact {
             receipt_idempotency_key: receipt.idempotency_key.clone(),
             rework_order_ids,
@@ -1181,11 +1171,11 @@ fn reconcile_one(
             journal.append_completed()?;
             Ok(report(ReconcileStatus::ClosedByReconcile))
         }
-        Some(task) if task.state == af_station::State::Queued => Ok(report(
-            ReconcileStatus::AwaitingClaim {
+        Some(task) if task.state == af_station::State::Queued => {
+            Ok(report(ReconcileStatus::AwaitingClaim {
                 task_id: prepared.task_id.clone(),
-            },
-        )),
+            }))
+        }
         Some(task) => Ok(report(ReconcileStatus::LeaseHeld {
             task_id: prepared.task_id.clone(),
             claimant: task.claimant.clone().unwrap_or_default(),
@@ -1410,7 +1400,10 @@ mod tests {
         assert_eq!(reloaded.lines().len(), 3, "三相各一行");
         // 重试可产生第二条 prepared（意图在账，历史不抹）：最新意图取后者。
         let mut reloaded = reloaded;
-        let second = PreparedIntent { decision_seq: 2, ..intent.clone() };
+        let second = PreparedIntent {
+            decision_seq: 2,
+            ..intent.clone()
+        };
         reloaded.append_prepared(second.clone()).unwrap();
         assert_eq!(reloaded.latest_prepared(), Some(&second));
         let _ = fs::remove_dir_all(state.root());
@@ -1422,9 +1415,12 @@ mod tests {
         let state = scratch("journal-bad");
         let dir = state.root().join(ADJUDICATIONS_DIR).join("wo-jb");
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join(format!("adj-wo-jb-1{JOURNAL_SUFFIX}")), "not-json\n").unwrap();
-        let err =
-            AdjudicationJournal::open(&state, "wo-jb", "adj-wo-jb-1").unwrap_err();
+        fs::write(
+            dir.join(format!("adj-wo-jb-1{JOURNAL_SUFFIX}")),
+            "not-json\n",
+        )
+        .unwrap();
+        let err = AdjudicationJournal::open(&state, "wo-jb", "adj-wo-jb-1").unwrap_err();
         assert!(matches!(err, AdjudicateError::Doc(_)), "{err}");
         let _ = fs::remove_dir_all(state.root());
     }
@@ -1438,10 +1434,8 @@ mod tests {
         spawn_rework_order(&state, &source, rework_id).unwrap();
         // 崩溃窗重放：同号已物化且确系本源单后继 → 跳过（不报错、不双落）。
         spawn_rework_order(&state, &source, rework_id).unwrap();
-        let records = af_execline::OrderLedger::load(
-            &state.order_dir(rework_id).join(LEDGER_FILE),
-        )
-        .unwrap();
+        let records =
+            af_execline::OrderLedger::load(&state.order_dir(rework_id).join(LEDGER_FILE)).unwrap();
         assert_eq!(
             records.iter().filter(|r| r.op == "create_order").count(),
             1,
@@ -1464,10 +1458,12 @@ mod tests {
             af_workorder::GraphVersion::new("af-order/poc-1"),
             Sla::new(None, Priority::Normal),
         );
-        source.bind_line(af_workorder::LineBinding {
-            line_id: "line-poc".into(),
-            line_version: "lv-1".into(),
-        }).unwrap();
+        source
+            .bind_line(af_workorder::LineBinding {
+                line_id: "line-poc".into(),
+                line_version: "lv-1".into(),
+            })
+            .unwrap();
         source
             .attach_budget_voucher(af_workorder::BudgetVoucher {
                 voucher_id: "bv-wo-ab-idem".into(),
@@ -1498,10 +1494,9 @@ mod tests {
         assert_eq!(source.state(), af_workorder::OrderState::Cancelled);
         // 崩溃窗重放：已 Cancelled → 收敛成功（不再 MissingEdge）。
         abort_source(&state, &mut source).unwrap();
-        let records = af_execline::OrderLedger::load(
-            &state.order_dir("wo-ab-idem").join(LEDGER_FILE),
-        )
-        .unwrap();
+        let records =
+            af_execline::OrderLedger::load(&state.order_dir("wo-ab-idem").join(LEDGER_FILE))
+                .unwrap();
         assert_eq!(
             records.iter().filter(|r| r.op == "cancel").count(),
             1,
