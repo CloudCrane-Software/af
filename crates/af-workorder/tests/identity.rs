@@ -227,7 +227,7 @@ fn decision_artifact_hash_includes_stable_id() {
                 Decision::Approve,
                 "release-request",
                 &decision_key(),
-        decision_attributes(),
+                decision_attributes(),
             )
             .payload_hash,
         expected

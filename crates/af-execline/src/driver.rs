@@ -687,11 +687,8 @@ impl OrderLifecycleDriver {
                 "qualified": artifact.qualified,
                 "content": content,
             });
-            let request = engine_request(
-                &self.order,
-                "attach_artifact",
-                json!({ "artifact": write }),
-            )?;
+            let request =
+                engine_request(&self.order, "attach_artifact", json!({ "artifact": write }))?;
             match self.client.call(&request)? {
                 EngineOutcome::Accept(accept) => self.order = accept.order,
                 EngineOutcome::Reject(rejection) => {

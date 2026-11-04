@@ -499,10 +499,7 @@ fn canary_predicate(min_completed: usize, max_defects: u64) -> CanaryPredicate {
 fn defects_from_results(orders_dir: &Path, order_id: &str) -> Option<u64> {
     let path = orders_dir.join(order_id).join("results.jsonl");
     let content = std::fs::read_to_string(path).ok()?;
-    let last = content
-        .lines()
-        .rev()
-        .find(|l| !l.trim().is_empty())?;
+    let last = content.lines().rev().find(|l| !l.trim().is_empty())?;
     let value: serde_json::Value = serde_json::from_str(last).ok()?;
     match value.get("reward") {
         Some(serde_json::Value::Bool(true)) => Some(0),

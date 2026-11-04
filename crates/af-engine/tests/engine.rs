@@ -499,11 +499,7 @@ fn attach_artifact_hashes_actual_bytes_and_rejects_self_reported_digest() {
         "qualified": true,
         "content_sha256": "0".repeat(64),
     });
-    let got = call(
-        "attach_artifact",
-        &wo,
-        json!({"artifact": self_reported}),
-    );
+    let got = call("attach_artifact", &wo, json!({"artifact": self_reported}));
     assert_bad(&got, "字段 artifact 类型错误");
 
     let mut smuggled = artifact_write("ia-1", false, true);
@@ -580,7 +576,9 @@ fn cancel_accepts_created_and_completed_but_rejects_terminal_states() {
 fn approve_decision_accepts_approver_and_returns_same_order() {
     let wo = released();
     let payload = bound_payload(&wo);
-    approver().validate_against(&payload, &actor_registry(), validated_at()).unwrap();
+    approver()
+        .validate_against(&payload, &actor_registry(), validated_at())
+        .unwrap();
     let got = call(
         "approve_decision",
         &wo,
@@ -595,7 +593,9 @@ fn approve_decision_rejects_reader() {
     let wo = created();
     let payload = bound_payload(&wo);
     let art = reader();
-    let err = art.validate_against(&payload, &actor_registry(), validated_at()).unwrap_err();
+    let err = art
+        .validate_against(&payload, &actor_registry(), validated_at())
+        .unwrap_err();
     assert!(matches!(err, DecisionError::PermissionDenied { .. }));
     let got = call(
         "approve_decision",
@@ -618,7 +618,9 @@ fn approve_decision_rejects_hash_mismatch() {
         &decision_key(),
         decision_attributes(),
     );
-    let err = art.validate_against(&payload, &actor_registry(), validated_at()).unwrap_err();
+    let err = art
+        .validate_against(&payload, &actor_registry(), validated_at())
+        .unwrap_err();
     assert!(matches!(err, DecisionError::PayloadHashMismatch { .. }));
     let got = call(
         "approve_decision",

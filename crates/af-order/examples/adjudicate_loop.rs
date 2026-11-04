@@ -18,9 +18,7 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use af_execline::EngineClient;
-use af_order::adjudicate::{
-    run_steward_loop, AdjudicationSeed, LoopFacilities, STEWARD_ROLE,
-};
+use af_order::adjudicate::{run_steward_loop, AdjudicationSeed, LoopFacilities, STEWARD_ROLE};
 use af_order::{cli, StateDir};
 use af_station::Station;
 use af_workorder::{Decision, Ed25519Keypair, Role, TrustedActor, TrustedActorRegistry};
@@ -29,8 +27,7 @@ const NOW: &str = "2026-11-03T00:00:00Z";
 const KEY_EXPIRY: &str = "2027-01-01T00:00:00Z";
 const DECISION_EXPIRY: &str = "2026-12-01T00:00:00Z";
 /// steward 固定种子（64 hex，复现面）。
-const STEWARD_SEED_HEX: &str =
-    "6161616161616161616161616161616161616161616161616161616161616161";
+const STEWARD_SEED_HEX: &str = "6161616161616161616161616161616161616161616161616161616161616161";
 
 fn fail(leg: &str, err: impl std::fmt::Display) -> ! {
     eprintln!(

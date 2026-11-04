@@ -206,9 +206,7 @@ impl TrustedActorRegistry {
         let mut actor_ids = BTreeSet::new();
         let mut key_ids = BTreeSet::new();
         for actor in &self.actors {
-            if actor.actor_id.trim().is_empty()
-                || actor.actor_id.chars().any(char::is_whitespace)
-            {
+            if actor.actor_id.trim().is_empty() || actor.actor_id.chars().any(char::is_whitespace) {
                 return Err(DecisionError::InvalidActorRegistry {
                     reason: "actor_id 为空或含空白".into(),
                 });

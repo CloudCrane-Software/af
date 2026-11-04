@@ -536,13 +536,24 @@ pub fn admit(
         .into());
     }
     checks.push(CHECK_EXPIRY.into());
-    recheck_basis(&request.decision, &order, &records, state, &request.order_id)?;
+    recheck_basis(
+        &request.decision,
+        &order,
+        &records,
+        state,
+        &request.order_id,
+    )?;
     checks.push(CHECK_BASIS_RECHECK.into());
     recheck_next_orders_digest(&request.decision, &request.next_orders)?;
     checks.push(CHECK_DIGEST_RECHECK.into());
 
     // ── 第⑤步：凭证求交（PoC-C 落地）──────────────────────────
-    intersect_credentials(&request.required_credentials, &order, state, &request.order_id)?;
+    intersect_credentials(
+        &request.required_credentials,
+        &order,
+        state,
+        &request.order_id,
+    )?;
     checks.push(CHECK_CREDENTIAL_INTERSECTION.into());
 
     // ── 第⑥步：全过后才写状态 ─────────────────────────────────
@@ -772,7 +783,10 @@ fn recheck_basis_entry(
             let artifact_path = artifact_file_path(state, order_id, entity_id);
             if artifact_path.is_file() {
                 let bytes = fs::read(&artifact_path).map_err(|err| {
-                    reject(format!("工件字节读取失败 {}: {err}", artifact_path.display()))
+                    reject(format!(
+                        "工件字节读取失败 {}: {err}",
+                        artifact_path.display()
+                    ))
                 })?;
                 let actual = sha256_hex(&bytes);
                 if actual != registered {
@@ -789,9 +803,9 @@ fn recheck_basis_entry(
             Ok(())
         }
         BASIS_KIND_VOUCHER => {
-            let voucher = order.budget_voucher().ok_or_else(|| {
-                reject(format!("实体不存在：源单 {} 未绑定预算凭证", order.id()))
-            })?;
+            let voucher = order
+                .budget_voucher()
+                .ok_or_else(|| reject(format!("实体不存在：源单 {} 未绑定预算凭证", order.id())))?;
             if voucher.voucher_id != entity_id {
                 return Err(reject(format!(
                     "实体不存在：源单绑定凭证 id={}，条目指向 {entity_id:?}",
@@ -800,9 +814,7 @@ fn recheck_basis_entry(
             }
             let actual = budget_voucher_digest(voucher);
             if claimed != actual {
-                return Err(reject(format!(
-                    "摘要不符：声称 {claimed}，实体 {actual}"
-                )));
+                return Err(reject(format!("摘要不符：声称 {claimed}，实体 {actual}")));
             }
             Ok(())
         }
@@ -810,14 +822,18 @@ fn recheck_basis_entry(
             let seq: u64 = entity_id.parse().map_err(|_| {
                 reject("ledger 条目的 entity_id 须是账本 seq（十进制 u64）".to_string())
             })?;
-            let record = records.iter().find(|record| record.seq == seq).ok_or_else(|| {
-                reject(format!("实体不存在：账本无 seq={seq} 行（共 {} 行）", records.len()))
-            })?;
+            let record = records
+                .iter()
+                .find(|record| record.seq == seq)
+                .ok_or_else(|| {
+                    reject(format!(
+                        "实体不存在：账本无 seq={seq} 行（共 {} 行）",
+                        records.len()
+                    ))
+                })?;
             let actual = ledger_record_digest(record);
             if claimed != actual {
-                return Err(reject(format!(
-                    "摘要不符：声称 {claimed}，实体 {actual}"
-                )));
+                return Err(reject(format!("摘要不符：声称 {claimed}，实体 {actual}")));
             }
             Ok(())
         }
@@ -837,9 +853,8 @@ fn recheck_next_orders_digest(
     decision: &DecisionArtifact,
     next_orders: &[String],
 ) -> Result<(), AdmitReject> {
-    let actual = canonical_next_orders_digest(next_orders).map_err(|reason| {
-        AdmitReject::DigestRecompute(format!("计划面规范化失败: {reason}"))
-    })?;
+    let actual = canonical_next_orders_digest(next_orders)
+        .map_err(|reason| AdmitReject::DigestRecompute(format!("计划面规范化失败: {reason}")))?;
     if decision.next_orders_digest != actual {
         return Err(AdmitReject::DigestRecompute(format!(
             "计划面摘要不符：工件声称 {}，请求 next_orders 实算 {actual}",
@@ -879,13 +894,12 @@ fn intersect_credentials(
                 voucher_path.display()
             ))
         })?;
-        let record: crate::voucher::VoucherRecord =
-            serde_json::from_str(&text).map_err(|err| {
-                AdmitReject::CredentialIntersection(format!(
-                    "源单凭证材料损坏 {}（fail-closed）: {err}",
-                    voucher_path.display()
-                ))
-            })?;
+        let record: crate::voucher::VoucherRecord = serde_json::from_str(&text).map_err(|err| {
+            AdmitReject::CredentialIntersection(format!(
+                "源单凭证材料损坏 {}（fail-closed）: {err}",
+                voucher_path.display()
+            ))
+        })?;
         held.push(record.voucher_id);
     }
     if required.is_empty() {
@@ -943,7 +957,10 @@ fn gate_input_two_check(_request: &AdmissionRequest) -> Result<(), AdmitReject> 
 /// 读回全部已受理回执（缺文件 = 空清单；坏行 fail-loud 为状态读取失败）。
 /// 公开给 [`crate::adjudicate`]：裁决环取"本源单已受理最大 seq"定下一笔
 /// 单调 seq，与 admit 链幂等窗同源同读，不另造第二套回执读取。
-pub fn load_receipts(state: &StateDir, order_id: &str) -> Result<Vec<AdmissionReceipt>, OrderError> {
+pub fn load_receipts(
+    state: &StateDir,
+    order_id: &str,
+) -> Result<Vec<AdmissionReceipt>, OrderError> {
     let path = admissions_path(state, order_id);
     if !path.is_file() {
         return Ok(Vec::new());
@@ -1247,16 +1264,14 @@ mod tests {
     #[test]
     fn canonical_next_orders_digest_is_sorted_deduped_and_domain_separated() {
         let a = canonical_next_orders_digest(&["wo-b".into(), "wo-a".into()]).unwrap();
-        let b = canonical_next_orders_digest(&["wo-a".into(), "wo-b".into(), "wo-b".into()])
-            .unwrap();
+        let b =
+            canonical_next_orders_digest(&["wo-a".into(), "wo-b".into(), "wo-b".into()]).unwrap();
         assert_eq!(a, b, "排序去重后同集合同 digest");
         let empty = canonical_next_orders_digest(&[]).unwrap();
         assert_eq!(empty.len(), 64);
         assert_ne!(empty, a, "空计划面与非空计划面摘要必不同");
         // 域分离：线里含 domain 前缀与条数（对拍同线重算）。
-        let line = format!(
-            "{NEXT_ORDERS_DOMAIN}\n2\nwo-a\nwo-b"
-        );
+        let line = format!("{NEXT_ORDERS_DOMAIN}\n2\nwo-a\nwo-b");
         assert_eq!(a, sha256_hex(line.as_bytes()));
         assert!(canonical_next_orders_digest(&["含 空格".into()]).is_err());
         assert!(canonical_next_orders_digest(&["".into()]).is_err());
@@ -1271,28 +1286,40 @@ mod tests {
             af_workorder::Sla::new(None, af_workorder::Priority::Normal),
         );
         let recheck = |entry: &str| {
-            recheck_basis_entry(entry, &order, &[], &StateDir::new("/nonexistent"), "wo-basis")
-                .err()
-                .map(|err| err.to_string())
+            recheck_basis_entry(
+                entry,
+                &order,
+                &[],
+                &StateDir::new("/nonexistent"),
+                "wo-basis",
+            )
+            .err()
+            .map(|err| err.to_string())
         };
         let text = recheck("没有分隔符").unwrap();
         assert!(text.contains("OR2109") && text.contains("文法"), "{text}");
         let text = recheck("artifact:fa-1").unwrap();
         assert!(text.contains("文法"), "{text}");
-        let text = recheck("magic:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
-            .unwrap();
+        let text =
+            recheck("magic:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+                .unwrap();
         assert!(text.contains("未知实体种类"), "{text}");
         let text = recheck("artifact:fa-1:NOTHEX").unwrap();
         assert!(text.contains("hex"), "{text}");
         // 实体不存在（源单无工件/未绑凭证/空账本）。
-        let text = recheck("artifact:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
-            .unwrap();
+        let text = recheck(
+            "artifact:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+        )
+        .unwrap();
         assert!(text.contains("实体不存在"), "{text}");
-        let text = recheck("voucher:bv-x:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
-            .unwrap();
+        let text = recheck(
+            "voucher:bv-x:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
+        )
+        .unwrap();
         assert!(text.contains("实体不存在"), "{text}");
-        let text = recheck("ledger:0:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
-            .unwrap();
+        let text =
+            recheck("ledger:0:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+                .unwrap();
         assert!(text.contains("实体不存在"), "{text}");
     }
 

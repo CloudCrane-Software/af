@@ -1,0 +1,8 @@
+# 断言守恒核对（68be206 → 6c001f0，本机亲测 2026-11-04）
+# 抽样深核 2 个改动过的测试文件（任务书②要求）：逐项前后相同
+crates/af-order/tests/adjudicate_loop.rs:  #[test] 5->5  #[ignore] 0->0  assert* 34->34  fn清单md5 9d0c32404338=9d0c32404338
+crates/af-workorder/tests/lifecycle.rs:    #[test] 3->3  #[ignore] 0->0  assert* 22->22  fn清单md5 40262937d723=40262937d723
+# 全部 23 个改动文件合计：#[test] 126->126  #[ignore] 0->0  assert* 579->579
+# diff 中零 #[test]/#[ignore] 增删行（grep -E '^[+-].*(#\[test\]|#\[ignore\])' 空集）
+# 无测试函数删除：fn 清单 md5 前后一致（抽样两文件）；无 #[ignore] 新增（0->0）
+# 字符串字面量：23 文件单行字面量多重集前后全等；driver/schema/router 三文件去空白后字面量序列全等(117/38/240)

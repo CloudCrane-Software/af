@@ -62,9 +62,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::admit::{
-    admit, budget_voucher_digest, canonical_next_orders_digest, load_receipts, AdmissionReceipt,
-    AdmissionRequest, AdjudicationTemplate, GateListSpec, GateSpec, ResourceClaim,
-    ResourceProfileSpec,
+    admit, budget_voucher_digest, canonical_next_orders_digest, load_receipts,
+    AdjudicationTemplate, AdmissionReceipt, AdmissionRequest, GateListSpec, GateSpec,
+    ResourceClaim, ResourceProfileSpec,
 };
 use crate::state::{StateDir, LEDGER_FILE};
 
@@ -185,13 +185,11 @@ impl AdjudicationDoc {
     pub fn persist(&self, state: &StateDir) -> Result<PathBuf, AdjudicateError> {
         let path = self.path(state);
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).map_err(|err| {
-                AdjudicateError::Doc(format!("创建 {}: {err}", parent.display()))
-            })?;
+            fs::create_dir_all(parent)
+                .map_err(|err| AdjudicateError::Doc(format!("创建 {}: {err}", parent.display())))?;
         }
-        let text = serde_json::to_string_pretty(self).map_err(|err| {
-            AdjudicateError::Doc(format!("裁决单序列化失败: {err}"))
-        })?;
+        let text = serde_json::to_string_pretty(self)
+            .map_err(|err| AdjudicateError::Doc(format!("裁决单序列化失败: {err}")))?;
         fs::write(&path, format!("{text}\n")).map_err(|err| {
             AdjudicateError::Doc(format!("裁决单落盘失败 {}: {err}", path.display()))
         })?;
@@ -222,9 +220,8 @@ pub fn verify_doc(doc: &AdjudicationDoc) -> Result<(), AdjudicateError> {
 
 /// 从盘上读回并复算一份裁决单。
 pub fn load_doc(path: &Path) -> Result<AdjudicationDoc, AdjudicateError> {
-    let text = fs::read_to_string(path).map_err(|err| {
-        AdjudicateError::Doc(format!("裁决单读取失败 {}: {err}", path.display()))
-    })?;
+    let text = fs::read_to_string(path)
+        .map_err(|err| AdjudicateError::Doc(format!("裁决单读取失败 {}: {err}", path.display())))?;
     let doc: AdjudicationDoc = serde_json::from_str(&text).map_err(|err| {
         AdjudicateError::DocVerify(format!("裁决单不是合法 JSON（{}）: {err}", path.display()))
     })?;
@@ -297,9 +294,8 @@ pub fn generate_adjudication_doc(
             "源单 {source_order_id} 无可引用依据实体（无工件且未绑预算凭证），拒绝生成空依据裁决单"
         )));
     }
-    let digest = canonical_next_orders_digest(&next_orders).map_err(|reason| {
-        AdjudicateError::Doc(format!("计划面 next_orders 不合法: {reason}"))
-    })?;
+    let digest = canonical_next_orders_digest(&next_orders)
+        .map_err(|reason| AdjudicateError::Doc(format!("计划面 next_orders 不合法: {reason}")))?;
     let stable_id = order.stable_id().as_str().to_string();
     let subject = format!(
         "对源单 {}（stable_id={stable_id}，state={}）闭环后的裁决受理",
@@ -340,9 +336,7 @@ fn next_adjudication_id(state: &StateDir, source_order_id: &str) -> String {
         .map(|entries| {
             entries
                 .filter_map(Result::ok)
-                .filter(|entry| {
-                    entry.path().extension().is_some_and(|ext| ext == "json")
-                })
+                .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
                 .count()
         })
         .unwrap_or(0);
@@ -426,7 +420,10 @@ pub fn run_steward_loop(
     })?;
 
     // ── 认领（带守卫 UPDATE 原子认领；角色不匹配领不到）──────────
-    let Some(task) = f.station.claim(seed.worker_id, STEWARD_ROLE, seed.lease_ms)? else {
+    let Some(task) = f
+        .station
+        .claim(seed.worker_id, STEWARD_ROLE, seed.lease_ms)?
+    else {
         return Err(AdjudicateError::Queue(format!(
             "steward {} 认领不到 {STEWARD_ROLE} 任务（队列空或角色不匹配）",
             seed.worker_id
@@ -605,9 +602,9 @@ fn abort_source(state: &StateDir, source: &mut WorkOrder) -> Result<(), Adjudica
                 .unwrap_or_else(|| format!("{:?}", source.state())),
         )));
     }
-    source
-        .cancel()
-        .map_err(|err| AdjudicateError::MissingEdge(format!("源单 {order_id} cancel 被拒: {err}")))?;
+    source.cancel().map_err(|err| {
+        AdjudicateError::MissingEdge(format!("源单 {order_id} cancel 被拒: {err}"))
+    })?;
     let ledger_path = state.order_dir(&order_id).join(LEDGER_FILE);
     let mut ledger = af_execline::OrderLedger::open(&ledger_path)
         .map_err(|err| AdjudicateError::Queue(format!("源单账本打开失败: {err}")))?;
@@ -683,8 +680,7 @@ mod tests {
         order.close().unwrap();
         let dir = state.order_dir(order_id);
         fs::create_dir_all(&dir).unwrap();
-        let mut ledger =
-            af_execline::OrderLedger::open(&dir.join(LEDGER_FILE)).unwrap();
+        let mut ledger = af_execline::OrderLedger::open(&dir.join(LEDGER_FILE)).unwrap();
         ledger
             .append(LedgerRecord {
                 seq: 0,
@@ -771,13 +767,8 @@ mod tests {
             Err(AdjudicateError::DocVerify(_))
         ));
         // 下一份单号递增。
-        let (second, _) = generate_adjudication_doc(
-            &state,
-            "wo-doc",
-            vec![],
-            time(DECISION_EXPIRY),
-        )
-        .unwrap();
+        let (second, _) =
+            generate_adjudication_doc(&state, "wo-doc", vec![], time(DECISION_EXPIRY)).unwrap();
         assert_eq!(second.adjudication_id, "adj-wo-doc-2");
         let _ = fs::remove_dir_all(state.root());
     }
@@ -793,8 +784,7 @@ mod tests {
             GraphVersion::new("af-order/poc-1"),
             Sla::new(None, Priority::Normal),
         );
-        let mut ledger =
-            af_execline::OrderLedger::open(&dir.join(LEDGER_FILE)).unwrap();
+        let mut ledger = af_execline::OrderLedger::open(&dir.join(LEDGER_FILE)).unwrap();
         ledger
             .append(LedgerRecord {
                 seq: 0,
@@ -813,13 +803,9 @@ mod tests {
         let err = generate_adjudication_doc(&state, "wo-bare", vec![], time(DECISION_EXPIRY))
             .unwrap_err();
         assert!(matches!(err, AdjudicateError::Doc(_)), "{err}");
-        let err = generate_adjudication_doc(
-            &state,
-            "wo-does-not-exist",
-            vec![],
-            time(DECISION_EXPIRY),
-        )
-        .unwrap_err();
+        let err =
+            generate_adjudication_doc(&state, "wo-does-not-exist", vec![], time(DECISION_EXPIRY))
+                .unwrap_err();
         assert!(matches!(err, AdjudicateError::Order(_)), "{err}");
         let _ = fs::remove_dir_all(state.root());
     }
@@ -830,8 +816,8 @@ mod tests {
     fn queue_wiring_idempotent_enqueue_and_role_routing() {
         let state = scratch("queue");
         let order = seed_closed_order(&state, "wo-queue");
-        let (doc, _) = generate_adjudication_doc(&state, "wo-queue", vec![], time(DECISION_EXPIRY))
-            .unwrap();
+        let (doc, _) =
+            generate_adjudication_doc(&state, "wo-queue", vec![], time(DECISION_EXPIRY)).unwrap();
         let doc_path = doc.persist(&state).unwrap();
         let station = Station::open_in_memory().unwrap().into_station();
         let key = format!("{}/{}", order.stable_id(), doc.adjudication_id);

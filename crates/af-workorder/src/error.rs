@@ -92,7 +92,9 @@ pub enum DecisionError {
     },
     #[error("actor {actor_id} 的 key_id 不在受信注册表:{key_id}")]
     KeyNotTrusted { actor_id: String, key_id: String },
-    #[error("actor {actor_id} 的 key {key_id} 已于 {key_expires_at} 过期(验签时刻 {validated_at})")]
+    #[error(
+        "actor {actor_id} 的 key {key_id} 已于 {key_expires_at} 过期(验签时刻 {validated_at})"
+    )]
     ExpiredKey {
         actor_id: String,
         key_id: String,

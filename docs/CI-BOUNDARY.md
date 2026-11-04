@@ -29,10 +29,14 @@ run.sh 内建的缺席跳过档先例。
 
 ## 二、干净克隆可跑性结论（83bb71c 实测，2026-11-04）
 
-- step1 fmt：**红**——主线预存状态（格式漂移集中在近年自动合并引入的
-  af-order/af-workorder/af-execline/af-engine 等文件；与 `ci/REPORT.md` ①
-  「预存未格式化代码」同源，非本批引入）。本机实测 `cargo fmt --check --all`
-  exit=1，rustfmt 1.10.0-stable（钉住 1.99.1 生效，排除版本伪差）。
+- step1 fmt：**归零**（2026-11-04 fmt-zero-v2 批口径更新；时点=feature/mainline-fmt-zero-v2
+  分支，基线 68be206 + 纯格式化提交 6c001f0，分支未动 product/main 指针）：
+  `cargo fmt --check --all` exit=0（rustfmt 1.10.0-stable，钉住 1.99.1 生效）。改前
+  同机实测 exit=1、99 diff 块/23 文件——与 83bb71c 时点预存红同源（漂移集中在
+  af-order/af-workorder/af-execline/af-engine 等文件，`ci/REPORT.md` ①「预存未格式化
+  代码」的 235 块/39 文件属更早树读数），非任一批新引入。**该读数时点=上述本批基线，
+  不以本行直接充当主线读数**：主线 tip 会继续前进且前移段可能含新格式漂移，合流后
+  fmt 状态须以合流树重验（rustfmt 幂等，重跑代价低）。
 - step2 clippy：**绿**——`CARGO_BUILD_JOBS=4 cargo clippy --workspace
   --all-targets -- -D warnings` exit=0（45.2s 冷建 @ -j4）；基线已收紧至零
   （`ci/clippy-baseline.txt` 仅两行注释），`-D warnings` 与基线门均无既有警告可拦。

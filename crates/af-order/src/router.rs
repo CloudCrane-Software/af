@@ -157,8 +157,9 @@ pub fn load_registry(path: &Path) -> Result<TriggerRegistry, RouterError> {
     let text = std::fs::read_to_string(path).map_err(|err| {
         RouterError::Registry(format!("注册表读取失败 {}: {err}", path.display()))
     })?;
-    serde_json::from_str(&text)
-        .map_err(|err| RouterError::Registry(format!("注册表不是合法 af.trigger.registry 视图: {err}")))
+    serde_json::from_str(&text).map_err(|err| {
+        RouterError::Registry(format!("注册表不是合法 af.trigger.registry 视图: {err}"))
+    })
 }
 
 /// 验证一张 af.trigger.v1 信封（读侧第一道门）：
@@ -208,14 +209,17 @@ pub fn verify_envelope(
         )));
     }
     let sha = &envelope.payload_sha256;
-    if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+    if sha.len() != 64
+        || !sha
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
         return Err(RouterError::Envelope(format!(
             "payload_sha256 不是 64 位小写 hex: {sha}"
         )));
     }
-    chrono::DateTime::parse_from_rfc3339(&envelope.received_at).map_err(|err| {
-        RouterError::Envelope(format!("received_at 不是 RFC3339: {err}"))
-    })?;
+    chrono::DateTime::parse_from_rfc3339(&envelope.received_at)
+        .map_err(|err| RouterError::Envelope(format!("received_at 不是 RFC3339: {err}")))?;
 
     // ── body_b64 自证（唯一可信载荷；篡改即红）──────────────────────
     let body_bytes = b64_decode_strict(&envelope.body_b64)?;
@@ -226,11 +230,12 @@ pub fn verify_envelope(
             envelope.payload_sha256
         )));
     }
-    let body: serde_json::Value = serde_json::from_slice(&body_bytes).map_err(|err| {
-        RouterError::Payload(format!("已验 payload 不是合法 JSON: {err}"))
-    })?;
+    let body: serde_json::Value = serde_json::from_slice(&body_bytes)
+        .map_err(|err| RouterError::Payload(format!("已验 payload 不是合法 JSON: {err}")))?;
     if !body.is_object() {
-        return Err(RouterError::Payload("已验 payload 顶层不是 JSON 对象".into()));
+        return Err(RouterError::Payload(
+            "已验 payload 顶层不是 JSON 对象".into(),
+        ));
     }
 
     // ── 冗余字段逐项核对（契约 §4 修复批：篡改 parsed body 保留合法
@@ -260,9 +265,7 @@ pub fn verify_envelope(
         .sources
         .iter()
         .find(|def| def.name == envelope.source)
-        .ok_or_else(|| {
-            RouterError::Registry(format!("source 未登记: {}", envelope.source))
-        })?;
+        .ok_or_else(|| RouterError::Registry(format!("source 未登记: {}", envelope.source)))?;
     if envelope.event_type == "push" || envelope.event_type == "pull_request" {
         return Err(RouterError::Registry(format!(
             "git 域事件（{}）归 PoC-D event-router 消费腿，本腿（MES complete→裁决单）不消费",
@@ -375,7 +378,10 @@ pub fn resolve_adjudication_target(
             "body.mes_event.kind 不是 complete（本腿只锚定 complete 事件）".into(),
         ));
     }
-    if mes_event.get("work_order_id").and_then(serde_json::Value::as_str) != Some(stable_id)
+    if mes_event
+        .get("work_order_id")
+        .and_then(serde_json::Value::as_str)
+        != Some(stable_id)
     {
         return Err(RouterError::Target(
             "body.mes_event.work_order_id 与 body.stable_id 不符（MES 事件按稳定身份记账，\
@@ -489,21 +495,17 @@ pub fn duplicate_consumed<'a>(
     delivery_id: &str,
     dedup_key: &str,
 ) -> Option<&'a ConsumedRecord> {
-    records.iter().find(|record| {
-        record.delivery_id == delivery_id || record.dedup_key == dedup_key
-    })
+    records
+        .iter()
+        .find(|record| record.delivery_id == delivery_id || record.dedup_key == dedup_key)
 }
 
 /// 追加一行消费游标（只在派单闭环成功后调用；fsync 落盘）。
-pub fn append_consumed(
-    triggers_home: &Path,
-    record: &ConsumedRecord,
-) -> Result<(), RouterError> {
+pub fn append_consumed(triggers_home: &Path, record: &ConsumedRecord) -> Result<(), RouterError> {
     let path = consumed_path(triggers_home);
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|err| {
-            RouterError::Cursor(format!("创建 {}: {err}", parent.display()))
-        })?;
+        std::fs::create_dir_all(parent)
+            .map_err(|err| RouterError::Cursor(format!("创建 {}: {err}", parent.display())))?;
     }
     let line = serde_json::to_string(record)
         .map_err(|err| RouterError::Cursor(format!("游标行序列化失败: {err}")))?;
@@ -523,7 +525,8 @@ pub fn append_consumed(
 /// af-order 零外部依赖纪律（Cargo.toml 硬约束 6），不引 base64 crate；
 /// 非法字符/非法 padding/长度非 4 倍数一律拒（fail-closed，不静默吞）。
 fn b64_decode_strict(text: &str) -> Result<Vec<u8>, RouterError> {
-    let invalid = |reason: String| RouterError::Payload(format!("body_b64 不是合法 base64: {reason}"));
+    let invalid =
+        |reason: String| RouterError::Payload(format!("body_b64 不是合法 base64: {reason}"));
     let bytes = text.as_bytes();
     if !bytes.len().is_multiple_of(4) {
         return Err(invalid(format!("长度 {} 非 4 的倍数", bytes.len())));
@@ -596,7 +599,8 @@ mod tests {
                 chunk.get(1).copied().unwrap_or(0),
                 chunk.get(2).copied().unwrap_or(0),
             ];
-            let acc = (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2]);
+            let acc =
+                (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2]);
             out.push(ALPHABET[(acc >> 18) as usize & 0x3f] as char);
             out.push(ALPHABET[(acc >> 12) as usize & 0x3f] as char);
             out.push(if chunk.len() > 1 {
@@ -682,7 +686,9 @@ mod tests {
                 "{sample}"
             );
         }
-        for bad in ["a", "a===", "====", "a=b=", "AB CD", "aG k=", "aGVsbG8", "aGVsbG8!"] {
+        for bad in [
+            "a", "a===", "====", "a=b=", "AB CD", "aG k=", "aGVsbG8", "aGVsbG8!",
+        ] {
             assert!(b64_decode_strict(bad).is_err(), "应拒: {bad}");
         }
     }
@@ -702,8 +708,7 @@ mod tests {
     #[test]
     fn envelope_verify_rejects_payload_tampering() {
         let body = mes_body("wo-t2", "sid-t2");
-        let mut value: serde_json::Value =
-            serde_json::from_str(&envelope(&body, "d-t2")).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&envelope(&body, "d-t2")).unwrap();
         // body_b64 换成另一份合法 base64（内容变了，sha 对不上）。
         value["body_b64"] = serde_json::json!(b64_encode(b"{\"event\":\"order_complete\"}"));
         let err = verify_envelope(&value.to_string(), &registry()).unwrap_err();
@@ -722,21 +727,18 @@ mod tests {
     #[test]
     fn envelope_verify_rejects_tampered_parsed_body() {
         let body = mes_body("wo-t3", "sid-t3");
-        let mut value: serde_json::Value =
-            serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
+        let mut value: serde_json::Value = serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
         value["body"]["order_id"] = serde_json::json!("wo-someone-else");
         let err = verify_envelope(&value.to_string(), &registry()).unwrap_err();
         assert!(matches!(err, RouterError::CrossCheck(_)), "{err}");
         // delivery_id / event_type 与已验载荷不符同途拒读。
-        let mut value2: serde_json::Value =
-            serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
+        let mut value2: serde_json::Value = serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
         value2["delivery_id"] = serde_json::json!("d-other");
         assert!(matches!(
             verify_envelope(&value2.to_string(), &registry()),
             Err(RouterError::Envelope(_) | RouterError::CrossCheck(_))
         ));
-        let mut value3: serde_json::Value =
-            serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
+        let mut value3: serde_json::Value = serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
         value3["event_type"] = serde_json::json!("push");
         assert!(matches!(
             verify_envelope(&value3.to_string(), &registry()),
@@ -832,7 +834,10 @@ mod tests {
         let loaded = load_consumed(&home).unwrap();
         assert_eq!(loaded, vec![record.clone()]);
         // delivery_id 命中（网络重试语义）。
-        assert_eq!(duplicate_consumed(&loaded, "d-1", "fresh-dedup"), Some(&record));
+        assert_eq!(
+            duplicate_consumed(&loaded, "d-1", "fresh-dedup"),
+            Some(&record)
+        );
         // dedup_key 命中（业务重放语义：不同 delivery 同内容）。
         assert_eq!(
             duplicate_consumed(&loaded, "d-2", "order_complete:line-poc/wo-1"),

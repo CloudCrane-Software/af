@@ -19,9 +19,7 @@ use af_order::adjudicate::{
 };
 use af_order::{cli, StateDir};
 use af_station::{State as TaskState, Station};
-use af_workorder::{
-    Decision, Ed25519Keypair, Role, TrustedActor, TrustedActorRegistry,
-};
+use af_workorder::{Decision, Ed25519Keypair, Role, TrustedActor, TrustedActorRegistry};
 
 const NOW: &str = "2026-11-03T00:00:00Z";
 const KEY_EXPIRY: &str = "2027-01-01T00:00:00Z";
@@ -99,7 +97,9 @@ fn submit_stub_order(root: &Path, order_id: &str) -> String {
 /// 源单最近快照状态名（与驱动层账本同口径）。
 fn latest_state(state: &Path, order_id: &str) -> String {
     let records = af_execline::OrderLedger::load(
-        &StateDir::new(state).order_dir(order_id).join("ledger.jsonl"),
+        &StateDir::new(state)
+            .order_dir(order_id)
+            .join("ledger.jsonl"),
     )
     .unwrap();
     af_order::state::current_state(&records).unwrap()
@@ -129,8 +129,7 @@ fn seed_released_order(state: &Path, order_id: &str) {
         .unwrap();
     let dir = StateDir::new(state).order_dir(order_id);
     fs::create_dir_all(&dir).unwrap();
-    let mut ledger =
-        af_execline::OrderLedger::open(&dir.join("ledger.jsonl")).unwrap();
+    let mut ledger = af_execline::OrderLedger::open(&dir.join("ledger.jsonl")).unwrap();
     order.release().unwrap();
     let record = LedgerRecord {
         seq: 0,
@@ -189,7 +188,9 @@ fn loop_approve_full_chain_from_submit_to_done() {
         "submit 应闭环: {summary}"
     );
     // MES 事件面：驱动层 complete 腿已落 mes-events.jsonl。
-    let mes_path = StateDir::new(&root).order_dir(order_id).join("mes-events.jsonl");
+    let mes_path = StateDir::new(&root)
+        .order_dir(order_id)
+        .join("mes-events.jsonl");
     let mes = fs::read_to_string(&mes_path).expect("MES 事件文件应已落盘");
     assert!(mes.contains("complete"), "MES 应含 complete 事件: {mes}");
 
@@ -353,10 +354,8 @@ fn loop_arbiter_pivots_and_revise_materializes_rework() {
     .unwrap_or_else(|err| panic!("Revise 闭环应走通: {err}"));
     assert_eq!(outcome2.receipt.decision, "Revise");
     assert_eq!(outcome2.rework_order_ids, vec![rework_id.clone()]);
-    let records = af_execline::OrderLedger::load(
-        &state.order_dir(&rework_id).join("ledger.jsonl"),
-    )
-    .expect("rework 单应落账");
+    let records = af_execline::OrderLedger::load(&state.order_dir(&rework_id).join("ledger.jsonl"))
+        .expect("rework 单应落账");
     let rework = records
         .iter()
         .rev()
@@ -395,11 +394,13 @@ fn loop_reject_aborts_active_source_and_fails_loud_on_terminal() {
     )
     .unwrap_or_else(|err| panic!("非终态 Reject 闭环应走通: {err}"));
     assert!(outcome.aborted, "非终态源单应被 abort");
-    assert_eq!(latest_state(&root, order_id), "Cancelled", "源单转 Cancelled");
-    let records = af_execline::OrderLedger::load(
-        &state.order_dir(order_id).join("ledger.jsonl"),
-    )
-    .unwrap();
+    assert_eq!(
+        latest_state(&root, order_id),
+        "Cancelled",
+        "源单转 Cancelled"
+    );
+    let records =
+        af_execline::OrderLedger::load(&state.order_dir(order_id).join("ledger.jsonl")).unwrap();
     assert!(
         records.iter().any(|record| record.op == "cancel"),
         "abort 应落 cancel 账本行"
@@ -428,9 +429,7 @@ fn loop_reject_aborts_active_source_and_fails_loud_on_terminal() {
         "终态 abort 应 MissingEdge: {err}"
     );
     assert_eq!(latest_state(&root, order_id2), "Closed", "源单不得被改");
-    let stuck = station2
-        .count_by_state(TaskState::Claimed)
-        .unwrap();
+    let stuck = station2.count_by_state(TaskState::Claimed).unwrap();
     assert_eq!(stuck, 1, "失败面任务保持 claimed 留检，不假装完成");
     let _ = fs::remove_dir_all(&root);
 }
@@ -455,7 +454,10 @@ fn loop_reenqueue_same_adjudication_is_duplicate() {
     )
     .unwrap();
     // 用同一裁决单号 + 同一幂等键再入队（模拟 event-router 重投）。
-    let key = format!("{}/{}", outcome.doc.source_stable_id, outcome.doc.adjudication_id);
+    let key = format!(
+        "{}/{}",
+        outcome.doc.source_stable_id, outcome.doc.adjudication_id
+    );
     let again = station
         .enqueue(af_station::NewTask {
             id: "adj-redo-probe",

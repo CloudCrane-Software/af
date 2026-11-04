@@ -48,9 +48,9 @@ fn legacy_artifact_bytes(order_dir: &Path, artifact_id: &str) -> Result<Vec<u8>,
     let safe_id = !artifact_id.is_empty()
         && artifact_id != "."
         && artifact_id != ".."
-        && artifact_id.bytes().all(|byte| {
-            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
-        });
+        && artifact_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'));
     if safe_id {
         for path in [
             order_dir
@@ -115,11 +115,10 @@ impl OrderLedger {
             if trimmed.is_empty() {
                 continue;
             }
-            let mut value: serde_json::Value = serde_json::from_str(trimmed).map_err(|err| {
-                ExeclineError::LedgerCorrupt {
+            let mut value: serde_json::Value =
+                serde_json::from_str(trimmed).map_err(|err| ExeclineError::LedgerCorrupt {
                     detail: format!("第 {} 行不是合法 ledger JSON: {err}", index + 1),
-                }
-            })?;
+                })?;
             if let Some(order_after) = value
                 .as_object_mut()
                 .and_then(|record| record.get_mut("order_after"))
@@ -133,11 +132,10 @@ impl OrderLedger {
                     detail: format!("第 {} 行旧单摘要迁移失败: {err}", index + 1),
                 })?;
             }
-            let record: LedgerRecord = serde_json::from_value(value).map_err(|err| {
-                ExeclineError::LedgerCorrupt {
+            let record: LedgerRecord =
+                serde_json::from_value(value).map_err(|err| ExeclineError::LedgerCorrupt {
                     detail: format!("第 {} 行不是合法 ledger 记录: {err}", index + 1),
-                }
-            })?;
+                })?;
             records.push(record);
         }
         for (index, record) in records.iter().enumerate() {
@@ -315,21 +313,24 @@ mod tests {
         order.start().unwrap();
         order
             .attach_artifact(af_workorder::WorkArtifact::from_bytes(
-                "fa-old", true, true, b"new placeholder",
+                "fa-old",
+                true,
+                true,
+                b"new placeholder",
             ))
             .unwrap();
         order
             .attach_artifact(af_workorder::WorkArtifact::from_bytes(
-                "swev-old", true, true, b"another placeholder",
+                "swev-old",
+                true,
+                true,
+                b"another placeholder",
             ))
             .unwrap();
         let mut row = record(1, "attach_artifact");
         row.order_after = Some(order);
         let mut value = serde_json::to_value(row).unwrap();
-        for artifact in value["order_after"]["artifacts"]
-            .as_array_mut()
-            .unwrap()
-        {
+        for artifact in value["order_after"]["artifacts"].as_array_mut().unwrap() {
             artifact
                 .as_object_mut()
                 .unwrap()

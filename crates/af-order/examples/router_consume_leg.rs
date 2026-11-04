@@ -28,8 +28,8 @@ use std::sync::OnceLock;
 use af_execline::EngineClient;
 use af_order::adjudicate::{run_steward_loop, AdjudicationSeed, LoopFacilities, STEWARD_ROLE};
 use af_order::router::{
-    append_consumed, duplicate_consumed, load_consumed, load_registry,
-    resolve_adjudication_target, verify_envelope, ConsumedRecord,
+    append_consumed, duplicate_consumed, load_consumed, load_registry, resolve_adjudication_target,
+    verify_envelope, ConsumedRecord,
 };
 use af_order::{cli, StateDir};
 use af_station::Station;
@@ -39,8 +39,7 @@ const NOW: &str = "2026-11-04T00:00:00Z";
 const KEY_EXPIRY: &str = "2027-01-01T00:00:00Z";
 const DECISION_EXPIRY: &str = "2026-12-01T00:00:00Z";
 /// steward 固定种子（64 hex，复现面；与 adjudicate_loop 同款）。
-const STEWARD_SEED_HEX: &str =
-    "6161616161616161616161616161616161616161616161616161616161616161";
+const STEWARD_SEED_HEX: &str = "6161616161616161616161616161616161616161616161616161616161616161";
 
 fn fail(leg: &str, err: impl std::fmt::Display) -> ! {
     eprintln!(
@@ -104,14 +103,11 @@ fn main() {
         }
         index += 2;
     }
-    let envelope_path =
-        envelope_path.unwrap_or_else(|| fail("parse", "缺 --envelope <path>"));
+    let envelope_path = envelope_path.unwrap_or_else(|| fail("parse", "缺 --envelope <path>"));
     let state_path = state_path.unwrap_or_else(|| fail("parse", "缺 --state <dir>"));
     let station_db = station_db.unwrap_or_else(|| fail("parse", "缺 --station-db <path>"));
-    let triggers_home =
-        triggers_home.unwrap_or_else(|| fail("parse", "缺 --triggers-home <dir>"));
-    let registry_path =
-        registry_path.unwrap_or_else(|| triggers_home.join("registry.json"));
+    let triggers_home = triggers_home.unwrap_or_else(|| fail("parse", "缺 --triggers-home <dir>"));
+    let registry_path = registry_path.unwrap_or_else(|| triggers_home.join("registry.json"));
     let workspace =
         workspace.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
     let target_dir = target_dir.unwrap_or_else(|| {
@@ -128,8 +124,7 @@ fn main() {
             format!("{}: {err}", envelope_path.display()),
         )
     });
-    let registry = load_registry(&registry_path)
-        .unwrap_or_else(|err| fail("envelope_verify", err));
+    let registry = load_registry(&registry_path).unwrap_or_else(|err| fail("envelope_verify", err));
     let verified = verify_envelope(&envelope_text, &registry)
         .unwrap_or_else(|err| fail("envelope_verify", err));
     leg(
@@ -171,9 +166,11 @@ fn main() {
 
     // ── 腿③：防重放游标（consumed.jsonl；delivery/dedup 两语义任一命中即拒）──
     let consumed = load_consumed(&triggers_home).unwrap_or_else(|err| fail("dedup_cursor", err));
-    if let Some(hit) =
-        duplicate_consumed(&consumed, &verified.envelope.delivery_id, &verified.envelope.dedup_key)
-    {
+    if let Some(hit) = duplicate_consumed(
+        &consumed,
+        &verified.envelope.delivery_id,
+        &verified.envelope.dedup_key,
+    ) {
         fail(
             "dedup_cursor",
             format!(
@@ -284,7 +281,10 @@ fn main() {
     };
     append_consumed(&triggers_home, &consumed_record)
         .unwrap_or_else(|err| fail("consumed_append", err));
-    leg("consumed_appended", serde_json::to_value(&consumed_record).unwrap());
+    leg(
+        "consumed_appended",
+        serde_json::to_value(&consumed_record).unwrap(),
+    );
 
     // ── 腿⑧：终态证据（任务 done / 受理账本 / CLI show 对拍）──────────
     let task = station
