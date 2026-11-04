@@ -18,6 +18,7 @@
 | Run | **id=151**，run_number=9，run_attempt=1，`display_title=F1 快速门 @ poc/f1-e2e-verify`，`path=f1.yml@refs/pull/2/head`，`event=pull_request`，`head_sha=8dc06d4…`（与 PR head / 本地 HEAD 一致） |
 | 结论 | `status=completed`，**`conclusion=success`** |
 | 耗时 | run created_at=`05:28:48Z` → updated_at=`05:29:42Z` ≈ **54s**（job started_at=`05:28:53Z`；job finished_at 字段 API 返回 null，以 run updated_at 计）。远快于 run148 的 5m16s：本分支代码面与主线零差异（纯文档 +4 行），持久 target 热缓存下三件步近乎只做校验 |
+| 追加 run | 证据提交 `18dd327`（本目录首次入库）触发 **run 152**（run_number=10，event=pull_request/synchronize）：同样 **success**、六步全绿（`05:32:41Z→05:34:51Z` ≈2m10s）——见 `run-post-evidence.json` 与 `run152-*.json` |
 
 ## 三件步结论（源：run151-jobs.json，job id=151 `f1-fast-gate`，runner label=`opch-ci`）
 
@@ -50,22 +51,27 @@
 3. 没证明冷启动（target 空缓存首跑 20-30min）与双 runner 并发争用下的行为。
 4. 没证明 Actions 产物（logs/artifacts API 面）之外的任何运营面。
 
-## 红线核验
+## 红线核验（全部已核实）
 
-- `product/main` 未动：开工 `288b0d9…`，收尾 fetch 复核仍 `288b0d9…`（见下 REPORT）。
-- 无 force push：分支首推输出 `* [new branch]`；后续证据提交普通 push。
+- `product/main` 未动：开工 fetch = `288b0d9…`；收尾 `git ls-remote origin` 复核
+  `refs/heads/product/main` 仍 = `288b0d9ecd4b0ceaaf5b55faae5a2411ae48cef3`。
+- 无 force push：首推输出 `* [new branch]`，证据推为 fast-forward
+  （`8dc06d4..18dd327`）；远端分支指针 = 本地 HEAD。
 - 未合流：PR #2 state=open、merged=false。
 - 凭据来自 `~/.git-credentials`（urllib.parse 解析、basic auth、运行时取用），
-  **未落盘**：`scripts` 与全部证据文件经反向扫描不含凭据串。
+  **未落盘**：取证脚本与全部证据文件经反向扫描，密码（40 字符）与
+  `user:password` 组合零命中（用户名 `opchadmin` 系仓 URL 路径段，公开信息，不计）。
 - 未改 workflow/门/代码：本分支相对 product/main 的 diff 仅
   `docs/CI-BOUNDARY.md` +4 行（首提交）与本 `poc/poc-f1-e2e/` 证据目录。
+- 未 sudo、未 `git reset --hard`、未删任何分支。
 
 ## 证据文件
 
 - `pr2.json`：PR #2 API 原文（state/base/head/merged）。
 - `run151-final.json`：run 151 终态 API 原文（status/conclusion/head_sha/时间戳）。
 - `run151-jobs.json`：job + 全部 6 步结论 API 原文。
-- `run-post-evidence.json`：证据提交（synchronize 事件）触发的追加 run 记录（若有）。
+- `run-post-evidence.json`：证据提交（synchronize）触发的 run 152 摘要。
+- `run152-final.json` / `run152-jobs.json`：run 152 API 原文。
 - `gitea_api.py` / `poll_run.py`：取证脚本（凭据运行时取自 `~/.git-credentials`，脚本本身无任何秘密材料）。
 
 ## 复核路径
