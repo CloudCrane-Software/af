@@ -93,7 +93,7 @@ jobs:
           CHANNEL="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
           echo "钉住 channel: $CHANNEL"
           rustup toolchain install "$CHANNEL" --profile minimal \
-            --component rustfmt clippy 2>&1 | tail -3
+            --component rustfmt --component clippy 2>&1 | tail -5
           rustup default "$CHANNEL"
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           cargo --version && rustc --version && cargo fmt --version
