@@ -545,9 +545,10 @@ impl OrderLifecycleDriver {
         self.drive_mes.clear();
         self.replay_hits = 0;
         let inner = self.drive_inner(unit);
-        // RT-E138 语义层 span 生产者（非关键车道）：仅当
-        // AF_OTEL_PRODUCTION_STATE 指向状态面时落盘。失败忽略，不改
-        // drive 返回值，也不改 ledger / MES 既有语义。
+        // RT-E138 语义层 span 生产者（非关键车道）：
+        // · AF_OTEL_PRODUCTION_STATE 在场 → 本地状态面 JSON（上轮）；
+        // · AF_OTEL_EMIT_CMD 在场 → 投影器经既有 OTLP collector 入库（本轮）。
+        // 失败忽略，不改 drive 返回值，也不改 ledger / MES 既有语义。
         crate::span_produce::publish_from_env(&self.cfg.out_dir);
         // 收尾对账面（B②③）——无条件执行：CH sink = retry_outbox + 读侧
         // event_id 对账 + 差量送批，以已发生事件为准；Parked = EX2003

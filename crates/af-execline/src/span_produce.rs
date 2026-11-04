@@ -6,8 +6,9 @@
 //! L3 `chat` ← `harness.model`；L4 `execute_tool` ← `harness.tool`。
 //!
 //! 非关键车道：失败不阻断订单（与 `af-trace` OTel lane 同口径）。生产者
-//! **只写数据、不判绿**。状态面路径由 `AF_OTEL_PRODUCTION_STATE` 显式指定；
-//! 未设置则 `drive` 路径静默跳过，既有测试与 ledger/MES 语义不变。
+//! **只写数据、不判绿**。本地状态面由 `AF_OTEL_PRODUCTION_STATE` 显式指定；
+//! OTLP 入库由 `AF_OTEL_EMIT_CMD` 指向投影器发射脚本。两变量都未设则
+//! `drive` 路径静默跳过，既有测试与 ledger/MES 语义不变。
 //!
 //! 写面：读-合并-tmp-rename 原子替换（同 `af-trace::anchor` 的
 //! `atomic_write`）；同 `order_id` 重发覆盖该单旧行，其他订单保留。
@@ -26,6 +27,12 @@ use crate::tracetree::{verify_order_dir, AgentLayer, TraceTreeReport};
 pub const SCHEMA: &str = "af.otel.production.v1";
 /// 显式状态面路径（绝对或相对 cwd）。未设置 ⇒ 生产路径不落盘。
 pub const ENV_STATE_PATH: &str = "AF_OTEL_PRODUCTION_STATE";
+/// 现役 OTLP collector HTTP 口（例 `http://100.64.0.8:4318`）。未设置时
+/// 缺省该值；真正开关是 `AF_OTEL_EMIT_CMD`。
+pub const ENV_OTLP_ENDPOINT: &str = "AF_OTEL_ENDPOINT";
+/// 投影+OTLP 发射脚本（`poc/.../emit-semantic-otlp.py`）。未设置 ⇒ 不发网络。
+/// 失败忽略（非关键车道），不改 `drive` 返回值。
+pub const ENV_OTLP_EMIT_CMD: &str = "AF_OTEL_EMIT_CMD";
 const PRODUCER_ID: &str = "af-execline/span_produce";
 
 /// 状态面整文件。
@@ -209,12 +216,35 @@ pub fn publish_order(dir: &Path, state_path: &Path) -> Result<usize, String> {
 /// `drive` 挂钩：仅当环境变量指向状态面时落盘，错误吞掉。
 pub fn publish_from_env(order_dir: &Path) {
     let Ok(path) = std::env::var(ENV_STATE_PATH) else {
+        emit_otlp_from_env(order_dir);
         return;
     };
     if path.is_empty() {
+        emit_otlp_from_env(order_dir);
         return;
     }
     let _ = publish_order(order_dir, Path::new(&path));
+    emit_otlp_from_env(order_dir);
+}
+
+/// 经既有 OTLP collector 入库。只在 `AF_OTEL_EMIT_CMD` 指向发射脚本时动作；
+/// 端点缺省 `http://100.64.0.8:4318`（与 `tools/otel/otel_emit.py` 同源）。
+/// 脚本/collector 失败一律吞掉，不阻断订单。
+pub fn emit_otlp_from_env(order_dir: &Path) {
+    let Ok(script) = std::env::var(ENV_OTLP_EMIT_CMD) else {
+        return;
+    };
+    if script.is_empty() {
+        return;
+    }
+    let endpoint = std::env::var(ENV_OTLP_ENDPOINT)
+        .ok()
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "http://100.64.0.8:4318".to_string());
+    let _ = std::process::Command::new("python3")
+        .args(["-I", &script, "--endpoint", &endpoint, "--harvest"])
+        .arg(order_dir)
+        .status();
 }
 
 /// 读状态面；缺席或无法解析 ⇒ 空壳（不造 span 行）。

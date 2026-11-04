@@ -1,0 +1,21 @@
+QUERY: SELECT
+  count() AS rows_360m,
+  countIf(SpanName IN ('invoke_workflow','invoke_agent','chat','execute_tool')) AS semantic_rows,
+  countIf(ResourceAttributes['af.order_id'] != '') AS order_keyed,
+  countIf(ResourceAttributes['af.work_order_id'] != '') AS woid_keyed,
+  countIf(SpanName='factory.harvest') AS harvest
+FROM otel.otel_traces
+WHERE Timestamp > now() - INTERVAL 360 MINUTE
+  AND Timestamp <= now() + INTERVAL 5 MINUTE
+RESULT: {"rows_360m": 1734, "semantic_rows": 19, "order_keyed": 20, "woid_keyed": 20, "harvest": 1}
+BY_NAME:
+{"SpanName": "chat", "n": 7}
+{"SpanName": "execute_tool", "n": 10}
+{"SpanName": "factory.guardian_round", "n": 692}
+{"SpanName": "factory.harvest", "n": 1}
+{"SpanName": "factory.order_round", "n": 315}
+{"SpanName": "factory.sidecar_round", "n": 706}
+{"SpanName": "invoke_agent", "n": 1}
+{"SpanName": "invoke_workflow", "n": 1}
+# recheck 2026-11-05 07:55 CST (same window, no re-emit)
+RESULT: {"rows_360m": 1734, "semantic_rows": 19, "order_keyed": 20, "woid_keyed": 20, "harvest": 1}

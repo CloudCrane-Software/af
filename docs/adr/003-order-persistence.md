@@ -23,3 +23,5 @@
 ## RT-E138 语义层 span 生产者（2026-11-05 增补）
 
 订单 `drive` 收尾把四层语义 span（`invoke_workflow` / `invoke_agent` / `chat` / `execute_tool`）投影到状态面 JSON。生产者只写数据，不判绿。路径由环境变量 `AF_OTEL_PRODUCTION_STATE` 显式指定；未设置则静默跳过，既有 ledger / MES / 测试语义不变。schema 名 `af.otel.production.v1`；写面为 tmp+rename 原子替换；订单级键取自 `ledger.jsonl` 的 `order_id`（无真实行不落盘）。落点：`crates/af-execline/src/span_produce.rs`，挂钩 `driver.rs` 的 `drive`。
+
+本轮接通消费面（2026-11-05 返修）：`AF_OTEL_EMIT_CMD` 指向 `poc/poc-rt-e138-span-producer/raw/emit-semantic-otlp.py` 时，同一挂钩把投影器产出经既有 OTLP collector（`AF_OTEL_ENDPOINT`，缺省 `http://100.64.0.8:4318`）送入 ClickHouse `otel.otel_traces`。断言器 `--production-check` 消费的是 `--production` 判 CH 后落盘的 status/checks 面，不是本地 `af.otel.production.v1`。

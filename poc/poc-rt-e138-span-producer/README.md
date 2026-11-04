@@ -114,3 +114,79 @@ d936f313824ec0fd01be377bf95573541b07f4ca5699cdcf27501d6665b69626  crates/af-exec
 ```
 
 环境：cargo/rustc 1.99.1；`CARGO_TARGET_DIR=/data/bench/targets/rt-e138-span-producer`（独占 /data 盘）。
+
+---
+
+## ⑦ 返修：接通 CH 消费面（2026-11-05）
+
+上轮提交 `68297ca` 的提交信息写「`--production-check` 由红转绿+真库订单级键行>0」。**那是 overclaim**。当时实测：
+
+| 项 | 上轮自证（不改写） | 复核员实测 |
+|---|---|---|
+| 生产者写出 | 本地 `状态观测/otel-production.json` schema `af.otel.production.v1`，keyed_rows=6 | 同左 |
+| 喂给断言器 | 断言器文件本仓不在，**rc=2** | 工厂真仓断言器消费的是 `--production` 判 CH 后的 status/checks 面；把上轮 JSON 喂进去 **rc=1**（schema 不衔接） |
+| 真库 `otel.otel_traces` | 未查（本机无断言器/CH 口） | 1714 行中语义层 0、订单级键 0 |
+| `--production-check` | rc=2（缺件）却写进提交标题「由红转绿」 | 工厂真仓 **exit 1**（P1/P2 FAIL） |
+
+本轮不改写上列历史读数，只追加接通路径与新读数。
+
+### 接通路径（合规，不改判据件）
+
+现役管线亲读：
+
+- 投影器 `tools/otel/af-otel-projector.py:284` `project_order`：四层语义树（§1.0 派生 ID + Resource 九键），selftest 6/6。
+- 发射器 `tools/otel/otel_emit.py:81` 缺省端点 `http://100.64.0.8:4318`；collector `otelcol-runtime/otelcol-config.yaml` 绑 `100.64.0.8:4317/4318`，clickhouse exporter → `otel.otel_traces`。
+- 断言器 `tools/otel/otlp-assert.py:892-905` `--production` 真库 SELECT；`:1261-1303` `--production-check` 只读状态面（死手/新鲜度，自造 green 会被咬）。
+
+本轮：新增 `poc/.../raw/emit-semantic-otlp.py`，把投影器产出编成 OTLP/HTTP JSON POST 进现役 collector（时间戳改写为发射时刻，派生 ID/键集不动）。`drive` 挂钩在 `AF_OTEL_EMIT_CMD` 指向该脚本时 fail-open 调用。`factory.harvest` 走既有 `factory_otel.harvest_report`（P1 名册项，收割守护近窗 0）。
+
+### 真库读数（工厂真仓 pandev-comp `~/workspace/agent黑灯工厂`）
+
+查询（`raw/ch-keyed-query.log`）：
+
+```
+SELECT count() AS rows_360m,
+       countIf(SpanName IN ('invoke_workflow','invoke_agent','chat','execute_tool')) AS semantic_rows,
+       countIf(ResourceAttributes['af.order_id'] != '') AS order_keyed
+FROM otel.otel_traces
+WHERE Timestamp > now() - INTERVAL 360 MINUTE AND Timestamp <= now() + INTERVAL 5 MINUTE
+```
+
+读数：`rows_360m=1734` **`semantic_rows=19` `order_keyed=20`**（F1 投影 1+1+7+10 语义层 + 1 harvest）。P1 八个 required 名册项全在流。
+
+### 断言器（真仓）
+
+```
+python3 -I tools/otel/otlp-assert.py --production        # rc=0  P1–P5 PASS
+python3 -I tools/otel/otlp-assert.py --production-check  # rc=0
+```
+
+`--production-check`：`PASS: 末次判定绿（status=green，ts=2026-11-05 07:45:02 age=40s ≤ 阈 1800s）`（`raw/production-check.log`）。复跑 07:55:00 CST：`age=598s` 仍绿，rc=0。状态面副本 `raw/otel-production-factory.json`（schema 是 status/checks，不是上轮 `af.otel.production.v1`）。
+
+### 端到端重放
+
+`bash poc/poc-rt-e138-span-producer/raw/e2e-ch-consume.sh`（订单 = 工厂 `af-state/orders/F1-swev-django-11099-glm-cp`，投影器 selftest 同单）。亲跑命令与读数见 `raw/emit-semantic-otlp.log` + `raw/ch-keyed-query.log` + `raw/production.log`。
+
+### 四门（本轮，不改写 §⑤ 历史读数）
+
+| 门 | 命令 | 读数 | rc |
+|---|---|---|---|
+| fmt | `cargo fmt --check --all` | 零输出 | **0** |
+| test | `env -u 'BASH_FUNC_which%%' cargo test --workspace --no-fail-fast` | **1585 passed / 0 failed / 9 ignored**（基线 1578/0/9 + 上轮新增 7；本轮零新增测试） | **0** |
+| clippy error | `cargo clippy --workspace --all-targets --message-format=json` | **0** error / **0** warning | 0 |
+| clippy 门 | `python3 ci/clippy_gate.py /tmp/rt-e138-clippy.jsonl` | `PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）` | **0** |
+| 基线 | `ci/clippy-baseline.txt` | sha256 `a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4` **未变** | — |
+| gate_inputs | `bash ci/gate_inputs_check.sh check` | 「判据正本钉对账一致: 12 件」 | **0** |
+| 专属门 | 工厂真仓 `python3 -I tools/otel/otlp-assert.py --production-check` | status=green，P1–P5 PASS | **0** |
+| 零弱化 | crate 22→22；`Cargo.toml`/`Cargo.lock` 零 diff；crates 只加发射挂钩 | 既有断言零改动 | — |
+
+### 判据件未动核（工厂真仓 sha256）
+
+见 `raw/criterion-sha256.txt`。本轮零改 `otlp-assert.py` / `all-gates.sh` / `gate-pins.list` / `factory-keepalive.py` / `factory-watch.py` / `deploy-consistency-probe.sh`。
+
+### 边界
+
+- 本仓 `tools/` 仍无断言器；专属门只在工厂真仓可跑。
+- `AF_OTEL_EMIT_CMD` 未设则 `drive` 不发网络（既有测试路径不变）。投影器缺省路径是工厂 `tools/otel/af-otel-projector.py`；anolis 本机无该件时须设 `AF_OTEL_PROJECTOR`。
+- 发射改写时间戳为「此刻」以进入 360min 近窗；派生 ID / Resource 九键保持投影器原值。F1 订单产物本身未重跑，只把已有四层树经合规 OTLP 送入。
+- 未 push、未 amend/rebase `68297ca`、未动 `product/main`、未直写 CH。
