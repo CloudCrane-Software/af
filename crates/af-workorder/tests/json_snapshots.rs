@@ -155,7 +155,11 @@ fn qualified_final_artifact_release_decision() {
     // 占位签名字节是 0xde，未涂红时 JSON 数字为 222。
     assert_redacted(
         "qualified_final_artifact_release_decision",
-        &[&decision.payload_hash, decision.signature.key_id.as_str(), "222"],
+        &[
+            &decision.payload_hash,
+            decision.signature.key_id.as_str(),
+            "222",
+        ],
         true,
     );
 }
@@ -230,7 +234,11 @@ fn reject_decision_names_missing_qualified_final_artifact() {
     // 占位签名字节是 0xde，未涂红时 JSON 数字为 222。
     assert_redacted(
         "reject_decision_names_missing_qualified_final_artifact",
-        &[&decision.payload_hash, decision.signature.key_id.as_str(), "222"],
+        &[
+            &decision.payload_hash,
+            decision.signature.key_id.as_str(),
+            "222",
+        ],
         true,
     );
 }

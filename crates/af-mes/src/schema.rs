@@ -126,8 +126,9 @@ mod tests {
         );
         // 锚必须是末列：RowBinary/列清单插入按位置映射普通列，末列追加不动既有列位。
         assert!(
-            DDL_MES_EVENT
-                .contains("quantity UInt64,\n    ingested_at DateTime64(3, 'UTC') MATERIALIZED now64(3)\n)"),
+            DDL_MES_EVENT.contains(
+                "quantity UInt64,\n    ingested_at DateTime64(3, 'UTC') MATERIALIZED now64(3)\n)"
+            ),
             "锚列必须排在 quantity 之后（列位兼容防回归）: {DDL_MES_EVENT}"
         );
         assert!(

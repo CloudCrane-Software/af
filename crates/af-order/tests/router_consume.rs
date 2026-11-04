@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 use af_execline::EngineClient;
 use af_order::adjudicate::{run_steward_loop, verify_doc, AdjudicationSeed, LoopFacilities};
 use af_order::router::{
-    append_consumed, duplicate_consumed, load_consumed, load_registry,
-    resolve_adjudication_target, verify_envelope, ConsumedRecord, RouterError,
+    append_consumed, duplicate_consumed, load_consumed, load_registry, resolve_adjudication_target,
+    verify_envelope, ConsumedRecord, RouterError,
 };
 use af_order::{cli, StateDir};
 use af_station::{State as TaskState, Station};
@@ -68,8 +68,7 @@ fn time(text: &str) -> chrono::DateTime<chrono::Utc> {
 
 /// 测试内联 base64 编码器（标准字母表带 padding；与 lib 侧严格解码互为对拍）。
 fn b64_encode(data: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::new();
     for chunk in data.chunks(3) {
         let bytes = [
@@ -169,10 +168,19 @@ fn submit_upstream_order(root: &Path, order_id: &str) -> (String, serde_json::Va
     ])
     .expect("上游 submit 应闭环");
     let submit_value: serde_json::Value = serde_json::from_str(&submit_out).unwrap();
-    assert_eq!(submit_value["state"].as_str(), Some("Closed"), "{submit_out}");
-    let stable_id = submit_value["stable_id"].as_str().expect("stable_id").to_string();
+    assert_eq!(
+        submit_value["state"].as_str(),
+        Some("Closed"),
+        "{submit_out}"
+    );
+    let stable_id = submit_value["stable_id"]
+        .as_str()
+        .expect("stable_id")
+        .to_string();
     let mes = fs::read_to_string(
-        StateDir::new(root).order_dir(order_id).join("mes-events.jsonl"),
+        StateDir::new(root)
+            .order_dir(order_id)
+            .join("mes-events.jsonl"),
     )
     .expect("MES 正本应已落盘");
     let complete = mes
@@ -213,8 +221,14 @@ fn consume_leg_runs_full_chain_from_envelope() {
     assert_eq!(target.order_id, order_id);
     assert_eq!(target.stable_id, stable_id);
     assert_eq!(target.source_state, "Closed");
-    assert_eq!(target.mes_event_id, mes_complete["event_id"].as_str().unwrap());
-    assert!(target.mes_events_total >= 4, "release/start/complete/close 至少四事件");
+    assert_eq!(
+        target.mes_event_id,
+        mes_complete["event_id"].as_str().unwrap()
+    );
+    assert!(
+        target.mes_events_total >= 4,
+        "release/start/complete/close 至少四事件"
+    );
 
     // 游标 fresh。
     assert!(load_consumed(&triggers_home).unwrap().is_empty());

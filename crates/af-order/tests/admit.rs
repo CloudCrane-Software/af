@@ -992,12 +992,16 @@ fn admit_accepts_increasing_seq_across_rechecks() {
 
 /// 最近快照读回（各负例共用；与 admit 链第①步同口径）。
 fn latest_order(state: &Path, order_id: &str) -> WorkOrder {
-    OrderLedger::load(&StateDir::new(state).order_dir(order_id).join("ledger.jsonl"))
-        .unwrap()
-        .iter()
-        .rev()
-        .find_map(|record| record.order_after.clone())
-        .unwrap()
+    OrderLedger::load(
+        &StateDir::new(state)
+            .order_dir(order_id)
+            .join("ledger.jsonl"),
+    )
+    .unwrap()
+    .iter()
+    .rev()
+    .find_map(|record| record.order_after.clone())
+    .unwrap()
 }
 
 // ---------------------------------------------------------------------------

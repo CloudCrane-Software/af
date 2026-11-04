@@ -11,9 +11,9 @@ use serde::de::Deserializer;
 use serde::{Deserialize, Serialize};
 
 use crate::decision::{Decision, DecisionArtifact, DecisionAttributes, Role};
-use crate::sign::Ed25519Keypair;
 use crate::error::{GateError, Missing, OrderDecodeError, RejectionEnvelope};
 use crate::identity::{self, inspect_identity_fields, RunContext, StableId};
+use crate::sign::Ed25519Keypair;
 use crate::sla::Sla;
 use crate::state::{OrderState, Transition};
 
@@ -157,17 +157,13 @@ where
         else {
             continue;
         };
-        let content = bytes_for(artifact_id).map_err(|reason| {
-            OrderDecodeError::ArtifactDigestMigration {
+        let content =
+            bytes_for(artifact_id).map_err(|reason| OrderDecodeError::ArtifactDigestMigration {
                 artifact_id: artifact_id.to_string(),
                 reason,
-            }
-        })?;
+            })?;
         let digest = crate::hash::sha256_hex(&content);
-        artifact_object.insert(
-            "content_sha256".into(),
-            serde_json::Value::String(digest),
-        );
+        artifact_object.insert("content_sha256".into(), serde_json::Value::String(digest));
         migrated = true;
     }
     Ok(migrated)
@@ -911,10 +907,9 @@ mod tests {
 
         // 不迁移时缺字段必须红；不存在 serde default 空哈希。
         assert!(decode_work_order_value(value.clone()).is_err());
-        let err = migrate_legacy_artifact_digests(&mut value.clone(), |_| {
-            Err("旧工件字节不存在".into())
-        })
-        .unwrap_err();
+        let err =
+            migrate_legacy_artifact_digests(&mut value.clone(), |_| Err("旧工件字节不存在".into()))
+                .unwrap_err();
         assert!(matches!(
             err,
             OrderDecodeError::ArtifactDigestMigration { .. }

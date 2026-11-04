@@ -69,7 +69,10 @@ impl OrderState {
     pub fn can_apply(self, t: Transition) -> bool {
         // Cancel 的起点是四个非终态（含 Completed：rework/pivot/abort 的诚实终态）。
         if t == Transition::Cancel {
-            return matches!(self, Created | Released | InProgress | OrderState::Completed);
+            return matches!(
+                self,
+                Created | Released | InProgress | OrderState::Completed
+            );
         }
         self.allowed_transitions().contains(&t)
     }

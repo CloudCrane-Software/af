@@ -26,14 +26,30 @@ fn decision_key() -> Ed25519Keypair {
 }
 
 fn decision_attributes() -> DecisionAttributes {
-    DecisionAttributes::new(1, vec!["basis".into()], "a".repeat(64), time("2027-01-01T00:00:00Z"))
+    DecisionAttributes::new(
+        1,
+        vec!["basis".into()],
+        "a".repeat(64),
+        time("2027-01-01T00:00:00Z"),
+    )
 }
 
 fn decision_registry() -> TrustedActorRegistry {
     TrustedActorRegistry::new(vec![
-        TrustedActor::new("user-approver", Role::Approver, &decision_key().public_key(), time("2027-01-01T00:00:00Z")),
-        TrustedActor::new("user-reader", Role::Reader, &Ed25519Keypair::from_seed(&[0x52; 32]).public_key(), time("2027-01-01T00:00:00Z")),
-    ]).unwrap()
+        TrustedActor::new(
+            "user-approver",
+            Role::Approver,
+            &decision_key().public_key(),
+            time("2027-01-01T00:00:00Z"),
+        ),
+        TrustedActor::new(
+            "user-reader",
+            Role::Reader,
+            &Ed25519Keypair::from_seed(&[0x52; 32]).public_key(),
+            time("2027-01-01T00:00:00Z"),
+        ),
+    ])
+    .unwrap()
 }
 
 fn prepared_order(id: &str, graph: &str) -> WorkOrder {
@@ -83,7 +99,10 @@ fn full_lifecycle_with_gates_end_to_end() {
 
     // 执行产出:中间件(合格但非终态)不影响 close 门控;终态合格件放行
     wo.attach_artifact(WorkArtifact::from_bytes(
-        "ia-1", false, true, b"intermediate artifact",
+        "ia-1",
+        false,
+        true,
+        b"intermediate artifact",
     ))
     .unwrap();
     assert_eq!(wo.complete().unwrap(), OrderState::Completed);
@@ -91,7 +110,10 @@ fn full_lifecycle_with_gates_end_to_end() {
     assert_eq!(err.missing().unwrap(), &[Missing::NoQualifiedFinalArtifact]);
 
     wo.attach_artifact(WorkArtifact::from_bytes(
-        "fa-1", true, true, b"final artifact",
+        "fa-1",
+        true,
+        true,
+        b"final artifact",
     ))
     .unwrap();
     assert_eq!(wo.close().unwrap(), OrderState::Closed);

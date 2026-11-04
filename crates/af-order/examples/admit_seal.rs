@@ -29,11 +29,11 @@ use std::fs;
 use std::io::Read;
 use std::path::PathBuf;
 
+use af_order::adjudicate::{resolved_basis, template_body_sha256};
 use af_order::admit::{
     canonical_next_orders_digest, AdjudicationTemplate, AdmissionRequest, GateListSpec, GateSpec,
     ResourceClaim, ResourceProfileSpec,
 };
-use af_order::adjudicate::{resolved_basis, template_body_sha256};
 use af_workorder::{
     Decision, DecisionArtifact, DecisionAttributes, Ed25519Keypair, Role, TrustedActor,
     TrustedActorRegistry,
