@@ -1,0 +1,41 @@
+# 装载/校验全过，但 uses 引用未注册组件（不给 --registry = 空注册表
+# fail-closed）→ E9001 绑定拒绝（stage 3）
+version: 1
+meta:
+  name: g2_diag_probe
+  graph_version: "1.0"
+  entry: worker
+  input: probe_input
+  output: { ref: answer, from: hatch }
+  intent: "G2 机读诊断产物面 · E900x 失败路径探针"
+types:
+  - name: probe_input
+    schema:
+      type: object
+      required: [x]
+      properties: { x: { type: string } }
+  - name: answer
+    schema:
+      type: object
+      required: [y]
+      properties: { y: { type: string } }
+nodes:
+  - id: worker
+    kind: task
+    uses: { model: route.main@1, tools: ["pkg.kit.hammer@1"] }
+    emits: { answer: answer }
+  - id: hatch
+    kind: task
+    escape:
+      kind: dynamic_tool_registry
+      impl_ref: packages/kit@1.0.0/hatches/registry.py
+      reason: "动作词表运行时解析（PoC 探针）"
+      owner: g2-team
+      share_budget_pct: 10
+    consumes: { answer: answer }
+    emits: { action_space: answer }
+edges:
+  - { from: worker, output: answer, to: hatch, input: answer }
+policies:
+  budgets:
+    - { id: cap, dimension: cents, scope: plan, cap: 100 }

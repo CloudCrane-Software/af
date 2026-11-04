@@ -1,0 +1,27 @@
+== 失败路径 1/3 · load 相位（E0001）==
+$ af-compiler-plan --diagnostics-out poc/poc-compiler-diagnostics/failure-e0001.diagnostics.json poc/poc-compiler-diagnostics/inputs/failure-e0001.yaml
+exit=1
+-- stderr --
+装载拒绝：envelope rejected:E0001 missing_version[envelope]: 缺 version 键
+
+== 失败路径 2/3 · validate 相位（E2001）==
+$ af-compiler-plan --diagnostics-out poc/poc-compiler-diagnostics/failure-e2001.diagnostics.json poc/poc-compiler-diagnostics/inputs/failure-e2001.yaml
+exit=1
+-- stderr --
+语义校验未过：E2001 dangling_reference[root]: 边引用未声明节点 to="ghost"
+
+== 失败路径 3/3 · bind 相位（E900x）==
+$ af-compiler-plan --diagnostics-out poc/poc-compiler-diagnostics/failure-e900x.diagnostics.json poc/poc-compiler-diagnostics/inputs/failure-e900x.yaml
+exit=1
+-- stderr --
+计划生成失败：绑定未过（2 条 E900x 违例）：E9001 节点 "worker" 引用 "route.main@1"：组件 "route.main" 未注册（注册表共 0 条声明）；E9001 节点 "worker" 引用 "pkg.kit.hammer@1"：组件 "pkg.kit.hammer" 未注册（注册表共 0 条声明）
+-- stdout 字节数（应为 0：失败不输出残缺计划）--
+0
+== 成功路径 · sample2 × af/packages ==
+$ af-compiler-plan --registry af/packages --diagnostics-out poc/poc-compiler-diagnostics/success-sample2.diagnostics.json crates/af-compiler/testdata/src/sample2.yaml > /dev/null
+exit=0
+-- stderr --
+-- stdout 前 3 行（计划 JSON 照常）--
+{
+  "v": 1,
+  "body": {
