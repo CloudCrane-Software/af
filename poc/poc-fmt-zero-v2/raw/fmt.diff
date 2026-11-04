@@ -1,0 +1,1336 @@
+diff --git a/crates/af-engine/tests/engine.rs b/crates/af-engine/tests/engine.rs
+index 9bb36c5..795916e 100644
+--- a/crates/af-engine/tests/engine.rs
++++ b/crates/af-engine/tests/engine.rs
+@@ -499,11 +499,7 @@ fn attach_artifact_hashes_actual_bytes_and_rejects_self_reported_digest() {
+         "qualified": true,
+         "content_sha256": "0".repeat(64),
+     });
+-    let got = call(
+-        "attach_artifact",
+-        &wo,
+-        json!({"artifact": self_reported}),
+-    );
++    let got = call("attach_artifact", &wo, json!({"artifact": self_reported}));
+     assert_bad(&got, "字段 artifact 类型错误");
+ 
+     let mut smuggled = artifact_write("ia-1", false, true);
+@@ -580,7 +576,9 @@ fn cancel_accepts_created_and_completed_but_rejects_terminal_states() {
+ fn approve_decision_accepts_approver_and_returns_same_order() {
+     let wo = released();
+     let payload = bound_payload(&wo);
+-    approver().validate_against(&payload, &actor_registry(), validated_at()).unwrap();
++    approver()
++        .validate_against(&payload, &actor_registry(), validated_at())
++        .unwrap();
+     let got = call(
+         "approve_decision",
+         &wo,
+@@ -595,7 +593,9 @@ fn approve_decision_rejects_reader() {
+     let wo = created();
+     let payload = bound_payload(&wo);
+     let art = reader();
+-    let err = art.validate_against(&payload, &actor_registry(), validated_at()).unwrap_err();
++    let err = art
++        .validate_against(&payload, &actor_registry(), validated_at())
++        .unwrap_err();
+     assert!(matches!(err, DecisionError::PermissionDenied { .. }));
+     let got = call(
+         "approve_decision",
+@@ -618,7 +618,9 @@ fn approve_decision_rejects_hash_mismatch() {
+         &decision_key(),
+         decision_attributes(),
+     );
+-    let err = art.validate_against(&payload, &actor_registry(), validated_at()).unwrap_err();
++    let err = art
++        .validate_against(&payload, &actor_registry(), validated_at())
++        .unwrap_err();
+     assert!(matches!(err, DecisionError::PayloadHashMismatch { .. }));
+     let got = call(
+         "approve_decision",
+diff --git a/crates/af-execline/src/driver.rs b/crates/af-execline/src/driver.rs
+index 2aed76d..f0641af 100644
+--- a/crates/af-execline/src/driver.rs
++++ b/crates/af-execline/src/driver.rs
+@@ -687,11 +687,8 @@ impl OrderLifecycleDriver {
+                 "qualified": artifact.qualified,
+                 "content": content,
+             });
+-            let request = engine_request(
+-                &self.order,
+-                "attach_artifact",
+-                json!({ "artifact": write }),
+-            )?;
++            let request =
++                engine_request(&self.order, "attach_artifact", json!({ "artifact": write }))?;
+             match self.client.call(&request)? {
+                 EngineOutcome::Accept(accept) => self.order = accept.order,
+                 EngineOutcome::Reject(rejection) => {
+diff --git a/crates/af-execline/src/ledger.rs b/crates/af-execline/src/ledger.rs
+index a7d53eb..0155ef9 100644
+--- a/crates/af-execline/src/ledger.rs
++++ b/crates/af-execline/src/ledger.rs
+@@ -48,9 +48,9 @@ fn legacy_artifact_bytes(order_dir: &Path, artifact_id: &str) -> Result<Vec<u8>,
+     let safe_id = !artifact_id.is_empty()
+         && artifact_id != "."
+         && artifact_id != ".."
+-        && artifact_id.bytes().all(|byte| {
+-            byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.')
+-        });
++        && artifact_id
++            .bytes()
++            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'));
+     if safe_id {
+         for path in [
+             order_dir
+@@ -115,11 +115,10 @@ impl OrderLedger {
+             if trimmed.is_empty() {
+                 continue;
+             }
+-            let mut value: serde_json::Value = serde_json::from_str(trimmed).map_err(|err| {
+-                ExeclineError::LedgerCorrupt {
++            let mut value: serde_json::Value =
++                serde_json::from_str(trimmed).map_err(|err| ExeclineError::LedgerCorrupt {
+                     detail: format!("第 {} 行不是合法 ledger JSON: {err}", index + 1),
+-                }
+-            })?;
++                })?;
+             if let Some(order_after) = value
+                 .as_object_mut()
+                 .and_then(|record| record.get_mut("order_after"))
+@@ -133,11 +132,10 @@ impl OrderLedger {
+                     detail: format!("第 {} 行旧单摘要迁移失败: {err}", index + 1),
+                 })?;
+             }
+-            let record: LedgerRecord = serde_json::from_value(value).map_err(|err| {
+-                ExeclineError::LedgerCorrupt {
++            let record: LedgerRecord =
++                serde_json::from_value(value).map_err(|err| ExeclineError::LedgerCorrupt {
+                     detail: format!("第 {} 行不是合法 ledger 记录: {err}", index + 1),
+-                }
+-            })?;
++                })?;
+             records.push(record);
+         }
+         for (index, record) in records.iter().enumerate() {
+@@ -315,21 +313,24 @@ mod tests {
+         order.start().unwrap();
+         order
+             .attach_artifact(af_workorder::WorkArtifact::from_bytes(
+-                "fa-old", true, true, b"new placeholder",
++                "fa-old",
++                true,
++                true,
++                b"new placeholder",
+             ))
+             .unwrap();
+         order
+             .attach_artifact(af_workorder::WorkArtifact::from_bytes(
+-                "swev-old", true, true, b"another placeholder",
++                "swev-old",
++                true,
++                true,
++                b"another placeholder",
+             ))
+             .unwrap();
+         let mut row = record(1, "attach_artifact");
+         row.order_after = Some(order);
+         let mut value = serde_json::to_value(row).unwrap();
+-        for artifact in value["order_after"]["artifacts"]
+-            .as_array_mut()
+-            .unwrap()
+-        {
++        for artifact in value["order_after"]["artifacts"].as_array_mut().unwrap() {
+             artifact
+                 .as_object_mut()
+                 .unwrap()
+diff --git a/crates/af-mes/src/schema.rs b/crates/af-mes/src/schema.rs
+index 7daefb3..648f0f7 100644
+--- a/crates/af-mes/src/schema.rs
++++ b/crates/af-mes/src/schema.rs
+@@ -126,8 +126,9 @@ mod tests {
+         );
+         // 锚必须是末列：RowBinary/列清单插入按位置映射普通列，末列追加不动既有列位。
+         assert!(
+-            DDL_MES_EVENT
+-                .contains("quantity UInt64,\n    ingested_at DateTime64(3, 'UTC') MATERIALIZED now64(3)\n)"),
++            DDL_MES_EVENT.contains(
++                "quantity UInt64,\n    ingested_at DateTime64(3, 'UTC') MATERIALIZED now64(3)\n)"
++            ),
+             "锚列必须排在 quantity 之后（列位兼容防回归）: {DDL_MES_EVENT}"
+         );
+         assert!(
+diff --git a/crates/af-order/examples/adjudicate_loop.rs b/crates/af-order/examples/adjudicate_loop.rs
+index 8b812a7..e4a4e5b 100644
+--- a/crates/af-order/examples/adjudicate_loop.rs
++++ b/crates/af-order/examples/adjudicate_loop.rs
+@@ -18,9 +18,7 @@ use std::path::PathBuf;
+ use std::sync::OnceLock;
+ 
+ use af_execline::EngineClient;
+-use af_order::adjudicate::{
+-    run_steward_loop, AdjudicationSeed, LoopFacilities, STEWARD_ROLE,
+-};
++use af_order::adjudicate::{run_steward_loop, AdjudicationSeed, LoopFacilities, STEWARD_ROLE};
+ use af_order::{cli, StateDir};
+ use af_station::Station;
+ use af_workorder::{Decision, Ed25519Keypair, Role, TrustedActor, TrustedActorRegistry};
+@@ -29,8 +27,7 @@ const NOW: &str = "2026-11-03T00:00:00Z";
+ const KEY_EXPIRY: &str = "2027-01-01T00:00:00Z";
+ const DECISION_EXPIRY: &str = "2026-12-01T00:00:00Z";
+ /// steward 固定种子（64 hex，复现面）。
+-const STEWARD_SEED_HEX: &str =
+-    "6161616161616161616161616161616161616161616161616161616161616161";
++const STEWARD_SEED_HEX: &str = "6161616161616161616161616161616161616161616161616161616161616161";
+ 
+ fn fail(leg: &str, err: impl std::fmt::Display) -> ! {
+     eprintln!(
+diff --git a/crates/af-order/examples/admit_seal.rs b/crates/af-order/examples/admit_seal.rs
+index d38b96b..fe02cbc 100644
+--- a/crates/af-order/examples/admit_seal.rs
++++ b/crates/af-order/examples/admit_seal.rs
+@@ -29,11 +29,11 @@ use std::fs;
+ use std::io::Read;
+ use std::path::PathBuf;
+ 
++use af_order::adjudicate::{resolved_basis, template_body_sha256};
+ use af_order::admit::{
+     canonical_next_orders_digest, AdjudicationTemplate, AdmissionRequest, GateListSpec, GateSpec,
+     ResourceClaim, ResourceProfileSpec,
+ };
+-use af_order::adjudicate::{resolved_basis, template_body_sha256};
+ use af_workorder::{
+     Decision, DecisionArtifact, DecisionAttributes, Ed25519Keypair, Role, TrustedActor,
+     TrustedActorRegistry,
+diff --git a/crates/af-order/examples/router_consume_leg.rs b/crates/af-order/examples/router_consume_leg.rs
+index 1f39f29..82a7ead 100644
+--- a/crates/af-order/examples/router_consume_leg.rs
++++ b/crates/af-order/examples/router_consume_leg.rs
+@@ -28,8 +28,8 @@ use std::sync::OnceLock;
+ use af_execline::EngineClient;
+ use af_order::adjudicate::{run_steward_loop, AdjudicationSeed, LoopFacilities, STEWARD_ROLE};
+ use af_order::router::{
+-    append_consumed, duplicate_consumed, load_consumed, load_registry,
+-    resolve_adjudication_target, verify_envelope, ConsumedRecord,
++    append_consumed, duplicate_consumed, load_consumed, load_registry, resolve_adjudication_target,
++    verify_envelope, ConsumedRecord,
+ };
+ use af_order::{cli, StateDir};
+ use af_station::Station;
+@@ -39,8 +39,7 @@ const NOW: &str = "2026-11-04T00:00:00Z";
+ const KEY_EXPIRY: &str = "2027-01-01T00:00:00Z";
+ const DECISION_EXPIRY: &str = "2026-12-01T00:00:00Z";
+ /// steward 固定种子（64 hex，复现面；与 adjudicate_loop 同款）。
+-const STEWARD_SEED_HEX: &str =
+-    "6161616161616161616161616161616161616161616161616161616161616161";
++const STEWARD_SEED_HEX: &str = "6161616161616161616161616161616161616161616161616161616161616161";
+ 
+ fn fail(leg: &str, err: impl std::fmt::Display) -> ! {
+     eprintln!(
+@@ -104,14 +103,11 @@ fn main() {
+         }
+         index += 2;
+     }
+-    let envelope_path =
+-        envelope_path.unwrap_or_else(|| fail("parse", "缺 --envelope <path>"));
++    let envelope_path = envelope_path.unwrap_or_else(|| fail("parse", "缺 --envelope <path>"));
+     let state_path = state_path.unwrap_or_else(|| fail("parse", "缺 --state <dir>"));
+     let station_db = station_db.unwrap_or_else(|| fail("parse", "缺 --station-db <path>"));
+-    let triggers_home =
+-        triggers_home.unwrap_or_else(|| fail("parse", "缺 --triggers-home <dir>"));
+-    let registry_path =
+-        registry_path.unwrap_or_else(|| triggers_home.join("registry.json"));
++    let triggers_home = triggers_home.unwrap_or_else(|| fail("parse", "缺 --triggers-home <dir>"));
++    let registry_path = registry_path.unwrap_or_else(|| triggers_home.join("registry.json"));
+     let workspace =
+         workspace.unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."));
+     let target_dir = target_dir.unwrap_or_else(|| {
+@@ -128,8 +124,7 @@ fn main() {
+             format!("{}: {err}", envelope_path.display()),
+         )
+     });
+-    let registry = load_registry(&registry_path)
+-        .unwrap_or_else(|err| fail("envelope_verify", err));
++    let registry = load_registry(&registry_path).unwrap_or_else(|err| fail("envelope_verify", err));
+     let verified = verify_envelope(&envelope_text, &registry)
+         .unwrap_or_else(|err| fail("envelope_verify", err));
+     leg(
+@@ -171,9 +166,11 @@ fn main() {
+ 
+     // ── 腿③：防重放游标（consumed.jsonl；delivery/dedup 两语义任一命中即拒）──
+     let consumed = load_consumed(&triggers_home).unwrap_or_else(|err| fail("dedup_cursor", err));
+-    if let Some(hit) =
+-        duplicate_consumed(&consumed, &verified.envelope.delivery_id, &verified.envelope.dedup_key)
+-    {
++    if let Some(hit) = duplicate_consumed(
++        &consumed,
++        &verified.envelope.delivery_id,
++        &verified.envelope.dedup_key,
++    ) {
+         fail(
+             "dedup_cursor",
+             format!(
+@@ -284,7 +281,10 @@ fn main() {
+     };
+     append_consumed(&triggers_home, &consumed_record)
+         .unwrap_or_else(|err| fail("consumed_append", err));
+-    leg("consumed_appended", serde_json::to_value(&consumed_record).unwrap());
++    leg(
++        "consumed_appended",
++        serde_json::to_value(&consumed_record).unwrap(),
++    );
+ 
+     // ── 腿⑧：终态证据（任务 done / 受理账本 / CLI show 对拍）──────────
+     let task = station
+diff --git a/crates/af-order/src/adjudicate.rs b/crates/af-order/src/adjudicate.rs
+index 06b72af..14eba76 100644
+--- a/crates/af-order/src/adjudicate.rs
++++ b/crates/af-order/src/adjudicate.rs
+@@ -62,9 +62,9 @@ use chrono::{DateTime, Utc};
+ use serde::{Deserialize, Serialize};
+ 
+ use crate::admit::{
+-    admit, budget_voucher_digest, canonical_next_orders_digest, load_receipts, AdmissionReceipt,
+-    AdmissionRequest, AdjudicationTemplate, GateListSpec, GateSpec, ResourceClaim,
+-    ResourceProfileSpec,
++    admit, budget_voucher_digest, canonical_next_orders_digest, load_receipts,
++    AdjudicationTemplate, AdmissionReceipt, AdmissionRequest, GateListSpec, GateSpec,
++    ResourceClaim, ResourceProfileSpec,
+ };
+ use crate::state::{StateDir, LEDGER_FILE};
+ 
+@@ -185,13 +185,11 @@ impl AdjudicationDoc {
+     pub fn persist(&self, state: &StateDir) -> Result<PathBuf, AdjudicateError> {
+         let path = self.path(state);
+         if let Some(parent) = path.parent() {
+-            fs::create_dir_all(parent).map_err(|err| {
+-                AdjudicateError::Doc(format!("创建 {}: {err}", parent.display()))
+-            })?;
++            fs::create_dir_all(parent)
++                .map_err(|err| AdjudicateError::Doc(format!("创建 {}: {err}", parent.display())))?;
+         }
+-        let text = serde_json::to_string_pretty(self).map_err(|err| {
+-            AdjudicateError::Doc(format!("裁决单序列化失败: {err}"))
+-        })?;
++        let text = serde_json::to_string_pretty(self)
++            .map_err(|err| AdjudicateError::Doc(format!("裁决单序列化失败: {err}")))?;
+         fs::write(&path, format!("{text}\n")).map_err(|err| {
+             AdjudicateError::Doc(format!("裁决单落盘失败 {}: {err}", path.display()))
+         })?;
+@@ -222,9 +220,8 @@ pub fn verify_doc(doc: &AdjudicationDoc) -> Result<(), AdjudicateError> {
+ 
+ /// 从盘上读回并复算一份裁决单。
+ pub fn load_doc(path: &Path) -> Result<AdjudicationDoc, AdjudicateError> {
+-    let text = fs::read_to_string(path).map_err(|err| {
+-        AdjudicateError::Doc(format!("裁决单读取失败 {}: {err}", path.display()))
+-    })?;
++    let text = fs::read_to_string(path)
++        .map_err(|err| AdjudicateError::Doc(format!("裁决单读取失败 {}: {err}", path.display())))?;
+     let doc: AdjudicationDoc = serde_json::from_str(&text).map_err(|err| {
+         AdjudicateError::DocVerify(format!("裁决单不是合法 JSON（{}）: {err}", path.display()))
+     })?;
+@@ -297,9 +294,8 @@ pub fn generate_adjudication_doc(
+             "源单 {source_order_id} 无可引用依据实体（无工件且未绑预算凭证），拒绝生成空依据裁决单"
+         )));
+     }
+-    let digest = canonical_next_orders_digest(&next_orders).map_err(|reason| {
+-        AdjudicateError::Doc(format!("计划面 next_orders 不合法: {reason}"))
+-    })?;
++    let digest = canonical_next_orders_digest(&next_orders)
++        .map_err(|reason| AdjudicateError::Doc(format!("计划面 next_orders 不合法: {reason}")))?;
+     let stable_id = order.stable_id().as_str().to_string();
+     let subject = format!(
+         "对源单 {}（stable_id={stable_id}，state={}）闭环后的裁决受理",
+@@ -340,9 +336,7 @@ fn next_adjudication_id(state: &StateDir, source_order_id: &str) -> String {
+         .map(|entries| {
+             entries
+                 .filter_map(Result::ok)
+-                .filter(|entry| {
+-                    entry.path().extension().is_some_and(|ext| ext == "json")
+-                })
++                .filter(|entry| entry.path().extension().is_some_and(|ext| ext == "json"))
+                 .count()
+         })
+         .unwrap_or(0);
+@@ -426,7 +420,10 @@ pub fn run_steward_loop(
+     })?;
+ 
+     // ── 认领（带守卫 UPDATE 原子认领；角色不匹配领不到）──────────
+-    let Some(task) = f.station.claim(seed.worker_id, STEWARD_ROLE, seed.lease_ms)? else {
++    let Some(task) = f
++        .station
++        .claim(seed.worker_id, STEWARD_ROLE, seed.lease_ms)?
++    else {
+         return Err(AdjudicateError::Queue(format!(
+             "steward {} 认领不到 {STEWARD_ROLE} 任务（队列空或角色不匹配）",
+             seed.worker_id
+@@ -605,9 +602,9 @@ fn abort_source(state: &StateDir, source: &mut WorkOrder) -> Result<(), Adjudica
+                 .unwrap_or_else(|| format!("{:?}", source.state())),
+         )));
+     }
+-    source
+-        .cancel()
+-        .map_err(|err| AdjudicateError::MissingEdge(format!("源单 {order_id} cancel 被拒: {err}")))?;
++    source.cancel().map_err(|err| {
++        AdjudicateError::MissingEdge(format!("源单 {order_id} cancel 被拒: {err}"))
++    })?;
+     let ledger_path = state.order_dir(&order_id).join(LEDGER_FILE);
+     let mut ledger = af_execline::OrderLedger::open(&ledger_path)
+         .map_err(|err| AdjudicateError::Queue(format!("源单账本打开失败: {err}")))?;
+@@ -683,8 +680,7 @@ mod tests {
+         order.close().unwrap();
+         let dir = state.order_dir(order_id);
+         fs::create_dir_all(&dir).unwrap();
+-        let mut ledger =
+-            af_execline::OrderLedger::open(&dir.join(LEDGER_FILE)).unwrap();
++        let mut ledger = af_execline::OrderLedger::open(&dir.join(LEDGER_FILE)).unwrap();
+         ledger
+             .append(LedgerRecord {
+                 seq: 0,
+@@ -771,13 +767,8 @@ mod tests {
+             Err(AdjudicateError::DocVerify(_))
+         ));
+         // 下一份单号递增。
+-        let (second, _) = generate_adjudication_doc(
+-            &state,
+-            "wo-doc",
+-            vec![],
+-            time(DECISION_EXPIRY),
+-        )
+-        .unwrap();
++        let (second, _) =
++            generate_adjudication_doc(&state, "wo-doc", vec![], time(DECISION_EXPIRY)).unwrap();
+         assert_eq!(second.adjudication_id, "adj-wo-doc-2");
+         let _ = fs::remove_dir_all(state.root());
+     }
+@@ -793,8 +784,7 @@ mod tests {
+             GraphVersion::new("af-order/poc-1"),
+             Sla::new(None, Priority::Normal),
+         );
+-        let mut ledger =
+-            af_execline::OrderLedger::open(&dir.join(LEDGER_FILE)).unwrap();
++        let mut ledger = af_execline::OrderLedger::open(&dir.join(LEDGER_FILE)).unwrap();
+         ledger
+             .append(LedgerRecord {
+                 seq: 0,
+@@ -813,13 +803,9 @@ mod tests {
+         let err = generate_adjudication_doc(&state, "wo-bare", vec![], time(DECISION_EXPIRY))
+             .unwrap_err();
+         assert!(matches!(err, AdjudicateError::Doc(_)), "{err}");
+-        let err = generate_adjudication_doc(
+-            &state,
+-            "wo-does-not-exist",
+-            vec![],
+-            time(DECISION_EXPIRY),
+-        )
+-        .unwrap_err();
++        let err =
++            generate_adjudication_doc(&state, "wo-does-not-exist", vec![], time(DECISION_EXPIRY))
++                .unwrap_err();
+         assert!(matches!(err, AdjudicateError::Order(_)), "{err}");
+         let _ = fs::remove_dir_all(state.root());
+     }
+@@ -830,8 +816,8 @@ mod tests {
+     fn queue_wiring_idempotent_enqueue_and_role_routing() {
+         let state = scratch("queue");
+         let order = seed_closed_order(&state, "wo-queue");
+-        let (doc, _) = generate_adjudication_doc(&state, "wo-queue", vec![], time(DECISION_EXPIRY))
+-            .unwrap();
++        let (doc, _) =
++            generate_adjudication_doc(&state, "wo-queue", vec![], time(DECISION_EXPIRY)).unwrap();
+         let doc_path = doc.persist(&state).unwrap();
+         let station = Station::open_in_memory().unwrap().into_station();
+         let key = format!("{}/{}", order.stable_id(), doc.adjudication_id);
+diff --git a/crates/af-order/src/admit.rs b/crates/af-order/src/admit.rs
+index 1112bd1..ecf6757 100644
+--- a/crates/af-order/src/admit.rs
++++ b/crates/af-order/src/admit.rs
+@@ -536,13 +536,24 @@ pub fn admit(
+         .into());
+     }
+     checks.push(CHECK_EXPIRY.into());
+-    recheck_basis(&request.decision, &order, &records, state, &request.order_id)?;
++    recheck_basis(
++        &request.decision,
++        &order,
++        &records,
++        state,
++        &request.order_id,
++    )?;
+     checks.push(CHECK_BASIS_RECHECK.into());
+     recheck_next_orders_digest(&request.decision, &request.next_orders)?;
+     checks.push(CHECK_DIGEST_RECHECK.into());
+ 
+     // ── 第⑤步：凭证求交（PoC-C 落地）──────────────────────────
+-    intersect_credentials(&request.required_credentials, &order, state, &request.order_id)?;
++    intersect_credentials(
++        &request.required_credentials,
++        &order,
++        state,
++        &request.order_id,
++    )?;
+     checks.push(CHECK_CREDENTIAL_INTERSECTION.into());
+ 
+     // ── 第⑥步：全过后才写状态 ─────────────────────────────────
+@@ -772,7 +783,10 @@ fn recheck_basis_entry(
+             let artifact_path = artifact_file_path(state, order_id, entity_id);
+             if artifact_path.is_file() {
+                 let bytes = fs::read(&artifact_path).map_err(|err| {
+-                    reject(format!("工件字节读取失败 {}: {err}", artifact_path.display()))
++                    reject(format!(
++                        "工件字节读取失败 {}: {err}",
++                        artifact_path.display()
++                    ))
+                 })?;
+                 let actual = sha256_hex(&bytes);
+                 if actual != registered {
+@@ -789,9 +803,9 @@ fn recheck_basis_entry(
+             Ok(())
+         }
+         BASIS_KIND_VOUCHER => {
+-            let voucher = order.budget_voucher().ok_or_else(|| {
+-                reject(format!("实体不存在：源单 {} 未绑定预算凭证", order.id()))
+-            })?;
++            let voucher = order
++                .budget_voucher()
++                .ok_or_else(|| reject(format!("实体不存在：源单 {} 未绑定预算凭证", order.id())))?;
+             if voucher.voucher_id != entity_id {
+                 return Err(reject(format!(
+                     "实体不存在：源单绑定凭证 id={}，条目指向 {entity_id:?}",
+@@ -800,9 +814,7 @@ fn recheck_basis_entry(
+             }
+             let actual = budget_voucher_digest(voucher);
+             if claimed != actual {
+-                return Err(reject(format!(
+-                    "摘要不符：声称 {claimed}，实体 {actual}"
+-                )));
++                return Err(reject(format!("摘要不符：声称 {claimed}，实体 {actual}")));
+             }
+             Ok(())
+         }
+@@ -810,14 +822,18 @@ fn recheck_basis_entry(
+             let seq: u64 = entity_id.parse().map_err(|_| {
+                 reject("ledger 条目的 entity_id 须是账本 seq（十进制 u64）".to_string())
+             })?;
+-            let record = records.iter().find(|record| record.seq == seq).ok_or_else(|| {
+-                reject(format!("实体不存在：账本无 seq={seq} 行（共 {} 行）", records.len()))
+-            })?;
++            let record = records
++                .iter()
++                .find(|record| record.seq == seq)
++                .ok_or_else(|| {
++                    reject(format!(
++                        "实体不存在：账本无 seq={seq} 行（共 {} 行）",
++                        records.len()
++                    ))
++                })?;
+             let actual = ledger_record_digest(record);
+             if claimed != actual {
+-                return Err(reject(format!(
+-                    "摘要不符：声称 {claimed}，实体 {actual}"
+-                )));
++                return Err(reject(format!("摘要不符：声称 {claimed}，实体 {actual}")));
+             }
+             Ok(())
+         }
+@@ -837,9 +853,8 @@ fn recheck_next_orders_digest(
+     decision: &DecisionArtifact,
+     next_orders: &[String],
+ ) -> Result<(), AdmitReject> {
+-    let actual = canonical_next_orders_digest(next_orders).map_err(|reason| {
+-        AdmitReject::DigestRecompute(format!("计划面规范化失败: {reason}"))
+-    })?;
++    let actual = canonical_next_orders_digest(next_orders)
++        .map_err(|reason| AdmitReject::DigestRecompute(format!("计划面规范化失败: {reason}")))?;
+     if decision.next_orders_digest != actual {
+         return Err(AdmitReject::DigestRecompute(format!(
+             "计划面摘要不符：工件声称 {}，请求 next_orders 实算 {actual}",
+@@ -879,13 +894,12 @@ fn intersect_credentials(
+                 voucher_path.display()
+             ))
+         })?;
+-        let record: crate::voucher::VoucherRecord =
+-            serde_json::from_str(&text).map_err(|err| {
+-                AdmitReject::CredentialIntersection(format!(
+-                    "源单凭证材料损坏 {}（fail-closed）: {err}",
+-                    voucher_path.display()
+-                ))
+-            })?;
++        let record: crate::voucher::VoucherRecord = serde_json::from_str(&text).map_err(|err| {
++            AdmitReject::CredentialIntersection(format!(
++                "源单凭证材料损坏 {}（fail-closed）: {err}",
++                voucher_path.display()
++            ))
++        })?;
+         held.push(record.voucher_id);
+     }
+     if required.is_empty() {
+@@ -943,7 +957,10 @@ fn gate_input_two_check(_request: &AdmissionRequest) -> Result<(), AdmitReject>
+ /// 读回全部已受理回执（缺文件 = 空清单；坏行 fail-loud 为状态读取失败）。
+ /// 公开给 [`crate::adjudicate`]：裁决环取"本源单已受理最大 seq"定下一笔
+ /// 单调 seq，与 admit 链幂等窗同源同读，不另造第二套回执读取。
+-pub fn load_receipts(state: &StateDir, order_id: &str) -> Result<Vec<AdmissionReceipt>, OrderError> {
++pub fn load_receipts(
++    state: &StateDir,
++    order_id: &str,
++) -> Result<Vec<AdmissionReceipt>, OrderError> {
+     let path = admissions_path(state, order_id);
+     if !path.is_file() {
+         return Ok(Vec::new());
+@@ -1247,16 +1264,14 @@ mod tests {
+     #[test]
+     fn canonical_next_orders_digest_is_sorted_deduped_and_domain_separated() {
+         let a = canonical_next_orders_digest(&["wo-b".into(), "wo-a".into()]).unwrap();
+-        let b = canonical_next_orders_digest(&["wo-a".into(), "wo-b".into(), "wo-b".into()])
+-            .unwrap();
++        let b =
++            canonical_next_orders_digest(&["wo-a".into(), "wo-b".into(), "wo-b".into()]).unwrap();
+         assert_eq!(a, b, "排序去重后同集合同 digest");
+         let empty = canonical_next_orders_digest(&[]).unwrap();
+         assert_eq!(empty.len(), 64);
+         assert_ne!(empty, a, "空计划面与非空计划面摘要必不同");
+         // 域分离：线里含 domain 前缀与条数（对拍同线重算）。
+-        let line = format!(
+-            "{NEXT_ORDERS_DOMAIN}\n2\nwo-a\nwo-b"
+-        );
++        let line = format!("{NEXT_ORDERS_DOMAIN}\n2\nwo-a\nwo-b");
+         assert_eq!(a, sha256_hex(line.as_bytes()));
+         assert!(canonical_next_orders_digest(&["含 空格".into()]).is_err());
+         assert!(canonical_next_orders_digest(&["".into()]).is_err());
+@@ -1271,28 +1286,40 @@ mod tests {
+             af_workorder::Sla::new(None, af_workorder::Priority::Normal),
+         );
+         let recheck = |entry: &str| {
+-            recheck_basis_entry(entry, &order, &[], &StateDir::new("/nonexistent"), "wo-basis")
+-                .err()
+-                .map(|err| err.to_string())
++            recheck_basis_entry(
++                entry,
++                &order,
++                &[],
++                &StateDir::new("/nonexistent"),
++                "wo-basis",
++            )
++            .err()
++            .map(|err| err.to_string())
+         };
+         let text = recheck("没有分隔符").unwrap();
+         assert!(text.contains("OR2109") && text.contains("文法"), "{text}");
+         let text = recheck("artifact:fa-1").unwrap();
+         assert!(text.contains("文法"), "{text}");
+-        let text = recheck("magic:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+-            .unwrap();
++        let text =
++            recheck("magic:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
++                .unwrap();
+         assert!(text.contains("未知实体种类"), "{text}");
+         let text = recheck("artifact:fa-1:NOTHEX").unwrap();
+         assert!(text.contains("hex"), "{text}");
+         // 实体不存在（源单无工件/未绑凭证/空账本）。
+-        let text = recheck("artifact:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+-            .unwrap();
++        let text = recheck(
++            "artifact:fa-1:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
++        )
++        .unwrap();
+         assert!(text.contains("实体不存在"), "{text}");
+-        let text = recheck("voucher:bv-x:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+-            .unwrap();
++        let text = recheck(
++            "voucher:bv-x:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae",
++        )
++        .unwrap();
+         assert!(text.contains("实体不存在"), "{text}");
+-        let text = recheck("ledger:0:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
+-            .unwrap();
++        let text =
++            recheck("ledger:0:2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae")
++                .unwrap();
+         assert!(text.contains("实体不存在"), "{text}");
+     }
+ 
+diff --git a/crates/af-order/src/lib.rs b/crates/af-order/src/lib.rs
+index a077694..6f5d958 100644
+--- a/crates/af-order/src/lib.rs
++++ b/crates/af-order/src/lib.rs
+@@ -27,8 +27,8 @@
+ //! 错误码契约（ADR-007 §3）：OR1xxx（用法）/ OR2xxx（spec / 凭证 / 状态 /
+ //! admit 受理）；引擎与账本失败透传 af-execline 的 EX 稳定码，见 [`error`]。
+ 
+-pub mod admit;
+ pub mod adjudicate;
++pub mod admit;
+ pub mod cli;
+ pub mod error;
+ pub mod exec;
+@@ -37,17 +37,17 @@ pub mod spec;
+ pub mod state;
+ pub mod voucher;
+ 
++pub use adjudicate::{
++    generate_adjudication_doc, load_doc, run_steward_loop, verify_doc, AdjudicateError,
++    AdjudicationDoc, AdjudicationSeed, LoopFacilities, StewardOutcome, ADJUDICATIONS_DIR,
++    ADJUDICATION_DOC_KIND, ADJUDICATION_TEMPLATE_ID, ADJUDICATION_TEMPLATE_VERSION, STEWARD_ROLE,
++    TEMPLATE_BODY,
++};
+ pub use admit::{
+-    canonical_next_orders_digest, admit, parse_request, AdjudicationTemplate, AdmissionReceipt,
++    admit, canonical_next_orders_digest, parse_request, AdjudicationTemplate, AdmissionReceipt,
+     AdmissionRequest, AdmitReject, GateListSpec, GateSpec, RequestError, ResourceClaim,
+     ResourceProfileSpec,
+ };
+-pub use adjudicate::{
+-    generate_adjudication_doc, load_doc, run_steward_loop, verify_doc, AdjudicateError,
+-    AdjudicationDoc, AdjudicationSeed, LoopFacilities, StewardOutcome, ADJUDICATION_DOC_KIND,
+-    ADJUDICATION_TEMPLATE_ID, ADJUDICATION_TEMPLATE_VERSION, STEWARD_ROLE, TEMPLATE_BODY,
+-    ADJUDICATIONS_DIR,
+-};
+ pub use error::OrderError;
+ pub use exec::{
+     parse_exec_flags, parse_unit_choice, report_unit_for, resolve_unit, swev_unit_spec_for,
+@@ -55,9 +55,9 @@ pub use exec::{
+ };
+ pub use router::{
+     append_consumed, consumed_path, duplicate_consumed, load_consumed, load_registry,
+-    resolve_adjudication_target, verify_envelope, AdjudicationTarget, ConsumedRecord,
+-    RouterError, TriggerEnvelope, TriggerRegistry, VerifiedTrigger, CONSUMED_FILE,
+-    ORDER_COMPLETE_EVENT, TRIGGER_CONTRACT,
++    resolve_adjudication_target, verify_envelope, AdjudicationTarget, ConsumedRecord, RouterError,
++    TriggerEnvelope, TriggerRegistry, VerifiedTrigger, CONSUMED_FILE, ORDER_COMPLETE_EVENT,
++    TRIGGER_CONTRACT,
+ };
+ pub use spec::{parse_spec, OrderSpec, SpecError, SPEC_FIELDS};
+ pub use state::{OrderSummary, StateDir};
+diff --git a/crates/af-order/src/router.rs b/crates/af-order/src/router.rs
+index 5cb3a46..aa924d9 100644
+--- a/crates/af-order/src/router.rs
++++ b/crates/af-order/src/router.rs
+@@ -157,8 +157,9 @@ pub fn load_registry(path: &Path) -> Result<TriggerRegistry, RouterError> {
+     let text = std::fs::read_to_string(path).map_err(|err| {
+         RouterError::Registry(format!("注册表读取失败 {}: {err}", path.display()))
+     })?;
+-    serde_json::from_str(&text)
+-        .map_err(|err| RouterError::Registry(format!("注册表不是合法 af.trigger.registry 视图: {err}")))
++    serde_json::from_str(&text).map_err(|err| {
++        RouterError::Registry(format!("注册表不是合法 af.trigger.registry 视图: {err}"))
++    })
+ }
+ 
+ /// 验证一张 af.trigger.v1 信封（读侧第一道门）：
+@@ -208,14 +209,17 @@ pub fn verify_envelope(
+         )));
+     }
+     let sha = &envelope.payload_sha256;
+-    if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
++    if sha.len() != 64
++        || !sha
++            .bytes()
++            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
++    {
+         return Err(RouterError::Envelope(format!(
+             "payload_sha256 不是 64 位小写 hex: {sha}"
+         )));
+     }
+-    chrono::DateTime::parse_from_rfc3339(&envelope.received_at).map_err(|err| {
+-        RouterError::Envelope(format!("received_at 不是 RFC3339: {err}"))
+-    })?;
++    chrono::DateTime::parse_from_rfc3339(&envelope.received_at)
++        .map_err(|err| RouterError::Envelope(format!("received_at 不是 RFC3339: {err}")))?;
+ 
+     // ── body_b64 自证（唯一可信载荷；篡改即红）──────────────────────
+     let body_bytes = b64_decode_strict(&envelope.body_b64)?;
+@@ -226,11 +230,12 @@ pub fn verify_envelope(
+             envelope.payload_sha256
+         )));
+     }
+-    let body: serde_json::Value = serde_json::from_slice(&body_bytes).map_err(|err| {
+-        RouterError::Payload(format!("已验 payload 不是合法 JSON: {err}"))
+-    })?;
++    let body: serde_json::Value = serde_json::from_slice(&body_bytes)
++        .map_err(|err| RouterError::Payload(format!("已验 payload 不是合法 JSON: {err}")))?;
+     if !body.is_object() {
+-        return Err(RouterError::Payload("已验 payload 顶层不是 JSON 对象".into()));
++        return Err(RouterError::Payload(
++            "已验 payload 顶层不是 JSON 对象".into(),
++        ));
+     }
+ 
+     // ── 冗余字段逐项核对（契约 §4 修复批：篡改 parsed body 保留合法
+@@ -260,9 +265,7 @@ pub fn verify_envelope(
+         .sources
+         .iter()
+         .find(|def| def.name == envelope.source)
+-        .ok_or_else(|| {
+-            RouterError::Registry(format!("source 未登记: {}", envelope.source))
+-        })?;
++        .ok_or_else(|| RouterError::Registry(format!("source 未登记: {}", envelope.source)))?;
+     if envelope.event_type == "push" || envelope.event_type == "pull_request" {
+         return Err(RouterError::Registry(format!(
+             "git 域事件（{}）归 PoC-D event-router 消费腿，本腿（MES complete→裁决单）不消费",
+@@ -375,7 +378,10 @@ pub fn resolve_adjudication_target(
+             "body.mes_event.kind 不是 complete（本腿只锚定 complete 事件）".into(),
+         ));
+     }
+-    if mes_event.get("work_order_id").and_then(serde_json::Value::as_str) != Some(stable_id)
++    if mes_event
++        .get("work_order_id")
++        .and_then(serde_json::Value::as_str)
++        != Some(stable_id)
+     {
+         return Err(RouterError::Target(
+             "body.mes_event.work_order_id 与 body.stable_id 不符（MES 事件按稳定身份记账，\
+@@ -489,21 +495,17 @@ pub fn duplicate_consumed<'a>(
+     delivery_id: &str,
+     dedup_key: &str,
+ ) -> Option<&'a ConsumedRecord> {
+-    records.iter().find(|record| {
+-        record.delivery_id == delivery_id || record.dedup_key == dedup_key
+-    })
++    records
++        .iter()
++        .find(|record| record.delivery_id == delivery_id || record.dedup_key == dedup_key)
+ }
+ 
+ /// 追加一行消费游标（只在派单闭环成功后调用；fsync 落盘）。
+-pub fn append_consumed(
+-    triggers_home: &Path,
+-    record: &ConsumedRecord,
+-) -> Result<(), RouterError> {
++pub fn append_consumed(triggers_home: &Path, record: &ConsumedRecord) -> Result<(), RouterError> {
+     let path = consumed_path(triggers_home);
+     if let Some(parent) = path.parent() {
+-        std::fs::create_dir_all(parent).map_err(|err| {
+-            RouterError::Cursor(format!("创建 {}: {err}", parent.display()))
+-        })?;
++        std::fs::create_dir_all(parent)
++            .map_err(|err| RouterError::Cursor(format!("创建 {}: {err}", parent.display())))?;
+     }
+     let line = serde_json::to_string(record)
+         .map_err(|err| RouterError::Cursor(format!("游标行序列化失败: {err}")))?;
+@@ -523,7 +525,8 @@ pub fn append_consumed(
+ /// af-order 零外部依赖纪律（Cargo.toml 硬约束 6），不引 base64 crate；
+ /// 非法字符/非法 padding/长度非 4 倍数一律拒（fail-closed，不静默吞）。
+ fn b64_decode_strict(text: &str) -> Result<Vec<u8>, RouterError> {
+-    let invalid = |reason: String| RouterError::Payload(format!("body_b64 不是合法 base64: {reason}"));
++    let invalid =
++        |reason: String| RouterError::Payload(format!("body_b64 不是合法 base64: {reason}"));
+     let bytes = text.as_bytes();
+     if !bytes.len().is_multiple_of(4) {
+         return Err(invalid(format!("长度 {} 非 4 的倍数", bytes.len())));
+@@ -596,7 +599,8 @@ mod tests {
+                 chunk.get(1).copied().unwrap_or(0),
+                 chunk.get(2).copied().unwrap_or(0),
+             ];
+-            let acc = (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2]);
++            let acc =
++                (u32::from(bytes[0]) << 16) | (u32::from(bytes[1]) << 8) | u32::from(bytes[2]);
+             out.push(ALPHABET[(acc >> 18) as usize & 0x3f] as char);
+             out.push(ALPHABET[(acc >> 12) as usize & 0x3f] as char);
+             out.push(if chunk.len() > 1 {
+@@ -682,7 +686,9 @@ mod tests {
+                 "{sample}"
+             );
+         }
+-        for bad in ["a", "a===", "====", "a=b=", "AB CD", "aG k=", "aGVsbG8", "aGVsbG8!"] {
++        for bad in [
++            "a", "a===", "====", "a=b=", "AB CD", "aG k=", "aGVsbG8", "aGVsbG8!",
++        ] {
+             assert!(b64_decode_strict(bad).is_err(), "应拒: {bad}");
+         }
+     }
+@@ -702,8 +708,7 @@ mod tests {
+     #[test]
+     fn envelope_verify_rejects_payload_tampering() {
+         let body = mes_body("wo-t2", "sid-t2");
+-        let mut value: serde_json::Value =
+-            serde_json::from_str(&envelope(&body, "d-t2")).unwrap();
++        let mut value: serde_json::Value = serde_json::from_str(&envelope(&body, "d-t2")).unwrap();
+         // body_b64 换成另一份合法 base64（内容变了，sha 对不上）。
+         value["body_b64"] = serde_json::json!(b64_encode(b"{\"event\":\"order_complete\"}"));
+         let err = verify_envelope(&value.to_string(), &registry()).unwrap_err();
+@@ -722,21 +727,18 @@ mod tests {
+     #[test]
+     fn envelope_verify_rejects_tampered_parsed_body() {
+         let body = mes_body("wo-t3", "sid-t3");
+-        let mut value: serde_json::Value =
+-            serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
++        let mut value: serde_json::Value = serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
+         value["body"]["order_id"] = serde_json::json!("wo-someone-else");
+         let err = verify_envelope(&value.to_string(), &registry()).unwrap_err();
+         assert!(matches!(err, RouterError::CrossCheck(_)), "{err}");
+         // delivery_id / event_type 与已验载荷不符同途拒读。
+-        let mut value2: serde_json::Value =
+-            serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
++        let mut value2: serde_json::Value = serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
+         value2["delivery_id"] = serde_json::json!("d-other");
+         assert!(matches!(
+             verify_envelope(&value2.to_string(), &registry()),
+             Err(RouterError::Envelope(_) | RouterError::CrossCheck(_))
+         ));
+-        let mut value3: serde_json::Value =
+-            serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
++        let mut value3: serde_json::Value = serde_json::from_str(&envelope(&body, "d-t3")).unwrap();
+         value3["event_type"] = serde_json::json!("push");
+         assert!(matches!(
+             verify_envelope(&value3.to_string(), &registry()),
+@@ -832,7 +834,10 @@ mod tests {
+         let loaded = load_consumed(&home).unwrap();
+         assert_eq!(loaded, vec![record.clone()]);
+         // delivery_id 命中（网络重试语义）。
+-        assert_eq!(duplicate_consumed(&loaded, "d-1", "fresh-dedup"), Some(&record));
++        assert_eq!(
++            duplicate_consumed(&loaded, "d-1", "fresh-dedup"),
++            Some(&record)
++        );
+         // dedup_key 命中（业务重放语义：不同 delivery 同内容）。
+         assert_eq!(
+             duplicate_consumed(&loaded, "d-2", "order_complete:line-poc/wo-1"),
+diff --git a/crates/af-order/tests/adjudicate_loop.rs b/crates/af-order/tests/adjudicate_loop.rs
+index e976553..b75b764 100644
+--- a/crates/af-order/tests/adjudicate_loop.rs
++++ b/crates/af-order/tests/adjudicate_loop.rs
+@@ -19,9 +19,7 @@ use af_order::adjudicate::{
+ };
+ use af_order::{cli, StateDir};
+ use af_station::{State as TaskState, Station};
+-use af_workorder::{
+-    Decision, Ed25519Keypair, Role, TrustedActor, TrustedActorRegistry,
+-};
++use af_workorder::{Decision, Ed25519Keypair, Role, TrustedActor, TrustedActorRegistry};
+ 
+ const NOW: &str = "2026-11-03T00:00:00Z";
+ const KEY_EXPIRY: &str = "2027-01-01T00:00:00Z";
+@@ -99,7 +97,9 @@ fn submit_stub_order(root: &Path, order_id: &str) -> String {
+ /// 源单最近快照状态名（与驱动层账本同口径）。
+ fn latest_state(state: &Path, order_id: &str) -> String {
+     let records = af_execline::OrderLedger::load(
+-        &StateDir::new(state).order_dir(order_id).join("ledger.jsonl"),
++        &StateDir::new(state)
++            .order_dir(order_id)
++            .join("ledger.jsonl"),
+     )
+     .unwrap();
+     af_order::state::current_state(&records).unwrap()
+@@ -129,8 +129,7 @@ fn seed_released_order(state: &Path, order_id: &str) {
+         .unwrap();
+     let dir = StateDir::new(state).order_dir(order_id);
+     fs::create_dir_all(&dir).unwrap();
+-    let mut ledger =
+-        af_execline::OrderLedger::open(&dir.join("ledger.jsonl")).unwrap();
++    let mut ledger = af_execline::OrderLedger::open(&dir.join("ledger.jsonl")).unwrap();
+     order.release().unwrap();
+     let record = LedgerRecord {
+         seq: 0,
+@@ -189,7 +188,9 @@ fn loop_approve_full_chain_from_submit_to_done() {
+         "submit 应闭环: {summary}"
+     );
+     // MES 事件面：驱动层 complete 腿已落 mes-events.jsonl。
+-    let mes_path = StateDir::new(&root).order_dir(order_id).join("mes-events.jsonl");
++    let mes_path = StateDir::new(&root)
++        .order_dir(order_id)
++        .join("mes-events.jsonl");
+     let mes = fs::read_to_string(&mes_path).expect("MES 事件文件应已落盘");
+     assert!(mes.contains("complete"), "MES 应含 complete 事件: {mes}");
+ 
+@@ -353,10 +354,8 @@ fn loop_arbiter_pivots_and_revise_materializes_rework() {
+     .unwrap_or_else(|err| panic!("Revise 闭环应走通: {err}"));
+     assert_eq!(outcome2.receipt.decision, "Revise");
+     assert_eq!(outcome2.rework_order_ids, vec![rework_id.clone()]);
+-    let records = af_execline::OrderLedger::load(
+-        &state.order_dir(&rework_id).join("ledger.jsonl"),
+-    )
+-    .expect("rework 单应落账");
++    let records = af_execline::OrderLedger::load(&state.order_dir(&rework_id).join("ledger.jsonl"))
++        .expect("rework 单应落账");
+     let rework = records
+         .iter()
+         .rev()
+@@ -395,11 +394,13 @@ fn loop_reject_aborts_active_source_and_fails_loud_on_terminal() {
+     )
+     .unwrap_or_else(|err| panic!("非终态 Reject 闭环应走通: {err}"));
+     assert!(outcome.aborted, "非终态源单应被 abort");
+-    assert_eq!(latest_state(&root, order_id), "Cancelled", "源单转 Cancelled");
+-    let records = af_execline::OrderLedger::load(
+-        &state.order_dir(order_id).join("ledger.jsonl"),
+-    )
+-    .unwrap();
++    assert_eq!(
++        latest_state(&root, order_id),
++        "Cancelled",
++        "源单转 Cancelled"
++    );
++    let records =
++        af_execline::OrderLedger::load(&state.order_dir(order_id).join("ledger.jsonl")).unwrap();
+     assert!(
+         records.iter().any(|record| record.op == "cancel"),
+         "abort 应落 cancel 账本行"
+@@ -428,9 +429,7 @@ fn loop_reject_aborts_active_source_and_fails_loud_on_terminal() {
+         "终态 abort 应 MissingEdge: {err}"
+     );
+     assert_eq!(latest_state(&root, order_id2), "Closed", "源单不得被改");
+-    let stuck = station2
+-        .count_by_state(TaskState::Claimed)
+-        .unwrap();
++    let stuck = station2.count_by_state(TaskState::Claimed).unwrap();
+     assert_eq!(stuck, 1, "失败面任务保持 claimed 留检，不假装完成");
+     let _ = fs::remove_dir_all(&root);
+ }
+@@ -455,7 +454,10 @@ fn loop_reenqueue_same_adjudication_is_duplicate() {
+     )
+     .unwrap();
+     // 用同一裁决单号 + 同一幂等键再入队（模拟 event-router 重投）。
+-    let key = format!("{}/{}", outcome.doc.source_stable_id, outcome.doc.adjudication_id);
++    let key = format!(
++        "{}/{}",
++        outcome.doc.source_stable_id, outcome.doc.adjudication_id
++    );
+     let again = station
+         .enqueue(af_station::NewTask {
+             id: "adj-redo-probe",
+diff --git a/crates/af-order/tests/admit.rs b/crates/af-order/tests/admit.rs
+index 375e88d..a2e6de1 100644
+--- a/crates/af-order/tests/admit.rs
++++ b/crates/af-order/tests/admit.rs
+@@ -992,12 +992,16 @@ fn admit_accepts_increasing_seq_across_rechecks() {
+ 
+ /// 最近快照读回（各负例共用；与 admit 链第①步同口径）。
+ fn latest_order(state: &Path, order_id: &str) -> WorkOrder {
+-    OrderLedger::load(&StateDir::new(state).order_dir(order_id).join("ledger.jsonl"))
+-        .unwrap()
+-        .iter()
+-        .rev()
+-        .find_map(|record| record.order_after.clone())
+-        .unwrap()
++    OrderLedger::load(
++        &StateDir::new(state)
++            .order_dir(order_id)
++            .join("ledger.jsonl"),
++    )
++    .unwrap()
++    .iter()
++    .rev()
++    .find_map(|record| record.order_after.clone())
++    .unwrap()
+ }
+ 
+ // ---------------------------------------------------------------------------
+diff --git a/crates/af-order/tests/router_consume.rs b/crates/af-order/tests/router_consume.rs
+index 0025830..b33e31b 100644
+--- a/crates/af-order/tests/router_consume.rs
++++ b/crates/af-order/tests/router_consume.rs
+@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
+ use af_execline::EngineClient;
+ use af_order::adjudicate::{run_steward_loop, verify_doc, AdjudicationSeed, LoopFacilities};
+ use af_order::router::{
+-    append_consumed, duplicate_consumed, load_consumed, load_registry,
+-    resolve_adjudication_target, verify_envelope, ConsumedRecord, RouterError,
++    append_consumed, duplicate_consumed, load_consumed, load_registry, resolve_adjudication_target,
++    verify_envelope, ConsumedRecord, RouterError,
+ };
+ use af_order::{cli, StateDir};
+ use af_station::{State as TaskState, Station};
+@@ -68,8 +68,7 @@ fn time(text: &str) -> chrono::DateTime<chrono::Utc> {
+ 
+ /// 测试内联 base64 编码器（标准字母表带 padding；与 lib 侧严格解码互为对拍）。
+ fn b64_encode(data: &[u8]) -> String {
+-    const ALPHABET: &[u8; 64] =
+-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
++    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+     let mut out = String::new();
+     for chunk in data.chunks(3) {
+         let bytes = [
+@@ -169,10 +168,19 @@ fn submit_upstream_order(root: &Path, order_id: &str) -> (String, serde_json::Va
+     ])
+     .expect("上游 submit 应闭环");
+     let submit_value: serde_json::Value = serde_json::from_str(&submit_out).unwrap();
+-    assert_eq!(submit_value["state"].as_str(), Some("Closed"), "{submit_out}");
+-    let stable_id = submit_value["stable_id"].as_str().expect("stable_id").to_string();
++    assert_eq!(
++        submit_value["state"].as_str(),
++        Some("Closed"),
++        "{submit_out}"
++    );
++    let stable_id = submit_value["stable_id"]
++        .as_str()
++        .expect("stable_id")
++        .to_string();
+     let mes = fs::read_to_string(
+-        StateDir::new(root).order_dir(order_id).join("mes-events.jsonl"),
++        StateDir::new(root)
++            .order_dir(order_id)
++            .join("mes-events.jsonl"),
+     )
+     .expect("MES 正本应已落盘");
+     let complete = mes
+@@ -213,8 +221,14 @@ fn consume_leg_runs_full_chain_from_envelope() {
+     assert_eq!(target.order_id, order_id);
+     assert_eq!(target.stable_id, stable_id);
+     assert_eq!(target.source_state, "Closed");
+-    assert_eq!(target.mes_event_id, mes_complete["event_id"].as_str().unwrap());
+-    assert!(target.mes_events_total >= 4, "release/start/complete/close 至少四事件");
++    assert_eq!(
++        target.mes_event_id,
++        mes_complete["event_id"].as_str().unwrap()
++    );
++    assert!(
++        target.mes_events_total >= 4,
++        "release/start/complete/close 至少四事件"
++    );
+ 
+     // 游标 fresh。
+     assert!(load_consumed(&triggers_home).unwrap().is_empty());
+diff --git a/crates/af-release-gate/src/bin/release-gate.rs b/crates/af-release-gate/src/bin/release-gate.rs
+index 77603d0..5cb65a7 100644
+--- a/crates/af-release-gate/src/bin/release-gate.rs
++++ b/crates/af-release-gate/src/bin/release-gate.rs
+@@ -499,10 +499,7 @@ fn canary_predicate(min_completed: usize, max_defects: u64) -> CanaryPredicate {
+ fn defects_from_results(orders_dir: &Path, order_id: &str) -> Option<u64> {
+     let path = orders_dir.join(order_id).join("results.jsonl");
+     let content = std::fs::read_to_string(path).ok()?;
+-    let last = content
+-        .lines()
+-        .rev()
+-        .find(|l| !l.trim().is_empty())?;
++    let last = content.lines().rev().find(|l| !l.trim().is_empty())?;
+     let value: serde_json::Value = serde_json::from_str(last).ok()?;
+     match value.get("reward") {
+         Some(serde_json::Value::Bool(true)) => Some(0),
+diff --git a/crates/af-workorder/src/decision.rs b/crates/af-workorder/src/decision.rs
+index 8ffa4a3..790aa8d 100644
+--- a/crates/af-workorder/src/decision.rs
++++ b/crates/af-workorder/src/decision.rs
+@@ -206,9 +206,7 @@ impl TrustedActorRegistry {
+         let mut actor_ids = BTreeSet::new();
+         let mut key_ids = BTreeSet::new();
+         for actor in &self.actors {
+-            if actor.actor_id.trim().is_empty()
+-                || actor.actor_id.chars().any(char::is_whitespace)
+-            {
++            if actor.actor_id.trim().is_empty() || actor.actor_id.chars().any(char::is_whitespace) {
+                 return Err(DecisionError::InvalidActorRegistry {
+                     reason: "actor_id 为空或含空白".into(),
+                 });
+diff --git a/crates/af-workorder/src/error.rs b/crates/af-workorder/src/error.rs
+index bc63398..0184a4a 100644
+--- a/crates/af-workorder/src/error.rs
++++ b/crates/af-workorder/src/error.rs
+@@ -92,7 +92,9 @@ pub enum DecisionError {
+     },
+     #[error("actor {actor_id} 的 key_id 不在受信注册表:{key_id}")]
+     KeyNotTrusted { actor_id: String, key_id: String },
+-    #[error("actor {actor_id} 的 key {key_id} 已于 {key_expires_at} 过期(验签时刻 {validated_at})")]
++    #[error(
++        "actor {actor_id} 的 key {key_id} 已于 {key_expires_at} 过期(验签时刻 {validated_at})"
++    )]
+     ExpiredKey {
+         actor_id: String,
+         key_id: String,
+diff --git a/crates/af-workorder/src/lib.rs b/crates/af-workorder/src/lib.rs
+index cea6a8d..d5ab4c9 100644
+--- a/crates/af-workorder/src/lib.rs
++++ b/crates/af-workorder/src/lib.rs
+@@ -17,10 +17,10 @@
+ //! 变更单签名是真 ed25519([`sign`]):在本 crate 内签发与验签,不经过 af-credential。
+ //! SLA 截止已接 af-calendar,不再是字符串占位。
+ 
+-pub mod gate_admit;
+ pub mod change;
+ pub mod decision;
+ pub mod error;
++pub mod gate_admit;
+ pub mod hash;
+ pub mod identity;
+ pub mod order;
+@@ -28,9 +28,6 @@ pub mod sign;
+ pub mod sla;
+ pub mod state;
+ 
+-pub use gate_admit::{
+-    validate_required_gate_inputs, GateAdmitRejection, ProvidedGateInput, RequiredGateInput,
+-};
+ pub use af_calendar::{Calendar, CalendarError};
+ pub use change::{ChangeOrder, DrainStrategy, RelayStrategy, SignedChangeOrder};
+ pub use decision::{
+@@ -41,6 +38,9 @@ pub use error::{
+     ChangeError, DecisionError, GateError, IdentityError, Missing, OrderDecodeError,
+     RejectionEnvelope, RejectionKind, ShardError, SignError,
+ };
++pub use gate_admit::{
++    validate_required_gate_inputs, GateAdmitRejection, ProvidedGateInput, RequiredGateInput,
++};
+ pub use hash::{sha256, sha256_hex, SHA256_HEX_LEN, SHA256_LEN};
+ pub use identity::{
+     decision_payload, RunContext, StableId, DECISION_PAYLOAD_DOMAIN, STABLE_ID_DOMAIN,
+diff --git a/crates/af-workorder/src/order.rs b/crates/af-workorder/src/order.rs
+index 837eb24..816b383 100644
+--- a/crates/af-workorder/src/order.rs
++++ b/crates/af-workorder/src/order.rs
+@@ -11,9 +11,9 @@ use serde::de::Deserializer;
+ use serde::{Deserialize, Serialize};
+ 
+ use crate::decision::{Decision, DecisionArtifact, DecisionAttributes, Role};
+-use crate::sign::Ed25519Keypair;
+ use crate::error::{GateError, Missing, OrderDecodeError, RejectionEnvelope};
+ use crate::identity::{self, inspect_identity_fields, RunContext, StableId};
++use crate::sign::Ed25519Keypair;
+ use crate::sla::Sla;
+ use crate::state::{OrderState, Transition};
+ 
+@@ -157,17 +157,13 @@ where
+         else {
+             continue;
+         };
+-        let content = bytes_for(artifact_id).map_err(|reason| {
+-            OrderDecodeError::ArtifactDigestMigration {
++        let content =
++            bytes_for(artifact_id).map_err(|reason| OrderDecodeError::ArtifactDigestMigration {
+                 artifact_id: artifact_id.to_string(),
+                 reason,
+-            }
+-        })?;
++            })?;
+         let digest = crate::hash::sha256_hex(&content);
+-        artifact_object.insert(
+-            "content_sha256".into(),
+-            serde_json::Value::String(digest),
+-        );
++        artifact_object.insert("content_sha256".into(), serde_json::Value::String(digest));
+         migrated = true;
+     }
+     Ok(migrated)
+@@ -911,10 +907,9 @@ mod tests {
+ 
+         // 不迁移时缺字段必须红；不存在 serde default 空哈希。
+         assert!(decode_work_order_value(value.clone()).is_err());
+-        let err = migrate_legacy_artifact_digests(&mut value.clone(), |_| {
+-            Err("旧工件字节不存在".into())
+-        })
+-        .unwrap_err();
++        let err =
++            migrate_legacy_artifact_digests(&mut value.clone(), |_| Err("旧工件字节不存在".into()))
++                .unwrap_err();
+         assert!(matches!(
+             err,
+             OrderDecodeError::ArtifactDigestMigration { .. }
+diff --git a/crates/af-workorder/src/state.rs b/crates/af-workorder/src/state.rs
+index b1c27c3..a3e1d02 100644
+--- a/crates/af-workorder/src/state.rs
++++ b/crates/af-workorder/src/state.rs
+@@ -69,7 +69,10 @@ impl OrderState {
+     pub fn can_apply(self, t: Transition) -> bool {
+         // Cancel 的起点是四个非终态（含 Completed：rework/pivot/abort 的诚实终态）。
+         if t == Transition::Cancel {
+-            return matches!(self, Created | Released | InProgress | OrderState::Completed);
++            return matches!(
++                self,
++                Created | Released | InProgress | OrderState::Completed
++            );
+         }
+         self.allowed_transitions().contains(&t)
+     }
+diff --git a/crates/af-workorder/tests/identity.rs b/crates/af-workorder/tests/identity.rs
+index 59e2ea0..c3d5381 100644
+--- a/crates/af-workorder/tests/identity.rs
++++ b/crates/af-workorder/tests/identity.rs
+@@ -227,7 +227,7 @@ fn decision_artifact_hash_includes_stable_id() {
+                 Decision::Approve,
+                 "release-request",
+                 &decision_key(),
+-        decision_attributes(),
++                decision_attributes(),
+             )
+             .payload_hash,
+         expected
+diff --git a/crates/af-workorder/tests/json_snapshots.rs b/crates/af-workorder/tests/json_snapshots.rs
+index 650dade..f2715d9 100644
+--- a/crates/af-workorder/tests/json_snapshots.rs
++++ b/crates/af-workorder/tests/json_snapshots.rs
+@@ -155,7 +155,11 @@ fn qualified_final_artifact_release_decision() {
+     // 占位签名字节是 0xde，未涂红时 JSON 数字为 222。
+     assert_redacted(
+         "qualified_final_artifact_release_decision",
+-        &[&decision.payload_hash, decision.signature.key_id.as_str(), "222"],
++        &[
++            &decision.payload_hash,
++            decision.signature.key_id.as_str(),
++            "222",
++        ],
+         true,
+     );
+ }
+@@ -230,7 +234,11 @@ fn reject_decision_names_missing_qualified_final_artifact() {
+     // 占位签名字节是 0xde，未涂红时 JSON 数字为 222。
+     assert_redacted(
+         "reject_decision_names_missing_qualified_final_artifact",
+-        &[&decision.payload_hash, decision.signature.key_id.as_str(), "222"],
++        &[
++            &decision.payload_hash,
++            decision.signature.key_id.as_str(),
++            "222",
++        ],
+         true,
+     );
+ }
+diff --git a/crates/af-workorder/tests/lifecycle.rs b/crates/af-workorder/tests/lifecycle.rs
+index 6acfd36..29323b7 100644
+--- a/crates/af-workorder/tests/lifecycle.rs
++++ b/crates/af-workorder/tests/lifecycle.rs
+@@ -26,14 +26,30 @@ fn decision_key() -> Ed25519Keypair {
+ }
+ 
+ fn decision_attributes() -> DecisionAttributes {
+-    DecisionAttributes::new(1, vec!["basis".into()], "a".repeat(64), time("2027-01-01T00:00:00Z"))
++    DecisionAttributes::new(
++        1,
++        vec!["basis".into()],
++        "a".repeat(64),
++        time("2027-01-01T00:00:00Z"),
++    )
+ }
+ 
+ fn decision_registry() -> TrustedActorRegistry {
+     TrustedActorRegistry::new(vec![
+-        TrustedActor::new("user-approver", Role::Approver, &decision_key().public_key(), time("2027-01-01T00:00:00Z")),
+-        TrustedActor::new("user-reader", Role::Reader, &Ed25519Keypair::from_seed(&[0x52; 32]).public_key(), time("2027-01-01T00:00:00Z")),
+-    ]).unwrap()
++        TrustedActor::new(
++            "user-approver",
++            Role::Approver,
++            &decision_key().public_key(),
++            time("2027-01-01T00:00:00Z"),
++        ),
++        TrustedActor::new(
++            "user-reader",
++            Role::Reader,
++            &Ed25519Keypair::from_seed(&[0x52; 32]).public_key(),
++            time("2027-01-01T00:00:00Z"),
++        ),
++    ])
++    .unwrap()
+ }
+ 
+ fn prepared_order(id: &str, graph: &str) -> WorkOrder {
+@@ -83,7 +99,10 @@ fn full_lifecycle_with_gates_end_to_end() {
+ 
+     // 执行产出:中间件(合格但非终态)不影响 close 门控;终态合格件放行
+     wo.attach_artifact(WorkArtifact::from_bytes(
+-        "ia-1", false, true, b"intermediate artifact",
++        "ia-1",
++        false,
++        true,
++        b"intermediate artifact",
+     ))
+     .unwrap();
+     assert_eq!(wo.complete().unwrap(), OrderState::Completed);
+@@ -91,7 +110,10 @@ fn full_lifecycle_with_gates_end_to_end() {
+     assert_eq!(err.missing().unwrap(), &[Missing::NoQualifiedFinalArtifact]);
+ 
+     wo.attach_artifact(WorkArtifact::from_bytes(
+-        "fa-1", true, true, b"final artifact",
++        "fa-1",
++        true,
++        true,
++        b"final artifact",
+     ))
+     .unwrap();
+     assert_eq!(wo.close().unwrap(), OrderState::Closed);

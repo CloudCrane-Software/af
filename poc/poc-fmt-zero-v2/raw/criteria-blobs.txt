@@ -1,0 +1,7 @@
+# 判据面完整性（68be206 vs HEAD blob 哈希）
+5466fe57ef0868dfc3d5f2f533ed81bd4ff9ccb3  5466fe57ef0868dfc3d5f2f533ed81bd4ff9ccb3  ci/clippy-baseline.txt  SAME
+0278008a76d05bb6dbb589bbbaa423afe70ce86f  0278008a76d05bb6dbb589bbbaa423afe70ce86f  Cargo.toml  SAME
+47674cb748a58f812645f6930137b5f0c9a68a5f  47674cb748a58f812645f6930137b5f0c9a68a5f  .gitea/workflows/f1.yml  SAME
+22576d43ca02d6b9cf24efbcd2163e3a4db559fe  22576d43ca02d6b9cf24efbcd2163e3a4db559fe  ci/baselines/clippy-baseline.sha256  SAME
+# crates/ 目录条目集合前后一致（git ls-tree diff 空）；根 Cargo.toml diff 0 行；零新增 crate
+# 改动文件全为 .rs：git diff --name-only | grep -v '\.rs$' 计数=0

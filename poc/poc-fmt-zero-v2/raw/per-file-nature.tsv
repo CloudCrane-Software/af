@@ -1,0 +1,25 @@
+# 逐文件性质归类（68be206→6c001f0，人核全部 23 文件 +/- 行；四类可叠加）
+# 分类族：A=拆行/合行(表达式与方法链重排) B=多行参数表补尾逗号 C=导入/模块/重导出重排 D=纯缩进修正
+crates/af-engine/tests/engine.rs	A（调用参数合行）
+crates/af-execline/src/driver.rs	A（engine_request 参数合行/闭包重排）
+crates/af-execline/src/ledger.rs	A+B（方法链拆行 .bytes().all()，+8 尾逗号）
+crates/af-mes/src/schema.rs	A（assert! 参数重排；DDL 字面量字节不变）
+crates/af-order/examples/adjudicate_loop.rs	A+C（use 合行；STEWARD_SEED_HEX 字面量不变）
+crates/af-order/examples/admit_seal.rs	C（use af_order::adjudicate 排序前移）
+crates/af-order/examples/router_consume_leg.rs	B+C（use 列表重排+7 尾逗号）
+crates/af-order/src/adjudicate.rs	A+B（12 hunk 拆/合行+3 尾逗号）
+crates/af-order/src/admit.rs	A+B（10 hunk 拆/合行+21 尾逗号，量最大）
+crates/af-order/src/lib.rs	B+C（pub mod 顺序重排、pub use adjudicate 组移位、+8 尾逗号）
+crates/af-order/src/router.rs	A+B（16 块：方法链拆行/合链+3 尾逗号）
+crates/af-order/tests/adjudicate_loop.rs	A+C（use 合行；StateDir 链拆行）
+crates/af-order/tests/admit.rs	A（长链 unwrap 重排）
+crates/af-order/tests/router_consume.rs	B+C（use 列表重排+7 尾逗号；ALPHABET 字面量不变）
+crates/af-release-gate/src/bin/release-gate.rs	A（content.lines().rev().find 链合行）
+crates/af-workorder/src/decision.rs	A（if 条件合行）
+crates/af-workorder/src/error.rs	A（#[error(...)] 属性串拆行；中文消息字节不变）
+crates/af-workorder/src/lib.rs	B+C（use 重排+1 尾逗号）
+crates/af-workorder/src/order.rs	C（use crate::sign 排序）+A
+crates/af-workorder/src/state.rs	A（matches! 拆行）
+crates/af-workorder/tests/identity.rs	D（纯缩进修正；diff -w 残差=0）
+crates/af-workorder/tests/json_snapshots.rs	A+B（数组元素拆行+8 尾逗号）
+crates/af-workorder/tests/lifecycle.rs	A+B（+22 尾逗号为最多）

@@ -1,0 +1,1 @@
+fmt-check-before: exit=1, diff-blocks=99, red-files=23
