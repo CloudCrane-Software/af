@@ -19,3 +19,7 @@
 
 - 下单门面（af-order）是纯 CLI + 状态文件 + af-engine 子进程调用，无需守护进程即可受理订单；
 - 执行面的常驻性由 factory-keepalive 看护清单承接（切流后改看护 af 执行面，ADR-008）。
+
+## RT-E138 语义层 span 生产者（2026-11-05 增补）
+
+订单 `drive` 收尾把四层语义 span（`invoke_workflow` / `invoke_agent` / `chat` / `execute_tool`）投影到状态面 JSON。生产者只写数据，不判绿。路径由环境变量 `AF_OTEL_PRODUCTION_STATE` 显式指定；未设置则静默跳过，既有 ledger / MES / 测试语义不变。schema 名 `af.otel.production.v1`；写面为 tmp+rename 原子替换；订单级键取自 `ledger.jsonl` 的 `order_id`（无真实行不落盘）。落点：`crates/af-execline/src/span_produce.rs`，挂钩 `driver.rs` 的 `drive`。

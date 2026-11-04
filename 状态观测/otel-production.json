@@ -1,0 +1,103 @@
+{
+  "schema": "af.otel.production.v1",
+  "updated_at_unix": 1793813805,
+  "producer": "af-execline/span_produce",
+  "spans": [
+    {
+      "order_id": "wo-span-2636331",
+      "stable_id": "sid-c031f919d196cc7c166ccdc869547d3414f02193435375d8330e39030e58935d",
+      "span_name": "invoke_workflow",
+      "span_id": "wo-span-2636331:invoke_workflow",
+      "source": "ledger.jsonl+mes-events.jsonl",
+      "attrs": {
+        "ledger_entries": 8,
+        "final_state": "Closed",
+        "mes_kinds": [
+          "release",
+          "start",
+          "complete",
+          "close"
+        ]
+      }
+    },
+    {
+      "order_id": "wo-span-2636452",
+      "stable_id": "sid-07e237362c0821755c4b7c8bad5558ef16355b590bd7dd949845d37b5f2a9a2e",
+      "span_name": "invoke_workflow",
+      "span_id": "wo-span-2636452:invoke_workflow",
+      "source": "ledger.jsonl+mes-events.jsonl",
+      "attrs": {
+        "ledger_entries": 8,
+        "final_state": "Closed",
+        "mes_kinds": [
+          "release",
+          "start",
+          "complete",
+          "close"
+        ]
+      }
+    },
+    {
+      "order_id": "T1-order",
+      "stable_id": "sid-T1-order",
+      "span_name": "invoke_workflow",
+      "span_id": "T1-order:invoke_workflow",
+      "source": "ledger.jsonl+mes-events.jsonl",
+      "attrs": {
+        "ledger_entries": 8,
+        "final_state": "Closed",
+        "mes_kinds": [
+          "release",
+          "start",
+          "complete",
+          "close"
+        ]
+      }
+    },
+    {
+      "order_id": "T1-order",
+      "stable_id": "sid-T1-order",
+      "span_name": "invoke_agent",
+      "parent_span_name": "invoke_workflow",
+      "span_id": "T1-order:invoke_agent:T1-order-a1:a1",
+      "source": "harness.db+critical.jsonl",
+      "attrs": {
+        "run_dir": "T1-order-a1",
+        "run_id": "T1-order-run",
+        "node_id": "line-A",
+        "attempt": 1,
+        "terminal_kind": "completed",
+        "terminal_signal": "TASK_COMPLETE"
+      }
+    },
+    {
+      "order_id": "T1-order",
+      "stable_id": "sid-T1-order",
+      "span_name": "chat",
+      "parent_span_name": "invoke_agent",
+      "span_id": "T1-order:invoke_agent:T1-order-a1:a1:chat",
+      "source": "normal.jsonl harness.model",
+      "attrs": {
+        "run_id": "T1-order-run",
+        "count": 2,
+        "tokens_input": 100,
+        "tokens_output": 20,
+        "tokens_cache_read": 40
+      }
+    },
+    {
+      "order_id": "T1-order",
+      "stable_id": "sid-T1-order",
+      "span_name": "execute_tool",
+      "parent_span_name": "invoke_agent",
+      "span_id": "T1-order:invoke_agent:T1-order-a1:a1:execute_tool",
+      "source": "normal.jsonl harness.tool+effects.db",
+      "attrs": {
+        "run_id": "T1-order-run",
+        "count": 2,
+        "impure": 2,
+        "effect_intents": 2
+      }
+    }
+  ]
+}

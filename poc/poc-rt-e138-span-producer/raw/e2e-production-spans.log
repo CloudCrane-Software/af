@@ -1,0 +1,52 @@
+== RT-E138 e2e 2026-11-05T01:36:42+08:00 ==
+CARGO_TARGET_DIR=/data/bench/targets/rt-e138-span-producer
+AF_OTEL_PRODUCTION_STATE=/home/pan-ding/af-dev/af/wt/rt-e138-span-producer/状态观测/otel-production.json
+
+== 0. 状态面起始（必须缺席或由生产者写入；此处只 mkdir 目录）==
+
+$ mkdir -p /home/pan-ding/af-dev/af/wt/rt-e138-span-producer/状态观测
+rc=0
+NOTE: 状态面已存在，将由生产者覆盖本单行（不手工改内容）
+
+== 1. 订单链路：stub 全生命周期 drive + 四层树夹具投影 ==
+
+$ cargo test -p af-execline --test span_produce -- --nocapture --test-threads=1
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.19s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/span_produce.rs (/data/bench/targets/rt-e138-span-producer/debug/deps/span_produce-a3366767086fbfea)
+
+running 7 tests
+test drive_publishes_true_order_keyed_spans_when_env_set ... drive_publishes: order_id=wo-span-2636452 keyed_rows=6 state=/home/pan-ding/af-dev/af/wt/rt-e138-span-producer/状态观测/otel-production.json
+ok
+test empty_dir_emits_zero_rows ... ok
+test full_tree_emits_four_layers_all_keyed ... full_tree published keyed_rows=6 order_id=T1-order state=/home/pan-ding/af-dev/af/wt/rt-e138-span-producer/状态观测/otel-production.json
+ok
+test ledger_only_emits_workflow_span_with_true_order_id ... ok
+test ledger_without_order_id_emits_zero_rows ... ok
+test publish_from_env_skips_when_unset ... ok
+test publish_upserts_by_order_id_and_counts_keyed_rows ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.21s
+
+rc=0
+
+== 2. 状态面内容与订单级键行计数 ==
+$ python3 -I -c <count>
+path= /home/pan-ding/af-dev/af/wt/rt-e138-span-producer/状态观测/otel-production.json
+exists= True
+schema= af.otel.production.v1
+producer= af-execline/span_produce
+updated_at_unix= 1793813805
+span_rows= 6
+keyed_rows= 6
+order_ids= ['T1-order', 'wo-span-2636331', 'wo-span-2636452']
+span_names= ['chat', 'execute_tool', 'invoke_agent', 'invoke_workflow']
+rc=0
+
+== 3. 断言器 --production-check（发布面；本机若缺件则如实记红）==
+
+$ python3 -I tools/otel/otlp-assert.py --production-check
+python3: can't open file '/home/pan-ding/af-dev/af/wt/rt-e138-span-producer/tools/otel/otlp-assert.py': [Errno 2] No such file or directory
+rc=2
+== e2e 完毕 ==

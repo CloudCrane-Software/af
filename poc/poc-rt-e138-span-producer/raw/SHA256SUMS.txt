@@ -1,0 +1,13 @@
+96cfdce2c915f7040ee23f89364b615c47e2aeb8b0b0c04beba2416fc91df69c  crates/af-execline/src/span_produce.rs
+cc7fa9dd3afa25e5cca7e7f36d7ace324d766129019ac063825f15ca1b0eb6e5  crates/af-execline/src/lib.rs
+421bf6efd954165e4ebc5d0999119ba92ad7b78d896610469f61299c7f4ae747  crates/af-execline/src/driver.rs
+58c7c18469192d650ca5043ede2abb3739e747816e6d4ffea580f59605dafae1  crates/af-execline/src/bin/af-trace-tree-verify.rs
+d936f313824ec0fd01be377bf95573541b07f4ca5699cdcf27501d6665b69626  crates/af-execline/tests/span_produce.rs
+42c286fb4049bd3c39a627569086214ed142913c8125e0a2129dfded2320b286  docs/adr/003-order-persistence.md
+56b1a2fd0dca4a93d5c9bc32a74ceb745748de31f8b0f0be68715385d9640112  poc/poc-rt-e138-span-producer/README.md
+7eb2349fc96518dfe832b4321397af9f554f3b990700ac6185a588fe2832a66b  poc/poc-rt-e138-span-producer/raw/e2e-production-spans.sh
+5d677245871e9d1a25cfe173a836c193698cbb6ffec0de14a21336e825cb13d1  poc/poc-rt-e138-span-producer/raw/e2e-production-spans.log
+155d6c1b407e000537a15780b50ea909101fb857c957fafbf06cea35c06b60d7  poc/poc-rt-e138-span-producer/raw/otel-production.json
+837cdfcaa9bca745e51a08737404f86087eb28106c2e0c24609da4a5a7b7bcdc  poc/poc-rt-e138-span-producer/raw/missing-surface-search.sh
+97058d3cb3008e8454de84217bf03f244bef6010814dbdb255d7ed996be4924a  poc/poc-rt-e138-span-producer/raw/missing-surface-search.log
+eee5da65109127c64ba49740d2a9768b800ed1a69026a1f2de3f2711301be0e5  状态观测/otel-production.json
