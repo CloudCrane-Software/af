@@ -1,0 +1,17 @@
+{
+ "order_id": "wo-pocr-leg-1",
+ "stable_id": "sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a",
+ "state": "Closed",
+ "replayed": false,
+ "voucher_id": "bv-wo-pocr-leg-1",
+ "voucher_key_id": "244df653e2bd957d976bc8c6acc7e4d9550ba8b34eee5534c4a1111e185ad819",
+ "exec": null,
+ "verdict": null,
+ "record": null,
+ "evidence": [],
+ "mes_ch": null,
+ "ledger_ops_appended": 8,
+ "mes_events_emitted": 4,
+ "order_dir": "/home/pan-ding/af-dev/af/poc/poc-router-adjudicate/run/state/orders/wo-pocr-leg-1",
+ "engine_bin": "/data/bench/af-target/debug/af-engine"
+}

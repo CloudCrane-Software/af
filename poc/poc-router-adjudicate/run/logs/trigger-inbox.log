@@ -1,0 +1,6 @@
+[10:34:35] trigger-inbox 起（127.0.0.1:18765，home=/home/pan-ding/af-dev/af/poc/poc-router-adjudicate/run/trigger-home，sources=['mes-execline']，body 上限 1024KiB，注册表只读；secret 未配置（该 source 一律 401，fail-closed）：无）
+[10:34:35] http 127.0.0.1 "GET /healthz HTTP/1.1" 200 -
+[10:34:35] 收件: mes-execline/mes-wo-pocr-leg-1-complete-1 event=order_complete thread_key=mes:line-poc/wo-pocr-leg-1 sha=405bb11e9c93…
+[10:34:35] http 127.0.0.1 "POST /inbox/mes-execline HTTP/1.1" 202 -
+[10:34:35] http 127.0.0.1 "POST /inbox/mes-execline HTTP/1.1" 200 -
+[10:34:35] http 127.0.0.1 "POST /inbox/mes-execline HTTP/1.1" 401 -

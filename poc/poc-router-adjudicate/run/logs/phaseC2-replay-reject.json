@@ -1,0 +1,8 @@
+{
+ "returncode": 1,
+ "stdout_lines": [
+  "{\"leg\":\"envelope_verify\",\"ok\":true,\"detail\":{\"envelope_path\":\"/home/pan-ding/af-dev/af/poc/poc-router-adjudicate/run/trigger-home/inbox/mes-execline/mes-wo-pocr-leg-1-complete-1.json\",\"contract\":\"af.trigger.v1\",\"event_id\":\"mes-execline-mes-wo-pocr-leg-1-complete-1\",\"thread_key\":\"mes:line-poc/wo-pocr-leg-1\",\"payload_ref\":\"inbox/mes-execline/mes-wo-pocr-leg-1-complete-1.json\",\"payload_sha256\":\"405bb11e9c93d4db5df6faa056112800a6f920e19cc5e8a7e5ebe78ba4bb2373\",\"dedup_key\":\"order_complete:line-poc/wo-pocr-leg-1\",\"source\":\"mes-execline\",\"received_at\":\"2026-11-04T02:34:35+00:00\",\"delivery_id\":\"mes-wo-pocr-leg-1-complete-1\",\"event_type\":\"order_complete\",\"body_bytes_len\":601,\"note\":\"唯一可信载荷=body_b64（payload_sha256 自证）；冗余字段（event_type/delivery_id/body）已与重解析逐项核对，thread_key/dedup_key 已按收件箱兜底分支从注册表+已验载荷重推导核对\"}}",
+  "{\"leg\":\"adjudication_target\",\"ok\":true,\"detail\":{\"order_id\":\"wo-pocr-leg-1\",\"stable_id\":\"sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a\",\"mes_event_id\":\"sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a:complete:7:3d8ab44334d5e0a1\",\"source_state\":\"Closed\",\"ledger_records\":8,\"mes_events_total\":4,\"note\":\"源单身份从已验信封载荷派生；stable_id 与账本对账、MES complete 事件与源单 MES 正本逐字对账过\"}}"
+ ],
+ "stderr": "{\"leg\":\"dedup_cursor\",\"ok\":false,\"error\":\"重放投递拒派：delivery_id=mes-wo-pocr-leg-1-complete-1 dedup_key=order_complete:line-poc/wo-pocr-leg-1 已于 2026-11-04T02:34:38.095853152+00:00 消费（order_id=wo-pocr-leg-1）\"}"
+}

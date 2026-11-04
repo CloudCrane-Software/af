@@ -1,0 +1,9 @@
+{
+ "ran_at": "2026-11-04T02:34:38+00:00",
+ "git_head": "83bb71c12e5da73076ea67ce3280e65a5713ef62",
+ "order_id": "wo-pocr-leg-1",
+ "delivery_id": "mes-wo-pocr-leg-1-complete-1",
+ "source": "mes-execline",
+ "trigger_inbox_tool": "poc/poc-super-agent/tools-mirror/trigger-inbox.py",
+ "note": "凭证种子 voucher-key.seed（0600 秘密面）不入证据清单；复算以信封 payload_sha256 / 裁决单 doc_sha256 / 账本行为准。"
+}

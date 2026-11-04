@@ -1,0 +1,7 @@
+# voucher 私钥种子（submit 生成，0600 秘密面）不入库；复算以信封
+# payload_sha256 / 裁决单 doc_sha256 / 账本行为准（README「边界」节登记）。
+run/state/orders/*/voucher-key.seed
+# station.db 随根 .gitignore 全仓 *.db 惯例不入库；队列行证据=
+# run/station-tasks.json（全表转储，含幂等键/状态/认领人）。
+run/station.db*
+__pycache__/

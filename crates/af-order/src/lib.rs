@@ -32,6 +32,7 @@ pub mod adjudicate;
 pub mod cli;
 pub mod error;
 pub mod exec;
+pub mod router;
 pub mod spec;
 pub mod state;
 pub mod voucher;
@@ -51,6 +52,12 @@ pub use error::OrderError;
 pub use exec::{
     parse_exec_flags, parse_unit_choice, report_unit_for, resolve_unit, swev_unit_spec_for,
     RealExec, SelectedUnit, UnitChoice, EXEC_FLAGS,
+};
+pub use router::{
+    append_consumed, consumed_path, duplicate_consumed, load_consumed, load_registry,
+    resolve_adjudication_target, verify_envelope, AdjudicationTarget, ConsumedRecord,
+    RouterError, TriggerEnvelope, TriggerRegistry, VerifiedTrigger, CONSUMED_FILE,
+    ORDER_COMPLETE_EVENT, TRIGGER_CONTRACT,
 };
 pub use spec::{parse_spec, OrderSpec, SpecError, SPEC_FIELDS};
 pub use state::{OrderSummary, StateDir};

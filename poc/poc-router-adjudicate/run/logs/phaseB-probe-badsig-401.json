@@ -1,0 +1,7 @@
+{
+ "status": 401,
+ "response": {
+  "error": "bad_signature",
+  "key_id": "pocr-mes-key-1"
+ }
+}

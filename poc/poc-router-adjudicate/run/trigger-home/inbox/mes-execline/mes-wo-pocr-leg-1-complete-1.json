@@ -1,0 +1,36 @@
+{
+ "contract": "af.trigger.v1",
+ "event_id": "mes-execline-mes-wo-pocr-leg-1-complete-1",
+ "thread_key": "mes:line-poc/wo-pocr-leg-1",
+ "payload_ref": "inbox/mes-execline/mes-wo-pocr-leg-1-complete-1.json",
+ "payload_sha256": "405bb11e9c93d4db5df6faa056112800a6f920e19cc5e8a7e5ebe78ba4bb2373",
+ "dedup_key": "order_complete:line-poc/wo-pocr-leg-1",
+ "source": "mes-execline",
+ "received_at": "2026-11-04T02:34:35+00:00",
+ "delivery_id": "mes-wo-pocr-leg-1-complete-1",
+ "event_type": "order_complete",
+ "key_id": "pocr-mes-key-1",
+ "hmac": "sha256",
+ "biz_object": "",
+ "body": {
+  "event": "order_complete",
+  "delivery_id": "mes-wo-pocr-leg-1-complete-1",
+  "repository": {
+   "full_name": "line-poc/wo-pocr-leg-1",
+   "name": "wo-pocr-leg-1"
+  },
+  "order_id": "wo-pocr-leg-1",
+  "stable_id": "sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a",
+  "line_id": "line-poc",
+  "mes_event": {
+   "work_order_id": "sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a",
+   "occurred_at": 1793759675675,
+   "event_id": "sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a:complete:7:3d8ab44334d5e0a1",
+   "line_id": "stub:line-poc",
+   "station_id": "af-order-cli",
+   "kind": "complete",
+   "quantity": 1
+  }
+ },
+ "body_b64": "eyJldmVudCI6Im9yZGVyX2NvbXBsZXRlIiwiZGVsaXZlcnlfaWQiOiJtZXMtd28tcG9jci1sZWctMS1jb21wbGV0ZS0xIiwicmVwb3NpdG9yeSI6eyJmdWxsX25hbWUiOiJsaW5lLXBvYy93by1wb2NyLWxlZy0xIiwibmFtZSI6IndvLXBvY3ItbGVnLTEifSwib3JkZXJfaWQiOiJ3by1wb2NyLWxlZy0xIiwic3RhYmxlX2lkIjoic2lkLTM4ZjQzMWE0YTljYmJmYTNmZDk4MjI3ZDQzMGRjMjU1YjlmYTQ4YTkxYjE4NzU3NTUyMWE1ZTg5N2RiZGFkNGEiLCJsaW5lX2lkIjoibGluZS1wb2MiLCJtZXNfZXZlbnQiOnsid29ya19vcmRlcl9pZCI6InNpZC0zOGY0MzFhNGE5Y2JiZmEzZmQ5ODIyN2Q0MzBkYzI1NWI5ZmE0OGE5MWIxODc1NzU1MjFhNWU4OTdkYmRhZDRhIiwib2NjdXJyZWRfYXQiOjE3OTM3NTk2NzU2NzUsImV2ZW50X2lkIjoic2lkLTM4ZjQzMWE0YTljYmJmYTNmZDk4MjI3ZDQzMGRjMjU1YjlmYTQ4YTkxYjE4NzU3NTUyMWE1ZTg5N2RiZGFkNGE6Y29tcGxldGU6NzozZDhhYjQ0MzM0ZDVlMGExIiwibGluZV9pZCI6InN0dWI6bGluZS1wb2MiLCJzdGF0aW9uX2lkIjoiYWYtb3JkZXItY2xpIiwia2luZCI6ImNvbXBsZXRlIiwicXVhbnRpdHkiOjF9fQ=="
+}

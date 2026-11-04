@@ -1,0 +1,9 @@
+{
+ "status": "ok",
+ "contract": "af.trigger.v1",
+ "sources": [
+  "mes-execline"
+ ],
+ "secrets_missing": [],
+ "home": "/home/pan-ding/af-dev/af/poc/poc-router-adjudicate/run/trigger-home"
+}
