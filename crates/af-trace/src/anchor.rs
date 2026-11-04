@@ -1,6 +1,6 @@
 //! critical 事件的 rekor 锚定。
 //!
-//! 落盘线程把已 `sync_data` 的 critical 事件交给锚线程。锚线程按 N 条或 T 毫秒封口，
+//! 落盘线程把已 `sync_all`（fsync）成功的 critical 事件交给锚线程。锚线程按 N 条或 T 毫秒封口，
 //! T 只和注入的 [`Clock`] 比较，不睡眠。到点观察发生在：事件进入锚线程、[`Trace::poll_anchor`]、
 //! shutdown。
 //!

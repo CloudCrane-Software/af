@@ -3,9 +3,13 @@
 //! 双通道语义：
 //!
 //! - **critical（移交同步、落盘确认、fail-closed）**：[`Trace::write_critical`] 把事件放进有界
-//!   critical 缓冲。缓冲满时立即返回 `Err(TraceError::CriticalFull)`，事件原样退还。
-//!   后台线程把事件以 JSONL 同步追加到调用方目录的 `critical.jsonl`，`sync_data` 成功后才记入
-//!   镜像。写盘失败则留下事件并返回 [`TraceError::PersistFailed`]，调用方决定重试或中止。
+//!   critical 缓冲，`Ok` **只代表已入队，不代表已写盘或已 fsync**（持久确认点是
+//!   [`Trace::shutdown`] 返回 `Ok`）。缓冲满时立即返回 `Err(TraceError::CriticalFull)`，
+//!   事件原样退还。后台线程把事件以 JSONL 同步追加到调用方目录的 `critical.jsonl`，
+//!   每条 `sync_all`（fsync：数据与 inode 元数据）成功后才记入镜像并推进
+//!   [`Trace::critical_durable`]；新建文件的目录项由打开路径的一次目录 fsync 钉住。
+//!   写盘失败则把已接受事件留在 [`TraceError::PersistFailed`] 里退还，调用方决定重试或中止，
+//!   不计缺口（critical 轨没有 fail-open 的丢弃路径）。
 //! - **normal（异步、有损）**：[`Trace::write_normal`] 放入有界队列，由后台线程追加到
 //!   `normal.jsonl`（不逐条 fsync）。队列满或写盘失败都丢弃并 `gap_counter += 1`，不阻塞生产者。
 //! - **OTel 非关键 lane（feature `otel`，默认关）**：落盘成功的 normal 事件可按

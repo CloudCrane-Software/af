@@ -1,0 +1,20 @@
+   Compiling af-trace v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-af-trace-fsync/crates/af-trace)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.86s
+     Running unittests src/lib.rs (/data/bench/targets/risk-af-trace-fsync/debug/deps/af_trace-1b19459f1218adaa)
+
+running 1 test
+[probe] write_critical(i=0) -> Ok(seq=0)，此刻事件仅在内存队列
+[probe] write_critical(i=1) -> Ok(seq=1)，此刻事件仅在内存队列
+[probe] write_critical(i=2) -> Ok(seq=2)，此刻事件仅在内存队列
+[probe] 3 个 Ok 之后、释放消费者之前：critical.jsonl 行数 = 0
+[probe] shutdown Ok 后：critical.jsonl 行数 = 3，critical_persisted = 3
+test trace::tests::poc_probe_ok_means_enqueued_not_persisted ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 39 filtered out; finished in 0.00s
+
+     Running tests/flood.rs (/data/bench/targets/risk-af-trace-fsync/debug/deps/flood-ac700c401959d7c6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+

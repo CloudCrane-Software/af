@@ -16,6 +16,8 @@ use std::time::Duration;
 
 pub const SCHEMA_VERSION: i64 = 1;
 pub const LINE_FORMAT: &str = "jsonl";
+/// critical 轨的耐久性档位声明。实际强度是每条 `sync_all`（fsync）+ 打开路径的一次目录 fsync，
+/// 仍属「sync」档：fsync ⊃ fdatasync，声明保持为真且旧库可重开，故值不动。
 pub const CRITICAL_DURABILITY: &str = "sync";
 
 const SCHEMA: &str = "
