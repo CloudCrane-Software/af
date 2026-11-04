@@ -1,0 +1,68 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.20s
+     Running unittests src/lib.rs (/data/bench/targets/risk-af-trace-fsync/debug/deps/af_trace-d05182b50e1ac770)
+
+running 48 tests
+test clock::tests::manual_clock_set_and_advance_are_shared_by_clones ... ok
+test http_util::tests::parse_url_appends_the_entries_path ... ok
+test http_util::tests::parse_response_reads_content_length ... ok
+test merkle::tests::single_leaf_root_is_prefixed_hash_and_proof_is_empty ... ok
+test merkle::tests::flipped_sibling_does_not_rebuild_the_root ... ok
+test otel::tests::zero_batch_size_uses_the_bsp_default ... ok
+test merkle::tests::two_leaves_are_one_internal_node ... ok
+test sha256::tests::nist_sha256_vectors ... ok
+test sha256::tests::hex_and_base64_roundtrip ... ok
+test rekor::tests::second_leaf_proof_covers_both_entries ... ok
+test rekor::tests::refused_port_is_unreachable ... ok
+test sha256::tests::rfc4231_hmac_sha256 ... ok
+test trace::tests::append_line_on_dev_full_returns_error ... ok
+test rekor::tests::memory_log_receipt_verifies_and_rejects_tampering ... ok
+test rekor::tests::http_stub_submits_and_connection_drop_is_unreachable ... ok
+test merkle::tests::inclusion_matches_root_for_uneven_trees ... ok
+test anchor::tests::disabled_anchor_does_not_write_sidecar_or_gap ... ok
+test anchor::tests::refused_endpoint_does_not_fail_open_and_still_persists_critical ... ok
+test anchor::tests::default_batch_seals_each_event ... ok
+test anchor::tests::batch_window_uses_the_injected_clock ... ok
+test anchor::tests::wedged_rekor_does_not_block_the_next_critical_write ... ok
+test anchor::tests::unreachable_queues_for_retry_without_blocking_critical ... ok
+test store::tests::pragmas_created_then_already_declared_keeps_gap ... ok
+test trace::tests::critical_persist_failure_is_fail_closed ... ok
+test store::tests::finding_c_foreign_sqlite_is_not_adopted ... ok
+test store::tests::finding_c_torn_tables_without_declaration_row_are_not_filled ... ok
+test anchor::tests::restart_retries_the_persisted_queue ... ok
+test trace::tests::export_failure_only_increments_gap_and_keeps_disk ... ok
+test trace::tests::orphan_jsonl_and_bad_dir_fail_closed ... ok
+test trace::tests::missing_collector_does_not_fail_startup ... ok
+test anchor::tests::batch_n_submits_and_shutdown_flushes_the_remainder ... ok
+test trace::tests::normal_events_map_to_spans_and_critical_never_enters ... ok
+test trace::tests::normal_persist_failure_counts_gap ... ok
+test trace::tests::offline_lane_counts_persisted_normals_and_skips_critical ... ok
+test trace::tests::ok_means_enqueued_durable_reads_lag_until_shutdown ... ok
+test trace::tests::poc_probe_ok_means_enqueued_not_persisted ... ok
+test trace::tests::unbuildable_exporter_degrades_to_pure_count ... ok
+test trace::tests::wedged_export_does_not_block_writes_and_overflow_counts_gap ... ok
+test trace::tests::declaration_gap_and_corrupt_log_fail_closed ... ok
+test trace::tests::restart_restores_critical_log_gap_counter_seq_and_clock ... ok
+test store::tests::declaration_mismatch_fails_closed_without_rewriting ... ok
+test trace::tests::zero_loss_when_under_capacity_and_closed_channel_errors ... ok
+test trace::tests::critical_persist_failure_freezes_durable_and_keeps_gap_zero ... ok
+test trace::tests::gap_counter_only_increases_across_normal_failures ... ok
+test trace::tests::normal_overflow_drops_and_counts_gap ... ok
+test trace::tests::gap_spans_coalesce_when_critical_is_also_full ... ok
+test trace::tests::critical_full_does_not_touch_gap_or_durable ... ok
+test trace::tests::critical_full_returns_err_and_event_is_preserved ... ok
+
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.01s
+
+     Running tests/flood.rs (/data/bench/targets/risk-af-trace-fsync/debug/deps/flood-70677c89634bc203)
+
+running 1 test
+test flood_100k_normal_events ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.16s
+
+   Doc-tests af_trace
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

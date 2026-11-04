@@ -108,17 +108,29 @@ strace 命令（before/after 各一次）：
 `strace -f -yy -e trace=fsync,fdatasync,sync_file_range,syncfs -o <out> cargo test -p af-trace --test flood -- --nocapture`
 （`-yy` 把 fd 解码成路径；flood 场景含 critical 检查点 + gap span 大量落盘。）
 
-## 五、门读数（全过）
+## 五、门读数（全过；本会话对未提交终态逐一重跑核实）
 
 | 门 | 命令 | exit | 读数 |
 |---|---|---|---|
 | test | `cargo test --workspace --all-features` | 0 | 152 套全 ok，**0 failed**，共 1519 passed |
-| test（默认） | `cargo test --workspace` | 0 | 152 套全 ok，0 failed |
+| test（默认） | `cargo test --workspace` | 0 | 152 套全 ok，0 failed，共 **1515 passed** |
+| test（补） | `cargo test -p af-trace --features otel` | 0 | 48+1 passed / 0 failed（改前同口径 44+1：39 既有 + 探针 1 → +4 新增，纯增） |
 | clippy | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | 0 | 无警告 |
-| clippy（默认） | `cargo clippy --workspace --all-targets -- -D warnings` | 0 | 无警告 |
+| clippy（默认） | `cargo clippy --workspace --all-targets -- -D warnings` | 0 | 无警告（stderr 仅外部依赖 proc-macro-error2 的 future-incompat 公告） |
 | clippy_gate | `cargo clippy --workspace --all-targets --all-features --message-format=json` → error 级 **0 条** → `python3 -I ci/clippy_gate.py <jsonl>` | 0 | `CLIPPY GATE: PASS`（基线 0 签名，未动） |
+| clippy_gate（默认） | 同上，去 `--all-features` | 0 | error 级 0 条；`CLIPPY GATE: PASS` |
 
-`ci/clippy-baseline.txt` 零改动（`git diff HEAD -- ci/` 为空）。crates 集合与根 Cargo.toml 未动。
+两个 json 门都先 `touch` 全部工作区源码强制 22 crate 全量重 lint，拿真实诊断流（任何级别
+0 条）再过门——缓存全 fresh 的空诊断流会让门平凡绿，不作数。插曲（如实记）：首次 all-features
+clippy json 撞 `/data/bench/targets/risk-af-trace-fsync` **瞬时 ENOSPC**（执行器不限并发、
+多 label 共享 /data 盘），编译失败流同样让门平凡绿；清 5.2G 增量缓存 + `CARGO_INCREMENTAL=0`
+重跑后为上表读数。归档：`after/gate-test-workspace.txt`、`after/gate-test-allfeatures.txt`、
+`after/gate-test-af-trace-otel.txt`、`after/gate-clippy-D-warnings.txt`、
+`after/gate-clippy-allfeatures-D-warnings.txt`、`after/gate-clippy.jsonl`（默认）、
+`after/gate-clippy-allfeatures.jsonl`、`after/gate-clippy-gate.txt`、
+`after/gate-clippy-allfeatures-gate.txt`、`after/gate-clippy-recompile-stderr.txt`。
+
+`ci/clippy-baseline.txt` 零改动（`git status --porcelain ci/` 为空）。crates 集合与根 Cargo.toml 未动。
 
 ## 六、如实登记的边界
 
