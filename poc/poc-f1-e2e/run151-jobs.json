@@ -1,0 +1,75 @@
+{
+  "jobs": [
+    {
+      "id": 151,
+      "url": "http://100.64.0.6:3300/api/v1/repos/opchadmin/af/actions/jobs/151",
+      "html_url": "http://100.64.0.6:3300/opchadmin/af/actions/runs/151/jobs/151",
+      "run_id": 151,
+      "run_url": "http://100.64.0.6:3300/api/v1/repos/opchadmin/af/actions/runs/151",
+      "name": "f1-fast-gate",
+      "labels": [
+        "opch-ci"
+      ],
+      "run_attempt": 1,
+      "head_sha": "8dc06d4386533e0c29bae154fc85018880dcd860",
+      "status": "completed",
+      "conclusion": "success",
+      "runner_id": 2,
+      "runner_name": "opch-act-runner",
+      "steps": [
+        {
+          "name": "分工声明（F1 快速门在此跑；F2 全量门不走 Actions）",
+          "number": 0,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-04T05:28:53Z",
+          "completed_at": "2026-11-04T05:28:53Z"
+        },
+        {
+          "name": "checkout（PR 头树；零外部 action 依赖，不用 actions/checkout）",
+          "number": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-04T05:28:53Z",
+          "completed_at": "2026-11-04T05:28:56Z"
+        },
+        {
+          "name": "工具链供给（runner 容器无 rust——按仓内钉住版自举；已装则直接复用）",
+          "number": 2,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-04T05:28:56Z",
+          "completed_at": "2026-11-04T05:29:00Z"
+        },
+        {
+          "name": "fmt --check（硬门；主线预存红见 ci/REPORT.md，红即如实亮红）",
+          "number": 3,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-04T05:29:00Z",
+          "completed_at": "2026-11-04T05:29:02Z"
+        },
+        {
+          "name": "clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）",
+          "number": 4,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-04T05:29:02Z",
+          "completed_at": "2026-11-04T05:29:20Z"
+        },
+        {
+          "name": "快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）",
+          "number": 5,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-11-04T05:29:20Z",
+          "completed_at": "2026-11-04T05:29:42Z"
+        }
+      ],
+      "created_at": "2026-11-04T05:28:48Z",
+      "started_at": "2026-11-04T05:28:53Z",
+      "completed_at": "2026-11-04T05:29:42Z"
+    }
+  ],
+  "total_count": 1
+}
