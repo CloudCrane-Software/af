@@ -80,10 +80,11 @@ v0.3 T7 终裁①：**CI 执行器 Gitea Actions 先行，Actions 只跑 F1 快�
   只读 GET `/api/v1/repos/opchadmin/af` 改前/改后双读取证，凭据指纹化、不落盘）。
   ⇒ **「默认 base 落在对照线 `main`」这一失门面已关闭**：不写 base 的 PR 现在默认
   对准 `product/main`，因而**默认就能拿到 F1 快速门**。
-  ★ **但显式写 base 仍为硬要求**，理由有二：① 仓设置可被再次改动（保护规则的
-  生效与撤销都是 API 一次调用），显式 base 不依赖仓设置；② `main` 仍是**存在**的
-  受保护只读分支（禁直推／禁 force／禁删），误开 base=`main` 的 PR **会被服务端拒绝**，
-  失败得早、失败得明确。
+  ★ **但显式写 base 仍为硬要求**，理由有三：① 仓设置可被再次改动（保护规则的
+  生效与撤销都是 API 一次调用），显式 base 不依赖仓设置；② **F1 快速门只认
+  base=`product/main`**——base 落到 `main` 的 PR **拿不到任何门**（不红不绿就是不跑），
+  这才是"显式写 base"的**首要**理由；③ `main` 虽已加保护，但**该保护只覆盖直推面**
+  （见下条），PR 路径不在其拦截范围内 ⇒ 不能指望服务端替你拦住误开的 PR。
 - **F1 快速门只在 base=product/main 时触发**（`.gitea/workflows/f1.yml` 实况：
   `on.pull_request.branches: [product/main]`）。base 落到 `main` 的 PR **拿不到
   F1 快速反馈**——静默失门，而非降级运行。
@@ -94,9 +95,19 @@ v0.3 T7 终裁①：**CI 执行器 Gitea Actions 先行，Actions 只跑 F1 快�
     （`Not allowed to push to protected branch`）；**真非快进 force 推被拒**
     （`protected from force push`）；**删除被拒**（`protected from deletion`）。
     ⇒ F1/F2 门不再可被「直推」绕过（直推仅限白名单账号），且历史不可被 force 改写。
-  - `main`：**只读归档线**（`enable_push=false`、白名单为空、禁 force、禁删）
+  - `main`：**直推面只读归档线**（`enable_push=false`、白名单为空、禁 force、禁删）
     ⇒ **连 owner 也推不上去**（实测 pre-receive 拒绝），`main` 上的 2 个独有提交
-    与 `f373113` 指针**就此冻结**，符合「对照线只读」的定位。
+    与 `f373113` 指针**在直推／force／删除三面上就此冻结**，符合「对照线只读」的定位。
+    ⚠ **口径限定（不可扩大解读）**：该保护**只覆盖直推面**。**PR 合流面不在其拦截范围内**
+    ——上游 v28.0.0 源码实测：开 PR 路径无任何保护分支校验（`routers/api/v1/repo/pull.go`
+    与 `services/pull/pull.go` 的创建路径均无 protect 检查）；合流路径 `doMergeAndPush`
+    走真 git push 进 pre-receive，而 `IsUserMergeWhitelisted` 在 `enable_merge_whitelist=false`
+    时**回落「写权限」**（`models/git/protected_branch.go:189-193`），仓主/admin 另经
+    `CanBypassBranchProtection`（`:213-216`，本仓 `block_admin_merge_override=false`）
+    **无条件放行**、且该放行在 `CheckPullBranchProtections` 之前返回
+    ⇒ **有写权限者以 PR 方式合流 `main` 仍可能成功**。
+    ⇒ **「main 只读」只对直推面成立**，**不等于「任何路径都写不进 main」**；
+    防止误回合的**实际防线是流程纪律 + F1 门不覆盖 main 这一事实**（不是服务端拦截）。
   - **回滚方式**：两条规则各一条 API 删除即可复原（不影响任何 ref）。
   - ⚠ **与 §五 上一条的关系**：`product/main` 仍**允许**白名单直推 ⇒ 本仓**不是**
     「强制 PR 合流」模型；F1 快速门是 **PR 路径**的门，**直推路径不经 F1**
