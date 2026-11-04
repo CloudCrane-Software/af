@@ -536,7 +536,7 @@ step 12 "计数复算 numbers.json + {{numbers.*}} 占位符" -- \
 #       上线前置=report_unit.rs:1112/1262 先修（总对账 §四.2，G0-C 已完成）。
 echo "== step13 横切与对称（fix-scan 族横切 + arm-wiring 三臂逐格 + budget-cast-lint）"
 step 13a "fix-scan 同族横切扫描（diff 档路径过滤；合流档 FIXSCAN_MODE=full 全量）" -- \
-  bash -c "cd '$AF_ROOT' && python3 ci/fix_scan.py --validate && python3 ci/fix_scan.py --run --mode \"\${FIXSCAN_MODE:-diff}\" --diff-base \"\${FIXSCAN_DIFF_BASE:-origin/main}\""
+  bash -c "cd '$AF_ROOT' && python3 ci/fix_scan.py --validate && python3 ci/fix_scan.py --run --mode \"\${FIXSCAN_MODE:-diff}\" --diff-base \"\${FIXSCAN_DIFF_BASE:-HEAD~1}\""
 step 13b "arm-wiring 三臂防线逐格断言（删任一格即红；absent 格挂债号）" -- \
   bash -c "cd '$AF_ROOT' && python3 ci/arm_wiring_check.py --validate ci/arm-wiring.yaml && python3 ci/arm_wiring_check.py --check ci/arm-wiring.yaml --report ci/out/arm-wiring-report.json"
 step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail-loud）" -- \

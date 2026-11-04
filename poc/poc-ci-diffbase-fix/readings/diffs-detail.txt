@@ -1,0 +1,102 @@
+== CI-BOUNDARY.md diff（应为纯新增段）：
+diff --git a/docs/CI-BOUNDARY.md b/docs/CI-BOUNDARY.md
+index 9be8efb..16dad48 100644
+--- a/docs/CI-BOUNDARY.md
++++ b/docs/CI-BOUNDARY.md
+@@ -68,3 +68,23 @@ v0.3 T7 终裁①：**CI 执行器 Gitea Actions 先行，Actions 只跑 F1 快
+ 规则：**merged → 清**（worktree 目录与分支登记后移除）；**aborted → 留证 48h**
+ （保留现场与留痕文件，48h 后可清）；**超时 → 止损**（lease 过期即强制回收）。
+ **lease TTL 到期 ≠ 删树**：TTL 只重置认领，删树只走上述三路。详见脚本头注。
++
++## 五、合流目标与 PR 基线口径（L1' 治理登记，2026-11-04）
++
++产品仓 af 的**唯一合流目标是 `product/main`**。远端 `main` 是 **fix3 代际对照线**：
++非默认分支、非合流目标、勿直接回合（merge/rebase/cherry-pick 回 `main` 一律禁止）。
++本节只新增口径与事实，不改 §一—§四 任何既有语义。据此：
++
++- **开 PR 的 base 必须显式写 `product/main`**。Gitea 的「默认 base」跟随仓设置
++  default_branch——实测（只读 GET `/api/v1/repos/opchadmin/af`，2026-11-04，
++  凭据指纹化取证 `poc/poc-ci-diffbase-fix/readings/gitea-readonly.json`）该值
++  **仍为 `main`**：不写 base 的 PR 会默认对准对照线 `main`。改仓设置属运营者
++  签认项（L2），非本批动作。
++- **F1 快速门只在 base=product/main 时触发**（`.gitea/workflows/f1.yml` 实况：
++  `on.pull_request.branches: [product/main]`）。base 落到 `main` 的 PR **拿不到
++  F1 快速反馈**——静默失门，而非降级运行。
++- 关联缺陷（L1，同批修复）：`ci/fix_scan.py --diff-base` 缺省曾误取 `origin/main`
++  （对照线），致 step13a diff 档路径过滤失效——本仓两线无 merge-base，基点恒
++  不可解析 → 恒回落 full；若基点可解析亦属按对照线全树差集恒全族触发。缺省已改
++  `HEAD~1`（与 mutations 门 `MUT_BASE` 同款，run.sh:167 先例），「基点不可解析
++  时 fail-safe 回落 full」语义逐字保持。
+
+== fix_scan.py + run.sh diff：
+diff --git a/ci/fix_scan.py b/ci/fix_scan.py
+index 219a72a..a978c08 100644
+--- a/ci/fix_scan.py
++++ b/ci/fix_scan.py
+@@ -6,7 +6,7 @@
+ 
+ 子命令：
+   --validate [--config ci/fix-scan.yaml]   schema+白名单校验（任何字段违例 exit 2）
+-  --run --mode diff|full [--diff-base origin/main] [--family ID]
++  --run --mode diff|full [--diff-base HEAD~1] [--family ID]
+                                           逐族扫描；diff 档=trigger_globs 命中的族才跑，
+                                           full 档=全族全量；产物落 redteam/scans/<batch>/
+   --verify-artifacts [--config ...]       合流门钩子：最新 batch 各族产物存在且 sha256 一致
+@@ -561,7 +561,11 @@ def main() -> int:
+     ap.add_argument("--verify-artifacts", action="store_true", help="合流门钩子：最新 batch 产物+sha256 核查")
+     ap.add_argument("--config", default=DEFAULT_CONFIG)
+     ap.add_argument("--mode", choices=["diff", "full"], default="diff")
+-    ap.add_argument("--diff-base", default="origin/main")
++    # 基点缺省 HEAD~1（本次改动面）——与同仓 mutations 门 MUT_BASE 缺省同款（run.sh
++    # 「基点缺省 HEAD~1；基点不可解析时 fail-safe 判 full」先例）；origin/main 是
++    # fix3 代际对照线，取它当基点=diff 档路径过滤失效。不可解析时 changed_files
++    # 返 None → 回落 full（宁多扫不漏扫），fail-safe 语义保持不变。
++    ap.add_argument("--diff-base", default="HEAD~1")
+     ap.add_argument("--family", default=None, help="只跑指定族（配合 --run）")
+     ap.add_argument("--whitelist-json", default=DEFAULT_WHITELIST_JSON,
+                     help="sat-cast 白名单单一正本（ci/budget-cast-whitelist.json）")
+diff --git a/ci/run.sh b/ci/run.sh
+index 976ec19..a994cbb 100755
+--- a/ci/run.sh
++++ b/ci/run.sh
+@@ -536,7 +536,7 @@ step 12 "计数复算 numbers.json + {{numbers.*}} 占位符" -- \
+ #       上线前置=report_unit.rs:1112/1262 先修（总对账 §四.2，G0-C 已完成）。
+ echo "== step13 横切与对称（fix-scan 族横切 + arm-wiring 三臂逐格 + budget-cast-lint）"
+ step 13a "fix-scan 同族横切扫描（diff 档路径过滤；合流档 FIXSCAN_MODE=full 全量）" -- \
+-  bash -c "cd '$AF_ROOT' && python3 ci/fix_scan.py --validate && python3 ci/fix_scan.py --run --mode \"\${FIXSCAN_MODE:-diff}\" --diff-base \"\${FIXSCAN_DIFF_BASE:-origin/main}\""
++  bash -c "cd '$AF_ROOT' && python3 ci/fix_scan.py --validate && python3 ci/fix_scan.py --run --mode \"\${FIXSCAN_MODE:-diff}\" --diff-base \"\${FIXSCAN_DIFF_BASE:-HEAD~1}\""
+ step 13b "arm-wiring 三臂防线逐格断言（删任一格即红；absent 格挂债号）" -- \
+   bash -c "cd '$AF_ROOT' && python3 ci/arm_wiring_check.py --validate ci/arm-wiring.yaml && python3 ci/arm_wiring_check.py --check ci/arm-wiring.yaml --report ci/out/arm-wiring-report.json"
+ step 13c "budget-cast-lint 预算 cast 门（白名单挂债号 + 兜底臂 fail-loud）" -- \
+
+== fail-safe 分支仍在（changed_files→None→full 逐字核）：
+def changed_files(root: Path, base: str) -> set[str] | None:
+    """git diff --name-only base...HEAD；base 不可解析返回 None（调用方按 full 保守处理）。"""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--verify", base], cwd=root,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            return None
+        r = subprocess.run(["git", "diff", "--name-only", f"{base}...HEAD"], cwd=root,
+                           capture_output=True, text=True)
+        if r.returncode != 0:
+            return None
+        return {ln.strip() for ln in r.stdout.splitlines() if ln.strip()}
+    except Exception:
+        return None
+    mode = args.mode
+    triggered_note = "全族全量（full 档）"
+    if mode == "diff":
+        changed = changed_files(root, args.diff_base)
+        if changed is None:
+            note(f"WARN: diff-base {args.diff_base} 不可解析——保守按 full 全族跑（宁多扫不漏扫）")
+            mode = "full"
+            triggered_note = "diff-base 缺失回落 full"
+        else:
+            fams_in = [f for f in cfg["families"]
+                       if any(glob_match(c, g) for c in changed for g in (f.get("trigger_globs") or []))]
+            skipped = [f["id"] for f in cfg["families"] if f["id"] not in {x["id"] for x in fams_in}]
+            triggered_note = (f"diff 档触发 {len(fams_in)}/{len(cfg['families'])} 族"
+                              f"（base={args.diff_base}，changed={len(changed)} 文件；"
+-- fix-scan.yaml（族定义/白名单正本）与基线逐字节对照（0 行 diff = 逐字未动）：
+0

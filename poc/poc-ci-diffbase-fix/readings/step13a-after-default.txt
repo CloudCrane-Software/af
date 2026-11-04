@@ -1,0 +1,10 @@
+== AFTER-fix step13a 实跑 A（缺省裸调，证缺省已=HEAD~1）: 2026-11-04 18:00:23
+$ python3 ci/fix_scan.py --run --mode diff
+[fix-scan] mode=diff：diff 档触发 2/2 族（base=HEAD~1，changed=18 文件；跳过: 无）
+[fix-scan] WL-STALE crates/af-execline/src/graph_unit.rs:1068 白名单条目未被本族模式命中（D-50）——或由共读方 budget-cast-lint 消费（两门检测强度不同属设计），或站点已修/行号漂移请销项
+[fix-scan] WL-STALE crates/af-execline/src/shadow.rs:392 白名单条目未被本族模式命中（D-50）——或由共读方 budget-cast-lint 消费（两门检测强度不同属设计），或站点已修/行号漂移请销项
+  VIOLATION sat-cast crates/af-execline/src/graph_unit.rs:1167: 族模式命中（suggested_debt: D-53）: turns: stage.turns as u32,
+== fix-scan sat-cast: 1 白名单外命中 / 0 白名单生效 → 产物 redteam/scans/2026-11-04-25429293/sat-cast.json (+.sha256)
+== fix-scan pyc-shadow: 0 白名单外命中 / 0 白名单生效 → 产物 redteam/scans/2026-11-04-25429293/pyc-shadow.json (+.sha256)
+== fix-scan --run: batch=2026-11-04-25429293 mode=diff exit=1
+exit=1

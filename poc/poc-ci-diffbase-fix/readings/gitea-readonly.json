@@ -1,0 +1,29 @@
+{
+  "cred_fingerprint": "5c5df08f27c9",
+  "method": "GET（只读，零写操作）",
+  "results": {
+    "repo": {
+      "http_status": 200,
+      "default_branch": "main",
+      "full_name": "opchadmin/af",
+      "mirror": false
+    },
+    "branch_protections": {
+      "http_status": 200,
+      "count": 0,
+      "body_shape": "list"
+    },
+    "branches_main": {
+      "http_status": 200,
+      "name": "main",
+      "protected": false,
+      "commit_sha": "f37311348842465c087cc2562e954812d46295e1"
+    },
+    "branches_product_main": {
+      "http_status": 200,
+      "name": "product/main",
+      "protected": false,
+      "commit_sha": "25429293b0671460d394cb217290f5cebf024a52"
+    }
+  }
+}
