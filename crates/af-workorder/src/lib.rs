@@ -12,6 +12,9 @@
 //!    `run_id`,不换 `stable_id`。分片键是 `sha256(stable_id)` 对配方层分片数取模。
 //!    老载荷缺 `stable_id` 时走拒绝式信封([`error::RejectionEnvelope`]),不补默认身份。
 //!    线格式不认识的字段也走拒绝式信封,并列出每一个字段名,不静默丢弃。
+//! 7. **graph_version 传递依赖锁**:[`graph_deps`] 把图依赖方
+//!    (evaluator/adapter/template)的**传递闭包**版本钉进域分离 SHA-256——
+//!    同图同闭包可复算,闭包内任何版本/类别变化 ⇒ digest 变(开放风险 #6 收口)。
 //!
 //! payload_hash 为 SHA-256 小写十六进制([`hash`]),跨进程确定。
 //! 变更单签名是真 ed25519([`sign`]):在本 crate 内签发与验签,不经过 af-credential。
@@ -21,6 +24,7 @@ pub mod gate_admit;
 pub mod change;
 pub mod decision;
 pub mod error;
+pub mod graph_deps;
 pub mod hash;
 pub mod identity;
 pub mod order;
@@ -38,8 +42,12 @@ pub use decision::{
     TrustedActorRegistry, DECISION_SIGNING_DOMAIN, SIGNATURE_ALGORITHM_PLACEHOLDER,
 };
 pub use error::{
-    ChangeError, DecisionError, GateError, IdentityError, Missing, OrderDecodeError,
-    RejectionEnvelope, RejectionKind, ShardError, SignError,
+    ChangeError, DecisionError, GateError, GraphDepsError, IdentityError, Missing,
+    OrderDecodeError, RejectionEnvelope, RejectionKind, ShardError, SignError,
+};
+pub use graph_deps::{
+    dependency_closure, graph_deps_digest, ClosureMember, DepKind, DepRef, DependencyTable,
+    GraphDepsDigest, GRAPH_DEPS_DOMAIN,
 };
 pub use hash::{sha256, sha256_hex, SHA256_HEX_LEN, SHA256_LEN};
 pub use identity::{

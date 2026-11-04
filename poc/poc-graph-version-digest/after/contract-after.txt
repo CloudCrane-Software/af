@@ -1,0 +1,25 @@
+   Compiling af-workorder v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-graph-version-digest/crates/af-workorder)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.72s
+     Running tests/graph_deps_contract.rs (/data/bench/targets/risk-graph-version-digest/debug/deps/graph_deps_contract-e9d88df4c7261ed6)
+
+running 9 tests
+CONTRACT evaluator@1 digest = 3b6d59b0ce8728b49603ad6d9ccb2187a53a83bcdb904db6be736ddfccfb5e7e
+CONTRACT evaluator@2 digest = 715961f7d6a2b292dbc46eb044723c789346a64d550543ca74c0625aa6cb007b
+CONTRACT 复算材料 = "af-workorder/graph-deps/v1\0|3|g-3|3|7|adapter|13|pkg.x.adapter|1|1|9|evaluator|15|pkg.x.evaluator|1|1|8|template|14|pkg.x.template|1|1"
+CONTRACT 复算 digest = 3b6d59b0ce8728b49603ad6d9ccb2187a53a83bcdb904db6be736ddfccfb5e7e
+test empty_closure_still_locks_the_graph_version ... okCONTRACT 多版本共存,取向 @1 ⇒ digest = 26d0117cfae550b262610c4d8a2cea8d0f003a51760bfa66c9bea8f66d14d3a0
+CONTRACT 多版本共存,取向 @2 ⇒ digest = 4d34d37feacf49d794f768aa56871279b754b84d6a6977ccc6efcb77fcfe82a2(registry_digest 对此无感)
+
+test direct_dependency_version_change_is_detected ... ok
+test graph_version_string_and_kind_are_part_of_the_contract ... ok
+test missing_declaration_fails_loud_without_digest ... ok
+test outside_closure_change_keeps_digest ... ok
+test same_graph_same_closure_is_reproducible_outside_the_crate ... ok
+test multi_version_coexistence_pins_orientation ... ok
+CONTRACT 传递链 C(template)@1 ⇒ root digest = 3b6d59b0ce8728b49603ad6d9ccb2187a53a83bcdb904db6be736ddfccfb5e7e
+CONTRACT 传递链 C(template)@2 ⇒ root digest = 99aa95b4936a9e6a1fea7091ea32b5672b9879b495c43130984e859522a46a04
+test roots_and_declaration_order_are_irrelevant ... ok
+test transitive_dependency_version_propagates_to_root_digest ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
