@@ -1,0 +1,122 @@
+F2 执行面端到端演练（隔离目录）
+时间=2026-11-05 00:39:18  DRILL_ROOT=/home/pan-ding/workspace/f2-drill-scratch/run
+本机工作树=/home/pan-ding/workspace/af-wt-t7-1-f2  共享树(只读)=/home/pan-ding/workspace/agent黑灯工厂/af
+★ 门是桩门（stub_gate.sh）；真实 ci/run.sh 全量门本机未跑（README §五 已登记理由）
+
+===== [S01] 候选树：共享树的 sparse shared clone（对象共享，不写 af 仓 worktree 登记） =====
+候选树 HEAD=f48960116a6005cd37eadbc013263d5f38487825  干净性=0 行变更
+集成器复核器在位=yes
+
+===== [S02] 造演练夹具（本地文件面；非合成 gitea 投递） =====
+--- make_fixture（正向臂：source=base=f48960116a6005cd37eadbc013263d5f38487825）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/make_fixture.py --out /home/pan-ding/workspace/f2-drill-scratch/run --source-sha f48960116a6005cd37eadbc013263d5f38487825 --base-sha f48960116a6005cd37eadbc013263d5f38487825 --delivery-id drill-f2-delivery-0001
+--- exit=0
+
+===== [S03] 负向臂 N-A：宿主供给核（对真实 af 工作树；cosign 不入库 ⇒ 真实缺件） =====
+--- f2_runner supply --repo /home/pan-ding/workspace/af-wt-t7-1-f2
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py supply --repo /home/pan-ding/workspace/af-wt-t7-1-f2
+--- exit=1
+
+===== [S04] 正向臂准备：装**演练用** cosign 替身到候选树 bin/（bin/ 在 .gitignore 行 2 ⇒ 不入版本面） =====
+--- f2_runner supply --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate（替身装好后）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py supply --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate
+--- exit=0
+候选树 git status（替身不应污染）：0 行
+
+===== [S05] 派单侧：ingest（在役面只读 → runner 自有队列） =====
+--- f2_dispatch ingest
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+--- exit=0
+TASK_ID=F2-opchadmin-af-d41f6a92da893388
+
+===== [S06] 负向臂 N-B：同一投递再 ingest 一次 ⇒ 幂等（不得产生第二个任务） =====
+--- f2_dispatch ingest（第二次）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+--- exit=0
+队列任务件数=1（应为 1）
+
+===== [S07] runner：领单 → 跑门（桩门）→ 落 SUMMARY → 结论入账 → 回报 =====
+--- f2_runner run（正向臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-d41f6a92da893388 --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-1
+--- exit=0
+结果件 verdict=pass  reason=[]
+四元组（自记录件读出，非手抄）={'base_sha': 'f48960116a6005cd37eadbc013263d5f38487825', 'source_sha': 'f48960116a6005cd37eadbc013263d5f38487825', 'suite_digest': 'a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31', 'tested_tree': '804cc31c5abc1c83d9de7fcbe9049e9e551273f7'}
+记录件=/home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json  在位=yes
+
+===== [S08] T7② integrator 复核面：verify（机器侧核对四项绑定 + 门摘要回读） =====
+--- integrator_bind_check verify
+$ python3 -I /home/pan-ding/workspace/f2-drill-scratch/run/candidate/ci/integrator_bind_check.py verify --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --branch feature/f2-drill --remote origin --base-ref origin/product/main --source f48960116a6005cd37eadbc013263d5f38487825 --allow-local-source
+--- exit=0
+
+===== [S09] 负向臂 N-C：门摘要文件被追加一行 ⇒ 复核面三方比对（磁盘↔内嵌 sha↔内嵌原文）拒绝 =====
+--- integrator_bind_check verify（篡改后）
+$ python3 -I /home/pan-ding/workspace/f2-drill-scratch/run/candidate/ci/integrator_bind_check.py verify --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --branch feature/f2-drill --remote origin --base-ref origin/product/main --source f48960116a6005cd37eadbc013263d5f38487825 --allow-local-source
+--- exit=1
+
+===== [S10] 负向臂 N-D：门红（桩门 mode=red）⇒ 不写记录件 =====
+--- f2_dispatch ingest（红门臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+--- exit=0
+--- f2_runner run（红门臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-5dced5685fb14315 --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-red.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-1
+--- exit=1
+红门臂 verdict=fail  reason=['SUMMARY-NON-GREEN-STEP']
+红门臂记录件在位=no（应为 no）
+
+===== [S11] 负向臂 N-E：SUMMARY 里出现 SKIP 状态（不在白名单）⇒ 不得计绿 ⇒ 不写记录件 =====
+--- f2_dispatch ingest（SKIP 臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+--- exit=0
+--- f2_runner run（SKIP 臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-27910a8c445fef42 --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-skip.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-1
+--- exit=1
+SKIP 臂 verdict=fail  reason=['SUMMARY-NON-GREEN-STEP']
+SKIP 臂记录件在位=no（应为 no）
+
+===== [S12] 负向臂 N-F：宿主供给缺件（撤走 cosign 替身）⇒ 不跑门、SKIP 不得计绿、不写记录件 =====
+--- f2_dispatch ingest（缺件臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+--- exit=0
+--- f2_runner run（缺件臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-03e97208f15fae15 --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-nosupply.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-1
+--- exit=1
+缺件臂 verdict=skip-host-supply-missing  reason=['SKIP-HOST-SUPPLY-MISSING']
+缺件臂门日志在位=0（应为 0：门未执行）
+缺件臂记录件在位=no（应为 no）
+
+===== [S13] 负向臂 N-G：任务上存在**未过期**租约 ⇒ 第二个 runner 领不走（认领唯一写者） =====
+--- f2_dispatch ingest（租约臂；独立夹具目录 ⇒ 独立 order_id）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/lease-arm/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+--- exit=0
+已写入他人租约 expires_at= 2026-11-05T00:49:27+08:00
+--- f2_runner run（他人租约未过期 ⇒ 应领单失败）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-4f46cd8ecb8e2dfe --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-lease.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-2
+--- exit=1
+
+===== [S14] 负向臂 N-H：租约**已过期** ⇒ 允许重领（租约超时语义） =====
+已把租约置为过期 expires_at= 2026-11-05T00:38:27+08:00
+--- f2_runner run（过期租约 ⇒ 应领单成功并跑门）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-4f46cd8ecb8e2dfe --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-lease.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-2
+--- exit=0
+
+===== [S15] 结论入账交接：handover（只读实测侧复算 + rebase 漂移动作清单） =====
+--- f2_runner handover
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py handover --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --base-ref origin/product/main --branch feature/f2-drill
+--- exit=0
+
+===== [S15b] 交接漂移臂①：handover（base 取 c962cec：非门跑时基点，但落地树仍==门跑过的树） =====
+--- f2_runner handover（漂移臂①）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py handover --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --base-ref c962cec287e80ff76f689d1434f9465c4909877e --branch feature/f2-drill
+--- exit=0
+
+===== [S15c] 交接漂移臂②：handover（base 取 c1f45f9：落地树≠门跑过的树 ⇒ 出 rebase/重跑门 动作清单） =====
+--- f2_runner handover（漂移臂②）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py handover --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --base-ref c1f45f9aa2b5d09b88779a5e491b0d343728eb9e --branch feature/f2-drill
+--- exit=0
+
+===== [S16] 收尾读数 =====
+队列任务件数=5
+结果件数=5
+回报行数=5
+记录件数（正向臂 + 租约臂；红/SKIP/缺件臂应无记录）=2
+演练结束=2026-11-05 00:39:31

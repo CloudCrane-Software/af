@@ -1,0 +1,26 @@
+F2 批改动件指纹（sha256 前 12 位 + 字节数；零凭据正文）
+生成时间：2026-11-05（工作树 /home/pan-ding/workspace/af-wt-t7-1-f2，分支 feat/t7-1-f2-dispatch-runner，HEAD=56ff52a）
+（本文件自身 sha256 无法自含；用 sha256sum 现场取）
+
+a2c9a4f8ab41     27217B  ci/f2_dispatch.py
+746618160457     42219B  ci/f2_runner.py
+a1761d2c689b     16053B  docs/F2-DISPATCH-RUNNER.md
+e936d797bb9b     18380B  poc/poc-t7-1-f2-dispatch-runner/README.md
+1151ab95ed98      6577B  poc/poc-t7-1-f2-dispatch-runner/drill/make_fixture.py
+45ecc9c7e99a      3193B  poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh
+d93ccda7a99c     18561B  poc/poc-t7-1-f2-dispatch-runner/drill/run_drill.sh
+f7fd04cb5b8c     69229B  poc/poc-t7-1-f2-dispatch-runner/raw/drill-e2e.txt
+c574a5fb7063     12077B  poc/poc-t7-1-f2-dispatch-runner/raw/drill-console-summary.txt
+0367df88629c      2660B  poc/poc-t7-1-f2-dispatch-runner/raw/gate-readings.txt
+e906e0a8c750       484B  poc/poc-t7-1-f2-dispatch-runner/raw/host-supply-real.txt
+
+基线指纹
+  任务书签发时 origin/product/main = 56ff52a57c022983d74d994fd4e1c63e98f45235
+  读数时     origin/product/main = f48960116a6005cd37eadbc013263d5f38487825（上游前移，非本批所为）
+  本分支 HEAD                    = 56ff52a57c022983d74d994fd4e1c63e98f45235
+
+工作树状态（未跟踪=本批新增；跟踪面零改动）
+?? ci/f2_dispatch.py
+?? ci/f2_runner.py
+?? docs/F2-DISPATCH-RUNNER.md
+?? poc/poc-t7-1-f2-dispatch-runner/
