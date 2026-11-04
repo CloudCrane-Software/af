@@ -1,0 +1,16 @@
+   Compiling af-execline v0.1.0 (/home/pan-ding/af-dev/af/wt/g6-compiler-version/crates/af-execline)
+   Compiling af-order v0.1.0 (/home/pan-ding/af-dev/af/wt/g6-compiler-version/crates/af-order)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.32s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/compiler_version_gate_test.rs (/data/bench/targets/g6-compiler-version/debug/deps/compiler_version_gate_test-b45b8aaf39dc2e12)
+
+running 5 tests
+test gate_rejects_manifest_missing_compiler_version_field ... ok
+test gate_rejects_manifest_from_different_compiler_version ... ok
+test gate_rejects_plan_missing_compiler_version_field ... ok
+test gate_passes_when_package_carries_current_compiler_version ... ok
+test gate_rejects_plan_from_different_compiler_version ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

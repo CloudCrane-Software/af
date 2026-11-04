@@ -53,6 +53,16 @@ pub use plan::{
     PlanParseError, PLAN_VERSION,
 };
 
+/// 当前构建的 af-compiler 版本（编译期 `env!("CARGO_PKG_VERSION")` 钉值）——
+/// G6 起消费侧核对 `compiler_version` 的**判据正本**：产物面（package
+/// manifest / plan `compiled_from`）携带的编译器版本，消费门（af-order
+/// preflight / af-execline planbind）与本常量核对，不符即拒。判据取
+/// 「链接进当前消费二进制的 af-compiler」而非仓内钉值/消费 crate 自身
+/// 版本：前者会与实际链接的 crate 漂移成第二真相，后者语义错位（那是
+/// af-order/af-execline 的版本，不是编译器的）。与 registry_digest 先例
+/// 同构：编译期值随产物携带，消费侧以本地正本对照。
+pub const COMPILER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 /// `lower + serialize`：IR 规范序列化（compact，键序=BTree 序）——确定性
 /// 快照，供 G3 golden 入库与逐位一致性断言。
 pub fn snapshot_json(doc: &af_dsl::Document) -> Result<String, LowerError> {

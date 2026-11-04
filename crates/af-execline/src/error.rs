@@ -49,7 +49,8 @@ pub enum ErrorCode {
     /// 裁决9；文案首 token 带 E9004，点名计划携带/本地重算双 digest）。
     PlanDigestMismatch,
     /// 计划装订-一致性核对失败：信封版本/graph_version/line 绑定/node_exec
-    /// 与 graph.nodes 对齐（planbind 附带核对面，设计 §2.5）。
+    /// 与 graph.nodes 对齐/compiler_version 与当前构建 af-compiler 一致
+    /// （planbind 附带核对面，设计 §2.5；G6 增 compiler_version 面）。
     PlanBindMismatch,
     /// 计划消费-typed envelope 交接违例（图执行器）：节点产物缺 artifact_contract
     /// 端口 / 载荷非声明的 JSON 形 / 下游边无产者 / 终态工件不符 types schema /

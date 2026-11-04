@@ -73,7 +73,9 @@ pub struct PlanBody {
 pub struct CompiledFrom {
     /// DSL→IR 规范序列化（compact）的 SHA-256。
     pub dsl_digest: String,
-    /// af-compiler 版本（`CARGO_PKG_VERSION`）。
+    /// af-compiler 版本（`CARGO_PKG_VERSION`）。G6：核对面——装订器
+    /// （af-execline planbind）与当前构建链接的 af-compiler
+    /// （[`crate::COMPILER_VERSION`]）核对，不符即拒。
     pub compiler_version: String,
     pub graph_version: String,
     /// 绑定快照摘要（§2.2 registry_digest——组件注册表装载 digest 随计划
@@ -456,7 +458,7 @@ pub fn generate_plan(ir: &IrProgram, report: &BindReport) -> Result<ExecutablePl
             plan_id,
             compiled_from: CompiledFrom {
                 dsl_digest,
-                compiler_version: env!("CARGO_PKG_VERSION").to_string(),
+                compiler_version: crate::COMPILER_VERSION.to_string(),
                 graph_version: body.graph.graph_version.clone(),
                 registry_digest: report.registry_digest.clone(),
             },
