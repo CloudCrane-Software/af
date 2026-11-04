@@ -6,8 +6,11 @@
 ## 为什么有第二版
 
 第一版 `feature/mainline-fmt-zero`（afa3e4c + 5747ae0）基于旧基线 dfea0c0，独立复核虽判可收卷，
-但其后主线又合入三支带**新代码**的分支（router 消费腿 / 在飞树登记面 / admit_seal 补面 /
-worktree-recycle 收敛 / 编译器诊断产物面），新代码未格式化，直接 merge 会在同文件上撞车。
+但其后主线又合入五支分支（router 消费腿 / 在飞树登记面 / admit_seal 补面 / worktree-recycle 收敛 /
+编译器诊断产物面），其中**带新 .rs 代码的是**：admit_seal 补面批（`examples/admit_seal.rs` +98、
+`tests/admit.rs` +288、`af-workorder/src/decision.rs` +68）与编译器诊断产物面批（af-compiler 五文件）；
+**`router.rs` / `adjudicate.rs` / `admit.rs` 的新代码在 dfea0c0 之前就已合入**（故第一版改前即有
+16/14/12 块漂移，不是 dfea0c0 之后引入）。新代码未格式化，直接 merge 会在同文件上撞车。
 rustfmt 输出只取决于文件内容 ⇒ 以当前主线 68be206 为基重跑一次 `cargo fmt --all`，结果等价且零冲突。
 本批全部读数为**本机在 68be206/6c001f0 上亲跑**，未沿用第一版任何读数（`poc/poc-fmt-zero/`
 不在主线上，仅经 `git show feature/mainline-fmt-zero:...` 作方法参照）。
@@ -25,7 +28,9 @@ rustfmt 输出只取决于文件内容 ⇒ 以当前主线 68be206 为基重跑�
 改前红面构成（99 块）：af-order/src/router.rs 16、admit.rs 14、adjudicate.rs 12（近批合入的新代码），
 tests/adjudicate_loop.rs 8、examples/router_consume_leg.rs 6、execline/ledger.rs 6，其余 43 块散布
 af-workorder/af-execline/af-engine/af-mes/release-gate 旧漂移——与 83bb71c 时点在案预存红同源。
-（对照：第一版改前同为 99 块/23 文件但构成不同——旧漂移为主；数字巧合，读数各自独立采集。）
+（对照：第一版(dfea0c0) 与本批(68be206) 改前红面 **file:line 完全一致**——99 块/23 文件
+**非巧合**：两基线之间新合入的代码未新增漂移块，且插入位置均在既有漂移块之后；
+两批读数各自独立采集（raw 路径前缀可辨）。）
 
 ## 纯格式化证明（零语义变更，最强机械判据）
 
