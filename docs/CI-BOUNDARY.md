@@ -1,0 +1,66 @@
+# CI 边界声明——干净克隆下的 af/ci 外部依赖、跳过档与 F1/F2 分工
+
+> 2026-11-04 · F1 快速门接线批落点（v0.3 T7 终裁④：af/ci 边界声明须写明外部依赖
+> 或提供跳过档）。本文是**声明面**：只登记事实与口径，不改 `ci/run.sh` 任何断言
+> 强度；run.sh 十四步（核心硬门为 1-7 步）语义以其自身文件为准。
+> 事实核证方式：每行标注证据（`git ls-files` 亲证 / run.sh 行号 / 实测读数），
+> 核证载体为干净 worktree（83bb71c，product/main 干净主线）。
+> 主线前移注记（2026-11-04 F1 修补批）：product/main 已随 router-adjudication-leg
+> 合流前移至 6ad146f（指针移动非本批所为，本地/远端双核一致）；本文「83bb71c」
+> 一律指本批建支时点基线，§二 实测结论属 83bb71c 时点，不因主线前移失效。
+
+## 一、核心七步的外部依赖与跳过档
+
+| 步 | 门命令 | 外部依赖 | 干净克隆在位性（亲证） | 跳过档口径 |
+|---|---|---|---|---|
+| 1 | `cargo fmt --check --all` + `ci/k5-path-lint.py`（run.sh:194-195） | rustup rustfmt 组件（工具链钉 `rust-toolchain.toml` 1.99.1）；python3 标准库 | ✓（rustup 侧装；判分链清单 `ci/scorechain-manifest.txt` 入库） | **无跳过档**。工具缺席=红，不许 skip 入绿。 |
+| 2 | `cargo clippy --workspace --all-targets -j4` + `ci/clippy_gate.py`（run.sh:199-200） | rustup clippy 组件；python3；基线 `ci/clippy-baseline.txt`（入库） | ✓ | **无跳过档**。 |
+| 3 | `cargo test -j4 --workspace`（run.sh:223-224，含 provenance 门） | 纯 cargo；全量测试面含带 docker 执行面的 crate（af-bench 执行面跑容器，其单元测试不要求 docker 守护进程——本批实测见 §二） | ✓ | **无跳过档**；但全量测试耗时长，**属 F2**，不进 F1 快速门。 |
+| 4 | cue vet/export/结构断言（run.sh:233-263） | `$AF_ROOT/poc/poc-cue/bin/cue`（run.sh:235） | **✓ 入库**（`git ls-files poc/poc-cue/bin/` → `poc/poc-cue/bin/cue`）；recipe 四件入库 | **无跳过档**。二进制随库，无需宿主供给。 |
+| 5 | `ci/parse_scrub.py` × 7 真实日志（run.sh:265-288） | python3；输入 `poc/poc-cas/verify-logs/*.log`（run.sh:268） | **✓ 入库**（18 份日志 `git ls-files` 亲证在册） | **无跳过档**。 |
+| 6 | cosign 断网 `verify-blob --trusted-root`（run.sh:290-320） | ① `$AF_ROOT/bin/cosign`（run.sh:292）——**不入库**：`.gitignore` 行 2 `/bin`（亲证 `git ls-files bin/` 为空）；② 断网手段 `sudo unshare -n` 或回退 `unshare -Urn`（run.sh:300-309，run.sh 内建）；③ 资产 `poc/poc-cas/verify-tr/`（run.sh:293）**✓ 入库** | **✗ ②③在位，①缺席——干净克隆七步跑不齐的唯一步** | **跳过档（SKIP，environment_unavailable）**：宿主无 `bin/cosign` 时允许以 SKIP 入账并在 SUMMARY 标注缺因，等价验证=F2 独立 runner（已供给 cosign 的宿主）补跑 step6。**SKIP 不得计绿**；现状 run.sh 预检对缺件 fail-closed（run.sh:117-121 收 PREFLIGHT），此跳过档是**对账口径**而非预检改写。带外供给方案：把核过哈希的 cosign 二进制放宿主 clone 的 `$AF_ROOT/bin/cosign`（bin/ 不入库，供给属宿主操作，不触碰仓库内容）。 |
+| 7 | `cargo deny --offline check`（run.sh:322） | ① `cargo-deny` 子命令二进制（PATH，仓外 `cargo install` 供给）；② advisory-db 本地库位 `~/.cargo/advisory-dbs/advisory-db-3157b0e258782691`（宿主状态，非仓内；刷新走 `ci/refresh-advisory-db.sh`，代理 `socks5h://100.64.0.3:1080`，GitHub 不可达时沿用旧库 WARN 降级——deny.toml:5-6 与刷新脚本内建） | ✗ 两者皆宿主供给 | **跳过档（SKIP，environment_unavailable）**：cargo-deny 或本地 db 缺席时允许 SKIP 入账并标注缺因，等价验证=F2 独立 runner 补跑。SKIP 不得计绿。 |
+
+step8-14 概览：python3/bash 自足面（neutrality/xcheck/branches/criteria/strategies/
+对账三件套等 checker 全部入库），step9 的 coqc 与 Kani 是**声明可选**（缺席=WARN
+非阻塞，run.sh:408 内建跳过档）；无 cosign 类仓外硬依赖。步 9 的 Kani 是 tmpfs
+保留件（`/dev/shm/fv0/kani-0.68.0`，重启即失，run.sh:347-350）——本就是
+run.sh 内建的缺席跳过档先例。
+
+## 二、干净克隆可跑性结论（83bb71c 实测，2026-11-04）
+
+- step1 fmt：**红**——主线预存状态（格式漂移集中在近年自动合并引入的
+  af-order/af-workorder/af-execline/af-engine 等文件；与 `ci/REPORT.md` ①
+  「预存未格式化代码」同源，非本批引入）。本机实测 `cargo fmt --check --all`
+  exit=1，rustfmt 1.10.0-stable（钉住 1.99.1 生效，排除版本伪差）。
+- step2 clippy：**绿**——`CARGO_BUILD_JOBS=4 cargo clippy --workspace
+  --all-targets -- -D warnings` exit=0（45.2s 冷建 @ -j4）；基线已收紧至零
+  （`ci/clippy-baseline.txt` 仅两行注释），`-D warnings` 与基线门均无既有警告可拦。
+- F1 快速子集：**绿**——`cargo test -p af-dsl -p af-compiler` exit=0，
+  375 个测试 0 败，单测试二进制 ≤0.25s（热缓存整机 <20s；冷建另计依赖编译）。
+- 七步可跑性判定：**1/2/3/4/5 干净克隆可跑；6 缺 bin/cosign 必红（按 §一跳过档
+  以 SKIP 入账或带外供给）；7 需宿主供给 cargo-deny+advisory-db**。
+
+## 三、F1（Actions 快速门）与 F2（收件箱派单全量门）分工
+
+v0.3 T7 终裁①：**CI 执行器 Gitea Actions 先行，Actions 只跑 F1 快速门；F2 全量
+走收件箱派单+独立 runner，不许把全量门塞进 Actions。**
+
+| | F1 快速门 | F2 全量门 |
+|---|---|---|
+| 载体 | `.gitea/workflows/f1.yml`（Gitea Actions，runner 标签 `opch-ci`） | `ci/run.sh` 十四步管道 |
+| 触发 | pull_request → base=product/main | 收件箱派单 + 独立 runner 领单 |
+| 内容 | fmt --check / clippy -D warnings / `cargo test -p af-dsl -p af-compiler` 快速子集 | 全量 test 面及 step4-14 全部硬门（含 step6 cosign、step7 deny） |
+| 预算 | 稳态分钟级（runner 实测 run148=5m16s 全门；`timeout-minutes: 45` 止损，T7③——首次填充持久 target 约 20-30min，之后复用） | 小时级预算，独占 runner |
+| 结论入账 | Actions run 结论（成功/失败，如实） | integrator 复核制：base_sha+source_sha+tested_tree+suite_digest 四元组（T7②） |
+| 边界 | runner 上**无** cosign/netns/POC 资产供给义务——F1 不依赖也不执行 F2 门件 | 全量门不进 Actions |
+
+两层的衔接：F1 绿不是合流充分条件——合流以 F2 全量门 + integrator 复核制
+四元组为准；F1 红则是合流**充分**的暂缓理由（快速反馈拦在 PR）。
+
+## 四、worktree 三路回收口径（T7④）
+
+可执行脚本：`tools/worktree-recycle.py`（af 仓 tools/，非外层工作区 tools/）。
+规则：**merged → 清**（worktree 目录与分支登记后移除）；**aborted → 留证 48h**
+（保留现场与留痕文件，48h 后可清）；**超时 → 止损**（lease 过期即强制回收）。
+**lease TTL 到期 ≠ 删树**：TTL 只重置认领，删树只走上述三路。详见脚本头注。
