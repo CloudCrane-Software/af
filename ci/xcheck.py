@@ -31,6 +31,16 @@ step10/11/12 使对账机检随槽清零后 xcheck 照绿）：以 numbers.json 
 （盘上真件）必须在 run.sh 有执行事实行——与 numbers.json 任何键无关，同批改账不可
 吸收（台账 RT-E49 拦截机制②「下限门独立于槽位存活」的执行事实版）。
 
+共宿槽子门字母缀计数臂（台账 RT-E1 清偿批，2026-11-04）：count_run_sh_steps 的
+槽位口径把 `step 13a|13b|13c` 折叠成单一槽 13——删 13b/13c 执行、留 13a 与
+`echo "== step13"` 登记行后门数账照绿（修前沙盒复现：xcheck 硬项 8/8 全绿、
+step12 逐键复算被同批改账 ci_step13_subgates 3→1 吸收）——step13 槽两道硬门
+（arm-wiring 三臂防线 + budget-cast-lint）此前无任何独立锚。本臂把字母缀从
+「被 [a-z]? 吞掉的修饰」升为被计数的执行事实（count_run_sh_subgates），与
+CO_HOSTED_SUBGATES 盘面锚硬对账——缺字母/整槽缺席/多字母/未登记共宿槽一律
+硬红；锚不在 numbers.json 任何键上，同批改账吸收不掉（与 ACCOUNTABILITY_SLOTS
+同级：有意增删共宿子门须同批评审改本表，脚本 diff 即评审面）。
+
 退出码：0=硬项全过且 advisory 全过；1=任一硬项红（门数/计数/名单/日期漂移）；
         2=仅 advisory 红（头注漂移/G0 勘误未同步/句式漂移提示）——由调用方定义
         是否改 OVERALL（run.sh step14 落 SUMMARY WARN 行不改 OVERALL）。
@@ -105,6 +115,14 @@ STEP_EXEC_REDIR_RE = re.compile(r'^[ \t]*(?!\#).*?(?<!>)>[ \t]*"\$OUT/step(\d+)\
 STEP_REGISTR_RE = re.compile(r'^echo\s+"==\s*step(\d+)\b', re.M)
 STEP_ADVISORY_ECHO_RE = re.compile(
     r'^echo\s+"==\s*step(\d+)\b[^\n]*advisory(?![\w-])', re.M)
+# 字母缀子门执行事实（台账 RT-E1 清偿批）：`step 13a "` 的字母缀此前被
+# STEP_HELPER_RE 的 [a-z]? 吞掉（共宿槽折叠成单一槽号）——删 13b/13c 执行、留
+# 13a 与登记行，槽位计数/绑定/下限臂全数照绿（修前沙盒复现在案）。本正则把
+# 字母缀升为计数对象，供 count_run_sh_subgates 与 CO_HOSTED_SUBGATES 对账。
+STEP_SUBGATE_RE = re.compile(r'^step\s+(\d+)([a-z])\s+"', re.M)
+# 共宿槽子门登记表（盘面锚：改本表=脚本 diff=评审面，与 ACCOUNTABILITY_SLOTS
+# /ci/subgates.list 名册同一纪律；不在 numbers.json 任何键上，同批改账吸收不掉）。
+CO_HOSTED_SUBGATES = {13: ("a", "b", "c")}   # step13 横切与对称批共宿三机制（fix-scan/arm-wiring/budget-cast-lint）
 
 
 def count_run_sh_steps(run_sh_text):
@@ -113,7 +131,10 @@ def count_run_sh_steps(run_sh_text):
     的 step（如 step14 机读一致性批）用 bespoke 块表达，只数助手行会让新门对账眼盲。
     advisory 门 = 登记行带 advisory 字样（step9 FV）或 fv_advisory() 探测。
     返回 (hard_ids, advisory_n, registered_ids, executed_ids)——后两者供
-    gates-exec-binding 登记↔执行双向绑定对账。"""
+    gates-exec-binding 登记↔执行双向绑定对账。
+    字母缀子门粒度（`step 13a "` 类）由姊妹计数 count_run_sh_subgates 承担
+    （台账 RT-E1 清偿批）：本函数槽位口径把共宿子门折叠成单一槽号，删共宿
+    子门执行对槽位计数不可见——四元组契约保持不变，纯增量补臂。"""
     executed = set()
     for m in STEP_HELPER_RE.finditer(run_sh_text):
         executed.add(int(m.group(1)))
@@ -339,6 +360,61 @@ def check_accountability_floor(run_sh_path):
     rec("accountability-slot-floor", ok, d)
 
 
+# ---- 共宿槽子门字母缀对账（台账 RT-E1 清偿批，2026-11-04） ----
+# 修前残留洞（沙盒复现在案）：删 step13b/13c 执行、留 13a 与 `echo "== step13"`
+# 登记行 ⇒ gates/gates-exec-binding/g0-erratum/subgates-roster/floor 全绿
+# （xcheck 硬项 8/8）；唯一拦截 numbers.json gates.ci_step13_subgates 逐键复算
+# 被「摘门+同批改账」一致化收缩吸收（2026-11-03 同型教训）——整槽连摘 step13
+# + 门数账全键同批收缩后 xcheck 亦照绿（g0-erratum 降级 advisory「批未齐」）。
+# 本臂 = 字母缀子门计数的落码拦截：census 与 CO_HOSTED_SUBGATES 双向逐槽相等，
+# fail-closed；锚为 xcheck.py 盘面事实（非 numbers.json 任何键，同批改账吸收
+# 不掉），有意增删共宿子门须同批评审改 CO_HOSTED_SUBGATES（脚本 diff 即评审面）。
+def count_run_sh_subgates(run_sh_text):
+    """字母缀子门计数（执行事实口径，与 STEP_HELPER_RE 同源、收紧一档到字母缀）：
+    `step 13a "` → {13: {"a"}}。返回 {槽号: sorted(字母缀)}。"""
+    census = {}
+    for m in STEP_SUBGATE_RE.finditer(run_sh_text):
+        census.setdefault(int(m.group(1)), set()).add(m.group(2))
+    return {slot: sorted(letters) for slot, letters in census.items()}
+
+
+def check_cohosted_subgates(run_sh_path):
+    """共宿槽子门字母缀对账（硬项，fail-closed）。作为 main 独立臂直调，不进
+    check_gates——避其 AGENT.md 句式漂移/批齐分支早退（承 check_subgates_roster /
+    check_accountability_floor 同款纪律：fail-closed 硬项不得被分支早退跳过）。"""
+    run_sh = Path(run_sh_path)
+    if not run_sh.is_file():
+        rec("gates-subgate-census", False,
+            [f"红：ci/run.sh 缺席（{run_sh}）——共宿子门字母缀计数无对照面，fail-closed 红"
+             "（防护的对照面缺席=防护失效，不得当绿）"])
+        return
+    census = count_run_sh_subgates(read(run_sh))
+    expected_view = {s: sorted(v) for s, v in sorted(CO_HOSTED_SUBGATES.items())}
+    d = [f"census（槽→字母缀，执行事实）= {census}；CO_HOSTED_SUBGATES（登记锚）= {expected_view}"]
+    ok = True
+    for slot, expected in sorted(CO_HOSTED_SUBGATES.items()):
+        got = census.get(slot, [])
+        if got != sorted(expected):
+            lost = [x for x in expected if x not in got]
+            extra = [x for x in got if x not in expected]
+            if lost:
+                d.append(f"红：step{slot} 共宿子门缺字母缀 {lost}（实得 {got if got else '整槽缺席'}）——"
+                         "摘门保牌/整槽连摘形态：删子门执行留槽登记行（或整槽一并摘）后槽位计数"
+                         "照绿；numbers.json 同批改账只能吸收逐键复算，本臂独立于任何键仍红")
+            if extra:
+                d.append(f"红：step{slot} 共宿子门多字母缀 {extra}（实得 {got}）——"
+                         "共宿子门增删/改形须同批评审同步 CO_HOSTED_SUBGATES（本文件）")
+            ok = False
+        else:
+            d.append(f"step{slot} 共宿子门字母缀 {got} 与登记一致（{len(got)} 件执行事实全数在场）")
+    stray = sorted(s for s in census if s not in CO_HOSTED_SUBGATES)
+    if stray:
+        d.append(f"红：未登记共宿槽 {stray}（{ {s: census[s] for s in stray} } 不在 CO_HOSTED_SUBGATES）——"
+                 "新共宿槽/字母缀子门须同批评审登记本表，不得绕过计数覆盖面")
+        ok = False
+    rec("gates-subgate-census", ok, d)
+
+
 # ------------------------------------------------------- ② packages 计数对账
 def check_packages(readme, components_json):
     rm = read(readme)
@@ -487,6 +563,11 @@ def main():
     # 与 ci.steps_total 登记锚互补：登记锚可被「整槽摘除+同批改账」自证吸收（锚与
     # 被守物同源），本臂只看 run.sh 执行事实与门脚本盘面真件、不消费 numbers.json。
     check_accountability_floor(args.run_sh)
+    # 共宿槽子门字母缀对账（台账 RT-E1 清偿批）：字母缀子门（step13a/13b/13c）
+    # 此前被槽位口径折叠——删 13b/13c 执行后门数账照绿（修前沙盒复现在案），
+    # 唯一拦截 numbers.json ci_step13_subgates 又被同批改账吸收；本臂以
+    # CO_HOSTED_SUBGATES 为独立锚（盘面事实，非 numbers.json 任何键）。
+    check_cohosted_subgates(args.run_sh)
     check_packages(args.readme, args.components)
     check_redlist(args.plan_doc, args.expected_fail)
     check_obs_dates({"README": args.doc_readme, "00-总纲": args.doc_zong,

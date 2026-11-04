@@ -58,6 +58,12 @@ GATE_INPUTS=(
   "ci/debt-register.md"
   # —— step14 子门单点名册（红队终局轮 RT-E81 修复批，2026-11-02）——
   "ci/subgates.list"                    # step14 子门全集正本（step12 名册绑定 + xcheck 子门级断言消费）
+  # —— step9 基线清单正本（RT-E6 清偿批 2026-11-04 补钉：ci/baseline_calc.sh 对称
+  #    管理的 9a/9b 两件此前无族钉——kani 件只有 numbers.json 值锚
+  #    fv.kani_inv_harness.manifest_sha256（「摘基线+同批改账」可吸收）；rocq 件的
+  #    陈述哈希行在本正本文件内=自指无外部钉。改基线清单即改 9a/9b 判据即改门）——
+  "ci/baselines/kani-inv-harness.manifest"         # 9b Kani INV harness 清单正本（baseline_calc.sh verify-kani + run.sh 9b count 行）
+  "proofs/rocq-规范库-v0/theorems-manifest.txt"    # 9a 定理清单正本（run.sh 9a-2 名集+陈述哈希对账 + baseline_calc.sh verify-rocq）
 )
 # 全集自动守卫的显式例外（逐件登记，脚本 diff 即评审面；不得静默漏钉）
 GATE_INPUT_EXCLUSIONS=(

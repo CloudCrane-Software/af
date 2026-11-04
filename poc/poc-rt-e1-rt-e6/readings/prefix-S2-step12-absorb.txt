@@ -1,0 +1,40 @@
+OK  [gates.ci_steps] 复算 14 == 登记（{…，last_recomputed=2026-10-31）
+OK  [ci.steps_total] 复算 14 == 登记（{…，last_recomputed=2026-11-01）
+OK  [gates.ci_hard] 复算 13 == 登记（{…，last_recomputed=2026-10-31）
+OK  [gates.fv_advisory] 复算 1 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [gates.ci_step13_subgates] 复算 1 == 登记（grep…，last_recomputed=2026-10-31）
+OK  [gates.ci_step14_subgates] 复算 4 == 登记（for…，last_recomputed=2026-11-02）
+OK  [gates.ci_step14_subgates_regex] 复算 4 == 登记（grep…，last_recomputed=2026-11-02）
+OK  [gates.ci_step14_subgates_roster] 复算 4 == 登记（grep…，last_recomputed=2026-11-02）
+OK  [redlist.count] 复算 23 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [registry.pkgs] 复算 37 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [af.crates] 复算 22 == 登记（ls…，last_recomputed=2026-10-28）
+OK  [adr.count] 复算 14 == 登记（ls…，last_recomputed=2026-10-28）
+OK  [fv.rocq_theorems] 复算 21 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [fv.kani_inv_mirror] 复算 32 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [neutrality.wordlist] 复算 62 == 登记（grep…，last_recomputed=2026-10-28）
+OK  [fv.kani_inv_harness.count] 复算 32 == 登记（bash…，last_recomputed=2026-10-28）
+OK  [fv.kani_inv_harness.manifest_sha256] 复算 dd67716e557489817398753ac5c9147cf57203ff3a6b0ad7ef35609ee54c85ab == 登记（sha256sum…，last_recomputed=2026-10-28）
+OK  [mutations.probes] 复算 13 == 登记（python3…，last_recomputed=2026-11-03）
+OK  docs/VERSIONS.md: {{numbers.af.crates}} -> 22
+OK  docs/VERSIONS.md: {{numbers.gates.ci_steps}} -> 14
+OK  docs/VERSIONS.md: {{numbers.gates.ci_hard}} -> 13
+OK  docs/VERSIONS.md: {{numbers.gates.fv_advisory}} -> 1
+OK  docs/VERSIONS.md: {{numbers.redlist.count}} -> 23
+SKIP README.md:7 「十四门」命中勘误/历史豁免语境
+SKIP README.md:7 「九门」命中勘误/历史豁免语境
+OK  README.md:17 「十四门」== numbers.gates.ci_steps=14
+OK  README.md:63 「十四门」== numbers.gates.ci_steps=14
+OK  README.md:99 「十四门」== numbers.gates.ci_steps=14
+SKIP docs/VERSIONS.md:12 「九门」命中勘误/历史豁免语境
+SKIP docs/VERSIONS.md:12 「十二门」命中勘误/历史豁免语境
+OK  docs/VERSIONS.md:17 「十四门」== numbers.gates.ci_steps=14
+OK  docs/VERSIONS.md:63 「十四门」== numbers.gates.ci_steps=14
+SKIP docs/VERSIONS.md:63 「九门」命中勘误/历史豁免语境
+OK  [ci/subgates.list] 三者一致：名册计数==正则计数==名册逐件在场数==4
+OK  [ci/subgates.list] 名册集合 == ci/run.sh step14 槽接线集合：['branches_check', 'criteria_check', 'strategies_check', 'xcheck']
+OK  [accountability-slot-floor] step10（ci/step10_check.py）执行事实行在场（独立锚：不消费 numbers.json）
+OK  [accountability-slot-floor] step11（ci/step11_check.py）执行事实行在场（独立锚：不消费 numbers.json）
+OK  [accountability-slot-floor] step12（ci/step12_check.py）执行事实行在场（独立锚：不消费 numbers.json）
+step12 计数复算: keys=18 watch=1 docs=2 红=0
+step12 PASS: 全部限定名键复算一致、占位符可解析、手写计数对值、step14 子门名册绑定三者一致、三对账门槽位下限在场
