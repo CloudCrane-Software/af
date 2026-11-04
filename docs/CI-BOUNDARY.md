@@ -48,7 +48,7 @@ v0.3 T7 终裁①：**CI 执行器 Gitea Actions 先行，Actions 只跑 F1 快�
 | 载体 | `.gitea/workflows/f1.yml`（Gitea Actions，runner 标签 `opch-ci`） | `ci/run.sh` 十四步管道 |
 | 触发 | pull_request → base=product/main | 收件箱派单 + 独立 runner 领单 |
 | 内容 | fmt --check / clippy -D warnings / `cargo test -p af-dsl -p af-compiler` 快速子集 | 全量 test 面及 step4-14 全部硬门（含 step6 cosign、step7 deny） |
-| 预算 | 分钟级（job `timeout-minutes: 30` 超时止损，T7③） | 小时级预算，独占 runner |
+| 预算 | 稳态分钟级（runner 实测 run148=5m16s 全门；`timeout-minutes: 45` 止损，T7③——首次填充持久 target 约 20-30min，之后复用） | 小时级预算，独占 runner |
 | 结论入账 | Actions run 结论（成功/失败，如实） | integrator 复核制：base_sha+source_sha+tested_tree+suite_digest 四元组（T7②） |
 | 边界 | runner 上**无** cosign/netns/POC 资产供给义务——F1 不依赖也不执行 F2 门件 | 全量门不进 Actions |
 
