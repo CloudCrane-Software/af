@@ -1,0 +1,11 @@
+== 门1 cargo test --workspace（终版码） ==
+exit=0
+passed=1520 failed=0
+
+== 门2 cargo clippy --workspace --all-targets -- -D warnings（终版码） ==
+exit=0
+
+== 门3 clippy json error 级消息计数 + ci/clippy_gate.py ==
+error-level messages: 0
+CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）
+gate_exit=0

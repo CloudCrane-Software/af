@@ -27,8 +27,8 @@
 //! 错误码契约（ADR-007 §3）：OR1xxx（用法）/ OR2xxx（spec / 凭证 / 状态 /
 //! admit 受理）；引擎与账本失败透传 af-execline 的 EX 稳定码，见 [`error`]。
 
-pub mod adjudicate;
 pub mod admit;
+pub mod adjudicate;
 pub mod cli;
 pub mod error;
 pub mod exec;
@@ -37,16 +37,18 @@ pub mod spec;
 pub mod state;
 pub mod voucher;
 
-pub use adjudicate::{
-    generate_adjudication_doc, load_doc, run_steward_loop, verify_doc, AdjudicateError,
-    AdjudicationDoc, AdjudicationSeed, LoopFacilities, StewardOutcome, ADJUDICATIONS_DIR,
-    ADJUDICATION_DOC_KIND, ADJUDICATION_TEMPLATE_ID, ADJUDICATION_TEMPLATE_VERSION, STEWARD_ROLE,
-    TEMPLATE_BODY,
-};
 pub use admit::{
-    admit, canonical_next_orders_digest, parse_request, AdjudicationTemplate, AdmissionReceipt,
+    canonical_next_orders_digest, admit, parse_request, AdjudicationTemplate, AdmissionReceipt,
     AdmissionRequest, AdmitReject, GateListSpec, GateSpec, RequestError, ResourceClaim,
     ResourceProfileSpec,
+};
+pub use adjudicate::{
+    generate_adjudication_doc, load_doc, reconcile_adjudications, run_steward_loop, verify_doc,
+    AdjudicateError, AdjudicationDoc, AdjudicationJournal, AdjudicationSeed, CommittedFact,
+    JournalLine, LoopFacilities, PreparedIntent, ReconcileReport, ReconcileStatus,
+    StewardOutcome, ADJUDICATION_DOC_KIND, ADJUDICATION_TEMPLATE_ID,
+    ADJUDICATION_TEMPLATE_VERSION, JOURNAL_SUFFIX, STEWARD_ROLE, TEMPLATE_BODY,
+    ADJUDICATIONS_DIR,
 };
 pub use error::OrderError;
 pub use exec::{
@@ -55,9 +57,9 @@ pub use exec::{
 };
 pub use router::{
     append_consumed, consumed_path, duplicate_consumed, load_consumed, load_registry,
-    resolve_adjudication_target, verify_envelope, AdjudicationTarget, ConsumedRecord, RouterError,
-    TriggerEnvelope, TriggerRegistry, VerifiedTrigger, CONSUMED_FILE, ORDER_COMPLETE_EVENT,
-    TRIGGER_CONTRACT,
+    resolve_adjudication_target, verify_envelope, AdjudicationTarget, ConsumedRecord,
+    RouterError, TriggerEnvelope, TriggerRegistry, VerifiedTrigger, CONSUMED_FILE,
+    ORDER_COMPLETE_EVENT, TRIGGER_CONTRACT,
 };
 pub use spec::{parse_spec, OrderSpec, SpecError, SPEC_FIELDS};
 pub use state::{OrderSummary, StateDir};
