@@ -40,13 +40,18 @@ jobs:
   f1-fast-gate:
     # 标签必须匹配实例级 opch-act-runner（label=opch-ci，两台均 online）。
     runs-on: [opch-ci]
-    # 超时止损（T7③）：快速门 30 分钟拿不下来即止损，不占 runner。
-    timeout-minutes: 30
+    # 超时止损（T7③）：45 分钟止损（首次填充持久 target 编译约 20-30min；
+    # 稳态下 target 跨 run 复用，预计 <15min）。超时即止损，不占 runner。
+    timeout-minutes: 45
     env:
       # 构建节流（本厂内存纪律）：并发 4，禁高并发编译。
       CARGO_BUILD_JOBS: "4"
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: never
+      # target 持久化：runner 容器 HOME=/var/lib/opch-ci 跨 run 持久（run146
+      # 工具链复用实证）——依赖编译一次填充、后续 run 分钟级复用；两台 runner
+      # 并发时由 cargo 文件锁串行，不损正确性。
+      CARGO_TARGET_DIR: /var/lib/opch-ci/.af-f1-target
       # 仓为 private：checkout 用 Gitea 每次运行自动注入的临时 token
       # （secrets.GITEA_TOKEN），不落任何长期凭据进 workflow 文本。
       AF_TOKEN: ${{ secrets.GITEA_TOKEN }}
