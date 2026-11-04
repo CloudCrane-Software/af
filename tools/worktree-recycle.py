@@ -12,6 +12,11 @@
   - 只回收本脚本登记薄（默认 <repo>/.af-worktree-registry.json）里有登记、且
     状态为 merged/aborted/timeout 的 worktree；未登记的一律不动。
   - 产品主线指针（product/main 等保护分支）永不删除、永不移动。
+  - **本工具默认保分支保提交**：默认不删任何分支；确需删必须 --delete-merged-branch
+    显式开关，且只走 `git branch -d` 安全删（未合入即拒），**永不 -D**。
+  - **不做不可逆兜底**：目录删除只走 `git worktree remove`（不带 --force），
+    失败（如脏树）⇒ 如实报告留检、保留现场（写明失败原因与脏面摘要），
+    绝无 rmtree 之类兜底；要清脏树由人先处置脏面，工具不替人做不可逆决定。
   - 「合入」判定用 `git merge-base --is-ancestor` 对本仓保护分支做真实判定，
     不采信登记簿里的自报状态（自报 merged 但未真合入 → 不清，改记 mismatch）。
 
@@ -20,6 +25,7 @@
   worktree-recycle.py --repo /path/to/af mark <name> --state active --ttl-min 120
   worktree-recycle.py --repo /path/to/af heartbeat <name>          # 续 lease（active 才可）
   worktree-recycle.py --repo /path/to/af recycle [--dry-run] [--evidence-hours 48]
+                                                [--delete-merged-branch]
   worktree-recycle.py --repo /path/to/af list
 
 设计对齐本仓既有脚本（tools/gate-item-emit.py）的 argparse+stdlib 风格；
@@ -130,33 +136,75 @@ def cmd_heartbeat(repo: Path, name: str, ttl_min: int) -> str:
     return f"heartbeat {name}（lease 续 {ttl_min}min）"
 
 
-def _remove_worktree(repo: Path, name: str, entry: dict, dry: bool) -> list[str]:
-    """回收动作：删 worktree 目录 + git worktree remove + 删分支 + 销登记。"""
+def _dirty_summary(path: Path) -> str:
+    """留检时的脏面摘要：porcelain 前 10 行；读不出就如实写读不出。"""
+    proc = _git(path, "status", "--porcelain", check=False)
+    if proc.returncode != 0:
+        return "（现场状态读取失败）"
+    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+    if not lines:
+        return "（porcelain 无改动记录）"
+    head = "；".join(lines[:10])
+    return head + "…" if len(lines) > 10 else head
+
+
+def _remove_worktree(repo: Path, name: str, entry: dict, dry: bool,
+                     delete_branch: bool) -> tuple[list[str], bool]:
+    """回收动作：删 worktree 目录 + 销登记。**本工具默认保分支保提交**。
+
+    - 目录删除只走 `git worktree remove`（不带 --force）：脏树（含未跟踪文件）、
+      锁定树由 git 自身拒绝，失败 ⇒ 留检保现场（报告原因与脏面摘要），
+      **绝无 rmtree 之类不可逆兜底**——清脏面由人先处置，工具不替人做不可逆决定。
+    - 分支默认一律保留；仅当显式开关且**真合入**时才 `git branch -d`（安全删，
+      未合入即拒），**永不 -D**。
+    - 返回 (动作清单, 是否成功)；失败时调用方必须保留登记（留检）。
+    """
     actions: list[str] = []
     path = Path(entry.get("path") or _wt_path(repo, name))
     branch = entry.get("branch") or name
     if dry:
         actions.append(f"[dry] remove worktree {path}")
-        if _branch_exists(repo, branch):
-            actions.append(f"[dry] delete branch {branch}")
+        if not delete_branch:
+            actions.append(f"[dry] 保留分支 {branch}（默认保分支保提交）")
+        elif _branch_exists(repo, branch):
+            actions.append(f"[dry] branch -d {branch}（-d 安全删：真合入才成，未合入拒绝）")
         actions.append(f"[dry] 消登记 {name}")
-        return actions
+        return actions, True
     if path.is_dir():
-        proc = _git(repo, "worktree", "remove", "--force", str(path), check=False)
+        # 不带 --force：git 会对脏树/锁定树拒绝——这正是留检语义的实现位，
+        # 不越过 git 的拒绝强删。
+        proc = _git(repo, "worktree", "remove", str(path), check=False)
         if proc.returncode != 0:
-            # 目录已脏/已被手删：rd fallthrough 兜底，确保现场不悬
-            import shutil
-            shutil.rmtree(path, ignore_errors=True)
-            actions.append(f"worktree remove rc={proc.returncode}，已兜底删目录 {path}")
+            reason = proc.stderr.strip().splitlines()[:1]
+            reason = reason[0] if reason else f"rc={proc.returncode}"
+            actions.append(
+                f"worktree remove 失败（{reason}）→ 留检保现场，未删目录 {path}；"
+                f"脏面摘要：{_dirty_summary(path)}")
+            return actions, False
+        actions.append(f"已移除 worktree {path}")
+    # 分支处置（目录已清后才谈；目录留检时分支也一并保留，现场不拆件）：
+    # 默认保分支；显式开关下也只对真合入走 -d 安全删。
+    if branch in PROTECTED_BRANCHES:
+        actions.append(f"分支 {branch} 为保护分支，永不删")
+    elif not delete_branch:
+        actions.append(f"保留分支 {branch}（默认保分支保提交）")
+    elif not _branch_exists(repo, branch):
+        actions.append(f"分支 {branch} 不存在（非本工具所删），无分支动作")
+    elif not _merged_into_protected(repo, branch):
+        actions.append(f"保留分支 {branch}（未真合入：--delete-merged-branch 只删已合入分支）")
+    else:
+        proc = _git(repo, "branch", "-d", branch, check=False)
+        if proc.returncode == 0:
+            actions.append(f"已删分支 {branch}（-d 安全删，真合入）")
         else:
-            actions.append(f"已移除 worktree {path}")
-    if _branch_exists(repo, branch) and branch not in PROTECTED_BRANCHES:
-        _git(repo, "branch", "-D", branch)
-        actions.append(f"已删分支 {branch}")
-    return actions
+            reason = proc.stderr.strip().splitlines()[:1]
+            reason = reason[0] if reason else f"rc={proc.returncode}"
+            actions.append(f"branch -d {branch} 被拒（{reason}）→ 分支保留")
+    return actions, True
 
 
-def cmd_recycle(repo: Path, dry: bool, evidence_hours: float) -> str:
+def cmd_recycle(repo: Path, dry: bool, evidence_hours: float,
+                delete_branch: bool = False) -> str:
     data = load_registry(repo)
     now = time.time()
     evidence_seconds = evidence_hours * 3600
@@ -187,11 +235,19 @@ def cmd_recycle(repo: Path, dry: bool, evidence_hours: float) -> str:
             # 不采信自报：真实合入才清；未合入改记 mismatch（红队口径：回收器
             # 自身不得成为丢活渠道）。
             if _merged_into_protected(repo, branch):
-                actions = _remove_worktree(repo, name, entry, dry)
-                if not dry:
-                    data["worktrees"].pop(name, None)
-                    save_registry(repo, data)
-                report.append(f"CLEAN {name}: merged 且已真合入 → 清（{'；'.join(actions)}）")
+                actions, ok = _remove_worktree(repo, name, entry, dry, delete_branch)
+                if ok:
+                    if not dry:
+                        data["worktrees"].pop(name, None)
+                        save_registry(repo, data)
+                    report.append(f"CLEAN {name}: merged 且已真合入 → 清（{'；'.join(actions)}）")
+                else:
+                    # 目录移除失败（如脏树）⇒ 登记保留并记 mismatch 留检，绝不销登记悬空现场。
+                    entry["mismatch"] = True
+                    entry["hold_reason"] = "worktree-remove-failed"
+                    if not dry:
+                        save_registry(repo, data)
+                    report.append(f"KEEP {name}: 目录移除失败 → 留检保现场（{'；'.join(actions)}）")
             else:
                 entry["mismatch"] = True
                 if not dry:
@@ -202,13 +258,22 @@ def cmd_recycle(repo: Path, dry: bool, evidence_hours: float) -> str:
             marked = entry.get("marked_at") or 0
             age_h = (now - marked) / 3600
             if age_h >= evidence_hours:
-                actions = _remove_worktree(repo, name, entry, dry)
-                if not dry:
-                    data["worktrees"].pop(name, None)
-                    save_registry(repo, data)
-                report.append(
-                    f"CLEAN {name}: aborted 留证 {age_h:.1f}h ≥ {evidence_hours}h → 清"
-                    f"（{'；'.join(actions)}）")
+                actions, ok = _remove_worktree(repo, name, entry, dry, delete_branch)
+                if ok:
+                    if not dry:
+                        data["worktrees"].pop(name, None)
+                        save_registry(repo, data)
+                    report.append(
+                        f"CLEAN {name}: aborted 留证 {age_h:.1f}h ≥ {evidence_hours}h → 清"
+                        f"（{'；'.join(actions)}）")
+                else:
+                    entry["mismatch"] = True
+                    entry["hold_reason"] = "worktree-remove-failed"
+                    if not dry:
+                        save_registry(repo, data)
+                    report.append(
+                        f"KEEP {name}: aborted 目录移除失败 → 留检保现场"
+                        f"（{'；'.join(actions)}）")
             else:
                 report.append(
                     f"KEEP {name}: aborted 留证中 {age_h:.1f}h < {evidence_hours}h（48h 留证期）")
@@ -218,13 +283,22 @@ def cmd_recycle(repo: Path, dry: bool, evidence_hours: float) -> str:
             marked = entry.get("timeout_at") or entry.get("marked_at") or 0
             age_h = (now - marked) / 3600
             if age_h >= evidence_hours:
-                actions = _remove_worktree(repo, name, entry, dry)
-                if not dry:
-                    data["worktrees"].pop(name, None)
-                    save_registry(repo, data)
-                report.append(
-                    f"CLEAN {name}: timeout 止损后留证 {age_h:.1f}h ≥ {evidence_hours}h → 清"
-                    f"（{'；'.join(actions)}）")
+                actions, ok = _remove_worktree(repo, name, entry, dry, delete_branch)
+                if ok:
+                    if not dry:
+                        data["worktrees"].pop(name, None)
+                        save_registry(repo, data)
+                    report.append(
+                        f"CLEAN {name}: timeout 止损后留证 {age_h:.1f}h ≥ {evidence_hours}h → 清"
+                        f"（{'；'.join(actions)}）")
+                else:
+                    entry["mismatch"] = True
+                    entry["hold_reason"] = "worktree-remove-failed"
+                    if not dry:
+                        save_registry(repo, data)
+                    report.append(
+                        f"KEEP {name}: timeout 目录移除失败 → 留检保现场"
+                        f"（{'；'.join(actions)}）")
             else:
                 report.append(
                     f"KEEP {name}: timeout 止损，现场留证 {age_h:.1f}h < {evidence_hours}h")
@@ -265,6 +339,9 @@ def main(argv: list[str] | None = None) -> int:
     p_rc.add_argument("--dry-run", action="store_true")
     p_rc.add_argument("--evidence-hours", type=float, default=48.0,
                       help="aborted/timeout 现场留证时长（小时）")
+    p_rc.add_argument("--delete-merged-branch", action="store_true",
+                      help="显式开关：真合入的分支用 git branch -d 安全删"
+                           "（默认一律保分支保提交，永不 -D）")
 
     sub.add_parser("list", help="列登记薄")
 
@@ -279,7 +356,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "heartbeat":
             print(cmd_heartbeat(repo, args.name, args.ttl_min))
         elif args.cmd == "recycle":
-            print(cmd_recycle(repo, args.dry_run, args.evidence_hours))
+            print(cmd_recycle(repo, args.dry_run, args.evidence_hours,
+                              args.delete_merged_branch))
         elif args.cmd == "list":
             print(cmd_list(repo))
     except RecycleError as exc:
