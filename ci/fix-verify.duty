@@ -27,6 +27,26 @@
 #   ——工作树未提交编辑对门不可见（RT-E48「版本面外修复」模式在名册面上排除）：
 #   改名册必须落基线提交才生效；--roster 参数仅供测试覆写。
 #
+# 在飞工作树登记面（2026-11-04 批，与门本体同批）：在飞批次的临时工作树**不进本
+#   名册**（本名册=在役/存档树的版本面正本），改由机器本地运行态面登记：
+#   <repo>/af-state/resources/inflight-worktrees.list（根 .gitignore /af-state/
+#   排除，与租约面同面），行格式 10 段：
+#     inflight | 分支 | 工作树路径 | 批次 | 租约id | 租约到期时刻ms | 登记时刻ms | holder | resource | 理由
+#   门侧判定顺序：**本名册先行**（树在本名册在列即按 duty/archived 既有语义判，
+#   在飞登记面不参与）；名册无行时，在飞登记须由租约面
+#   （<repo>/af-state/resources/leases.db，poc/poc-supply/lease_store.py）
+#   **实时背书**才豁免漏登记红：租约须真实存在、state=active、未到期，且到期
+#   时刻/holder/resource 与登记逐字相等、租约槽 work_interval 恰为
+#   worktree:<分支>（唯一活跃索引保证一张活租约只背本树槽位）。**裸登记一律
+#   不豁免**；租约过期/归还/不存在/对不上 → 红且点名「超期未回收」（TTL 止损，
+#   T7④：lease TTL ≠ 删树）。领租约纪律：
+#     python3 -I poc/poc-supply/lease_store.py --db <repo>/af-state/resources/leases.db \
+#       acquire --lease-id <id> --resource <节点>/<挂载> --interval worktree:<分支> \
+#       --profile '{"schema_version":"af.resources/v1","node_id":"<节点>"}' \
+#       --holder <施工者> --reserved-bytes 0 --ttl-ms <毫秒>
+#   登记行的「租约到期时刻ms」须抄租约面实测 lease_until_ms（续租 heartbeat 后
+#   须重登记，登记不得比租约面更宽）。
+#
 # 登记（2026-11-02，RT-E49/E6 跨树收口批）：
 sil-writeback | duty | NONE | 生产活跃回写线（SIL 守护④回写面，本工作树）；E49/E6 修复在此树在场，篡改回放须硬红
 g0merge | duty | NONE | G0 合流主线（CI 七门产物入库面）；与 sil 门码同源（sha256 逐件对账）

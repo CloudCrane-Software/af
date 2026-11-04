@@ -43,17 +43,34 @@
   理由与门码钉值（无钉=未登记分叉即红）。名册改动必须走基线提交——工作树未提交
   编辑对门不可见（RT-E48「版本面外修复」模式在名册面上结构性排除）。
 
+在飞工作树登记面（2026-11-04 批，门侧新判据，加在「漏登记即红」红腿之上、
+  不替换它）：跨树收口门跑在整机全部工作树上，在飞批次的临时树不进名册 →
+  漏登记红随在飞树增减漂移（8→9→10），红成噪声本身即 weakening。本面给
+  「在飞临时工作树」一个可判定、可核销的登记（af-state/resources/
+  inflight-worktrees.list，机器本地运行态）：豁免必须由租约面（poc/poc-supply/
+  lease_store.py 的 resource_lease 表，af-state/resources/leases.db）**实时背书**
+  ——租约真实存在、state=active、未到期、且到期时刻/holder/resource 与登记逐字
+  相等、租约槽 work_interval 恰为 worktree:<分支>；裸登记一律不豁免。判定顺序：
+  ①名册有 duty/archived 行 → 既有语义逐字不动；②名册无行+登记有行+租约背书
+  成立 → 漏登记红不触发；③名册无行+登记无行 → 既有红腿原样；④登记有行但
+  租约已过期/已归还/不存在/对不上 → 红且点名「超期未回收」（TTL 止损，T7④）。
+  既有判据强度零改动：duty/archived 全部语义逐字不动，缩名册红腿不删不绕。
+
 退出码：0=全绿；1=有红项（任一红项硬红，不降级为 advisory）。
 用法：python3 ci/fix_verify.py [--repo DIR] [--base-ref REF] [--roster FILE]
+  [--inflight FILE] [--leases-db FILE]（后两者仅测试/特殊核验覆写；豁免与否由
+  租约面实时背书裁定，覆写登记面换不来豁免）
 """
 import argparse
 import hashlib
 import json
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -341,6 +358,164 @@ def parse_roster_text(text):
     return out
 
 
+# ---------- 在飞工作树登记面（门侧新判据的登记正本，加在名册红腿之上） ----------
+# 【病与方（2026-11-04 在飞树登记面批）】「漏登记即红」防的是「缩名册把在役树
+# 摘出去」旁路；但本门跑在整机全部工作树上，在飞批次的临时树（feature/* 批次树）
+# 不进名册 → 这条红腿随在飞树增减漂移（8→9→10），红成噪声、久而久之被当成
+# 常态——这本身就是 weakening。本面给「在飞临时工作树」一个可判定、可核销的
+# 登记：登记至少记 分支/工作树路径/批次归属/租约标识/租约到期时刻/登记时刻
+# （另记 holder/resource/理由供背书核账），落机器本地运行态
+# af-state/resources/inflight-worktrees.list（根 .gitignore /af-state/ 排除，
+# 与租约面 leases.db 同面）。名册仍是版本面正本（基线已提交副本），在飞登记面
+# 是机器本地运行态面——它的防伪不靠提交，靠租约面实时背书（见下）。
+#
+# 【判定顺序（在既有红腿之上加，不替换；逐树）】
+#   ① 名册有 duty/archived 行 → 既有语义逐字照旧（duty 回放+门族单源对账、
+#     archived 钉值逐字一致），在飞登记面不参与（名册先行）；
+#   ② 名册无行，在飞登记面有本树之行（分支与工作树路径都对上），且该行引用的
+#     租约在租约面真实存在、state='active'、到期时刻未过、且到期时刻/holder/
+#     resource/租约槽 work_interval 与登记对得上 → 漏登记红**不触发**；
+#   ③ 名册无行、在飞登记也无本树之行 → 既有漏登记红腿**原样保留**（逐字不改）；
+#   ④ 在飞登记有行但背书不成立（租约已过期/已归还/不存在/对不上/租约面不可读）
+#     → 红，且点名「超期未回收」（TTL 止损——租约到期豁免自动死亡，呼应
+#     T7④ 三路回收「lease TTL ≠ 删树」：超期红命名的正是该回收的树）。
+#
+# 【防伪（为何裸登记文件写一行换不来豁免）】登记面是运行态文件，谁都能写——
+# 但门在判树时**实时回租约面核账**（sqlite 只读打开 leases.db）：
+#   a. 租约 id 不在 leases.db → 「不存在」红；
+#   b. state 非 'active'（已归还/已过期）→ 红；
+#   c. lease_until_ms ≤ 门读时刻 → 超期红（门自判时刻，不依赖 reaper 是否跑过）；
+#   d. 登记的租约到期时刻必须与租约行 lease_until_ms 逐字相等——登记不得比
+#      租约面更宽（续租 heartbeat 后须重登记）；
+#   e. holder/resource 必须与租约行逐字相等；
+#   f. 租约槽 work_interval 必须恰为 worktree:<本树分支>——lease_store SCHEMA 的
+#      唯一活跃索引 resource_lease_one_active_interval(resource, work_interval)
+#      WHERE state='active' 保证一个槽位至多一张活租约：抄别人的活租约字段到
+#      另一棵树/分支，必在 work_interval 上对不上（一张租约背不了第二棵树）。
+# 唯一合法豁免路径 = 按既有流程真领一张 TTL 租约（lease_store.py acquire
+# --resource <节点>/<挂载> --interval worktree:<分支> --holder <施工者>），且
+# TTL 一到豁免自动翻红——**豁免是租约的影子，不是文件的影子**。门对租约面
+# 只读（sqlite ro 模式），绝不 reap、绝不写；写面只有 lease_store.py。
+INFLIGHT_RELPATH = os.path.join("af-state", "resources", "inflight-worktrees.list")
+LEASES_DB_RELPATH = os.path.join("af-state", "resources", "leases.db")
+INFLIGHT_INTERVAL_PREFIX = "worktree:"
+
+
+def parse_inflight_text(text, inflight_path):
+    """在飞登记面行格式（10 段，'|' 分隔；'#' 开头与空行忽略）：
+      inflight | 分支 | 工作树路径 | 批次 | 租约id | 租约到期时刻ms | 登记时刻ms |
+      holder | resource | 理由
+    逐段非空；两个时刻须为十进制毫秒整数；路径须为绝对路径；理由不得为空
+    （与名册同纪律：空理由=未交代的登记）。格式错行一律红（fail-closed）——
+    错行不豁免任何树，且留在面上即是登记面被写坏/滥用的信号。"""
+    rows = []
+    for raw in (text or "").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = [x.strip() for x in line.split("|")]
+        bad = None
+        if len(parts) != 10 or parts[0] != "inflight":
+            bad = ("须 10 段「inflight | 分支 | 工作树路径 | 批次 | 租约id | "
+                   "到期ms | 登记ms | holder | resource | 理由」")
+        else:
+            _, br, path, batch, lease_id, until_ms, at_ms, holder, resource, why = parts
+            if not (br and path and batch and lease_id and holder and resource and why):
+                bad = "存在空段（分支/路径/批次/租约id/holder/resource/理由均不得为空）"
+            elif not os.path.isabs(path):
+                bad = "工作树路径须为绝对路径：%s" % path
+            elif not (until_ms.isdigit() and at_ms.isdigit()):
+                bad = "到期/登记时刻须为十进制毫秒整数（得 %s / %s）" % (until_ms, at_ms)
+        if bad:
+            rec_red("在飞登记行格式错（%s，%s）：%s" % (inflight_path, bad, line))
+            continue
+        rows.append({"branch": br, "path": path, "batch": batch,
+                     "lease_id": lease_id, "until_ms": int(until_ms),
+                     "at_ms": int(at_ms), "holder": holder,
+                     "resource": resource, "why": why})
+    return rows
+
+
+def load_leases(db_path):
+    """只读装载租约面（poc/poc-supply/lease_store.py 的 resource_lease 表）：
+    {lease_id: 行}。面缺席/不可读/表缺席 → None（fail-closed：判不了 ≠ 背书
+    成立——在飞登记行撞上 None 一律红）。门只读，不 reap、不写。"""
+    if not os.path.isfile(db_path):
+        return None
+    try:
+        conn = sqlite3.connect("file:%s?mode=ro" % db_path, uri=True, timeout=5)
+        try:
+            rows = conn.execute(
+                "SELECT lease_id, resource, work_interval, holder, ttl_ms, "
+                "leased_at_ms, lease_until_ms, state FROM resource_lease"
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return None
+    return {r[0]: {"lease_id": r[0], "resource": r[1], "work_interval": r[2],
+                   "holder": r[3], "ttl_ms": r[4], "leased_at_ms": r[5],
+                   "lease_until_ms": r[6], "state": r[7]} for r in rows}
+
+
+def lease_backing_fault(row, leases, now_ms):
+    """在飞登记行 → 租约面背书核账。返回 None=背书成立；否则返回不对账原因
+    一句（供「超期未回收」红点名）。六道核账见上方注释 a–f。"""
+    lease = leases.get(row["lease_id"])
+    if lease is None:
+        return "租约 id=%s 在租约面不存在（裸登记无背书）" % row["lease_id"]
+    if lease["state"] != "active":
+        return ("租约 id=%s 已%s（state=%s）——豁免随租约死亡"
+                % (row["lease_id"],
+                   {"returned": "归还", "expired": "过期"}.get(lease["state"], "翻态"),
+                   lease["state"]))
+    if lease["lease_until_ms"] <= now_ms:
+        return ("租约 id=%s 已到期（until=%dms ≤ 门读时刻 %dms，state=%s）——TTL 止损"
+                % (row["lease_id"], lease["lease_until_ms"], now_ms, lease["state"]))
+    if lease["lease_until_ms"] != row["until_ms"]:
+        return ("登记到期时刻 %dms ≠ 租约面实测 %dms（租约 id=%s）——登记不得比"
+                "租约面更宽（续租 heartbeat 后须重登记）"
+                % (row["until_ms"], lease["lease_until_ms"], row["lease_id"]))
+    if lease["holder"] != row["holder"] or lease["resource"] != row["resource"]:
+        return ("租约 id=%s 的 holder/resource（%s/%s）与登记（%s/%s）对不上"
+                % (row["lease_id"], lease["holder"], lease["resource"],
+                   row["holder"], row["resource"]))
+    want_interval = INFLIGHT_INTERVAL_PREFIX + row["branch"]
+    if lease["work_interval"] != want_interval:
+        return ("租约 id=%s 的槽位 work_interval=%s ≠ 本树 %s——租约未钉在本树槽位"
+                "（一张租约不得背第二棵树）" % (row["lease_id"], lease["work_interval"],
+                                               want_interval))
+    return None
+
+
+def inflight_verdict(t, br, rows, leases, now_ms, inflight_path):
+    """在飞登记面判定（判定顺序②/④；①名册先行、③无行走既有红腿均在调用方）。
+    返回 None=登记面无本树之行（分支与工作树路径都须对上）；("green", 行)=有行
+    且租约面背书成立（漏登记红不触发）；("red", 行)=有行但背书不成立（红且点名
+    「超期未回收」）。"""
+    cands = [r for r in rows if r["branch"] == br and r["path"] == t["path"]]
+    if not cands:
+        return None
+    label = br if br else "(detached)"
+    if leases is None:
+        return ("red", "[%s] 在飞登记 %d 行但租约面不可读（%s）——裸登记一律不豁免"
+                "（fail-closed），超期未回收，红" % (label, len(cands), inflight_path))
+    faults = []
+    for r in cands:
+        fault = lease_backing_fault(r, leases, now_ms)
+        if fault is None:
+            lease = leases[r["lease_id"]]
+            return ("green", "[%s] 在飞登记背书成立：租约 %s 活跃（until=%dms，"
+                    "holder=%s，resource=%s，槽位 %s，批次 %s，登记于 %dms，理由：%s）"
+                    "——漏登记红不触发（豁免由租约面背书，TTL 到期自动翻红）"
+                    % (label, r["lease_id"], lease["lease_until_ms"], lease["holder"],
+                       lease["resource"], INFLIGHT_INTERVAL_PREFIX + r["branch"],
+                       r["batch"], r["at_ms"], r["why"]))
+        faults.append(fault)
+    return ("red", "[%s] 在飞登记背书不成立：%s——超期未回收（TTL 止损，T7④ 三路"
+            "回收：lease TTL ≠ 删树，此处命名的正是该回收的树），红" % (label, "；".join(faults)))
+
+
 # ---------- 整槽连摘篡改件构造 ----------
 def build_tampered_run_sh(text):
     """把 step10/11/12 三槽整槽摘除（段注释 + echo 登记行 + step 调用行+续行）。
@@ -432,6 +607,11 @@ def main():
     ap.add_argument("--base-ref", default=os.environ.get("FIX_VERIFY_BASE_REF", "phase2"),
                     help="主干基线 ref（门码正本来源；缺省 phase2）")
     ap.add_argument("--roster", default=None, help="在役树名册覆写（缺省读基线 ref 已提交副本 ci/fix-verify.duty）")
+    ap.add_argument("--inflight", default=None,
+                    help="在飞工作树登记面覆写（缺省 <repo>/%s；仅测试/特殊核验用——"
+                         "豁免与否由租约面实时背书裁定，覆写本面换不来豁免）" % INFLIGHT_RELPATH)
+    ap.add_argument("--leases-db", default=None,
+                    help="租约面覆写（缺省 <repo>/%s；仅测试/特殊核验用）" % LEASES_DB_RELPATH)
     args = ap.parse_args()
 
     repo = os.path.abspath(args.repo)
@@ -474,13 +654,34 @@ def main():
     if roster_text is None:
         roster = {}
 
-    # ---------- 名册覆盖（漏登记即红） ----------
+    # ---------- 名册覆盖（漏登记即红；在飞登记面判据加在此红腿之上，不替换） ----------
+    # 判定顺序（逐树，见「在飞工作树登记面」注释块）：
+    #   ①名册有 duty/archived 行 → 既有语义逐字不动（不进本段在飞判定）；
+    #   ②名册无行+在飞登记有本树之行+租约面背书成立 → 漏登记红不触发；
+    #   ③名册无行+登记无行 → 既有漏登记红腿原样（文案逐字不改）；
+    #   ④登记有行但租约已过期/已归还/不存在/对不上 → 红且点名「超期未回收」。
+    # 登记面缺席=空面（与今日行为零差异）；租约面只在登记面有行时才读。
+    now_ms = time.time_ns() // 1_000_000
+    inflight_path = args.inflight or os.path.join(repo, INFLIGHT_RELPATH)
+    leases_path = args.leases_db or os.path.join(repo, LEASES_DB_RELPATH)
+    inflight_rows = []
+    if os.path.isfile(inflight_path):
+        inflight_rows = parse_inflight_text(
+            Path(inflight_path).read_text(encoding="utf-8"), inflight_path)
+    leases = load_leases(leases_path) if inflight_rows else None
     for t in trees:
         br = t.get("branch")
         key = br if br else os.path.basename(t["path"])
         if br is None or br not in roster:
-            rec_red("工作树漏登记名册：%s（分支 %s）——缩名册即旁路，红"
-                    % (t["path"], br or "(detached)"))
+            verdict = inflight_verdict(t, br, inflight_rows, leases, now_ms,
+                                       inflight_path)
+            if verdict is None:
+                rec_red("工作树漏登记名册：%s（分支 %s）——缩名册即旁路，红"
+                        % (t["path"], br or "(detached)"))
+            elif verdict[0] == "green":
+                rec_green(verdict[1])
+            else:
+                rec_red(verdict[1])
 
     # ---------- 机制②：主干基线 ref 在场（内容级） ----------
     base_xcheck = git_show_bytes(repo, "%s:ci/xcheck.py" % args.base_ref)
