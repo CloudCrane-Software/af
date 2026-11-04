@@ -147,3 +147,101 @@ fn manifest_serialization_is_deterministic() {
     assert_eq!(bytes_a, bytes_b, "同内容同字节（确定性纪律）");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// ============================================================
+// G6：compiler_version 从只溯源到被核对
+// ============================================================
+
+/// 把已落盘 manifest 的 compiler_version 改写为 rogue 值（其余键不动）。
+fn rewrite_rogue_version(dir: &std::path::Path, rogue: &str) {
+    let path = dir.join(PACKAGE_MANIFEST_FILE);
+    let mut m: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    m["compiler_version"] = serde_json::json!(rogue);
+    std::fs::write(&path, serde_json::to_string_pretty(&m).unwrap()).unwrap();
+}
+
+/// G6：manifest 携带的 af-compiler 版本与当前构建不符 → 拒
+/// （`CompilerVersionMismatch`，文案点名「重新组包」行动指令）。
+#[test]
+fn verify_rejects_compiler_version_mismatch() {
+    let dir = fixture();
+    write_package_manifest(&dir, "plan.x@1.0+abc123").unwrap();
+    rewrite_rogue_version(&dir, "0.0.1-rogue");
+
+    let err = verify_package_manifest(&dir).unwrap_err();
+    assert_eq!(
+        err,
+        af_compiler::PackageError::CompilerVersionMismatch {
+            recorded: "0.0.1-rogue".to_string(),
+            actual: af_compiler::COMPILER_VERSION.to_string(),
+        },
+        "版本不符 = 专用错误变体（不留档值/判据值双点名）"
+    );
+    let msg = err.to_string();
+    assert!(
+        msg.contains("compiler_version") && msg.contains("0.0.1-rogue"),
+        "文案应点名核对面与 rogue 值：{msg}"
+    );
+    assert!(msg.contains("重新组包"), "行动指令在文案面：{msg}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// G6 核对序钉死：内容被改 + 版本不符并存 → `ContentTampered` 先报
+/// （既有错误优先级不变：坏形 → 内容改 → 编译器不符）。
+#[test]
+fn verify_keeps_content_tamper_precedence_over_version_mismatch() {
+    let dir = fixture();
+    write_package_manifest(&dir, "plan.x@1.0+abc123").unwrap();
+    rewrite_rogue_version(&dir, "0.0.1-rogue");
+    std::fs::write(
+        dir.join("task.json"),
+        "{\"task_id\":\"T-1\",\"task_book\":\"改了\"}".as_bytes(),
+    )
+    .unwrap();
+
+    let err = verify_package_manifest(&dir).unwrap_err();
+    assert!(
+        matches!(err, af_compiler::PackageError::ContentTampered { .. }),
+        "内容被改优先于版本不符：{err}"
+    );
+    assert!(err.to_string().contains("清态换号重提"), "{err}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// G6 缺字段口径：manifest 缺 compiler_version 键（其余键齐备）→ 坏形拒
+/// （schema 必填 + deny_unknown_fields——缺席即整份拒，不静默、不「未核对」）。
+#[test]
+fn verify_rejects_manifest_missing_compiler_version_field() {
+    let dir = fixture();
+    write_package_manifest(&dir, "plan.x@1.0+abc123").unwrap();
+    let path = dir.join(PACKAGE_MANIFEST_FILE);
+    let mut m: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    m.as_object_mut().unwrap().remove("compiler_version");
+    std::fs::write(&path, serde_json::to_string_pretty(&m).unwrap()).unwrap();
+
+    let err = verify_package_manifest(&dir).unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("坏形") && msg.contains("compiler_version"),
+        "缺 compiler_version 键 = 坏形拒绝：{msg}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// G6 正门：当前构建产 manifest（组包即盖当前版本章）→ 核对过
+/// （roundtrip 已覆盖 Verified；本测试把「版本面单独钉死」写成显式断言）。
+#[test]
+fn verify_passes_when_manifest_carries_current_compiler_version() {
+    let dir = fixture();
+    let manifest = write_package_manifest(&dir, "plan.x@1.0+abc123").unwrap();
+    assert_eq!(manifest.compiler_version, af_compiler::COMPILER_VERSION);
+    match verify_package_manifest(&dir).unwrap() {
+        ManifestVerification::Verified(verified) => {
+            assert_eq!(verified.compiler_version, af_compiler::COMPILER_VERSION);
+        }
+        other => panic!("当前构建产 manifest 应核对过：{other:?}"),
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}

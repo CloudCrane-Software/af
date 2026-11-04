@@ -1,0 +1,17 @@
+
+running 4 tests
+PROBE-C: REJECT：OR1001: 用法错误: OR1001: package_manifest.json 坏形：missing field `compiler_version` at line 6 column 1（用法: af-order submit --spec <order.json> --state <dir> | af-order admit --request <admission.json> --state <dir> | af-order list --state <dir> | af-order show <order-id> --state <dir>）
+PROBE-C: state residue = 0
+test probe_c_manifest_missing_version_field_current_behavior ... ok
+PROBE-D: REJECT：OR1001: 用法错误: OR1001: 干跑计划装订预检未过: EX4005: 计划装订-一致性核对失败: 计划 decode 拒绝: 计划 body 形状不符：missing field `compiler_version`（用法: af-order submit --spec <order.json> --state <dir> | af-order admit --request <admission.json> --state <dir> | af-order list --state <dir> | af-order show <order-id> --state <dir>）
+PROBE-D: state residue = 0
+test probe_d_plan_missing_version_field_current_behavior ... ok
+PROBE-B: PASS（破窗实证）dry_run=true checks=Array [String("parse_spec"), String("resolve_unit"), String("pin_task_digest"), String("pin_plan_digest"), String("read_plan_graph_version"), String("package_manifest"), String("graph_task_package_layout"), String("planbind_preflight"), String("profile_resolvable")]
+PROBE-B: unit_detail.plan_id = "plan.factory_construction_build@1.0+1ef0577a6b6f"
+test probe_b_plan_rogue_version_passes_before_fix ... ok
+PROBE-A: PASS（破窗实证）dry_run=true checks=Array [String("parse_spec"), String("resolve_unit"), String("pin_task_digest"), String("pin_plan_digest"), String("read_plan_graph_version"), String("package_manifest"), String("graph_task_package_layout"), String("planbind_preflight"), String("profile_resolvable")]
+PROBE-A: package_manifest.compiler_version = "0.0.1-rogue"
+test probe_a_manifest_rogue_version_passes_before_fix ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+

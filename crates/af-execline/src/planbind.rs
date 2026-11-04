@@ -8,8 +8,10 @@
 //!    报告单元**不得**另写第二套 digest 核对——裁决9）。
 //! 2. **信封**：`v == 1` + 拒绝式 decode（deny_unknown_fields）。
 //! 3. **一致性**：graph_version（compiled_from vs order 槽 vs 可选外部期待）、
-//!    line 绑定（计划携带 line_id 时与期待核对——编译期常 None，执行面
-//!    bind_line 后可复验）、node_exec 与 graph.nodes 按 id 对齐。
+//!    compiler_version（计划携带值 vs 当前构建链接的 af-compiler——G6 从
+//!    只溯源到被核对，不符拒装订）、line 绑定（计划携带 line_id 时与期待
+//!    核对——编译期常 None，执行面 bind_line 后可复验）、node_exec 与
+//!    graph.nodes 按 id 对齐。
 //! 4. **模板清单**（裁决10 统一机制，解析器一套 = [`crate::pkg::prompts`]）：
 //!    装订器收口单元 spec 声明的 template_ref 集，逐件装载 + MANIFEST.sha256
 //!    核对（EX4001-4003 透传）。
@@ -98,6 +100,22 @@ pub fn bind(
         return Err(ExeclineError::PlanDigestMismatch {
             expected: plan.body.compiled_from.registry_digest.clone(),
             actual,
+        });
+    }
+    // ③ 一致性：compiler_version（G6）——计划携带的编译器版本须与当前
+    // 构建链接的 af-compiler 一致（判据正本 = af_compiler::COMPILER_VERSION，
+    // 与 ② 的 registry_digest 同构：编译期值随计划携带，消费侧以本地正本
+    // 对照）。不符即拒：旧编译器/别家编译器产的计划不得过装订门（此前
+    // 只溯源不核对——版本不符照过）。
+    if plan.body.compiled_from.compiler_version != af_compiler::COMPILER_VERSION {
+        return Err(ExeclineError::PlanBindMismatch {
+            detail: format!(
+                "compiler_version 不符：计划携带 {} ≠ 当前构建 af-compiler {}（G6：\
+                 编译器版本从只溯源到被核对）——这份计划不是当前编译器产的，\
+                 请用当前 af-compiler 重新编译组包",
+                plan.body.compiled_from.compiler_version,
+                af_compiler::COMPILER_VERSION
+            ),
         });
     }
     // ③ 一致性：graph_version 三面（compiled_from / order 槽 / 外部期待）。

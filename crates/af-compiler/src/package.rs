@@ -12,7 +12,9 @@
 //! - [`verify_package_manifest`]：提交侧（af-order 门面，正式 + 干跑两路）
 //!   在一切副作用之前重算两份摘要并与 manifest 核对——不符即 fail-loud，
 //!   点名「任务包内容已改，须清态换号重提」（防重放契约的完整句：
-//!   改动任务包 = 清状态、换订单号、重新提交）；
+//!   改动任务包 = 清状态、换订单号、重新提交）；G6 起另核对
+//!   `compiler_version` 与当前构建链接的 af-compiler（[`crate::COMPILER_VERSION`]）
+//!   一致——不符即拒（此前只溯源不核对，旧编译器/别家产物照过消费门）；
 //! - manifest 缺席 = [`ManifestVerification::Absent`]（G3 收口）：不再与
 //!   「核对过且通过」同住一个 `Ok(Some(..))/Ok(None)` 形态——缺席是显式
 //!   可机检的「未核对」状态，要求核对的路径（af-order preflight）对它
@@ -44,7 +46,9 @@ pub struct TaskPackageManifest {
     /// 编译产物计划身份（plan_id 确定性派生形——manifest 归属面，核对时
     /// 与计划面摘要共同确认「这份 manifest 是为这份计划签的」）。
     pub plan_id: String,
-    /// 写 manifest 的 af-compiler 版本（溯源面，不参与核对）。
+    /// 写 manifest 的 af-compiler 版本（G6：核对面——提交侧与当前构建
+    /// 链接的 af-compiler [`crate::COMPILER_VERSION`] 核对，不符即拒；
+    /// 此前「只溯源不核对」= 拿旧编译器/别家产物照过消费门）。
     pub compiler_version: String,
 }
 
@@ -61,6 +65,9 @@ pub enum PackageError {
         recorded: String,
         actual: String,
     },
+    /// manifest 携带的 af-compiler 版本与当前构建不符（G6：从只溯源到
+    /// 被核对——旧编译器/别家编译器产的任务包不得过消费门）。
+    CompilerVersionMismatch { recorded: String, actual: String },
 }
 
 impl fmt::Display for PackageError {
@@ -79,6 +86,13 @@ impl fmt::Display for PackageError {
                 "任务包内容已改（{file}）：manifest 留档 {recorded} ≠ 实得 {actual}——\
                  防重放契约违例（W2-C55 语义内置编译链）：改动任务包须清态换号重提，\
                  不得在原订单号上重放"
+            ),
+            Self::CompilerVersionMismatch { recorded, actual } => write!(
+                f,
+                "任务包 manifest 的 compiler_version 不符：留档 {recorded} ≠ 当前构建\
+                 af-compiler {actual}（G6：编译器版本从只溯源到被核对）——这份任务包\
+                 不是当前编译器产的，不得照过消费门；请用当前 af-compiler 重新组包\
+                 （assemble_construction_package）后再提交"
             ),
         }
     }
@@ -124,7 +138,7 @@ pub fn build_package_manifest(
         task_sha256: file_digest(&task_dir.join("task.json"))?,
         plan_sha256: file_digest(&task_dir.join("plan.json"))?,
         plan_id: plan_id.into(),
-        compiler_version: env!("CARGO_PKG_VERSION").to_string(),
+        compiler_version: crate::COMPILER_VERSION.to_string(),
     })
 }
 
@@ -190,6 +204,16 @@ pub fn verify_package_manifest(task_dir: &Path) -> Result<ManifestVerification, 
             file: "plan.json",
             recorded: manifest.plan_sha256.clone(),
             actual: actual_plan,
+        });
+    }
+    // G6：compiler_version 从只溯源到被核对——manifest 留档的编译器版本须与
+    // 当前构建链接的 af-compiler 一致（判据正本 = [`crate::COMPILER_VERSION`]），
+    // 不符即拒（旧编译器/别家编译器产的任务包不得过消费门）。核对序在
+    // 坏形/内容摘要之后：既有错误优先级不变（坏形 → 内容改 → 编译器不符）。
+    if manifest.compiler_version != crate::COMPILER_VERSION {
+        return Err(PackageError::CompilerVersionMismatch {
+            recorded: manifest.compiler_version.clone(),
+            actual: crate::COMPILER_VERSION.to_string(),
         });
     }
     Ok(ManifestVerification::Verified(manifest))
