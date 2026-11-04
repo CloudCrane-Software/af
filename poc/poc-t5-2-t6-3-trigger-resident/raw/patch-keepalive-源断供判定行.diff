@@ -1,0 +1,198 @@
+--- /home/pan-ding/workspace/agent黑灯工厂/tools/factory-keepalive.py.20261104-pre-触发源断供安灯判据行.bak	2026-11-04 23:38:39.544899005 +0800
++++ /home/pan-ding/workspace/agent黑灯工厂/tools/factory-keepalive.py	2026-11-04 23:39:33.717860437 +0800
+@@ -1595,6 +1595,24 @@
+ last_ti_alarm = 0.0
+ last_ti_detail = ""      # check→fix 传递（one_round 单线程同轮有序，同 last_af_exec_detail）
+ 
++# ---------- 源断供安灯：判据④（v0.3-T5②/T6③ 常驻批 2026-11-04 新增，只加不改） ----------
++# 本条安灯存在的**全部理由**＝把两种失联形态分家（既有码 vs 新码，物理隔离）：
++#   形态A 收件箱进程不在        → 既有码 trigger-inbox-down（fix_trigger_inbox 既有报警行**逐字不动**）
++#   形态B 收件箱进程在但源头断供  → 新码 trigger-inbox-source-silent（本段）
++# 判据④ 只在①②③全过（进程在+目录可写+secret 在位）时评估 ⇒ 形态A 时新码**不出现**
++# （新码永不覆盖既有 down 码）。
++# 落面：①判据文件 状态观测/trigger-inbox-source-silent.json（原子写，机器可读，
++#   与事件路由那份 trigger-inbox-liveness.json 同机制、不同文件、不互相覆盖）；
++#   ②alarms.log 摘要行（1800s 去重，同既有失联报警节奏）+ MES 事件（同既有面口径）。
++# 起算锚点 = max(最新投递 mtime, 在役进程启动时刻)——刚拉起还没来事件的收件箱不冤枉。
++TRIGGER_INBOX_SILENT_CODE = "trigger-inbox-source-silent"
++TRIGGER_INBOX_SILENT_ALARM_DEDUP_S = 1800
++TRIGGER_INBOX_SILENT_DEFAULT_MIN = 240     # 注册表缺 liveness 时的回落阈（配方缺省）
++TRIGGER_INBOX_SILENT_F = os.environ.get(
++    "AF_TRIGGER_SILENT_F", f"{WS}/状态观测/trigger-inbox-source-silent.json")
++TRIGGER_INBOX_ALARMS_LOG = os.environ.get("AF_TRIGGER_ALARMS_LOG", ALARMS_LOG)
++last_ti_silent_alarm = 0.0
++
+ 
+ def trigger_inbox_pids():
+     return scan_pids(lambda argv: any(os.path.basename(a) == TRIGGER_INBOX_SCRIPT
+@@ -1613,12 +1631,147 @@
+     return None
+ 
+ 
++def _trigger_inbox_silent_threshold(home):
++    """源断供阈值（**配方驱动**：读在役注册表运行位 <home>/registry.json 的
++    liveness.inbox_silent_after_min）；缺 liveness/缺该项 → 回落 240
++    （显式 None 判——0 是合法阈值，falsy 不吞）；注册表读不到/坏 → None（不可证）。
++    秘密纪律：本函数**只读阈值**，注册表本身不含秘密（key_id 只作指向）。"""
++    try:
++        with open(os.path.join(home, "registry.json"), encoding="utf-8") as f:
++            reg = json.load(f)
++    except Exception:
++        return None
++    if not isinstance(reg, dict):
++        return None
++    thr = (reg.get("liveness") or {}).get("inbox_silent_after_min")
++    if thr is None:
++        return float(TRIGGER_INBOX_SILENT_DEFAULT_MIN)
++    try:
++        return float(thr)
++    except (TypeError, ValueError):
++        return None
++
++
++def _trigger_inbox_newest_delivery(inbox_dir):
++    """收件箱最新一投递的落盘时刻（epoch 秒）；无投递 → 0.0（只读扫描，不写面）。"""
++    newest = 0.0
++    try:
++        for src_dir in os.scandir(inbox_dir):
++            if not src_dir.is_dir():
++                continue
++            for f in os.scandir(src_dir.path):
++                if not f.name.endswith(".json"):
++                    continue
++                try:
++                    newest = max(newest, f.stat().st_mtime)
++                except OSError:
++                    pass
++    except OSError:
++        pass
++    return newest
++
++
++def _trigger_inbox_criterion_write(snap):
++    """判据文件原子写（tmp+os.replace，事件路由安灯同款）；写失败不阻塞看护轮。"""
++    try:
++        os.makedirs(os.path.dirname(TRIGGER_INBOX_SILENT_F), exist_ok=True)
++        tmp = TRIGGER_INBOX_SILENT_F + ".tmp"
++        with open(tmp, "w", encoding="utf-8") as f:
++            json.dump(snap, f, ensure_ascii=False, indent=1)
++        os.replace(tmp, TRIGGER_INBOX_SILENT_F)
++    except OSError:
++        pass
++
++
++def _trigger_inbox_silent_state_raw(pids, home, t, process_alive, healthy, note):
++    """形态判定 + 判据文件落盘 + 新码报警（形态A 不发新码 ⇒ 不覆盖既有 down 码）。
++
++    返回 (status, alarm_code, silent_s, thr_min)：
++      down     = 形态A（进程不在）——报警仍由既有 trigger-inbox-down 行负责
++      degraded = 进程在但不健康（②③ 失败）——不判源断供
++      unknown  = 不可证（阈值/锚点读不到）——**不报绿也不报琥珀**（fail-closed）
++      amber    = 形态B（进程在 + 最新投递超阈）——新码 trigger-inbox-source-silent
++      green    = 形态B 的健康侧
++    """
++    global last_ti_silent_alarm
++    inbox_dir = os.path.join(home, "inbox")
++    thr_min = _trigger_inbox_silent_threshold(home)
++    newest = _trigger_inbox_newest_delivery(inbox_dir)
++    proc_started = proc_start_epoch(pids[0], boot_time()) if pids else None
++    # 起算锚点（**与路由侧那份 trigger-inbox-liveness 不同义**，此处按收件箱自身口径）：
++    #   有投递 → 锚点=最新投递 mtime（投递只增不删 ⇒ 进程重启**不掩盖**既有断供；
++    #           若用 max(投递, 进程启动) 则每次重启都会把断供时钟清零，源断供永报不出）
++    #   无投递 → 锚点=在役进程启动时刻（刚部署还没事件，不冤枉）
++    since = newest if newest else (proc_started or 0)
++    silent_s = int(t - since) if since else None
++    if not process_alive:
++        status, code = "down", "trigger-inbox-down"
++        msg = ((note or "进程不在") + "——形态A（收件箱进程不在）；本形态的报警由既有 "
++               "trigger-inbox-down 报警行负责，本判据行**不覆盖既有码**")
++    elif not healthy:
++        status, code = "degraded", None
++        msg = (note or "收件箱不健康") + "——第三形态（进程在但不健康）；不判源断供"
++    elif thr_min is None or silent_s is None:
++        status, code = "unknown", None
++        msg = "不可证（阈值或起算锚点读不到）——不报绿也不报琥珀（fail-closed）"
++    elif silent_s > thr_min * 60:
++        status, code = "amber", TRIGGER_INBOX_SILENT_CODE
++        msg = (f"trigger-inbox 源断供：收件箱进程在（pid={list(pids)} home={home}）但最新"
++               f"投递距今 {silent_s // 60}min（>阈 {int(thr_min)}min）——形态B（源头无事件"
++               f"可路由）；恢复=事件源重投/查 webhook 出口；与『进程不在』"
++               f"（trigger-inbox-down）**分码**")
++    else:
++        status, code = "green", None
++        msg = (f"收件箱活性正常（最新投递 {silent_s // 60}min 前，阈 {int(thr_min)}min）"
++               "——形态B 的健康侧")
++    snap = {"ts": now_s(), "ts_epoch": int(t), "tool": "factory-keepalive/trigger-inbox",
++            "status": status, "alarm_code": code, "message": msg,
++            "process_alive": bool(process_alive), "healthy": bool(healthy),
++            "silent_s": silent_s,
++            "threshold_min": (int(thr_min) if thr_min is not None else None),
++            "inbox_dir": inbox_dir, "pids": list(pids or []),
++            "newest_delivery_epoch": (int(newest) if newest else None),
++            "process_started_epoch": (int(proc_started) if proc_started else None),
++            "since_epoch": (int(since) if since else None),
++            "note": "写入方=factory-keepalive 判据行④；形态A 的真实报警仍由既有 "
++                    "trigger-inbox-down 报警行发出（既有码/既有行零改动）"}
++    _trigger_inbox_criterion_write(snap)
++    if status == "amber" and (t - last_ti_silent_alarm) >= TRIGGER_INBOX_SILENT_ALARM_DEDUP_S:
++        last_ti_silent_alarm = t
++        try:
++            with open(TRIGGER_INBOX_ALARMS_LOG, "a", encoding="utf-8") as f:
++                f.write(json.dumps({
++                    "ts": now_s(), "level": "amber", "code": TRIGGER_INBOX_SILENT_CODE,
++                    "message": msg + "；不自动拉起（拉起闸=主代理）",
++                    "since": time.strftime("%F %T", time.localtime(since)),
++                }, ensure_ascii=False) + "\n")
++        except Exception:
++            pass
++        mes_event("trigger-inbox", "trigger_inbox_source_silent")
++    return status, code, silent_s, thr_min
++
++
++def _trigger_inbox_silent_state(pids, home, t, process_alive, healthy, note):
++    """判据④ 入口（**永不抛异常**：本判据行不得带崩看护轮，既有护栏口径）。"""
++    try:
++        return _trigger_inbox_silent_state_raw(pids, home, t, process_alive, healthy, note)
++    except Exception as e:
++        klog("trigger-inbox", f"源断供判据行异常（不阻塞看护轮）: "
++                              f"{type(e).__name__}: {str(e)[:120]}")
++        return "unknown", None, None, None
++
++
+ def check_trigger_inbox(t):
+     """trigger-inbox 判活（进程在 + inbox 目录可写 + 段B secret 在役）。返回 (alive, detail)。"""
+     global last_ti_detail
+     pids = trigger_inbox_pids()
+     if not pids:
+         last_ti_detail = "进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）"
++        # 判据④（新增）：形态A 只镜像状态到判据文件，**不发新码**
++        # （既有 trigger-inbox-down 报警行仍由 fix_trigger_inbox 负责，逐字不动）
++        _trigger_inbox_silent_state([], f"{WS}/af-state/triggers", t,
++                                    process_alive=False, healthy=False,
++                                    note=last_ti_detail)
+         return False, last_ti_detail
+     home = _proc_environ_get(pids[0], "AF_TRIGGER_HOME") or f"{WS}/af-state/triggers"
+     inbox_dir = os.path.join(home, "inbox")
+@@ -1626,14 +1779,22 @@
+         os.makedirs(inbox_dir, exist_ok=True)
+     except OSError as e:
+         last_ti_detail = f"收件箱目录不可建/不可写（{inbox_dir}: {e}）"
++        _trigger_inbox_silent_state(pids, home, t, process_alive=True, healthy=False,
++                                    note=last_ti_detail)
+         return False, last_ti_detail
+     if not os.access(inbox_dir, os.W_OK):
+         last_ti_detail = f"收件箱目录不可写（{inbox_dir}）"
++        _trigger_inbox_silent_state(pids, home, t, process_alive=True, healthy=False,
++                                    note=last_ti_detail)
+         return False, last_ti_detail
+     if not _proc_environ_get(pids[0], TRIGGER_INBOX_SECRET_ENV):
+         last_ti_detail = (f"进程={pids} 在役缺段B secret（{TRIGGER_INBOX_SECRET_ENV}）"
+                           "——收件箱 fail-closed 必 401，缺 secret 不判活（安全缺省）")
++        _trigger_inbox_silent_state(pids, home, t, process_alive=True, healthy=False,
++                                    note=last_ti_detail)
+         return False, last_ti_detail
++    # 判据④（新增）：形态B 判定（源断供）——只在①②③全过时评估
++    _trigger_inbox_silent_state(pids, home, t, process_alive=True, healthy=True, note="")
+     last_ti_detail = f"进程={pids} home={home} inbox 可写 secret 在位"
+     return True, last_ti_detail
+ 

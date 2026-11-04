@@ -1,0 +1,52 @@
+# 门读数（v0.3-T5②/T6③ trigger-inbox 常驻批 2026-11-04）
+
+## 1) cargo fmt --check --all（工作树 /home/pan-ding/workspace/af-wt-t5t6）
+$ export PATH=$HOME/.cargo/bin:$PATH CARGO_TARGET_DIR=/data/bench/targets/t5t6-trigger LANG=C.UTF-8
+$ cargo fmt --check --all
+CARGO_FMT_EXIT=0
+
+## 2) cargo build / test / clippy —— **未跑**（理由见 README §6）
+
+## 3) af 主树零改动核（/home/pan-ding/workspace/agent黑灯工厂/af）
+$ git status --porcelain
+?? redteam/scans/2026-11-04-e4484537/
+
+$ git log --oneline -1 ; git rev-parse HEAD origin/product/main product/main
+56ff52a fix(ci): 门输入钉再重钉（sat-cast 销项改了另两件判据正本）
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+
+## 4) PoC 原件 blob 逐字未动（hash-object vs origin/product/main blob）
+$ git hash-object poc/poc-super-agent/{tools-mirror/trigger-inbox.py,contracts/af.trigger.v1.md,registry/trigger-registry.v1.json}
+3ad5fef7c97b1ea4f7cd3440c924506ede3e3798
+9573b21a1fb94808366ec28557af141c37f8bab8
+a5c19dd10bfe34f537dec9e0e32704fbc7e34d56
+$ git rev-parse origin/product/main:poc/poc-super-agent/...
+3ad5fef7c97b1ea4f7cd3440c924506ede3e3798
+9573b21a1fb94808366ec28557af141c37f8bab8
+a5c19dd10bfe34f537dec9e0e32704fbc7e34d56
+
+## 5) crates/ ci/ 零 diff（对 origin/product/main）
+(空=零 diff)
+
+## 6) 本批工作树改动清单（未 commit）——**2026-11-05 返修批按当前 `git status --porcelain -uall` 重出（替换旧快照，非追加）**
+$ git status --porcelain -uall
+ M docs/adr/README.md
+?? docs/adr/015-trigger-inbox-resident-contract.md
+?? poc/poc-t5-2-t6-3-trigger-resident/README.md
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/five-state-readings.json
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/gate-readings.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/in-service-readings.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/lamp-readings.json
+?? "poc/poc-t5-2-t6-3-trigger-resident/raw/patch-keepalive-\346\272\220\346\226\255\344\276\233\345\210\244\345\256\232\350\241\214.diff"
+?? "poc/poc-t5-2-t6-3-trigger-resident/raw/patch-\347\224\237\344\272\247\345\211\257\346\234\254-vs-PoC\345\216\237\344\273\266.diff"
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/probe-selfcheck.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/repair-readings.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/selfcheck-output.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/stop-reading-final.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/stop-reading.txt
+?? tools/trigger-inbox-src-parity-probe.py
+?? tools/trigger-inbox.py
+
+## 7) 构建盘（未跑重编译，仅 fmt 不占 target）
