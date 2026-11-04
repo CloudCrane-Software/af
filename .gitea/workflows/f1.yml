@@ -103,7 +103,7 @@ jobs:
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
           cargo --version && rustc --version && cargo fmt --version
 
-      - name: fmt --check（硬门；主线预存红见 ci/REPORT.md，红即如实亮红）
+      - name: fmt --check（硬门；主线已归零，红即如实亮红）
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo fmt --check --all
