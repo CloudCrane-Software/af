@@ -150,6 +150,24 @@ if ! bash "$CI_DIR/gate_inputs_check.sh" check --root "$AF_ROOT" >>"$OUT/step0.l
   echo "step0 FAIL: 判据正本漂移（判据/基线/白名单改动未走 gate_inputs_check.sh update 同批评审）"
   exit 1
 fi
+# ---- 0.x 任务包组包覆盖面门（G3 债：组包路径全覆盖核查缺；2026-11-04 批） --------
+# 缺陷回顾（30-工件/剩余欠账总表-20261104 G3 行）：「任务包 manifest 缺席 = 不核对
+# 的未组包破窗（组包路径全覆盖核查缺）」——crate 内 package_manifest.json 只钉
+# task.json/plan.json 两件内容 hash，不回答：① 全仓还有没有别的生产写入点没人管；
+# ② 任务包目录里多出来的文件谁发现；③ 「组包写入点全集」本身有没有被任何清单
+# 核对（删 manifest 即绕过核对之外的另一半破窗）。
+# 机制（承 gate_inputs_check 同槽先例——step0 预检、不占新 step 编号；清单+对账
+# 同款模式）：ci/baselines/task-package-writepoints.json 造册全仓 57 生产写入点
+# （sha256 自钉于脚本常量）；门四段 fail-closed：① 注册表自钉对账 ② 写入点全集
+# 双向对账（扫描面每个生产写入点必须在册——覆盖不到=红，本门核心；在册必须仍
+# 有真实写入点）③ 组包域闭包（组包产物全集 == 层1 manifest 钉面 ∪ {manifest 自身}
+# ——新增产物不被钉=半覆盖红）④ 真实组包回环（cargo 现场组真任务包，盘面 ↔
+# 注册表双向逐位 + sha256 身份 + compiler_version 代际核对）。破窗自证与边界见
+# poc/poc-g3-manifest/README.md。
+if ! python3 -I "$CI_DIR/task_package_manifest_check.py" check --root "$AF_ROOT" >>"$OUT/step0.log" 2>&1; then
+  echo "step0 FAIL: 任务包组包覆盖面红（生产写入点未造册/组包产物盘面↔清单不符/身份不符——见 ci/out/step0.log 尾）"
+  exit 1
+fi
 # ---- 0.x mutations 全量演练接线（2026-11-01：should-run 判定从无消费点改为有消费者） ----
 # 修复史实：此前头注写「全量演练挂合流入口」，但仓内 0 个消费点（grep *.sh/*.py 亲证）
 #   ——312e6db 改 ci/strategies_check.py（触及 gate_inputs ci/**）后零演练留痕，

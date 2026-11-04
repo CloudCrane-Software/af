@@ -1,0 +1,2 @@
+task_package_manifest_check: 产物身份不符：task.json 实得 sha256=c652e458be99… ≠ package_manifest.json 钉 eb4a3cf8a725…——内容被改/钉错，红
+exit=1

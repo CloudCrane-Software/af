@@ -1,0 +1,27 @@
+test_drift_detected_when_pin_differs (__main__.RegistryPinTest.test_drift_detected_when_pin_differs) ... ok
+test_pending_pin_rejected (__main__.RegistryPinTest.test_pending_pin_rejected) ... ok
+test_real_registry_pin_green (__main__.RegistryPinTest.test_real_registry_pin_green) ... ok
+test_const_resolved_artifact_name (__main__.ScannerTest.test_const_resolved_artifact_name) ... ok
+test_inline_cfg_test_mod_and_bare_test_fn_excluded (__main__.ScannerTest.test_inline_cfg_test_mod_and_bare_test_fn_excluded) ... ok
+test_lib_gated_mod_file_excluded (__main__.ScannerTest.test_lib_gated_mod_file_excluded) ... ok
+test_line_comment_noise_immune (__main__.ScannerTest.test_line_comment_noise_immune) ... ok
+test_mid_file_test_mod_does_not_swallow_later_prod_code (__main__.ScannerTest.test_mid_file_test_mod_does_not_swallow_later_prod_code) ... ok
+test_multiline_write_literal_in_window (__main__.ScannerTest.test_multiline_write_literal_in_window) ... ok
+test_prod_write_point_detected_and_attributed (__main__.ScannerTest.test_prod_write_point_detected_and_attributed) ... ok
+test_raw_string_braces_do_not_corrupt_test_region (__main__.ScannerTest.test_raw_string_braces_do_not_corrupt_test_region) ... ok
+test_closure_on_real_repo (__main__.StaticClosureTest.test_closure_on_real_repo) ... ok
+test_closure_red_when_registry_adds_unpinned_artifact (__main__.StaticClosureTest.test_closure_red_when_registry_adds_unpinned_artifact) ... ok
+test_unregistered_site_red (__main__.StaticClosureTest.test_unregistered_site_red) ... ok
+test_green_on_well_formed_package (__main__.VerifyDirTest.test_green_on_well_formed_package) ... ok
+test_red_compiler_version_drift (__main__.VerifyDirTest.test_red_compiler_version_drift) ... ok
+test_red_extra_artifact (__main__.VerifyDirTest.test_red_extra_artifact) ... ok
+test_red_manifest_absent (__main__.VerifyDirTest.test_red_manifest_absent) ... ok
+test_red_manifest_key_drift (__main__.VerifyDirTest.test_red_manifest_key_drift) ... ok
+test_red_missing_artifact (__main__.VerifyDirTest.test_red_missing_artifact) ... ok
+test_red_tampered_content (__main__.VerifyDirTest.test_red_tampered_content) ... ok
+
+----------------------------------------------------------------------
+Ran 21 tests in 2.688s
+
+OK
+exit=0
