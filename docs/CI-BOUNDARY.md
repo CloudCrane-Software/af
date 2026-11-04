@@ -62,6 +62,10 @@ v0.3 T7 终裁①：**CI 执行器 Gitea Actions 先行，Actions 只跑 F1 快�
 两层的衔接：F1 绿不是合流充分条件——合流以 F2 全量门 + integrator 复核制
 四元组为准；F1 红则是合流**充分**的暂缓理由（快速反馈拦在 PR）。
 
+（2026-11-04）F1 端到端链路（开 PR → Actions 真跑 → 结论入账）另由专供验证分支
+`poc/f1-e2e-verify` 的 open PR 实跑核验；该分支相对 product/main 仅含本段说明性
+文字，不含任何代码/门/workflow 变更，验证完保持 PR open 不合流。
+
 ## 四、worktree 三路回收口径（T7④）
 
 可执行脚本：`tools/worktree-recycle.py`（af 仓 tools/，非外层工作区 tools/）。
