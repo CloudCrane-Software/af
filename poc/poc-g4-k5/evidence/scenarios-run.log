@@ -1,0 +1,53 @@
+[S0-pristine] before(0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[           ] after (0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[           ] => 一致
+
+[S1-mut007-replay] before(1): k5-path-lint: 判分链登记表被收缩（必需成员缺席：crates/af-execline/src/judge.rs）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）
+[                ] after (1): k5-path-lint: 判分链登记表被收缩（必需成员缺席：crates/af-execline/src/judge.rs）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改本文件下界派生规则）
+[                ] => 一致
+
+[S2-shrink-report-row] before(1): k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/citation_unit.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）
+[                    ] after (1): k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/citation_unit.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改本文件下界派生规则）
+[                    ] => 一致
+
+[S3-drift-member-bytes] before(1): K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在
+[                     ] after (1): K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在
+[                     ] => 一致
+
+[S4-delete-member-file] before(1): K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在
+[                     ] after (1): K5 判分链路径 lint: FAIL（判分链被触碰——有意变更须走裁决并在
+[                     ] => 一致
+
+[S5-empty-manifest] before(1): k5-path-lint: 登记表为空（判分链保护面缺失）
+[                 ] after (1): k5-path-lint: 登记表为空（判分链保护面缺失）
+[                 ] => 一致
+
+[S6-new-unregistered-member] before(0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[                          ] after (1): k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/new_unit.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改本文件下界派生规则）
+[                          ] => 分叉(改后更严)
+
+[S7-new-member-registered] before(0): K5 判分链路径 lint: PASS（5 件判分链成员逐位对锚）
+[                        ] after (0): K5 判分链路径 lint: PASS（5 件判分链成员逐位对锚）
+[                        ] => 一致
+
+[S8-excluded-artifacts] before(0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[                     ] after (0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[                     ] => 一致
+
+[S9-gate-body-marker-stripped] before(0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[                            ] after (1): k5-path-lint: swev 判分臂派生为空（生产源无声明判分脚本 sha256 锚（script_sha256）的判分门本体）——下界无法派生即红（fail-closed，不静默缩面）
+[                            ] => 分叉(改后更严)
+
+[S10-reportkit-pkg-absent] before(1): k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/citation_unit.py、af/packages/reportkit/units/rubric_unit.py、af/packages/reportkit/tools/render.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）
+[                        ] after (1): k5-path-lint: report 判分臂载体包缺席（af/packages/reportkit/）——下界无法派生即红（fail-closed，不静默缩面）
+[                        ] => 一致
+
+[S11-name-collision-nonmember] before(0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[                            ] after (0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[                            ] => 一致
+
+[S12-marker-in-tests-ignored] before(0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[                           ] after (0): K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+[                           ] => 一致
+
+对照表落 poc/poc-g4-k5/evidence/scenarios.tsv
