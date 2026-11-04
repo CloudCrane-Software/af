@@ -1,0 +1,4 @@
+error_level=0
+warning_level=0
+build_finished=True
+success=True

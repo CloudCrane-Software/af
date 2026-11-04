@@ -1,4 +1,6 @@
+===== STRATEGIES_CHECK -B (after strategies/README §四) =====
 [INFO] R0 入库对账 OK：被测对象 66 件全部在 git 跟踪面内（strategies/ 全库 + crates/af-dsl/tests/strategy_library_test.rs）
 [INFO] 命名空间分解：A 线（st-C*）13 条，B 线（st-b-*）48 条，全部登记=True
 [INFO] index 计数对账 OK：total=61 tiers={'A': 11, 'B': 48, 'C': 2} dsl_states={'compilable': 32, 'not_applicable': 17, 'needs_syntax': 12}
 == strategies_check: 全绿——磁盘条目 61（compilable=32），index 计数对账一致，编译断言经 af-dsl 装载测试
+strategies_check_B_exit=0

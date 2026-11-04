@@ -47,3 +47,21 @@ A 档中唯一的判据类（评测方法论）策略 st-C007 的配对同模型
    `cargo test -p af-dsl --test strategy_library_test` 再提交；
 2. 更新 `index.yaml` 的 `entries` 与 `counts`（登记值须与文件机算值一致）；
 3. 跑 `python3 -B ci/strategies_check.py` 全绿后方可提交。
+
+## 四、P3-A1 策略→DSL 闭环接缝（2026-11-05）
+
+本批把「可编译」推进到「被跑过一次并留读数」。接缝与读数在
+`poc/poc-p3-a1-strategy-dsl/`（standalone 工程 `seam/`，空 `[workspace]`
+表自成根，不入仓 workspace，根 `Cargo.toml`/`Cargo.lock` 零改动）。
+
+- 三态清单：`three-state-list.json`（机器可读）/ `three-state-list.md`（人读表）。
+  全集口径 `index.yaml` 61 条；台账「59 簇」= A 档 11 + B 档 48，多出
+  `st-C122` / `st-C103` 为 C 档实验终裁回写（EXP-1 / EXP-2）。
+- 编译门（14d）：`python3 -B ci/strategies_check.py`，R4 =
+  `cargo test -p af-dsl --test strategy_library_test`（compilable 逐条
+  `load_str`+`validate`）。仓内正本挂法是 `-B`（`ci/run.sh:596`）。
+- 最小接缝：`seam/` 的 `compile-all`（61 条四段链 stage 级读数，对生产
+  `af/packages`）+ `run-one`（单条 compilable 经覆盖层注册表四段全链 →
+  真 `GraphExecuteUnit` 驱动，读数落 `run/out/records.jsonl`）。
+  实测 `st-b-C102` 执行完成 `verdict=true`；`st-b-C037` 在执行面被 EX4005
+  拒收（节点级 cents 预算不在 v1 强制集），负读数同样留档。

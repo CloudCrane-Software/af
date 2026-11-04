@@ -1,0 +1,13 @@
+id: st-b-C058
+name: "自建工具检索层前先测检索器：工具检索本身是短板（ToolRet）"
+tier: B
+claim: "自建工具检索层前先测检索器：ToolRet最佳嵌入nDCG@10仅33.83，检索差拖累通过率11.4%"
+claimed_value:
+  metric: "tool_retrieval_nDCG@10"
+  direction: up
+  context: "以自有工具描述+真实任务查询构造内部评测集；先测检索器本身再建检索层"
+sources: [S043, S055, S056, S057]
+consensus: {corpora: 1, cards: 4}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "夹具条目：与正本 st-b-C058 同文，仅用于 R3 无下限观察项复现。"

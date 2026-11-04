@@ -1,0 +1,8 @@
+== env ==
+CARGO_TARGET_DIR=/data/bench/targets/p3-a1-strategy-dsl
+CARGO_BUILD_JOBS=8
+== touch crates **/*.rs ==
+rs_files=323
+touched 2026-11-05T01:28:12+08:00
+== cargo clippy --workspace --all-targets -j8 --message-format=json ==
+clippy_json_exit=0
