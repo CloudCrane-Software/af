@@ -1,0 +1,23 @@
+# P3-A1 策略→DSL 整合：最小接缝（standalone 工程，不入 workspace）。
+#
+# 空的 [workspace] 表 = 本工程自成 workspace 根（先例：proofs/ 被根
+# workspace exclude；本工程不经 exclude 而经自带空 workspace 表独立，
+# 根 Cargo.toml / Cargo.lock 零改动）。依赖走 path 指向仓内 crates/*
+# 正本——与 ci/run.sh step3 同一套源码，不引入第二真相。
+[workspace]
+
+[package]
+name = "p3a1-strategy-seam"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "P3-A1 最小接缝：策略库 dsl_snippet → af-compiler 四段全链 → af-execline 图执行器真跑（注入零模型 runner）"
+
+[dependencies]
+af-dsl = { path = "../../../crates/af-dsl" }
+af-compiler = { path = "../../../crates/af-compiler" }
+af-execline = { path = "../../../crates/af-execline" }
+af-harness = { path = "../../../crates/af-harness" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+serde_yaml = "0.9.34"

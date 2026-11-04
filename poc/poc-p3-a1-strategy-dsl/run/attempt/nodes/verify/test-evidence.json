@@ -1,0 +1,9 @@
+{
+  "command": "cd /testbed && echo p3a1-seam-check-ok",
+  "exit_code": 0,
+  "pass": true,
+  "observation_bytes": 30,
+  "observation_truncated": false,
+  "observation_cap_bytes": 12000,
+  "review": null
+}

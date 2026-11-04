@@ -1,0 +1,38 @@
+{
+  "components": [
+    {
+      "class": "tool",
+      "name": "pkg.sweng.locate",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.view",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.edit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.sweng.test_unit",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.publish_task_finished",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.publish_task_finished@af-execline"
+    }
+  ]
+}

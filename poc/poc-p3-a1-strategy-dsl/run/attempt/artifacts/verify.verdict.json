@@ -1,0 +1,1 @@
+{"envelope":"v1","from":"verify","port":"verdict","payload":{"pass":true,"failures":[],"evidence":{"dir":"verify","log":"test.log","summary":"test-evidence.json","exit_code":0,"observation_truncated":false,"observation_bytes":30,"diff":{"path":"agent.diff","bytes":32,"sha256":"3ee41db3fc36fa58da2ae1dddb9d3994346fbe9ecb9047cc3176859f7a06222a"}}}}

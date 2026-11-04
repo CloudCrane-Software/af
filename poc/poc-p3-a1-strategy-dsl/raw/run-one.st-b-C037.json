@@ -1,0 +1,26 @@
+{
+  "id": "st-b-C037",
+  "task_id": "p3a1-st-b-C037",
+  "chain": {
+    "load": "pass",
+    "validate": "pass",
+    "lower": "pass",
+    "bind": "pass",
+    "plan": "pass"
+  },
+  "plan_id": "plan.explore_then_fix@1.0+eb923222ee8c",
+  "graph_version": "1.0",
+  "task_sha256": "49ad8432060ceb94257b0d8ffdb678073258d65e534e365766ff4f7a8eb3ee3f",
+  "plan_sha256": "cf0e3fa19b13085c6a799dd8635f064e2a93b132c4b02a97731a9352e7fc312e",
+  "exec": {
+    "ok": false,
+    "error": "EX4005: 计划装订-一致性核对失败: 预算条目 id explore_cents（dimension=Cents, scope=\"node:explorer\"）不在执行面强制集内（强制集：plan 级 cost_cap(cents)/token_cap(tokens_total) + 节点级turns；其余组合声明即须强制，静默忽略=免帽，拒收）"
+  },
+  "node_launches": [],
+  "timings": {
+    "compile_four_stage_ms": 9,
+    "execute_ms": 6,
+    "total_ms": 22
+  },
+  "work_dir": "poc/poc-p3-a1-strategy-dsl/run"
+}

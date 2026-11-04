@@ -1,0 +1,11 @@
+{
+  "components": [
+    {
+      "class": "tool",
+      "name": "pkg.swarmkit.tools",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/swarmkit@1.0.0/tools/toolbench.py"
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+version: 1
+meta:
+  name: sweng_fix_swe
+  graph_version: "1.0"
+  entry: env_boot
+  input: swe_task_input
+  output: { ref: verdict, from: evaluate }
+  intent: "软件工程包 E2E：容器环境装载（L4 记账）→ 单 LLM 修复节点（bash 工具面，节点运行时环）→ swebench 官方判分（外部评估器；评估输入对修复节点不可读）"
+
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: env_handle
+    schema:
+      type: object
+      required: [container, repo_path, test_command]
+      properties:
+        container: { type: string }
+        repo_path: { type: string }
+        test_command: { type: string }
+  - name: patch
+    schema:
+      type: object
+      required: [diff, files]
+      properties:
+        diff: { type: string }
+        files: { type: array, items: { type: string } }
+  - name: verdict
+    schema:
+      type: object
+      required: [resolved, f2p_passed, f2p_total]
+      properties:
+        resolved: { type: boolean }
+        f2p_passed: { type: integer }
+        f2p_total: { type: integer }
+
+stores:
+  - name: eval_refs              # 官方评测输入（eval_script/fail_to_pass），模型不可见
+    type: collection
+    item: patch                  # 评测资产包（复用 patch 形状：diff=eval_script、files=fail_to_pass 清单）
+    writer: env_boot
+    lifecycle: run
+    retention: { max_items: 64 }
+    eval_input: true
+
+nodes:
+  - id: env_boot                 # 环境装载：容器起 + 评测资产入隔离槽（L4 记账；真实现=复用 swev::setup）
+    kind: task
+    escape:
+      kind: env_adapter
+      impl_ref: executor:builtin/sweng.env_boot@af-execline
+      reason: "per-instance 容器装载与资源护栏/代理注入是运行时基础设施，静态拓扑无法穷举（承 SWE-agent.yaml:139-146 判例）"
+      owner: sweng-team
+      share_budget_pct: 6
+    writes: [eval_refs]
+    emits: { env: env_handle }
+
+  - id: fix                      # 修复节点：单 LLM + bash 工具面；迭代环在 harness 运行时内
+    kind: task
+    uses:
+      model: route.main@1
+      tools: [pkg.sweagent.env@1]
+    consumes: { env: env_handle }
+    emits: { patch: patch }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.swev_system@1, quota_tokens: 400 }
+        - { from: input, fields: [repo, instance_id, problem_statement], policy: project, quota_tokens: 1200 }
+        - { from: edge, port: env, policy: project, quota_tokens: 200 }
+
+  - id: evaluate                 # 官方判分：外部评估器（check+unit）；读隔离槽
+    kind: check
+    uses: { unit: pkg.sweagent.swebench_eval@1 }
+    reads: [eval_refs]
+    consumes: { patch: patch }
+    emits: { verdict: verdict }
+
+edges:
+  - { from: env_boot, output: env, to: fix, input: env }
+  - { from: fix, output: patch, to: evaluate, input: patch, checkpoint: true }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 100 }
+    - { id: turn_cap, dimension: turns, scope: node:fix, cap: 60 }
+  stop:
+    - { when: "last_tool.first_line in ['TASK_COMPLETE']", outcome: completed }
+    - { when: "steps.tool_free >= 3", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

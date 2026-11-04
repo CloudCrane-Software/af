@@ -1,0 +1,5 @@
+# manifest_version: 1
+f93457d02dd893af7b97c7a1c24081a750c562aaa30330cde608565a163aa49d  prompts/analyze_system.md
+9419657039c24ab5d1ed7e00368a73fc99f7b53249e724a3c30de1d4430968ba  prompts/locate_system.md
+19cf9e2735427d0c4e90c4996befb67ab11a6f9c48e5ed1518c6ac79bb999efd  prompts/patch_system.md
+3b855cf66d850dee21050da4b28ec8b48cbcafe3c8a3c9ab69e8298bf6139ac2  prompts/review_system.md

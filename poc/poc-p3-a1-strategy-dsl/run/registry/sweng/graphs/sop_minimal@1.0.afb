@@ -1,0 +1,55 @@
+version: 1
+meta:
+  name: sweng_sop_minimal
+  graph_version: "1.0"
+  entry: repair
+  input: swe_task_input
+  output: { ref: patch, from: repair }
+  intent: "软件工程包 SOP 最小形：单 LLM 修复节点（bash 工具面，迭代环在节点运行时内）直出补丁——SOP 候选图的下界锚点，与 sop_full/sop_no_qa 构成同任务面三档"
+
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: patch
+    schema:
+      type: object
+      required: [diff, files]
+      properties:
+        diff: { type: string }
+        files: { type: array, items: { type: string } }
+
+nodes:
+  - id: repair                    # 单修复节点：LLM + bash 工具面；迭代环在 harness 运行时内
+    kind: task
+    uses:
+      model: route.main@1
+      tools: [pkg.sweagent.env@1]
+    emits: { patch: patch }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.swev_system@1, quota_tokens: 400 }
+        - { from: input, fields: [repo, instance_id, problem_statement], policy: project, quota_tokens: 1200 }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 100 }
+    - { id: turn_cap, dimension: turns, scope: node:repair, cap: 60 }
+  stop:
+    - { when: "last_tool.first_line in ['TASK_COMPLETE']", outcome: completed }
+    - { when: "steps.tool_free >= 3", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

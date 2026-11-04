@@ -1,0 +1,121 @@
+{
+  "id": "st-b-C102",
+  "task_id": "p3a1-st-b-C102",
+  "chain": {
+    "load": "pass",
+    "validate": "pass",
+    "lower": "pass",
+    "bind": "pass",
+    "plan": "pass"
+  },
+  "plan_id": "plan.coder_role_task_graph@1.0+573fcbaaa072",
+  "graph_version": "1.0",
+  "task_sha256": "6fc400ae66839754a8c9280ab6add62755966e8fd6a04acc4a0eaa4f7ccc205d",
+  "plan_sha256": "3efc5933e18edb325b91a4bed2a552eef73a739a84ec3a3220f0b9b11f10e6a1",
+  "exec": {
+    "ok": true,
+    "verdict": true,
+    "note": "图执行器驱动 5 节点（analyze → …），判定 Some(true)",
+    "record": {
+      "plan_id": "plan.coder_role_task_graph@1.0+573fcbaaa072",
+      "node_id": "line-p3a1-seam",
+      "item_id": "p3a1-st-b-C102",
+      "attempt": 1,
+      "host_alias": "local",
+      "unit_id": "graph-unit",
+      "unit_version": "0.1.0",
+      "status": "completed",
+      "verdict": true,
+      "evidence": {
+        "run_dir": "poc/poc-p3-a1-strategy-dsl/run/attempt",
+        "evidence_digest": null
+      },
+      "gate": "ok",
+      "usage": {
+        "turns": 12,
+        "unit_calls": 20,
+        "http_retries": 0,
+        "quota": {
+          "input": 400,
+          "output": 200,
+          "cache_read": 40
+        }
+      },
+      "wall_ms": 40,
+      "note": "graph nodes=5 cents=20 tokens_total=640"
+    },
+    "artifacts": [
+      {
+        "artifact_id": "graph-verify-verdict",
+        "is_final": true,
+        "qualified": true,
+        "content_sha256": "eeefc4a8e5291b38ef27cf8d54e5eb4c44a02012ed2613b679d772d006b874ef"
+      }
+    ],
+    "evidence_files": [
+      "poc/poc-p3-a1-strategy-dsl/run/attempt/artifacts/analyze.analysis.json",
+      "poc/poc-p3-a1-strategy-dsl/run/attempt/artifacts/locate.report.json",
+      "poc/poc-p3-a1-strategy-dsl/run/attempt/artifacts/patch_role.patch.json",
+      "poc/poc-p3-a1-strategy-dsl/run/attempt/artifacts/review.reviewed.json",
+      "poc/poc-p3-a1-strategy-dsl/run/attempt/artifacts/verify.verdict.json"
+    ]
+  },
+  "node_launches": [
+    {
+      "run_id": "p3a1-st-b-C102-analyze",
+      "node": "analyze",
+      "model": "GLM-5.3",
+      "max_turns": 60,
+      "spend_cap_cents": 700,
+      "system_head": "# analyze system（P3-A1 覆盖层模板——st-b-C102 analyze 节点，route.strong）\n\nYou are the analysis role of the coder role task graph. Read the issue and\nproduce the root ca",
+      "user_head": "[OUTPUT CONTRACT — your work is NOT complete until you do this]\n1. Do the task below with bash tool calls.\n2. When done, call the `declare` tool with ONE argume",
+      "tools": [
+        "declare"
+      ]
+    },
+    {
+      "run_id": "p3a1-st-b-C102-locate",
+      "node": "locate",
+      "model": "GLM-5.3-Flash",
+      "max_turns": 60,
+      "spend_cap_cents": 695,
+      "system_head": "# locate system（P3-A1 覆盖层模板——st-b-C102 locate 节点，route.cheap）\n\nYou are the locate role. Use the locate tool to confirm which suspect files\nactually contain the ",
+      "user_head": "[OUTPUT CONTRACT — your work is NOT complete until you do this]\n1. Do the task below with bash tool calls.\n2. When done, call the `declare` tool with ONE argume",
+      "tools": [
+        "sweng.locate",
+        "declare"
+      ]
+    },
+    {
+      "run_id": "p3a1-st-b-C102-patch_role",
+      "node": "patch_role",
+      "model": "GLM-5.3",
+      "max_turns": 60,
+      "spend_cap_cents": 690,
+      "system_head": "# patch system（P3-A1 覆盖层模板——st-b-C102 patch_role 节点，route.strong）\n\nYou are the patch role. Apply the minimal edit to the located hits.\n\n- Deliver the envelope: ",
+      "user_head": "[OUTPUT CONTRACT — your work is NOT complete until you do this]\n1. Do the task below with bash tool calls.\n2. When done, call the `declare` tool with ONE argume",
+      "tools": [
+        "sweng.edit",
+        "declare"
+      ]
+    },
+    {
+      "run_id": "p3a1-st-b-C102-review",
+      "node": "review",
+      "model": "GLM-5.3-Flash",
+      "max_turns": 60,
+      "spend_cap_cents": 685,
+      "system_head": "# review system（P3-A1 覆盖层模板——st-b-C102 review 节点，route.mid）\n\nYou are the review role. Inspect the patch; if acceptable, hand it through\nunchanged for verificati",
+      "user_head": "[OUTPUT CONTRACT — your work is NOT complete until you do this]\n1. Do the task below with bash tool calls.\n2. When done, call the `declare` tool with ONE argume",
+      "tools": [
+        "declare"
+      ]
+    }
+  ],
+  "timings": {
+    "compile_four_stage_ms": 9,
+    "execute_ms": 40,
+    "total_ms": 57
+  },
+  "work_dir": "poc/poc-p3-a1-strategy-dsl/run"
+}
