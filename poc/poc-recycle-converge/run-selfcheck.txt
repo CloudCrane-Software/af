@@ -1,0 +1,22 @@
+[PASS] T1a 脏树回收：报告写明留检
+[PASS] T1b 脏树回收：目录仍在（未强删）
+[PASS] T1c 脏面未提交改动原样在
+[PASS] T1d 登记未销且记 mismatch 留检
+[PASS] T2a1 自报 merged 未真合入（开关下）→ mismatch 留检
+[PASS] T2a2 未合入分支未被删
+[PASS] T2b1 aborted 过留证期 → 树清
+[PASS] T2b2 未真合入分支在开关下仍被拒删
+[PASS] T3a merged 真合入（默认）→ 树清
+[PASS] T3b 报告写明默认保分支
+[PASS] T3c 分支仍在 git branch --list
+[PASS] T3d 提交对象仍可读（cat-file -t）
+[PASS] T3e 登记已销（清路完整）
+[PASS] T4a 开关下 merged 真合入 → 树清
+[PASS] T4b 已合入分支被 -d 安全删
+[PASS] T4c 分支删后提交对象仍可读（保提交）
+[PASS] R1 active lease 未到期 → KEEP 且不删树
+[PASS] R2 lease 过期 → RECLAIM 标 timeout 且不删树（TTL≠删树）
+[PASS] R3 aborted 留证期内 → KEEP 现场保留
+[PASS] R4 保护分支登记 → SKIP 永不回收
+
+共 20 项：全绿
