@@ -76,13 +76,32 @@ v0.3 T7 终裁①：**CI 执行器 Gitea Actions 先行，Actions 只跑 F1 快�
 本节只新增口径与事实，不改 §一—§四 任何既有语义。据此：
 
 - **开 PR 的 base 必须显式写 `product/main`**。Gitea 的「默认 base」跟随仓设置
-  default_branch——实测（只读 GET `/api/v1/repos/opchadmin/af`，2026-11-04，
-  凭据指纹化取证 `poc/poc-ci-diffbase-fix/readings/gitea-readonly.json`）该值
-  **仍为 `main`**：不写 base 的 PR 会默认对准对照线 `main`。改仓设置属运营者
-  签认项（L2），非本批动作。
+  default_branch——**该值已于 2026-11-04 由 `main` 改为 `product/main`**（L2 裁决执行；
+  只读 GET `/api/v1/repos/opchadmin/af` 改前/改后双读取证，凭据指纹化、不落盘）。
+  ⇒ **「默认 base 落在对照线 `main`」这一失门面已关闭**：不写 base 的 PR 现在默认
+  对准 `product/main`，因而**默认就能拿到 F1 快速门**。
+  ★ **但显式写 base 仍为硬要求**，理由有二：① 仓设置可被再次改动（保护规则的
+  生效与撤销都是 API 一次调用），显式 base 不依赖仓设置；② `main` 仍是**存在**的
+  受保护只读分支（禁直推／禁 force／禁删），误开 base=`main` 的 PR **会被服务端拒绝**，
+  失败得早、失败得明确。
 - **F1 快速门只在 base=product/main 时触发**（`.gitea/workflows/f1.yml` 实况：
   `on.pull_request.branches: [product/main]`）。base 落到 `main` 的 PR **拿不到
   F1 快速反馈**——静默失门，而非降级运行。
+- **分支保护现状（L2'/L2'' 裁决执行，2026-11-04，经 pre-receive 实测）**：
+  - `product/main`：`enable_push=true` + **白名单直推 `opchadmin`**（**保住现役
+    「本地合流 → 直推」合流流程**）+ **禁 force push** + **禁分支删除**。
+    实测四读数：白名单成员快进推**成功**；**有写权限但非白名单**的账号推**被拒**
+    （`Not allowed to push to protected branch`）；**真非快进 force 推被拒**
+    （`protected from force push`）；**删除被拒**（`protected from deletion`）。
+    ⇒ F1/F2 门不再可被「直推」绕过（直推仅限白名单账号），且历史不可被 force 改写。
+  - `main`：**只读归档线**（`enable_push=false`、白名单为空、禁 force、禁删）
+    ⇒ **连 owner 也推不上去**（实测 pre-receive 拒绝），`main` 上的 2 个独有提交
+    与 `f373113` 指针**就此冻结**，符合「对照线只读」的定位。
+  - **回滚方式**：两条规则各一条 API 删除即可复原（不影响任何 ref）。
+  - ⚠ **与 §五 上一条的关系**：`product/main` 仍**允许**白名单直推 ⇒ 本仓**不是**
+    「强制 PR 合流」模型；F1 快速门是 **PR 路径**的门，**直推路径不经 F1**
+    （直推的正确性由合流前的本地全量门 F2 + integrator 复核承担）。
+    本节登记的是**直推面的收窄**（仅白名单 + 禁 force + 禁删），**不是** PR 强制化。
 - 关联缺陷（L1，同批修复）：`ci/fix_scan.py --diff-base` 缺省曾误取 `origin/main`
   （对照线），致 step13a diff 档路径过滤失效——本仓两线无 merge-base，基点恒
   不可解析 → 恒回落 full；若基点可解析亦属按对照线全树差集恒全族触发。缺省已改
