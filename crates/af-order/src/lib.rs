@@ -43,9 +43,11 @@ pub use admit::{
     ResourceProfileSpec,
 };
 pub use adjudicate::{
-    generate_adjudication_doc, load_doc, run_steward_loop, verify_doc, AdjudicateError,
-    AdjudicationDoc, AdjudicationSeed, LoopFacilities, StewardOutcome, ADJUDICATION_DOC_KIND,
-    ADJUDICATION_TEMPLATE_ID, ADJUDICATION_TEMPLATE_VERSION, STEWARD_ROLE, TEMPLATE_BODY,
+    generate_adjudication_doc, load_doc, reconcile_adjudications, run_steward_loop, verify_doc,
+    AdjudicateError, AdjudicationDoc, AdjudicationJournal, AdjudicationSeed, CommittedFact,
+    JournalLine, LoopFacilities, PreparedIntent, ReconcileReport, ReconcileStatus,
+    StewardOutcome, ADJUDICATION_DOC_KIND, ADJUDICATION_TEMPLATE_ID,
+    ADJUDICATION_TEMPLATE_VERSION, JOURNAL_SUFFIX, STEWARD_ROLE, TEMPLATE_BODY,
     ADJUDICATIONS_DIR,
 };
 pub use error::OrderError;

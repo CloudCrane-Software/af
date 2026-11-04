@@ -48,6 +48,31 @@
 //!   create_order 行，Created 态 = 待修订）；Decision=Reject → abort：源单
 //!   cancel + 账本落 cancel 行（Closed/Cancelled 终态无 abort 边，如实报
 //!   [`AdjudicateError::MissingEdge`]，不假装迁移）。
+//!
+//! # 跨库意图账（开放风险 #5：跨库无原子事务的 prepared/committed 补偿）
+//!
+//! 一次闭环横跨四类持久面：裁决单文书（文件）、af-station lease 库（sqlite：
+//! enqueue/claim/complete）、订单受理账（`admissions.jsonl`：receipt）、WIP 面
+//! （rework 工单账本 / 源单 cancel 行）——没有任何跨库原子事务。此前的失败
+//! 语义只有「claimed 留检 + 租约到期回炉」，而这在**提交点之后**的崩溃窗
+//! （admit 已落账、`station.complete` 未落）里会双写：任务回炉被再认领 →
+//! 重签 seq+1 → 同一裁决单二次受理（见 poc/poc-cross-db-atomicity 改前读数）。
+//!
+//! 补偿面（本模块落地，最小两阶段语义）：
+//! - **prepared**：跨库提交点（admit）**之前**落 [`PreparedIntent`]——
+//!   「我将要受理什么」，含回执幂等键；
+//! - **committed**：提交点之后落 [`CommittedFact`]——分支结算事实
+//!   （rework 清单 / 是否 abort）；
+//! - **completed**：任务 complete 落账后收口；
+//! - **重放幂等臂**：认领到的裁决单若已过提交点（committed 线在，或
+//!   prepared 的回执键在受理账——盖住「admit 落账 ↔ committed 线之间」的
+//!   崩溃窗），不重签不重受理，按意图账收敛剩余面后返回原回执；
+//! - **[`reconcile_adjudications`]**：扫描全部意图账，检出在飞残留
+//!   （prepared 无回执 = 留检面；有回执 = 分支幂等结算 + 线补缺），任务面
+//!   最终 complete 由重放臂在下一次认领时落。
+//!
+//! 意图账是既有 adjudications 目录里的 append-only JSONL（fsync 追加，
+//! 与 `append_receipt`/`OrderLedger` 同款纪律），**不是另一套库**。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -232,6 +257,181 @@ pub fn load_doc(path: &Path) -> Result<AdjudicationDoc, AdjudicateError> {
     Ok(doc)
 }
 
+// ============================================================
+// 跨库意图账（开放风险 #5：prepared/committed 补偿）
+// ============================================================
+
+/// 意图账文件后缀（`<state>/adjudications/<order_id>/<裁决单号>.journal.jsonl`）。
+/// `.jsonl` 结尾不进 [`next_adjudication_id`] 的 `*.json` 计数。
+pub const JOURNAL_SUFFIX: &str = ".journal.jsonl";
+
+/// prepared 意图：跨库提交点（admit 落受理账）**之前**落盘的「我将要受理
+/// 什么」。有了这行，崩溃后的任何重放都能按 `receipt_idempotency_key` 对
+/// 账出「这笔提交到底落没落」，不靠猜。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PreparedIntent {
+    pub adjudication_id: String,
+    /// 认领到的 af-station 任务 id（与裁决单号同源；留键面供 reconcile 对账）。
+    pub task_id: String,
+    pub source_order_id: String,
+    pub source_stable_id: String,
+    pub decision: Decision,
+    pub decision_seq: u64,
+    pub decision_digest: String,
+    /// admit 回执幂等键（`{stable}/admit/{seq}/{digest}`，与受理账同键）。
+    pub receipt_idempotency_key: String,
+    /// 计划面（Revise 分支幂等物化的输入面）。
+    pub next_orders: Vec<String>,
+    pub ts_ms: i64,
+}
+
+/// committed 事实：跨库提交点之后、任务 complete 之前，各库面实际发生的
+/// 分支结算结果——重放臂据此跳过分支，不凭空推断。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CommittedFact {
+    pub receipt_idempotency_key: String,
+    /// Revise 分支物化的 rework 工单清单（其余分支为空）。
+    pub rework_order_ids: Vec<String>,
+    /// Reject 分支是否执行了 abort。
+    pub aborted: bool,
+    pub ts_ms: i64,
+}
+
+/// 意图账一行（append-only；最新到某相位即代表当前相位，重试可产生多条
+/// prepared——意图在账，历史不抹）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "phase", rename_all = "snake_case")]
+pub enum JournalLine {
+    Prepared(PreparedIntent),
+    Committed(CommittedFact),
+    Completed { ts_ms: i64 },
+}
+
+/// 一份裁决单的跨库意图账句柄（打开/追加/相位判读）。
+#[derive(Debug)]
+pub struct AdjudicationJournal {
+    path: PathBuf,
+    lines: Vec<JournalLine>,
+}
+
+impl AdjudicationJournal {
+    /// 意图账路径（与裁决单文书同目录）。
+    pub fn path(state: &StateDir, source_order_id: &str, adjudication_id: &str) -> PathBuf {
+        state
+            .root()
+            .join(ADJUDICATIONS_DIR)
+            .join(source_order_id)
+            .join(format!("{adjudication_id}{JOURNAL_SUFFIX}"))
+    }
+
+    /// 打开意图账：文件缺席 = 空账（首走之前本来就没有意图）；存在则重载
+    /// 校验（坏行 fail-loud，不静默跳过）。
+    pub fn open(
+        state: &StateDir,
+        source_order_id: &str,
+        adjudication_id: &str,
+    ) -> Result<Self, AdjudicateError> {
+        let path = Self::path(state, source_order_id, adjudication_id);
+        let mut lines = Vec::new();
+        if path.is_file() {
+            let text = fs::read_to_string(&path).map_err(|err| {
+                AdjudicateError::Doc(format!("意图账读取失败 {}: {err}", path.display()))
+            })?;
+            for (index, line) in text.lines().enumerate() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+                let parsed: JournalLine =
+                    serde_json::from_str(trimmed).map_err(|err| {
+                        AdjudicateError::Doc(format!(
+                            "意图账第 {} 行不是合法记录（{}）: {err}",
+                            index + 1,
+                            path.display()
+                        ))
+                    })?;
+                lines.push(parsed);
+            }
+        }
+        Ok(Self { path, lines })
+    }
+
+    /// 追加一行：fsync 落盘后才更新内存视图——崩溃时内存不领先于盘
+    /// （与 `append_receipt`/`OrderLedger::append` 同款纪律）。
+    fn append(&mut self, line: JournalLine) -> Result<(), AdjudicateError> {
+        use std::io::Write as _;
+        let text = serde_json::to_string(&line)
+            .map_err(|err| AdjudicateError::Doc(format!("意图账序列化失败: {err}")))?;
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent).map_err(|err| {
+                AdjudicateError::Doc(format!("创建 {}: {err}", parent.display()))
+            })?;
+        }
+        let mut file = fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&self.path)
+            .map_err(|err| {
+                AdjudicateError::Doc(format!("意图账打开失败 {}: {err}", self.path.display()))
+            })?;
+        file.write_all(text.as_bytes())
+            .and_then(|()| file.write_all(b"\n"))
+            .and_then(|()| file.sync_all())
+            .map_err(|err| {
+                AdjudicateError::Doc(format!(
+                    "意图账落盘失败 {}: {err}",
+                    self.path.display()
+                ))
+            })?;
+        self.lines.push(line);
+        Ok(())
+    }
+
+    /// 落 prepared 意图（跨库提交点之前）。
+    pub fn append_prepared(&mut self, intent: PreparedIntent) -> Result<(), AdjudicateError> {
+        self.append(JournalLine::Prepared(intent))
+    }
+
+    /// 落 committed 事实（提交点之后、complete 之前）。
+    pub fn append_committed(&mut self, fact: CommittedFact) -> Result<(), AdjudicateError> {
+        self.append(JournalLine::Committed(fact))
+    }
+
+    /// 落 completed 收口线（任务 complete 落账之后）。
+    pub fn append_completed(&mut self) -> Result<(), AdjudicateError> {
+        let ts_ms = Utc::now().timestamp_millis();
+        self.append(JournalLine::Completed { ts_ms })
+    }
+
+    /// 全部历史行（审计面；相位判读用下方三个取值器）。
+    pub fn lines(&self) -> &[JournalLine] {
+        &self.lines
+    }
+
+    /// 最新一条 prepared 意图（无 = 从未走到提交点前）。
+    pub fn latest_prepared(&self) -> Option<&PreparedIntent> {
+        self.lines.iter().rev().find_map(|line| match line {
+            JournalLine::Prepared(intent) => Some(intent),
+            _ => None,
+        })
+    }
+
+    /// 最新一条 committed 事实。
+    pub fn latest_committed(&self) -> Option<&CommittedFact> {
+        self.lines.iter().rev().find_map(|line| match line {
+            JournalLine::Committed(fact) => Some(fact),
+            _ => None,
+        })
+    }
+
+    /// 是否已有 completed 线（跨库事务全部面已收敛）。
+    pub fn is_completed(&self) -> bool {
+        self.lines
+            .iter()
+            .any(|line| matches!(line, JournalLine::Completed { .. }))
+    }
+}
+
 /// 从源单实际状态解析"决策依据"清单（生成侧；每条都能过 admit OR2109）：
 /// 源单每个工件一条 `artifact:<id>:<content_sha256>`，绑定预算凭证再加一条
 /// `voucher:<id>:<canonical 摘要>`。账本行不作默认依据（生成面只列实质实体；
@@ -397,11 +597,16 @@ pub struct StewardOutcome {
     pub aborted: bool,
 }
 
-/// 一次 steward 闭环（③）：生成裁决单 → 入队 → 认领 → 复算文书 → 真签 →
-/// admit → 决策分支（continue/rework/abort）→ complete 任务。
+/// 一次 steward 闭环（③）：生成裁决单 → 入队 → 认领 → 复算文书 →
+/// （重放幂等臂：已过提交点则按意图账收敛，返回原回执）→ 真签 → prepared
+/// 意图落账 → admit → 决策分支幂等结算 → committed 线 → complete 任务 →
+/// completed 线。
 ///
 /// 任何一步失败即向上传播类型化错误；认领后的任务**不**自动回滚（租约到期
-/// 由 af-station 惰性回收），失败面留给运营者检查，不静默吞任务。
+/// 由 af-station 惰性回收），失败面留给运营者检查，不静默吞任务——**但**
+/// 提交点（admit 落账）之后的崩溃不再靠人肉分辨：意图账记下 prepared/
+/// committed/completed 三相，租约回炉后的再认领由重放幂等臂收敛（不二次
+/// 受理），无人值守扫描见 [`reconcile_adjudications`]。
 pub fn run_steward_loop(
     seed: &AdjudicationSeed<'_>,
     f: &LoopFacilities<'_>,
@@ -438,6 +643,29 @@ pub fn run_steward_loop(
     let claimed_path = PathBuf::from(&task.payload_ref);
     let claimed = load_doc(&claimed_path)?;
 
+    // ── 重放幂等臂（风险#5）：认领到的裁决单若已过跨库提交点，不再重签/
+    //    重受理——那是同一裁决单的二次受理（双写）。按意图账收敛剩余面后
+    //    返回原回执。提交点判据见 [`committed_receipt`]。──────────────
+    let mut journal = AdjudicationJournal::open(
+        f.state,
+        &claimed.source_order_id,
+        &claimed.adjudication_id,
+    )?;
+    if let Some(receipt) = committed_receipt(f.state, &journal, &claimed)? {
+        return steward_replay(
+            f,
+            seed.worker_id,
+            claimed,
+            claimed_path,
+            &mut journal,
+            ReplayCarry {
+                enqueue,
+                task_id,
+                receipt,
+            },
+        );
+    }
+
     // ── 真签（af-workorder 既有路径；四扩展字段进被签字节）────────
     let (mut source, _records) =
         crate::admit::recover_source_order(f.state, &claimed.source_order_id)?;
@@ -457,6 +685,23 @@ pub fn run_steward_loop(
         seed.actor_keypair,
         attributes,
     );
+
+    // ── prepared 意图落账（风险#5：跨库提交点之前，先落「将受理什么」）──
+    let digest = crate::admit::decision_digest(&decision);
+    let stable_id = source.stable_id().as_str().to_string();
+    let receipt_idempotency_key = crate::admit::idempotency_key(&stable_id, seq, &digest);
+    journal.append_prepared(PreparedIntent {
+        adjudication_id: claimed.adjudication_id.clone(),
+        task_id: task_id.clone(),
+        source_order_id: claimed.source_order_id.clone(),
+        source_stable_id: stable_id,
+        decision: seed.decision,
+        decision_seq: seq,
+        decision_digest: digest,
+        receipt_idempotency_key: receipt_idempotency_key.clone(),
+        next_orders: claimed.next_orders.clone(),
+        ts_ms: Utc::now().timestamp_millis(),
+    })?;
 
     // ── admit 受理（OR21xx 全链；越权角色在此 OR2106 类型化拒绝）────
     let held_voucher = source
@@ -486,25 +731,15 @@ pub fn run_steward_loop(
     };
     let receipt = admit(&request, f.state, f.client, f.now)?;
 
-    // ── continue / rework / abort 分支（角色纪律已在四层校验落实）────
-    let mut rework_order_ids = Vec::new();
-    let mut aborted = false;
-    match seed.decision {
-        // Approve / Arbitrate：原单继续，receipt 留档即留痕。
-        Decision::Approve | Decision::Arbitrate => {}
-        // Revise：按被签计划面物化 rework 后继单（Created 态 = 待修订）。
-        Decision::Revise => {
-            for rework_id in &claimed.next_orders {
-                spawn_rework_order(f.state, &source, rework_id)?;
-                rework_order_ids.push(rework_id.clone());
-            }
-        }
-        // Reject：abort——源单 cancel + 账本落 cancel 行。
-        Decision::Reject => {
-            abort_source(f.state, &mut source)?;
-            aborted = true;
-        }
-    }
+    // ── continue / rework / abort 分支（幂等结算，风险#5）+ committed 线 ──
+    let (rework_order_ids, aborted) =
+        settle_decision_branches(f.state, &mut source, seed.decision, &claimed.next_orders)?;
+    journal.append_committed(CommittedFact {
+        receipt_idempotency_key: receipt.idempotency_key.clone(),
+        rework_order_ids: rework_order_ids.clone(),
+        aborted,
+        ts_ms: Utc::now().timestamp_millis(),
+    })?;
 
     // ── complete 任务（只有现任 claimant 能置 done）──────────────
     if !f.station.complete(&task_id, seed.worker_id)? {
@@ -512,6 +747,9 @@ pub fn run_steward_loop(
             "任务 {task_id} 完成失败（非现任 claimant 或已被接管）"
         )));
     }
+
+    // ── completed 线：跨库事务全部面（文书/lease 库/受理账/WIP 面）收敛 ──
+    journal.append_completed()?;
 
     Ok(StewardOutcome {
         adjudication_id: claimed.adjudication_id.clone(),
@@ -523,6 +761,136 @@ pub fn run_steward_loop(
         rework_order_ids,
         aborted,
     })
+}
+
+/// 意图账判读：这份裁决单是否已过跨库提交点（受理账已有该 prepared 意图
+/// 对应的回执）。三种在账证据任一即真：
+/// 1. committed / completed 线在——线是提交点之后落的，受理账必含该回执
+///    （对不上 = 跨库账面漂移，fail-loud 拒重放）；
+/// 2. 仅 prepared 线时**以受理账为准**对账回执键——盖住「admit 已落账 ↔
+///    committed 线未落」的崩溃窗（这正是意图账存在的意义）。
+///
+/// 返回受理账中的原回执（无 = 首走：从未到过提交点）。
+fn committed_receipt(
+    state: &StateDir,
+    journal: &AdjudicationJournal,
+    claimed: &AdjudicationDoc,
+) -> Result<Option<AdmissionReceipt>, AdjudicateError> {
+    let Some(prepared) = journal.latest_prepared() else {
+        return Ok(None); // 无在飞意图 = 首走
+    };
+    let receipts = crate::admit::load_receipts(state, &claimed.source_order_id)?;
+    let original = receipts
+        .into_iter()
+        .find(|receipt| receipt.idempotency_key == prepared.receipt_idempotency_key);
+    if journal.latest_committed().is_some() || journal.is_completed() {
+        return original.map(Some).ok_or_else(|| {
+            AdjudicateError::Queue(format!(
+                "意图账称裁决单 {} 已过提交点（回执键 {}），受理账中无此回执——\
+                 跨库账面漂移，拒绝重放，留检",
+                claimed.adjudication_id, prepared.receipt_idempotency_key
+            ))
+        });
+    }
+    Ok(original)
+}
+
+/// 重放臂的携带面（认领现场的既有事实，收拢参数列）。
+struct ReplayCarry {
+    /// 本次闭环 enqueue 步的结果（如实回传 outcome）。
+    enqueue: Enqueued,
+    /// 认领到的任务 id。
+    task_id: String,
+    /// 受理账中的原回执（[`committed_receipt`] 已判真在账）。
+    receipt: AdmissionReceipt,
+}
+
+/// 重放幂等臂本体（风险#5）：跨库提交点已过——不重签、不重受理（不产生
+/// 第二笔受理账）；分支按 committed 线事实复用（线缺 = 幂等重结算，盖住
+/// 「admit 落账 ↔ 分支结算之间」的崩溃窗）；complete 任务后落 completed 线。
+/// 返回原回执（`replayed=true`）。
+fn steward_replay(
+    f: &LoopFacilities<'_>,
+    worker_id: &str,
+    claimed: AdjudicationDoc,
+    claimed_path: PathBuf,
+    journal: &mut AdjudicationJournal,
+    carry: ReplayCarry,
+) -> Result<StewardOutcome, AdjudicateError> {
+    let prepared = journal
+        .latest_prepared()
+        .cloned()
+        .expect("committed_receipt 已保证在飞意图在账");
+    // 分支结算：committed 线在 = 事实已留档，按线复用；缺线 = 幂等重结算。
+    let (rework_order_ids, aborted) = if let Some(fact) = journal.latest_committed() {
+        (fact.rework_order_ids.clone(), fact.aborted)
+    } else {
+        let (mut source, _records) =
+            crate::admit::recover_source_order(f.state, &claimed.source_order_id)?;
+        let settled = settle_decision_branches(
+            f.state,
+            &mut source,
+            prepared.decision,
+            &claimed.next_orders,
+        )?;
+        journal.append_committed(CommittedFact {
+            receipt_idempotency_key: prepared.receipt_idempotency_key.clone(),
+            rework_order_ids: settled.0.clone(),
+            aborted: settled.1,
+            ts_ms: Utc::now().timestamp_millis(),
+        })?;
+        settled
+    };
+    if !f.station.complete(&carry.task_id, worker_id)? {
+        return Err(AdjudicateError::Queue(format!(
+            "重放收敛：任务 {} 完成失败（非现任 claimant 或已被接管）",
+            carry.task_id
+        )));
+    }
+    journal.append_completed()?;
+    let mut receipt = carry.receipt;
+    receipt.replayed = true;
+    Ok(StewardOutcome {
+        adjudication_id: claimed.adjudication_id.clone(),
+        doc: claimed,
+        doc_path: claimed_path,
+        enqueue: carry.enqueue,
+        task_id: carry.task_id,
+        receipt,
+        rework_order_ids,
+        aborted,
+    })
+}
+
+/// 决策分支结算（continue / rework / abort），**幂等**（风险#5）：崩溃窗
+/// 重放不重复物化、不重复 abort。Approve/Arbitrate 无分支动作；Revise 按
+/// 计划面物化 rework 后继单（[`spawn_rework_order`] 同号已物化即跳过）；
+/// Reject abort 源单（[`abort_source`] 已 Cancelled 即收敛）。返回
+/// (rework 清单, 是否 abort) 供 committed 线留档与重放臂复用。
+fn settle_decision_branches(
+    state: &StateDir,
+    source: &mut WorkOrder,
+    decision: Decision,
+    next_orders: &[String],
+) -> Result<(Vec<String>, bool), AdjudicateError> {
+    match decision {
+        // Approve / Arbitrate：原单继续，receipt 留档即留痕。
+        Decision::Approve | Decision::Arbitrate => Ok((Vec::new(), false)),
+        // Revise：按被签计划面物化 rework 后继单（Created 态 = 待修订）。
+        Decision::Revise => {
+            let mut rework_order_ids = Vec::new();
+            for rework_id in next_orders {
+                spawn_rework_order(state, source, rework_id)?;
+                rework_order_ids.push(rework_id.clone());
+            }
+            Ok((rework_order_ids, false))
+        }
+        // Reject：abort——源单 cancel + 账本落 cancel 行。
+        Decision::Reject => {
+            abort_source(state, source)?;
+            Ok((Vec::new(), true))
+        }
+    }
 }
 
 /// 本源单下一笔单调 decision_seq：已受理最大 seq + 1（无受理 = 1）。
@@ -541,6 +909,9 @@ fn next_decision_seq(state: &StateDir, order_id: &str) -> Result<u64, Adjudicate
 /// 源单，SLA 走骨架缺省）并在新订单目录落 create_order 账本行（Created 态
 /// = 待修订）。既有件接线：af-workorder `WorkOrder::successor` +
 /// af-execline `OrderLedger`。
+///
+/// 幂等（风险#5）：同号已落账**且确系本源单的后继单** = 崩溃窗重放的已结算
+/// 面，跳过不重复物化；同号异源（supersedes 对不上）= 真冲突，拒绝覆盖。
 fn spawn_rework_order(
     state: &StateDir,
     source: &WorkOrder,
@@ -550,8 +921,23 @@ fn spawn_rework_order(
         .map_err(|err| AdjudicateError::Queue(format!("rework 单号不合法 {rework_id:?}: {err}")))?;
     let order_dir = state.order_dir(rework_id);
     if order_dir.join(LEDGER_FILE).is_file() {
+        let records = af_execline::OrderLedger::load(&order_dir.join(LEDGER_FILE)).map_err(
+            |err| {
+                AdjudicateError::Queue(format!(
+                    "rework 单 {rework_id} 已落账但账本不可读（对不上后继关系）: {err}"
+                ))
+            },
+        )?;
+        let existing = records
+            .iter()
+            .rev()
+            .find_map(|record| record.order_after.clone());
+        if existing.as_ref().is_some_and(|order| order.supersedes() == Some(source.id())) {
+            return Ok(());
+        }
         return Err(AdjudicateError::Queue(format!(
-            "rework 单 {rework_id} 已落账（计划面重复物化），拒绝覆盖"
+            "rework 单 {rework_id} 已落账且非本源单（{}）后继，拒绝覆盖",
+            source.id()
         )));
     }
     let mut rework = WorkOrder::successor(
@@ -591,11 +977,16 @@ fn spawn_rework_order(
     Ok(())
 }
 
-/// abort 物化：源单 cancel（非终态）+ 账本落 cancel 行。终态（Closed/
-/// Cancelled）没有 abort 边——如实报 [`AdjudicateError::MissingEdge`]，
-/// 不假装迁移。
+/// abort 物化：源单 cancel（非终态）+ 账本落 cancel 行。终态（Closed）没有
+/// abort 边——如实报 [`AdjudicateError::MissingEdge`]，不假装迁移。
+///
+/// 幂等（风险#5）：已 Cancelled = abort 已生效（崩溃窗重放直接收敛为成功），
+/// 不再报错——Cancelled 只有 abort 这一条进路，重复 abort 语义上无歧义。
 fn abort_source(state: &StateDir, source: &mut WorkOrder) -> Result<(), AdjudicateError> {
     let order_id = source.id().to_string();
+    if source.state() == af_workorder::OrderState::Cancelled {
+        return Ok(());
+    }
     if source.state().is_terminal() {
         return Err(AdjudicateError::MissingEdge(format!(
             "源单 {order_id} 已终态（{}），状态机无 abort 边；拒绝结论以 receipt 留档，不改单",
@@ -633,6 +1024,177 @@ fn abort_source(state: &StateDir, source: &mut WorkOrder) -> Result<(), Adjudica
 /// stable_id（队列幂等键组成面用；公开给测试与编排对拍）。
 pub fn stable_id_of(order_id: &str) -> StableId {
     StableId::generate(order_id)
+}
+
+// ============================================================
+// reconcile：意图账残留扫描与无人值守收敛（风险#5 ④）
+// ============================================================
+
+/// 一份意图账经 [`reconcile_adjudications`] 处理后的收敛判读。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum ReconcileStatus {
+    /// 无在飞意图（空账 / completed 线已落）——无需动作。
+    Converged,
+    /// receipt 在账、任务已 done——本轮补 completed 线收口（complete 落了、
+    /// 线没落的崩溃窗）。
+    ClosedByReconcile,
+    /// receipt 在账、分支已结算，任务 queued——下一次 steward 认领由重放
+    /// 幂等臂收敛。**不代认领**：af-station 的 claim 无任务定向，代领可能
+    /// 抢到未裁决任务又无释放面（complete 需真受理在账），只会制造新残面。
+    AwaitingClaim { task_id: String },
+    /// receipt 在账、任务 claimed 且租约未到——在役/僵尸租约；到期回炉后
+    /// 按 [`ReconcileStatus::AwaitingClaim`] 路径收敛。
+    LeaseHeld {
+        task_id: String,
+        claimant: String,
+        lease_until: i64,
+    },
+    /// prepared 残留（受理账无对应回执）——admit 未提交或被拒：检出留检。
+    /// 无回执即无已提交事实，双写不可能；后续认领按首走重试（同 seq 同
+    /// 摘要的重放由受理幂等窗接住，换 seq 换摘要是新裁决轮次，语义如旧）。
+    PreparedResidue { detail: String },
+}
+
+/// 一份意图账的 reconcile 报告（留证面：谁、什么状态、怎么收敛的）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReconcileReport {
+    pub source_order_id: String,
+    pub adjudication_id: String,
+    pub status: ReconcileStatus,
+}
+
+/// 扫描全部裁决单意图账：检出在飞残留并收敛**可无人值守收敛的面**——
+/// 分支幂等结算（rework 物化补缺 / abort 补落）、committed 线补缺、
+/// completed 线收口（任务已 done 时）。任务面的最终 complete 由重放幂等臂
+/// 在下一次认领时落（见 [`ReconcileStatus::AwaitingClaim`] 的不代领理由）。
+///
+/// 幂等：对已收敛（completed 线在）的账是 no-op；重复扫描不产生新写入。
+pub fn reconcile_adjudications(
+    state: &StateDir,
+    station: &Station,
+) -> Result<Vec<ReconcileReport>, AdjudicateError> {
+    let mut reports = Vec::new();
+    let root = state.root().join(ADJUDICATIONS_DIR);
+    if !root.is_dir() {
+        return Ok(reports);
+    }
+    let mut order_dirs: Vec<PathBuf> = fs::read_dir(&root)
+        .map_err(|err| AdjudicateError::Doc(format!("扫描 {}: {err}", root.display())))?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+    order_dirs.sort();
+    for order_dir in order_dirs {
+        let source_order_id = order_dir
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut journals: Vec<PathBuf> = fs::read_dir(&order_dir)
+            .map_err(|err| AdjudicateError::Doc(format!("扫描 {}: {err}", order_dir.display())))?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.is_file()
+                    && path
+                        .file_name()
+                        .is_some_and(|name| name.to_string_lossy().ends_with(JOURNAL_SUFFIX))
+            })
+            .collect();
+        journals.sort();
+        for journal_path in journals {
+            let Some(adjudication_id) = journal_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .and_then(|name| name.strip_suffix(JOURNAL_SUFFIX))
+            else {
+                continue; // 排序过滤已保证可剥离；防御而已
+            };
+            reports.push(reconcile_one(
+                state,
+                station,
+                &source_order_id,
+                adjudication_id,
+            )?);
+        }
+    }
+    Ok(reports)
+}
+
+/// 单份意图账的 reconcile（判读 + 收敛动作）。
+fn reconcile_one(
+    state: &StateDir,
+    station: &Station,
+    source_order_id: &str,
+    adjudication_id: &str,
+) -> Result<ReconcileReport, AdjudicateError> {
+    let mut journal = AdjudicationJournal::open(state, source_order_id, adjudication_id)?;
+    let report = |status| ReconcileReport {
+        source_order_id: source_order_id.to_string(),
+        adjudication_id: adjudication_id.to_string(),
+        status,
+    };
+    let Some(prepared) = journal.latest_prepared().cloned() else {
+        return Ok(report(ReconcileStatus::Converged)); // 空账：无在飞意图
+    };
+    if journal.is_completed() {
+        return Ok(report(ReconcileStatus::Converged));
+    }
+    // 提交点判读：以受理账为准（committed/completed 线在而回执缺席 =
+    // 账面漂移，fail-loud——与 committed_receipt 同一纪律）。
+    let receipts = crate::admit::load_receipts(state, &prepared.source_order_id)?;
+    let Some(receipt) = receipts
+        .into_iter()
+        .find(|receipt| receipt.idempotency_key == prepared.receipt_idempotency_key)
+    else {
+        return Ok(report(ReconcileStatus::PreparedResidue {
+            detail: format!(
+                "prepared 意图在账（seq={} 回执键 {}）、受理回执缺席——admit 未提交或被拒；\
+                 无回执即无已提交事实，留检待后续认领按首走重试",
+                prepared.decision_seq, prepared.receipt_idempotency_key
+            ),
+        }));
+    };
+    // receipt 在账：跨库提交点已过——结算分支（幂等）+ committed 线补缺。
+    if journal.latest_committed().is_none() {
+        let (mut source, _records) =
+            crate::admit::recover_source_order(state, &prepared.source_order_id)?;
+        let (rework_order_ids, aborted) = settle_decision_branches(
+            state,
+            &mut source,
+            prepared.decision,
+            &prepared.next_orders,
+        )?;
+        journal.append_committed(CommittedFact {
+            receipt_idempotency_key: receipt.idempotency_key.clone(),
+            rework_order_ids,
+            aborted,
+            ts_ms: Utc::now().timestamp_millis(),
+        })?;
+    }
+    match station.get(&prepared.task_id)? {
+        None => Ok(report(ReconcileStatus::PreparedResidue {
+            detail: format!(
+                "receipt 在账但队列任务 {} 缺位（lease 库与意图账漂移）——留检",
+                prepared.task_id
+            ),
+        })),
+        Some(task) if task.state == af_station::State::Done => {
+            journal.append_completed()?;
+            Ok(report(ReconcileStatus::ClosedByReconcile))
+        }
+        Some(task) if task.state == af_station::State::Queued => Ok(report(
+            ReconcileStatus::AwaitingClaim {
+                task_id: prepared.task_id.clone(),
+            },
+        )),
+        Some(task) => Ok(report(ReconcileStatus::LeaseHeld {
+            task_id: prepared.task_id.clone(),
+            claimant: task.claimant.clone().unwrap_or_default(),
+            lease_until: task.lease_until.unwrap_or(0),
+        })),
+    }
 }
 
 #[cfg(test)]
@@ -821,6 +1383,144 @@ mod tests {
         )
         .unwrap_err();
         assert!(matches!(err, AdjudicateError::Order(_)), "{err}");
+        let _ = fs::remove_dir_all(state.root());
+    }
+
+    /// 意图账三相追加/重载/相位判读 roundtrip（风险#5）。
+    #[test]
+    fn journal_phases_roundtrip_and_latest_readers() {
+        let state = scratch("journal");
+        let mut journal = AdjudicationJournal::open(&state, "wo-j", "adj-wo-j-1").unwrap();
+        assert!(journal.latest_prepared().is_none(), "空账无在飞意图");
+        assert!(!journal.is_completed());
+        let intent = PreparedIntent {
+            adjudication_id: "adj-wo-j-1".into(),
+            task_id: "adj-wo-j-1".into(),
+            source_order_id: "wo-j".into(),
+            source_stable_id: "sid-wo-j".into(),
+            decision: Decision::Approve,
+            decision_seq: 1,
+            decision_digest: "d1".into(),
+            receipt_idempotency_key: "sid-wo-j/admit/1/d1".into(),
+            next_orders: vec![],
+            ts_ms: 1,
+        };
+        journal.append_prepared(intent.clone()).unwrap();
+        journal
+            .append_committed(CommittedFact {
+                receipt_idempotency_key: "sid-wo-j/admit/1/d1".into(),
+                rework_order_ids: vec![],
+                aborted: false,
+                ts_ms: 2,
+            })
+            .unwrap();
+        journal.append_completed().unwrap();
+        // 重载后判读一致（fsync 落盘语义由 OrderLedger/append_receipt 同款
+        // 纪律保证，此处验相位面）。
+        let reloaded = AdjudicationJournal::open(&state, "wo-j", "adj-wo-j-1").unwrap();
+        assert_eq!(reloaded.latest_prepared(), Some(&intent));
+        assert_eq!(reloaded.latest_committed().map(|f| f.aborted), Some(false));
+        assert!(reloaded.is_completed());
+        assert_eq!(reloaded.lines().len(), 3, "三相各一行");
+        // 重试可产生第二条 prepared（意图在账，历史不抹）：最新意图取后者。
+        let mut reloaded = reloaded;
+        let second = PreparedIntent { decision_seq: 2, ..intent.clone() };
+        reloaded.append_prepared(second.clone()).unwrap();
+        assert_eq!(reloaded.latest_prepared(), Some(&second));
+        let _ = fs::remove_dir_all(state.root());
+    }
+
+    /// 意图账坏行 fail-loud（不静默跳过）。
+    #[test]
+    fn journal_bad_line_fails_loud() {
+        let state = scratch("journal-bad");
+        let dir = state.root().join(ADJUDICATIONS_DIR).join("wo-jb");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join(format!("adj-wo-jb-1{JOURNAL_SUFFIX}")), "not-json\n").unwrap();
+        let err =
+            AdjudicationJournal::open(&state, "wo-jb", "adj-wo-jb-1").unwrap_err();
+        assert!(matches!(err, AdjudicateError::Doc(_)), "{err}");
+        let _ = fs::remove_dir_all(state.root());
+    }
+
+    /// rework 物化幂等（风险#5）：同号同源已落账 → 跳过；同号异源 → 拒绝。
+    #[test]
+    fn spawn_rework_order_idempotent_and_rejects_foreign_ledger() {
+        let state = scratch("rework-idem");
+        let source = seed_closed_order(&state, "wo-rw-idem");
+        let rework_id = "wo-rw-idem-rw";
+        spawn_rework_order(&state, &source, rework_id).unwrap();
+        // 崩溃窗重放：同号已物化且确系本源单后继 → 跳过（不报错、不双落）。
+        spawn_rework_order(&state, &source, rework_id).unwrap();
+        let records = af_execline::OrderLedger::load(
+            &state.order_dir(rework_id).join(LEDGER_FILE),
+        )
+        .unwrap();
+        assert_eq!(
+            records.iter().filter(|r| r.op == "create_order").count(),
+            1,
+            "重复物化不得双落账"
+        );
+        // 同号异源（后继关系对不上）→ 真冲突拒绝。
+        let err = spawn_rework_order(&state, &seed_closed_order(&state, "wo-other"), rework_id)
+            .unwrap_err();
+        assert!(matches!(err, AdjudicateError::Queue(_)), "{err}");
+        let _ = fs::remove_dir_all(state.root());
+    }
+
+    /// abort 幂等（风险#5）：已 Cancelled 源单重复 abort 直接收敛成功。
+    #[test]
+    fn abort_source_is_idempotent_on_cancelled() {
+        let state = scratch("abort-idem");
+        // 落一张已 release（非终态，有 abort 边）的源单。
+        let mut source = WorkOrder::new(
+            "wo-ab-idem",
+            af_workorder::GraphVersion::new("af-order/poc-1"),
+            Sla::new(None, Priority::Normal),
+        );
+        source.bind_line(af_workorder::LineBinding {
+            line_id: "line-poc".into(),
+            line_version: "lv-1".into(),
+        }).unwrap();
+        source
+            .attach_budget_voucher(af_workorder::BudgetVoucher {
+                voucher_id: "bv-wo-ab-idem".into(),
+                amount: 100,
+                signed: true,
+            })
+            .unwrap();
+        source.release().unwrap();
+        let dir = state.order_dir("wo-ab-idem");
+        fs::create_dir_all(&dir).unwrap();
+        af_execline::OrderLedger::open(&dir.join(LEDGER_FILE))
+            .unwrap()
+            .append(LedgerRecord {
+                seq: 0,
+                ts_ms: 1_767_225_600_000,
+                order_id: "wo-ab-idem".into(),
+                stable_id: source.stable_id().as_str().to_string(),
+                op: "release".into(),
+                idem_key: format!("{}/release", source.stable_id()),
+                ok: true,
+                state_after: Some("Released".into()),
+                error_kind: None,
+                error_detail: None,
+                order_after: Some(source.clone()),
+            })
+            .unwrap();
+        abort_source(&state, &mut source).unwrap();
+        assert_eq!(source.state(), af_workorder::OrderState::Cancelled);
+        // 崩溃窗重放：已 Cancelled → 收敛成功（不再 MissingEdge）。
+        abort_source(&state, &mut source).unwrap();
+        let records = af_execline::OrderLedger::load(
+            &state.order_dir("wo-ab-idem").join(LEDGER_FILE),
+        )
+        .unwrap();
+        assert_eq!(
+            records.iter().filter(|r| r.op == "cancel").count(),
+            1,
+            "重复 abort 不得双落 cancel 行"
+        );
         let _ = fs::remove_dir_all(state.root());
     }
 

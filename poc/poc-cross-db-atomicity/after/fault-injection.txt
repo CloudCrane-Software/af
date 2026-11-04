@@ -1,0 +1,35 @@
+   Compiling af-calendar v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-calendar)
+   Compiling af-dsl v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-dsl)
+   Compiling af-credential v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-credential)
+   Compiling af-meter v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-meter)
+   Compiling af-stop v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-stop)
+   Compiling af-trace v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-trace)
+   Compiling af-eval v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-eval)
+   Compiling af-workorder v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-workorder)
+   Compiling af-station v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-station)
+   Compiling af-effect-gateway v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-effect-gateway)
+   Compiling af-compiler v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-compiler)
+   Compiling af-harness v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-harness)
+   Compiling af-execline v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-execline)
+   Compiling af-order v0.1.0 (/home/pan-ding/af-dev/af/wt/risk-cross-db-atomicity/crates/af-order)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 8.49s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/adjudicate_fault_injection.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/adjudicate_fault_injection-93e714d8666ebef8)
+
+running 6 tests
+[after/Reject] reconcile 报告 = [ReconcileReport { source_order_id: "wo-fi-reject", adjudication_id: "adj-wo-fi-reject-1", status: LeaseHeld { task_id: "adj-wo-fi-reject-1", claimant: "steward-1", lease_until: 1767225601000 } }]
+test fault_reject_abort_is_idempotent_across_crash_window ... ok
+test journal_files_do_not_disturb_adjudication_numbering ... ok
+[after/W2] 重试后受理账行数 = 1
+[after/W2]   receipt: seq=1 decision=Approve replayed=false
+test fault_w2_crash_before_complete_replays_without_double_admission ... ok
+[after/W0] reconcile 报告 = [ReconcileReport { source_order_id: "wo-fi-w0", adjudication_id: "adj-wo-fi-w0-1", status: PreparedResidue { detail: "prepared 意图在账（seq=1 回执键 sid-c7b9fe816a71939182d1a82d3140700407beb419d40138b141ff348d4fb5ea42/admit/1/fbd1b53777e72c033d6452b6c8d3ed34bbd828a9e3f3d82fe5f1e0a22d6487db）、受理回执缺席——admit 未提交或被拒；无回执即无已提交事实，留检待后续认领按首走重试" } }]
+test fault_w0_crash_before_admit_residue_detected_then_first_walk_succeeds ... ok
+[after/W3] reconcile 报告 = [ReconcileReport { source_order_id: "wo-fi-w3", adjudication_id: "adj-wo-fi-w3-1", status: ClosedByReconcile }]
+test fault_w3_crash_after_complete_reconcile_closes_journal_idempotently ... ok
+[after/W1] reconcile 报告 = [ReconcileReport { source_order_id: "wo-fi-w1", adjudication_id: "adj-wo-fi-w1-1", status: LeaseHeld { task_id: "adj-wo-fi-w1-1", claimant: "steward-1", lease_until: 1767225601000 } }]
+test fault_w1_crash_after_admit_reconcile_settles_and_replay_converges ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.81s
+

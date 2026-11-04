@@ -1,0 +1,285 @@
+Running unittests src/main.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_bench-24e9ed58dc23ddc0)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_calendar-0a527859badf55ad)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/dst_night_shift.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/dst_night_shift-aaf56eb97b993606)
+test result: ok. 11 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.15s
+Running tests/sla.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/sla-50a1d1e6ebc73176)
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_compiler-2df066bece4cc745)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/bin/af-compiler-construct.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_compiler_construct-77523b4df374d3e3)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/bin/af-compiler-plan.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_compiler_plan-f4ca7df61edfdac6)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/bin/af-compiler-snapshot.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_compiler_snapshot-dfe8021de49e213d)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/bind_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/bind_test-c513034ab48c72b4)
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+Running tests/construction_build_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/construction_build_test-cb3759bc6f9eca28)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+Running tests/construction_teaching_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/construction_teaching_test-f26c9c29431b6118)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+Running tests/diagnostics_cli_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/diagnostics_cli_test-76fe81e2c053eb42)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+Running tests/diagnostics_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/diagnostics_test-bae7160faf2841cc)
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/golden_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/golden_test-e9424adf48302cfb)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+Running tests/inline_body_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/inline_body_test-efddc989b0656624)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+Running tests/ir_schema_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/ir_schema_test-5029e9bf100fc0d1)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+Running tests/lower_error_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/lower_error_test-f055e4c888143deb)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/package_manifest_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/package_manifest_test-15e5e249edc8a692)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/plan_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/plan_test-f65d3848afeaf2a1)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+Running tests/registry_decl_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/registry_decl_test-dde66731a5782cab)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/route_guard_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/route_guard_test-6169ef34469c055a)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+Running tests/stack_safety_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/stack_safety_test-77411cee44bb7b44)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_credential-1e7e1d309764a94c)
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running tests/attenuation.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/attenuation-21ac85e36eaabc54)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+Running tests/intersection.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/intersection-96690d4f66661aac)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+Running tests/root_persist.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/root_persist-d710496172c780ca)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+Running tests/yaml_snapshots.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/yaml_snapshots-de2e7ee9eba74cd8)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_dsl-02d12ce3e3e8373b)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/branch_fixtures_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/branch_fixtures_test-1efad3d30f9116ac)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/cel_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/cel_test-5ed15390f37694ca)
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+Running tests/construct_conflict_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/construct_conflict_test-d7f306d63307d541)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/envelope_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/envelope_test-4e45cabf08c76b3a)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/farm_anomalies_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/farm_anomalies_test-001226bf26dc743a)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+Running tests/inv1_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/inv1_test-76ee988fee5045ea)
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+Running tests/inv2_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/inv2_test-e82431c572a67245)
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running tests/inv3_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/inv3_test-e0e2475454603612)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running tests/inv4_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/inv4_test-fdb97c213bd1acad)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running tests/loop_guard_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/loop_guard_test-e36ad092831883ad)
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/m4_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/m4_test-ed535f5bd88d27cb)
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/parse_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/parse_test-0f33dc265efa501e)
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+Running tests/refs_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/refs_test-dabe1d58857746d3)
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/registry_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/registry_test-1d201c8f6952466d)
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/route_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/route_test-42ad939906904780)
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running tests/selector_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/selector_test-ec4adad73506892d)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/strategy_library_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/strategy_library_test-88620e92c593c891)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_dspy_ir-7ee351ced34a0350)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/guardrails.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/guardrails-029b6dd5a09f4698)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/schema.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/schema-0d76a4ec1d45c50d)
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_effect_gateway-eb7d5052bd2a4224)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/gateway_tests.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/gateway_tests-96cdcb740e5d3fac)
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_engine-9b942cde9ec5916d)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/main.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_engine-92e0265e14c5f201)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/engine.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/engine-5ce24faa74176d11)
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_eval-38d153901648b4f7)
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/pipeline.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/pipeline-4cbd7f1c5fb0e73c)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_execline-64289298f78df91b)
+test result: ok. 47 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 20.88s
+Running unittests src/bin/af-trace-tree-verify.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_trace_tree_verify-a51f152ea45f9664)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/agent_paper_order.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/agent_paper_order-ce048e43afc48707)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+Running tests/gate_order.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/gate_order-284e1903c43a8dde)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.41s
+Running tests/graph_corpus_adv.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/graph_corpus_adv-30af3401cb54ffa7)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.77s
+Running tests/graph_node_watchdog_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/graph_node_watchdog_test-651b4e218b04ac29)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.05s
+Running tests/graph_unit.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/graph_unit-4f876debd455131a)
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+Running tests/lifecycle.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/lifecycle-414f2c06d1c7cfb3)
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 28.96s
+Running tests/mes_sink.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/mes_sink-bad4c5c0fd16a7d3)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.09s
+Running tests/p1_comparison.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/p1_comparison-f26aff98bb426ace)
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/p1_suite.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/p1_suite-600a7d1a47ca767c)
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/p2_bridge.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/p2_bridge-2a9c05505d6cd33f)
+test result: ok. 12 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/p3_judge.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/p3_judge-4083a78e1b4ce326)
+test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.10s
+Running tests/p3_verify.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/p3_verify-866fd886379e42bb)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+Running tests/p4_unit.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/p4_unit-4e37f4ea3a8f110b)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running tests/p5_tb.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/p5_tb-f5e795dca53cc8f9)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/p5_wiring.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/p5_wiring-391209e27c5a16bd)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.52s
+Running tests/p6_shadow.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/p6_shadow-81122815091b445e)
+test result: ok. 8 passed; 0 failed; 3 ignored; 0 measured; 0 filtered out; finished in 2.06s
+Running tests/pkg_reportkit.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/pkg_reportkit-e8cd1ff2d241cc84)
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+Running tests/pkg_reportkit_package.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/pkg_reportkit_package-ecdcef0d585ae184)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+Running tests/pkg_reportkit_ring.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/pkg_reportkit_ring-2e7da2c73bb0d4fb)
+test result: ok. 23 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.39s
+Running tests/pkg_sweng.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/pkg_sweng-d1aae6b9c0aa9b1b)
+test result: ok. 37 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/pkg_sweng_package.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/pkg_sweng_package-76ece7c93ac37734)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+Running tests/trace_tree_verify.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/trace_tree_verify-8e08e29e814118ba)
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_graph-35bb438e10ebbcd8)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/bin/afg.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/afg-2d16b2ddaaf013ca)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/predicate.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/predicate-589b78f5cfd38bd5)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/validate.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/validate-133d6cae2b1839ed)
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/validate_snapshots.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/validate_snapshots-7edace70bd8edb4f)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_harness-a68b81101e4e09d3)
+test result: ok. 54 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.51s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_mes-985c2dd1b42da4ba)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/http.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/http-42d2b29853871dad)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_meter-c3a1440c6e2aef93)
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/bifrost.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/bifrost-a56e821790cb903f)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running tests/ledger.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/ledger-c47fe6417303033f)
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+Running tests/properties.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/properties-065e0490874a8635)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running tests/routing.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/routing-8303b6f279e6068e)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/vocab.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/vocab-49963e8fce0e1ba9)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_order-f57d5def8fce96b7)
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+Running unittests src/main.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_order-4d49f1e09aa2c118)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/adjudicate_fault_injection.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/adjudicate_fault_injection-5d1cd3089e81ea9e)
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 17.81s
+Running tests/adjudicate_loop.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/adjudicate_loop-c53b0239d48dccf8)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.10s
+Running tests/admit.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/admit-8c0bc1e48bbf92ee)
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 40.80s
+Running tests/cli.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/cli-731468e485fba5a1)
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.63s
+Running tests/compile_submit_dryrun_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/compile_submit_dryrun_test-ea052fd95f3f5439)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+Running tests/exec_contract.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/exec_contract-0638889a87da6ec1)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.57s
+Running tests/graph_route.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/graph_route-8abf6d7609704ac4)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/package_manifest_preflight_test.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/package_manifest_preflight_test-e9adb79438613fcb)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+Running tests/router_consume.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/router_consume-e419aa0a94ab0b58)
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.31s
+Running tests/unit_route.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/unit_route-f1be63501984c8bd)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_release_gate-1a64a03b31002bb5)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running unittests src/bin/release-gate.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/release_gate-84d2a11c072706f5)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/conservation.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/conservation-11d42e200bb46ffa)
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.99s
+Running tests/day_sim.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/day_sim-237ca353244382b7)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/gate_unit.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/gate_unit-c7d6143a08767433)
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+Running tests/order_release.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/order_release-6160f9c8c35a5dea)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/persist.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/persist-0b49779a91da0fea)
+test result: ok. 19 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+Running tests/properties.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/properties-1e6ac3992e328def)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.76s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_sampling-6205737eeeecd850)
+test result: ok. 40 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+Running tests/end_to_end.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/end_to_end-1102c7cb54b11438)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/properties.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/properties-75e7d9080a401e14)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.12s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_sandbox-6268139be5405193)
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/semantics.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/semantics-a8dcd44c3b9adbd3)
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_station-a492d278fa6132a2)
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+Running tests/concurrency.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/concurrency-e8fd0407fbc4bcb6)
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+Running tests/properties.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/properties-e7c67d15c70b0063)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.57s
+Running tests/shift_window.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/shift_window-38a1bbfd2b6b670f)
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_stop-82e22afaf04359b3)
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/properties.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/properties-8cdcffd8c3ab9f06)
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+Running tests/restart.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/restart-a76532b273aaa602)
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_trace-c4c6e595b43cd4cd)
+test result: ok. 39 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.01s
+Running tests/flood.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/flood-66098e075be84d3a)
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+Running unittests src/lib.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/af_workorder-86b5a4bc6ec0823b)
+test result: ok. 58 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+Running tests/calendar_sla.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/calendar_sla-bd751439f968577d)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+Running tests/identity.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/identity-32da8ad4e55b4988)
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+Running tests/json_snapshots.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/json_snapshots-26f63e72c46660ef)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+Running tests/lifecycle.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/lifecycle-416fe46b3105e65c)
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

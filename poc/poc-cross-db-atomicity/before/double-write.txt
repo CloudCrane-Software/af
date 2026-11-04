@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.28s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/poc_crossdb_before.rs (/data/bench/targets/risk-cross-db-atomicity/debug/deps/poc_crossdb_before-fe45cb516890dff1)
+
+running 1 test
+[before] 首走 admit 已提交: seq=1 key=sid-53d7ba0adf3ec0330a5190c0655a2d64ad292f8214bfcd15cb9270852a3ac098/admit/1/bc9f5b4431bd32e2c2efe18d128de6c1723c551772e4b3f37e0f727af619b0cd
+[before] 崩溃后受理账行数 = 1（任务停在 claimed，等待租约回收）
+[before] 崩溃后任务态 = Claimed（claimant=Some("steward-1") lease_until=1767225601000）
+[before] 重试后受理账行数 = 2
+[before]   receipt: seq=1 decision=Approve replayed=false key=sid-53d7ba0adf3ec0330a5190c0655a2d64ad292f8214bfcd15cb9270852a3ac098/admit/1/bc9f5b4431bd32e2c2efe18d128de6c1723c551772e4b3f37e0f727af619b0cd
+[before]   receipt: seq=2 decision=Approve replayed=false key=sid-53d7ba0adf3ec0330a5190c0655a2d64ad292f8214bfcd15cb9270852a3ac098/admit/2/9bc231ace55003f149c7804893a2ca012d86d3ef806f313bde62a8ed9a7e2158
+[before] 重试认领到的是旧任务 adj-wo-poc-before-1；新生成的 adj-wo-poc-before-1 入队后留在队列
+[before] 队列: queued=1 claimed=0 done=1
+[before] 裁决单目录文件 = ["adj-wo-poc-before-2.json", "adj-wo-poc-before-1.json"]
+[before] 残留检出面（意图账/journal）存在 = false（改前无任何 prepared/committed 面）
+[before] 同一裁决单是否被二次受理（双写）= true（seq 1 与 2 均在账）
+test poc_before_crash_between_admit_and_complete_double_writes ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.99s
+
