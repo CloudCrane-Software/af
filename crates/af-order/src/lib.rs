@@ -33,6 +33,7 @@ pub mod cli;
 pub mod error;
 pub mod exec;
 pub mod router;
+pub mod router_liveness;
 pub mod spec;
 pub mod state;
 pub mod voucher;
@@ -59,6 +60,12 @@ pub use router::{
     resolve_adjudication_target, verify_envelope, AdjudicationTarget, ConsumedRecord, RouterError,
     TriggerEnvelope, TriggerRegistry, VerifiedTrigger, CONSUMED_FILE, ORDER_COMPLETE_EVENT,
     TRIGGER_CONTRACT,
+};
+pub use router_liveness::{
+    evaluate_liveness, load_liveness_view, parse_liveness_view, resolve_threshold_min,
+    write_snapshot, AnchorSource, LivenessError, LivenessReading, LivenessRegistryView,
+    LivenessSection, LivenessStatus, ALARM_CODE_LIVE, ALARM_CODE_SILENT, ANCHOR_FILE,
+    DEFAULT_SILENT_AFTER_MIN, INBOX_DIR, REGISTRY_FILE, REGISTRY_SCHEMA, SNAPSHOT_TOOL,
 };
 pub use spec::{parse_spec, OrderSpec, SpecError, SPEC_FIELDS};
 pub use state::{OrderSummary, StateDir};

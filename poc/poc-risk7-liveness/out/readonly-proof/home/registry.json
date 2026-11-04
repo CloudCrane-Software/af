@@ -1,0 +1,1 @@
+{"schema":"af.trigger.registry.v1","sources":[{"name":"mes-execline","domain":"mes","events":["order_complete"]}],"liveness":{"inbox_silent_after_min":240}}

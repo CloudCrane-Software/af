@@ -1,0 +1,8 @@
+.
+./before.txt
+./home
+./home/inbox
+./home/inbox/mes-execline
+./home/inbox/mes-execline/d-1.json
+./home/registry.json
+./snap-out

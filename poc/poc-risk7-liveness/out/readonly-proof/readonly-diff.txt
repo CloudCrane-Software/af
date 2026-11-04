@@ -1,0 +1,32 @@
+== 只读性对拍（demo 层，自洽 fixtures）==
+安排：registry+inbox（投递 mtime 钉 @1700000300）；两轮评估 t=1700000000（首跑，写锚点）/ t=1700000360（复跑）
+
+-- before 清单 --
+.
+./before.txt
+./home
+./home/inbox
+./home/inbox/mes-execline
+./home/inbox/mes-execline/d-1.json
+./home/registry.json
+./snap-out
+
+-- demo 两轮 stdout（首跑 anchor_created=true；复跑 anchor_created=false 且锚点不刷新）--
+status=green silent_s=-300.000 threshold_min=240 since_epoch_s=1700000300.000 anchor_source=newest_delivery anchor_created=true alarm_code=trigger-inbox-live
+status=green silent_s=60.000 threshold_min=240 since_epoch_s=1700000300.000 anchor_source=newest_delivery anchor_created=false alarm_code=trigger-inbox-live
+
+-- after 清单 diff（相对 before 的新增）--
+> ./after.txt
+> ./demo-stdout.txt
+> ./home/liveness-anchor.json
+> ./snap-out/trigger-inbox-liveness.json
+（应且仅应有：锚点文件 / 快照 / before.txt 自身在 before 已计）
+
+== home 内件清单：无 consumed.jsonl、无 dispatch/、无 orders/、无账本 ==
+inbox
+liveness-anchor.json
+registry.json
+
+== 锚点文件内容（=首跑 t，二跑未刷新）==
+{"first_run_epoch_s":1700000000.0}
+== 首轮（t=1700000000 早于投递 mtime → 时钟偏移面）与二轮（silent=60s→green）读数一致语义：silent 为负不 amber，与 PoC-D `silent_s > thr_s` 同款 ==
