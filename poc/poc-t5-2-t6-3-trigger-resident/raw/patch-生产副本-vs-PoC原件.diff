@@ -1,0 +1,166 @@
+--- poc/poc-super-agent/tools-mirror/trigger-inbox.py	2026-11-04 23:35:00.534303127 +0800
++++ tools/trigger-inbox.py	2026-11-04 23:36:30.637909943 +0800
+@@ -25,14 +25,31 @@
+ poc/poc-super-agent/registry/trigger-registry.v1.json，安装脚本安放）。
+ 
+ 回滚：停进程即回滚；inbox 文件留证不清理（只增不删，审计面）。
++
++────────── 生产副本（v0.3-T5②/T6③ 常驻批 2026-11-04）──────────
++源件：poc/poc-super-agent/tools-mirror/trigger-inbox.py（PoC-D 原件，**禁改**，
++sha256 25f0d00e392a0e3fc4d0456f7d87b014f0560585d51d476a806c055130da0bdf）。
++本件=PoC 原件 + 以下**收窄/加固**，判定顺序与五态语义逐字未改：
++ ① 绑定面收窄闸：`AF_TRIGGER_BIND` 缺省 127.0.0.1；**通配（0.0.0.0/::/空）一律
++    拒起（exit 3，无豁免）**；非回环绑定须同时给 `AF_TRIGGER_BIND_ACK=<同一绑定
++    地址>` 显式确认，否则拒起（fail-loud，不静默起非回环监听）。
++ ② 幂等竞态锁：⑤重复判定 + ⑥落盘 同一把进程内锁（ThreadingHTTPServer 并发下
++    「查存在→写」原为 TOCTOU：并发同 delivery 会双双落盘、后写覆盖前写＝违反
++    「不重写」；加锁后同 delivery 并发只落一次、其余 200 duplicate）。
++ ③ 原子落盘补目录 fsync（tmp→fsync→os.replace→目录 fsync）。
++ ④ /healthz 增报 bind/port（只增字段；PoC 自检断言的 secrets_missing 形状不变）。
++本副本与在役运行位（工作区 tools/trigger-inbox.py）**必须逐字同源**
++（sha256 对账见证据）；判定行/启动/调度逻辑与 PoC 原件一致。
+ """
+ import base64
+ import hashlib
+ import hmac
++import ipaddress
+ import json
+ import os
+ import re
+ import sys
++import threading
+ import time
+ from datetime import datetime, timezone
+ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+@@ -45,6 +62,50 @@
+ DELIVERY_RE = re.compile(r"^[A-Za-z0-9._-]{1,128}$")  # 防路径穿越/超长 id
+ CONTRACT = "af.trigger.v1"
+ 
++# ---------- 绑定面收窄闸（生产副本新增①；见文件头） ----------
++BIND = os.environ.get("AF_TRIGGER_BIND", "127.0.0.1")
++BIND_ACK_ENV = "AF_TRIGGER_BIND_ACK"      # 非回环绑定的显式确认闸（值=绑定地址本身）
++_WILDCARD = {"", "*", "0", "0.0.0.0", "::", "[::]", "0:0:0:0:0:0:0:0"}
++
++
++def _is_loopback(host):
++    """回环判定：127.0.0.0/8、::1、localhost 算回环；其余（含私网 IP）不算。"""
++    h = (host or "").strip()
++    if h.lower() == "localhost":
++        return True
++    try:
++        return ipaddress.ip_address(h).is_loopback
++    except ValueError:
++        return False
++
++
++def resolve_bind():
++    """绑定地址决议（fail-loud）：通配一律拒起；非回环须显式确认。返回绑定地址。
++
++    纪律来源：T5.2 最小暴露面（portal 0.0.0.0 三公网入口前科）+ 本批
++    「只许绑 127.0.0.1 / 禁通配」硬约束。非回环不是不可能（现役 Fast Path
++    gov 门户→本机 8765 走 tailnet 私网 IP 且 ACL 收窄到 gov→pandev:8765 单条），
++    但必须是**显式、可审计**的动作：确认值写进在役进程 environ（keepalive 可读）。
++    """
++    h = (BIND or "").strip()
++    if h.lower() in _WILDCARD:
++        log(f"绑定地址被拒（{h!r}）——通配/空绑定一律禁起（最小暴露面纪律，"
++            f"无豁免通道）；请给回环地址或经裁决的非回环地址")
++        sys.exit(3)
++    if _is_loopback(h):
++        return h
++    ack = (os.environ.get(BIND_ACK_ENV) or "").strip()
++    if ack != h:
++        log(f"绑定地址被拒（{h}）——非回环绑定须显式确认：{BIND_ACK_ENV}={h}"
++            f"（现值 {ack!r}）；确认前拒起（fail-loud，不静默起非回环监听）")
++        sys.exit(3)
++    log(f"绑定面确认：非回环 {h}（{BIND_ACK_ENV} 已显式确认；"
++        f"暴露面收窄责任落在 ACL/上游，不由本件承担）")
++    return h
++
++
++_DUP_LOCK = threading.Lock()   # 幂等判定+落盘的进程内互斥（生产副本新增②）
++
+ _REG = None            # 注册表（只读缓存；--reload 语义不需要，进程重启即新表）
+ _REG_LOADED_AT = 0.0
+ 
+@@ -142,7 +203,11 @@
+ 
+ 
+ def atomic_write_json(path, obj):
+-    """tmp+os.replace 原子写（tmp 同目录保证原子性；event-router save_state 同款）。"""
++    """tmp+os.replace 原子写（tmp 同目录保证原子性；event-router save_state 同款）。
++
++    生产副本新增③：os.replace 之后补一次**目录 fsync**——rename 的持久性需要父
++    目录 fsync 才落盘（掉电后目录项可能丢）；只增 fsync，不改写入语义。
++    """
+     os.makedirs(os.path.dirname(path), exist_ok=True)
+     tmp = path + ".tmp"
+     with open(tmp, "w", encoding="utf-8") as f:
+@@ -150,6 +215,14 @@
+         f.flush()
+         os.fsync(f.fileno())
+     os.replace(tmp, path)
++    try:
++        dfd = os.open(os.path.dirname(path), os.O_RDONLY)
++        try:
++            os.fsync(dfd)
++        finally:
++            os.close(dfd)
++    except OSError:
++        pass
+ 
+ 
+ class Handler(BaseHTTPRequestHandler):
+@@ -178,7 +251,10 @@
+                         {"status": "ok" if ready else "not_ready",
+                          "contract": CONTRACT,
+                          "sources": [s["name"] for s in reg.get("sources", [])],
+-                         "secrets_missing": missing, "home": HOME})
++                         "secrets_missing": missing, "home": HOME,
++                         # 生产副本新增④：只增字段（PoC 自检断言的形状不变）——
++                         # 暴露面自证用：跑者能自报实际绑定面与端口。
++                         "bind": BIND, "port": PORT})
+         else:
+             self._reply(404, {"error": "not_found"})
+ 
+@@ -257,16 +333,19 @@
+             self.close_connection = True
+             return
+         # ⑤ 幂等：同 source/delivery 已收 → 200 duplicate（不重写不重派）
++        #    生产副本新增②：⑤⑥ 同锁——ThreadingHTTPServer 并发下「查存在→写」
++        #    原为 TOCTOU（并发同 delivery 双双落盘、后写覆盖前写＝违反不重写）。
+         inbox_dir = os.path.join(HOME, "inbox", source)
+         path = os.path.join(inbox_dir, delivery_id + ".json")
+-        if os.path.exists(path):
+-            self._reply(200, {"status": "duplicate", "delivery_id": delivery_id,
+-                              "path": os.path.relpath(path, HOME)})
+-            return
+-        # ⑥ 落盘（原子）→ 202
+-        env = envelope_for(sdef, source, body_raw, parsed, delivery_id,
+-                           os.path.relpath(path, HOME))
+-        atomic_write_json(path, env)
++        with _DUP_LOCK:
++            if os.path.exists(path):
++                self._reply(200, {"status": "duplicate", "delivery_id": delivery_id,
++                                  "path": os.path.relpath(path, HOME)})
++                return
++            # ⑥ 落盘（原子）→ 202
++            env = envelope_for(sdef, source, body_raw, parsed, delivery_id,
++                               os.path.relpath(path, HOME))
++            atomic_write_json(path, env)
+         log(f"收件: {source}/{delivery_id} event={etype} thread_key={env['thread_key']}"
+             f" sha={env['payload_sha256'][:12]}…")
+         self._reply(202, {"status": "accepted", "delivery_id": delivery_id,
+@@ -287,9 +366,10 @@
+ def main():
+     reg = load_registry()
+     os.makedirs(HOME + "/inbox", exist_ok=True)
+-    srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
++    bind = resolve_bind()          # 生产副本新增①：绑定面决议（fail-loud，通配拒起）
++    srv = ThreadingHTTPServer((bind, PORT), Handler)
+     no_sec = [s["name"] for s in reg.get("sources", []) if secret_for(s["name"]) is None]
+-    log(f"trigger-inbox 起（127.0.0.1:{PORT}，home={HOME}，"
++    log(f"trigger-inbox 起（{bind}:{PORT}，home={HOME}，"
+         f"sources={[s['name'] for s in reg.get('sources', [])]}，"
+         f"body 上限 {MAX_BODY // 1024}KiB，注册表只读；"
+         f"secret 未配置（该 source 一律 401，fail-closed）：{no_sec or '无'}）")

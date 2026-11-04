@@ -1,0 +1,40 @@
+FAIL  S0 桥已构建  /home/pan-ding/workspace/agent黑灯工厂/af/poc/poc-super-agent/bridge/target/debug/af-super-agent-bridge
+PASS  S0 STOP 熔断控制（静态：poll_triggers 在主循环 try 内、STOP 检查之后）  main() while 循环：STOP 在位即 continue（跳过全部 poll 腿）→poll_triggers→save_state
+PASS  S4 最小皮代码面零 shell/root 调用（三禁只辖最小皮，AST 级；denylist 保留）  违规=无；唯一进程出口=桥 argv 调用×1；denylist=('shell', 'root', 'sudo', 'network', 'exec', 'spawn')（在役 event-router 的既有root SSH+shell=True 能力面=遗留风险另档，不在此断言内）
+PASS  S1 注册表安装+recipe_digest  b7474da1b7d64288
+PASS  S2 收件箱起服（127.0.0.1 最小暴露面）  {"status": "ok", "contract": "af.trigger.v1", "sources": ["gitea-webhook"], "secrets_missing": [], "home": "/tmp/pocd-se
+PASS  P1 合法 push 投递 202  {'status': 'accepted', 'delivery_id': 'pocd-pos-push-0001', 'path': 'inbox/gitea-webhook/pocd-pos-push-0001.json', 'thread_key': 'git:acme/widget@111111111111',
+PASS  P2 收件箱原子落盘+af.trigger.v1 七字段  git:acme/widget@111111111111 / gitea-webhook-pocd-pos-push-0001
+PASS  P2b payload_sha256 对原始字节复算  
+PASS  P3 合法 pull_request/opened 投递 202  {'status': 'accepted', 'delivery_id': 'pocd-pos-pr-0002', 'path': 'inbox/gitea-webhook/pocd-pos-pr-0002.json', 'thread_key': 'git:acme/widget#7', 'dedup_key': '
+PASS  N1 坏签名 401（必红）  {'error': 'bad_signature', 'key_id': 'pocd-webhook-key-1'}
+PASS  N2 超限 413（必红，>1MiB）  {'error': 'payload_too_large', 'limit_bytes': 1048576}
+PASS  N3 重复 delivery 200 且不重写  code=200 mtime不变=True
+PASS  N4 非白名单事件 422  {'error': 'bad_message', 'detail': "event_type 不在白名单: 'cron'", 'allowed': ['push', 'pull_request']}
+PASS  N5 非法 delivery_id 422  {'error': 'bad_message', 'detail': 'delivery_id 缺失或非法（^[A-Za-z0-9._-]{1,128}$）'}
+PASS  N14 已配 secret：空密钥 HMAC 签名 401（空密钥≠真 secret）  {'error': 'bad_signature', 'key_id': 'pocd-webhook-key-1'}
+PASS  N12 未配 secret：/healthz 503 not_ready（不假绿）  {'status': 'not_ready', 'contract': 'af.trigger.v1', 'sources': ['gitea-webhook', 'ghost-nosecret'], 'secrets_missing': ['gitea-webhook', 'ghost-nosecret'], 'ho
+PASS  N13 未配 secret：空密钥 HMAC 签名一律 401 + inbox 零落盘（fail-closed）  code=401/401 落盘=0（修复前实测 202 accepted+落盘）
+PASS  P4 router 检出→F1 派单记录产生（push→F1）  F1-acme-widget-5cdda48cdbc5b2c3.json
+PASS  P5 pull_request opened→F2 派单记录  F2-acme-widget-12451f5a23717666.json
+PASS  P6 order_id 确定性=hash(repo|suite|subject|recipe_digest)  F1-acme-widget-5cdda48cdbc5b2c3 == F1-acme-widget-5cdda48cdbc5b2c3
+PASS  P7 读侧游标 consumed.jsonl 一行一事件  2 行
+PASS  A1 活性安灯判据文件落盘（green）  trigger-inbox-live age=0s
+PASS  P8 消费腿防重放（第二轮零新增）  trigger_leg": {"started_at": 1793806854.1997898, "alarm_state": "green", "last_liveness": "2026-11-04T15:40:54+00:00"}}
+
+PASS  N6 业务重放（同内容换 delivery）不重复派单  code=202
+PASS  N7 pull_request closed 收下（202）但不派单  code=202
+PASS  N8 篡改信封（sha 不符）拒读不派单  拒读日志见 stdout
+PASS  N15 篡改 parsed body（合法 body_b64+hash）拒读记原因、零派单  投递=202 拒读原因=冗余 parsed body 与 body_b64 重解析不一致（篡改痕迹；本腿不消费 parsed body，仅核对）（修复前实测按篡改字段派单 acme/evil）
+PASS  N16 篡改 body_b64（hash 不符）拒读、零派单  投递=202 拒读原因=payload_sha256 对 body_b64 复算不符（篡改痕迹）
+FAIL  S1 Slow Path 六步：admitted（Released 经 ReleaseGate）  rc=1 result=None steps=[]
+Traceback (most recent call last):
+  File "/home/pan-ding/workspace/agent黑灯工厂/af/poc/poc-super-agent/tests/selfcheck.py", line 503, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/home/pan-ding/workspace/agent黑灯工厂/af/poc/poc-super-agent/tests/selfcheck.py", line 434, in main
+    art = json.load(open(os.path.join(HOME, "slowpath", dj["order_id"],
+                    ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                      "decision-artifact.json")))["artifact"]
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/tmp/pocd-selfcheck/triggers/slowpath/F1-acme-widget-5cdda48cdbc5b2c3/decision-artifact.json'
