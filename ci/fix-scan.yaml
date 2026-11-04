@@ -38,7 +38,7 @@ families:
     whitelist:              # 单一正本=ci/budget-cast-whitelist.json 的回填副本
       # （SPEC 1 ⑧-6 防两份白名单漂移；fix_scan.py --validate 逐条对账两本一致）
       - path: crates/af-execline/src/graph_unit.rs
-        line: 1068
+        line: 1167
         pattern: 'turns: stage.turns as u32,'
         debt: D-50
         reason: stage.turns:u64（graph_unit.rs:1434）直转截断进 record turns:u32（record.rs:164）；红队摸排新发现（SPEC 3 ④），v0.2 迁钳位/饱和换算后销项
@@ -47,7 +47,7 @@ families:
         line: 392
         pattern: 'turns: row.get("turns").and_then(Value::as_u64).map(|t| t as u32),'
         debt: D-50
-        reason: 判分行投影 u64→u32 直转（SPEC 3 ④新发现站点）；与 graph_unit.rs:1068 同族一并治理后销项
+        reason: 判分行投影 u64→u32 直转（SPEC 3 ④新发现站点）；与 graph_unit.rs:1167 同族一并治理后销项
         expires: v0.2-G0
     artifact: redteam/scans/<batch>/sat-cast.json   # 产物入库带 sha256；缺产物 = 合流 blocked
 
