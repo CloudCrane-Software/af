@@ -104,11 +104,15 @@ jobs:
           cargo fmt --check --all
 
       - name: clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）
+        # fmt 红不遮蔽 clippy/test 判定——一次 run 收全三路诊断（对齐 ci/run.sh
+        # 「步骤失败不中断、跑完全部步骤收集完整诊断」哲学）；job 结论仍任一红即红。
+        if: ${{ always() }}
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo clippy --workspace --all-targets -- -D warnings
 
       - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
+        if: ${{ always() }}
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo test -p af-dsl -p af-compiler
