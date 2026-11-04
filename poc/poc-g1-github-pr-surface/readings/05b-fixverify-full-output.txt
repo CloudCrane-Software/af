@@ -1,0 +1,27 @@
+[PASS] [product/main] 在飞登记背书成立：租约 wt-main-20261104-a 活跃（until=1793852149649ms，holder=recycle-worker-20261104，resource=pandev/tmp，槽位 worktree:product/main，批次 工作树租约化回收-20261104，登记于 1793765770239ms，理由：af 主检出正本树（非批次临时树、不入名册版本面）：本回收批按门判定序②以真租约背书豁免漏登记红；TTL 24h 到期未续租即自动翻红，续租=lease_store heartbeat --lease-id wt-main-20261104-a --holder recycle-worker-20261104 后按新 lease_until_ms 逐字重登记本行）——漏登记红不触发（豁免由租约面背书，TTL 到期自动翻红）
+[PASS] [feat/g1-github-pr-surface] 在飞登记背书成立：租约 wt-g1gh-20261104-a 活跃（until=1793893189203ms，holder=g1-github-pr-surface，resource=pandev/tmp，槽位 worktree:feat/g1-github-pr-surface，批次 G1-GitHubPR端反馈面-20261104，登记于 1793806792442ms，理由：G1 批 GitHub 端 PR 反馈面施工树（分支 feat/g1-github-pr-surface，基线 origin/product/main=56ff52a）：落 .github/workflows/f1.yml + ci/gh_workflow_check.py + 证据面；本批零 push 零 commit，diff 留给主代理。TTL 24h，到期未续租即自动翻红，续租=lease_store heartbeat --lease-id wt-g1gh-20261104-a --holder g1-github-pr-surface 后按新 lease_until_ms 逐字重登记本行）——漏登记红不触发（豁免由租约面背书，TTL 到期自动翻红）
+[PASS] [feature/poc-e-codeadapter] 在飞登记背书成立：租约 wt-poce-20261104-a 活跃（until=1793852149704ms，holder=poc-e-codeadapter，resource=pandev/tmp，槽位 worktree:feature/poc-e-codeadapter，批次 工作树租约化回收-20261104，登记于 1793765770239ms，理由：poc-e 代码域适配器批当刻在飞施工树（tip 提交 2026-11-04 05:47，树内 cargo 产物同日 09:21-09:22），本回收批代其领租约登记使合法免红；在飞占用本批不动树；TTL 24h，续租=heartbeat --holder poc-e-codeadapter 后按新 lease_until_ms 逐字重登记）——漏登记红不触发（豁免由租约面背书，TTL 到期自动翻红）
+[PASS] 机制② 主干基线 phase2 的 ci/xcheck.py 含 E49 修复锚点（sha256=b75938236500…）
+[PASS] 主干基线 phase2 的 numbers.json ci.steps_total=14（登记值锚在场）
+[PASS] 机制② 收口门本体已落主干基线 phase2（sha256 与本门同源）
+[PASS] 机制③扩 主干基线 phase2 的门族正本面：110 件（门码面 43 + 判据/证据正本3 + 策略正本数据面 64）——各在役树逐件对账，分叉/缺件/多余件即红
+[PASS] [e1-fivegaps-20261103] 存档树门码与名册钉值一致（sha256=ce3f60c205ec…，修复已由基线承担）
+[PASS] [g0merge] 门族全集单源：110 件（门码面 43 + 判据/证据正本 3 + 策略正本数据面 64）逐件一致（提交面 oid + 工作树面 sha256 双核）
+[PASS] [g0merge] 篡改臂：整槽连摘 step10/11/12 → exit=1 且 [FAIL] gates-g0-erratum（修复在该树在场）
+[PASS] [g0merge] 对照臂：未篡改 ci/run.sh exit=0（不误红）
+[PASS] [phase2] 门族全集单源：110 件（门码面 43 + 判据/证据正本 3 + 策略正本数据面 64）逐件一致（提交面 oid + 工作树面 sha256 双核）
+[PASS] [phase2] 篡改臂：整槽连摘 step10/11/12 → exit=1 且 [FAIL] gates-g0-erratum（修复在该树在场）
+[PASS] [phase2] 对照臂：未篡改 ci/run.sh exit=0（不误红）
+[PASS] [mm-compat] 存档树门码与名册钉值一致（sha256=b8d43243f9f4…，修复已由基线承担）
+[PASS] [phase2-execline-p6] 存档树：无 G0 门族（无 ci/xcheck.py），名册登记一致
+[PASS] [sil-writeback] 门族全集单源：110 件（门码面 43 + 判据/证据正本 3 + 策略正本数据面 64）逐件一致（提交面 oid + 工作树面 sha256 双核）
+[PASS] [sil-writeback] 篡改臂：整槽连摘 step10/11/12 → exit=1 且 [FAIL] gates-g0-erratum（修复在该树在场）
+[PASS] [sil-writeback] 对照臂：未篡改 ci/run.sh exit=0（不误红）
+[FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-fmtfix（分支 feature/mainline-fmt-zero-v2-fix）——缩名册即旁路，红
+[FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-l3l3（分支 feat/l3-l3-independent-port）——缩名册即旁路，红
+[FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-l3l3-base（分支 (detached)）——缩名册即旁路，红
+[FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-review-mainline（分支 (detached)）——缩名册即旁路，红
+[FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-satcast（分支 fix/sat-cast-whitelist-line）——缩名册即旁路，红
+[FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-t5t6（分支 feat/t5-2-t6-3-trigger-resident）——缩名册即旁路，红
+[FAIL] 工作树漏登记名册：/home/pan-ding/workspace/af-wt-t7-2（分支 feat/t7-2-integrator-bind-check）——缩名册即旁路，红
+== fix-verify: 绿 19 / 警告 0 / 红 7（工作树 16 棵，名册 11 条）

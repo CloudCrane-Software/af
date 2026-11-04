@@ -1,0 +1,22 @@
+# 读数 01：检查器对现役 GitHub 端面的判定（门：python3 -I ci/gh_workflow_check.py）
+# 工作树：/home/pan-ding/workspace/af-wt-g1github（分支 feat/g1-github-pr-surface，基线 origin/product/main=56ff52a）
+# 时间：2026-11-04（最终版检查器字节）
+
+$ python3 -I ci/gh_workflow_check.py
+[OK]   R01 面在场：1 件 workflow（f1.yml）
+[OK]   R02 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 解析成功
+[OK]   R02 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 双解析交叉核对一致
+[OK]   R03 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 无 pull_request_target（生效面）
+[OK]   R04 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 触发面=仅 pull_request，base 分支约束=['main']
+[OK]   R05 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 顶层 permissions 只读
+[OK]   R06 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 凭据面干净（无硬编码凭据、无其它 secret）
+[OK]   R07 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 零 action 依赖
+[OK]   R08 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: fmt --check 在位
+[OK]   R09 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: clippy -D warnings 在位
+[OK]   R10 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: af-dsl+af-compiler 快速测试在位
+[OK]   R16 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 工具链供给在位（rustup + rustfmt + clippy 组件）
+[OK]   R12 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml job[f1-fast-gate]: timeout-minutes=45
+[OK]   R13 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: concurrency 在位（同分支只保最新）
+[OK]   R15 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml job[f1-fast-gate]: runs-on 在位
+SUMMARY: files=1 rules=17 fail=0 failed_rules=-
+exit=0

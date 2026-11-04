@@ -1,0 +1,106 @@
+# 读数 04：Gitea 端 F1 快速门（af/.gitea/workflows/f1.yml）逐字读数与语义面/环境面拆分锚点
+# 用途：§一 拆分表的行号锚（sha256 见读数 03 §3.3）
+# 时间：2026-11-04
+
+### 4.1 顶层骨架（带行号）
+26:name: F1 快速门
+27:run-name: "F1 快速门 @ ${{ gitea.event.pull_request.head.ref || gitea.ref_name }}"
+28:
+29:on:
+30:  pull_request:
+31:    branches:
+32:      - product/main
+33:
+34:# 同一 PR 分支重复推送只保最新一次快速门（快速门的意义就是快）。
+35:concurrency:
+36:  group: f1-${{ gitea.event.pull_request.head.ref || gitea.ref_name }}
+37:  cancel-in-progress: true
+38:
+39:jobs:
+40:  f1-fast-gate:
+41:    # 标签必须匹配实例级 opch-act-runner（label=opch-ci，两台均 online）。
+42:    runs-on: [opch-ci]
+43:    # 超时止损（T7③）：45 分钟止损（首次填充持久 target 编译约 20-30min；
+44:    # 稳态下 target 跨 run 复用，预计 <15min）。超时即止损，不占 runner。
+45:    timeout-minutes: 45
+46:    env:
+47:      # 构建节流（本厂内存纪律）：并发 4，禁高并发编译。
+48:      CARGO_BUILD_JOBS: "4"
+49:      CARGO_INCREMENTAL: "0"
+50:      CARGO_TERM_COLOR: never
+51:      # target 持久化：runner 容器 HOME=/var/lib/opch-ci 跨 run 持久（run146
+52:      # 工具链复用实证）——依赖编译一次填充、后续 run 分钟级复用；两台 runner
+53:      # 并发时由 cargo 文件锁串行，不损正确性。
+54:      CARGO_TARGET_DIR: /var/lib/opch-ci/.af-f1-target
+55:      # 仓为 private：checkout 用 Gitea 每次运行自动注入的临时 token
+56:      # （secrets.GITEA_TOKEN），不落任何长期凭据进 workflow 文本。
+57:      AF_TOKEN: ${{ secrets.GITEA_TOKEN }}
+58:    steps:
+
+### 4.2 各 step 的 run 体（带行号）
+58:    steps:
+59:      - name: 分工声明（F1 快速门在此跑；F2 全量门不走 Actions）
+60:        run: |
+61:          echo "F1 快速门：fmt --check / clippy -D warnings / af-dsl+af-compiler 快速测试"
+62:          echo "F2 全量门：ci/run.sh 十四步——走收件箱派单+独立 runner（integrator 复核制），不进 Actions"
+63:
+64:      - name: checkout（PR 头树；零外部 action 依赖，不用 actions/checkout）
+65:        env:
+66:          AF_HEAD_REF: ${{ gitea.event.pull_request.head.ref }}
+67:        run: |
+68:          set -eu
+69:          REF="${AF_HEAD_REF:-${GITHUB_HEAD_REF:-}}"
+70:          if [ -z "$REF" ]; then
+71:            echo "取不到 PR 头分支（事件上下文缺 pull_request.head.ref）" >&2
+72:            exit 1
+73:          fi
+74:          HOST="${GITHUB_SERVER_URL#http://}"; HOST="${HOST#https://}"
+75:          AUTH=""
+76:          if [ -n "${AF_TOKEN:-}" ]; then
+77:            AUTH="x-access-token:${AF_TOKEN}@"
+78:          fi
+79:          git clone --depth 1 --branch "$REF" \
+80:            "http://${AUTH}${HOST}/${GITHUB_REPOSITORY}.git" .
+81:          git --no-pager log --oneline -1
+82:
+83:      - name: 工具链供给（runner 容器无 rust——按仓内钉住版自举；已装则直接复用）
+84:        run: |
+85:          set -eu
+86:          export PATH="$HOME/.cargo/bin:$PATH"
+87:          if command -v cargo >/dev/null 2>&1; then
+88:            echo "cargo 已在（复用既有供给）: $(cargo --version)"
+89:          else
+90:            echo "runner 容器无 rust（OpenCloudOS 9.6 极简镜像，run143/144 诊断在案）——rustup 自举"
+91:            curl -sSfL https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init \
+92:              -o /tmp/rustup-init
+93:            chmod +x /tmp/rustup-init
+94:            /tmp/rustup-init -y --profile minimal --no-modify-path
+95:          fi
+96:          export PATH="$HOME/.cargo/bin:$PATH"
+97:          # 按 rust-toolchain.toml 钉住的 channel（1.99.1）装工具链与 rustfmt/clippy 组件
+98:          CHANNEL="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+99:          echo "钉住 channel: $CHANNEL"
+100:          rustup toolchain install "$CHANNEL" --profile minimal \
+101:            --component rustfmt --component clippy 2>&1 | tail -5
+102:          rustup default "$CHANNEL"
+103:          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+104:          cargo --version && rustc --version && cargo fmt --version
+105:
+106:      - name: fmt --check（硬门；主线已归零，红即如实亮红）
+107:        run: |
+108:          export PATH="$HOME/.cargo/bin:$PATH"
+109:          cargo fmt --check --all
+110:
+111:      - name: clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）
+112:        # fmt 红不遮蔽 clippy/test 判定——一次 run 收全三路诊断（对齐 ci/run.sh
+113:        # 「步骤失败不中断、跑完全部步骤收集完整诊断」哲学）；job 结论仍任一红即红。
+114:        if: ${{ always() }}
+115:        run: |
+116:          export PATH="$HOME/.cargo/bin:$PATH"
+117:          cargo clippy --workspace --all-targets -- -D warnings
+118:
+119:      - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
+120:        if: ${{ always() }}
+121:        run: |
+122:          export PATH="$HOME/.cargo/bin:$PATH"
+123:          cargo test -p af-dsl -p af-compiler

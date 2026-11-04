@@ -122,3 +122,115 @@ v0.3 T7 终裁①：**CI 执行器 Gitea Actions 先行，Actions 只跑 F1 快�
   不可解析 → 恒回落 full；若基点可解析亦属按对照线全树差集恒全族触发。缺省已改
   `HEAD~1`（与 mutations 门 `MUT_BASE` 同款，run.sh:167 先例），「基点不可解析
   时 fail-safe 回落 full」语义逐字保持。
+
+## 六、GitHub 端 PR 反馈面（G1 批新增面，2026-11-04）
+
+### 6.1 面与判据
+
+- **面**：`.github/workflows/f1.yml` = GitHub 端 F1 快速门，与 Gitea 端
+  `.gitea/workflows/f1.yml` **语义面 1:1 对等**（触发仅 `pull_request` + base 分支
+  约束 / `cargo fmt --check --all` / `cargo clippy --workspace --all-targets -- -D warnings` /
+  `cargo test -p af-dsl -p af-compiler` / `timeout-minutes: 45` / `concurrency`
+  同分支只保最新 / clippy 与快速测试 step 带 `always()` 一次收全三路诊断）。
+  环境面按 GitHub 侧现实改写（托管 runner、零 action 的 `git clone` checkout、
+  无持久 target），逐条「改了什么 / 为什么 / 语义有无损失」登记在
+  `poc/poc-g1-github-pr-surface/README.md` §二。
+- **GitHub 侧 base 分支名 = `main`**（**实测非假设**）：
+  `git ls-remote --symref github HEAD`（remote `github` = `https://github.com/Feasy898/af.git`）
+  → `ref: refs/heads/main	HEAD`（**exit 0**）；
+  同命令 `--heads` 实测 **24** 个分支中**无** `product/main` ⇒ Gitea 端
+  `base=product/main` 在 GitHub 侧按实际写 `main`（映射语义 = 产品主线的 PR base 约束）。
+  原始读数：`poc/poc-g1-github-pr-surface/readings/00-github-branch-probe.txt`
+  §B「复跑（成功）」条（§A 的首次直连 URL `exit=124` 记录**保留不删**）。
+- **判据**：`ci/gh_workflow_check.py`（G1 批新增件，R01–R22；R18–R22 为返修批加严）
+  把上述约束逐条变成可执行判定（`pull_request_target` 缺席 / permissions 只读 /
+  凭据面 / 零 action / 三个语义 step 齐备**且在命令位**（★ 返修批：R08/R09/R10 改
+  命令位判定 + 拒吞红写法 `|| true` / `; true` / `set +e`）/ timeout / concurrency /
+  F2 不进 Actions / always() 诊断面 / 工具链供给 / 解析 fail-closed + 双解析交叉核对
+  + **重复键 fail-closed** / **语义 step 禁 `if:` 抑制** / **job 级 `if:` 禁恒假** /
+  **触发面禁 `types`/`paths`/`paths-ignore` 收窄** / **判据面自检 step 在位且恒跑**）。
+  **负向自证**：`python3 -I ci/gh_workflow_check.py --selftest` 造 **23** 个「被削弱的变体」
+  逐个跑检查器 ⇒ 每个都必须红且命中预期规则（正例必须绿）。
+
+### 6.2 门位（★ 本批不新增 `ci/run.sh` step 编号；`ci/` 下既有件零 diff）
+
+| 层 | 触发面 | 性质 | 当前是否生效 |
+|---|---|---|---|
+| ① | GitHub 端 PR 门：`.github/workflows/f1.yml` 的「判据面自检」step（`if: always()`）恒跑 `python3 -I ci/gh_workflow_check.py` | 机器 | **否**——GitHub 通道当前 blocked（见 6.4） |
+| ② | 门族面字节对账：`ci/gh_workflow_check.py` 落 `ci/` 门码面 ⇒ 既有跨树收口门 `ci/fix_verify.py` 机制③「门族全集单源」自动把它纳入逐树双核对账（`ci/fix_verify.py:199-231` 面派生 + `:268-300` 提交面 oid / 工作树面 sha256 双核）⇒ **检查器本体被删/被改弱 ⇒ 该既有门红** | 机器 | **是**（现役可跑）——但**有生效前提，见下** |
+| ③ | SOP：①任何改动 `.github/**` 的 PR，合流前须 `python3 -I ci/gh_workflow_check.py`（exit 0）+ `--selftest`（exit 0）；②主线合流批可把它挂进 `ci/run.sh` 的**既有**槽位（**本批不挂**：禁新增 step 编号 + `ci/` 下既有件零 diff 硬约束） | 流程（人工触发） | 是（须被触发） |
+
+> ★ **层 ② 的生效前提（返修批补，诚实登记）**：层 ② 的对账面 = **主干基线 ref 上的
+> `ci/` 门码面**。本检查器本体是**新件、尚未并入任何基线 ref** ⇒
+> 实测 `git ls-tree phase2 ci/ | grep -c gh_workflow` = **0**（另实测基线
+> `origin/product/main` 同样为 0）⇒ **在合并进主干基线 ref 之前，基线门码面里根本没有
+> 本件，机制③ 的逐树双核对账覆盖不到它 ⇒ 本体尚未受字节对账保护**。
+> 与 `poc/poc-g1-github-pr-surface/README.md` §4.3 的「duty 树门族面补达」缺口对齐。
+> ⇒ 层 ② 的现役可跑性**不覆盖本检查器本体**（覆盖的是既有 `ci/` 件）；本体入基线后
+> 才被纳入。层 ①（GitHub 通道）当前 blocked ⇒ 三层里**当前没有任何一层机械地
+> 保护本件**（层 ③ 是 SOP 面、须人工触发）。
+
+> ★ 如实登记：层 ① 是「判据面被削弱 ⇒ 同一次 PR run 机器红」的机器面，
+> 但**当前 GitHub 通道 blocked ⇒ 未生效**；层 ② 是现役机器面，保护的是
+> **检查器本体**（★ 前提：本体入基线 ref，见上）；层 ③ 是 SOP 面。
+> **GitHub 端 workflow 自身在通道恢复前无运行时权力**
+> ⇒ 此期间「削弱 workflow」不产生运行时后果，但会在层 ① 生效后立刻被机器抓住，
+> 且本批以 **23** 个削弱变体的负向读数预先证明「抓住」这一动作是机械的、非人工自觉。
+
+### 6.3 本批不做什么
+
+不动：GitHub 发布通道、镜像披露（`tools/mirror-disclose.sh` 与任何 allowlist/denylist）、
+GitHub 公开仓已有 5 件 POC 私钥的处置（另一笔、需运营者决策）、Gitea 端 F1、
+AF 产品的 F2 全量门路径、判分链、账本、协议、注册表、`crates/` 下任何件、
+`ci/` 下既有件、`ci/run.sh` 的任何 step（含编号）。
+
+### 6.4 GitHub 侧生效条件（当前**未生效**）
+
+1. **披露通道恢复**：镜像终扫 `verdict=ok`（当前 `verdict=blocked`、无可发布物）⇒
+   `30-工件/镜像披露-20261104/终审-allowlist与放行.md` 记的当前状态未变前，
+   GitHub 侧拿不到本 workflow。
+2. **镜像 allowlist 增补 `.github`**：`tools/mirror-allowlist.paths` 当前**无**
+   `.github` 条目（实测 grep 零命中）⇒ 即使 ① 恢复，发布快照里的 `.github/` 会被
+   **裁出** ⇒ 本 workflow 仍到不了 GitHub。**本批禁改该清单**（只登记，不动）。
+3. **GitHub 仓侧 Actions 可用 + 仓内存在 `ci/gh_workflow_check.py`**：
+   `ci` 在 allowlist 内（会被发布）⇒ 随快照到达；GitHub 仓的 Actions 权限需另行开通。
+4. **恢复后须重验**：① `python3 -I ci/gh_workflow_check.py` 对**发布后的**仓面 exit 0；
+   ② `--selftest` exit 0；③ 首个真实 PR 上 workflow 三个语义 step 实际跑起来
+   （fmt/clippy/快速测试各绿）；④ 通道恢复与 allowlist 增补两件事都完成后，
+   GitHub 侧分支保护把本 workflow 设为 required check（否则 PR 面无强制力）。
+
+> ⚠ 已知边界（诚实登记）：GitHub 的 `pull_request` 事件用 **PR 头分支的 workflow 文件**
+> ⇒ 判据面自检 step 跑的是 PR 头里的那份检查器；PR 若同时削弱 workflow 与检查器，
+> 自检会一起失效（自证不可自证）。缓解：① 仓的 base 分支保护 + required check
+> （base 侧文件不被 PR 头改写时判定生效）；② 本批把检查器本体交由层 ② 的既有门
+> 做字节对账（跨树分叉即红）——★ **该缓解自身有生效前提：本体入基线 ref 之前不成立**
+> （见 6.2 层 ② 的前提登记）；③ 合流前的 Gitea 端 F1 与产品 CI 走的是**主线**文件，
+> 判据面改动必须经主线合流评审。**本批不解决「PR 头可同时改 workflow 与检查器」**
+> （超出本批范围，另记）。
+
+### 6.5 残余风险项（单列登记 · 返修批补）
+
+**RR-01 ★ PR 头的 Rust 构建脚本会在 GitHub 托管 runner 上执行**（本批最需要登记的一条）
+
+- **事实**：`pull_request` 事件下，本 workflow 检出并运行的是 **PR 头树**
+  （`git clone --depth 1 --branch "$REF" "$URL" .`）。`cargo clippy` / `cargo test`
+  会**编译 PR 头里的 crate**，而 Rust 的 `build.rs`（以及 proc-macro crate、
+  `#[cfg(test)]` 辅助代码、构建脚本可触达的任意逻辑）**都是 PR 头作者可控的任意代码**
+  ⇒ 它们**会在 GitHub 托管 runner（GitHub 侧机器）上原样执行**。
+- **为什么必须单列**：这是本 workflow「检出 PR 头树」这一设计**固有的**执行面，
+  与「谁能把代码送上 runner」无关——**只要本 workflow 对 PR 开放执行，就必然执行 PR 头的构建脚本**。
+- **当前风险面（可量化的部分）**：本 workflow 的凭据面为**零 secret 引用**
+  （不引 `secrets.GITHUB_TOKEN`、不引任何 `secrets.*`）、`permissions` 顶层与 job 级
+  **双写 `contents: read`**、clone 走**匿名 HTTP**（零凭据落盘、零凭据进 argv）、
+  **零 action 依赖** ⇒ 被执行代码拿不到仓库写权限、拿不到 secret。
+- **残余风险（不可消除的部分）**：托管 runner 上的**任意代码执行**本身
+  （CPU/内存占用、runner 内网可达面、GitHub 侧的滥用检测与账号级风控）——
+  这部分**不因本 workflow 的凭据面为零而归零**；另 `cargo` 会从 crates.io 拉依赖
+  （供应链面在 PR 头作者手里）。
+- **处置**：**登记**，不声称已消除。可选的降险手段（**本批一律不做**、超出本批范围）：
+  ①把 F1 面下沉到自建 runner；②对 PR 头加「首次贡献者需批准」；
+  ③在 `pull_request` 之外另设一条不执行 PR 代码的只读面。
+  另注：Gitea 端 F1 是**自托管 runner**（`runs-on: [opch-ci]`），同一执行面在那边
+  落在**本厂自管容器**内 ⇒ GitHub 端把它挪到托管 runner 是**环境面改写带来的新执行面**，
+  与 §6.1 的「环境面改写登记」同列。
+

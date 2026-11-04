@@ -1,0 +1,62 @@
+# 读数 03：af 仓零改动核 + 判据面零弱化核 + cargo fmt 门（最终版）
+# 工作树：/home/pan-ding/workspace/af-wt-g1github（分支 feat/g1-github-pr-surface，基线 origin/product/main=56ff52a）
+# 时间：2026-11-04
+
+### 3.1 本工作树改动面（git status --porcelain）
+ M docs/CI-BOUNDARY.md
+?? .github/
+?? ci/gh_workflow_check.py
+?? poc/poc-g1-github-pr-surface/
+
+### 3.2 已跟踪文件的 diff（相对 origin/product/main）
+ docs/CI-BOUNDARY.md | 67 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 67 insertions(+)
+
+### 3.3 .gitea/workflows/f1.yml 逐字未动
+$ git diff origin/product/main -- .gitea/  （须为空）
+（无输出=零改动）
+$ sha256sum .gitea/workflows/f1.yml
+4002392f221aff4aa125d0d1df95600ba83e6190065422cc65ad5cac886292d2  .gitea/workflows/f1.yml
+$ git show origin/product/main:.gitea/workflows/f1.yml | sha256sum
+4002392f221aff4aa125d0d1df95600ba83e6190065422cc65ad5cac886292d2  -
+
+### 3.4 crates/ 零新增 crate
+$ git diff --name-only origin/product/main -- crates/  （须为空）
+（无输出=零改动）
+$ git status --porcelain -- crates/  （须为空）
+（无输出=零新增/零改动）
+
+### 3.5 ci/ 下除本批新增件外零 diff
+$ git diff --name-only origin/product/main -- ci/  （须为空：既有件零 diff）
+（无输出=既有件零 diff）
+$ git status --porcelain -- ci/  （本批新增件）
+?? ci/gh_workflow_check.py
+$ sha256sum ci/clippy-baseline.txt（工作树面）
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  ci/clippy-baseline.txt
+$ git show origin/product/main:ci/clippy-baseline.txt | sha256sum（基线面）
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  -
+
+### 3.6 Cargo.toml / Cargo.lock / rust-toolchain.toml 零改动
+（无输出=零改动）
+
+### 3.7 主检出树（/home/pan-ding/workspace/agent黑灯工厂/af）未被本批改动
+$ git -C '/home/pan-ding/workspace/agent黑灯工厂/af' status --porcelain
+?? redteam/scans/2026-11-04-e4484537/
+（本批开工前已有的未跟踪项：?? redteam/scans/2026-11-04-e4484537/ —— 本批未碰）
+$ git -C '/home/pan-ding/workspace/agent黑灯工厂/af' rev-parse HEAD product/main origin/product/main
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+
+### 3.8 cargo fmt 门
+$ cargo fmt --check --all
+exit=0
+$ cargo --version / rustc --version
+cargo 1.99.1 (5f94df478 2026-08-27)
+rustc 1.99.1 (58cf8f9c3 2026-10-13)
+（本批不改 Rust ⇒ fmt 门须绿；不产生 target 目录、不占构建盘）
+
+### 3.9 未跑的门（如实登记）
+cargo build / cargo test / cargo clippy —— 未跑。理由：本批禁改 crates/，任务书指派由
+主线全量门复验批（anolis，tip 56ff52a）承担；且明令不为此在本地跑重编译（本机 14G 内存）。
+GitHub 侧实跑 —— 未跑（镜像 verdict=blocked + allowlist 未含 .github ⇒ 该仓尚无此 workflow）。

@@ -1,0 +1,78 @@
+# 读数 08（返修批新增）：`--selftest` 23 个削弱变体逐条读数
+# 日期：2026-11-05 · G1 返修批
+# 变化：变体表由 **21 → 23** 条（新增 V22 / V23 = 整块删 clippy / 快速测试语义 step）；
+#       旧 21 条里**只有 V06（删 fmt step）覆盖到「语义件缺失」路径**
+#       （因为只有 R08 带 else 分支）⇒ V22/V23 是本次 fail-open 的正面覆盖。
+$ python3 -I ci/gh_workflow_check.py --selftest
+== 正例（现役面）==
+[OK]   R01 面在场：1 件 workflow（f1.yml）
+[OK]   R02 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 解析成功
+[OK]   R02 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 双解析交叉核对一致
+[OK]   R03 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 无 pull_request_target（生效面）
+[OK]   R04 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 触发面=仅 pull_request，base 分支约束=['main']
+[OK]   R05 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 顶层 permissions 只读
+[OK]   R06 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 凭据面干净（无硬编码凭据、无其它 secret）
+[OK]   R07 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 零 action 依赖
+[OK]   R08 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: fmt --check 在位
+[OK]   R09 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: clippy -D warnings 在位
+[OK]   R10 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: af-dsl+af-compiler 快速测试在位
+[OK]   R16 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 工具链供给在位（rustup + rustfmt + clippy 组件）
+[OK]   R12 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml job[f1-fast-gate]: timeout-minutes=45
+[OK]   R13 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: concurrency 在位（同分支只保最新）
+[OK]   R15 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml job[f1-fast-gate]: runs-on 在位
+SUMMARY: files=1 rules=22 fail=0 failed_rules=-
+POSITIVE /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml exit=0（期望 0）
+== 负例（削弱变体，逐个须红且命中预期规则）==
+V01 exit=1 expected_rule=R03 hit=yes | 引入 pull_request_target（提权触发面）
+V02 exit=1 expected_rule=R05 hit=yes | 顶层 permissions 放宽为 write
+V03 exit=1 expected_rule=R05 hit=yes | job 级 permissions 放宽为 write
+V04 exit=1 expected_rule=R07 hit=yes | 引入第三方 action（actions/checkout）
+V05 exit=1 expected_rule=R09 hit=yes | clippy 降级：去掉 -D warnings，改接基线门
+V06 exit=1 expected_rule=R08 hit=yes | 删掉 fmt --check 语义件
+V07 exit=1 expected_rule=R10 hit=yes | 快速测试换成全量 workspace（F2 混入）
+V08 exit=1 expected_rule=R12 hit=yes | 删掉 timeout-minutes
+V09 exit=1 expected_rule=R13 hit=yes | 删掉 concurrency
+V10 exit=1 expected_rule=R06 hit=yes | 引用非自动注入的 secret
+V11 exit=1 expected_rule=R04 hit=yes | 触发面放宽到 push
+V12 exit=1 expected_rule=R04 hit=yes | 去掉 base 分支约束
+V13 exit=1 expected_rule=R14 hit=yes | clippy step 去掉 always()（诊断不再一次收全）
+V14 exit=1 expected_rule=R10 hit=yes | 快速测试封闭子集缩水（漏 af-compiler）
+V15 exit=1 expected_rule=R11 hit=yes | 把 F2 全量门塞进 Actions
+V16 exit=1 expected_rule=R08 hit=yes | fmt 门降级：去掉 --check（改成改写而非判定）
+V17 exit=1 expected_rule=R09 hit=yes | clippy 门降级：-D warnings 换成 -D clippy::all
+V18 exit=1 expected_rule=R12 hit=yes | 超时止损放宽：45 → 120
+V19 exit=1 expected_rule=R13 hit=yes | 并发策略放宽：cancel-in-progress 改 false
+V20 exit=1 expected_rule=R05 hit=yes | job 级 permissions 整块删掉（依赖继承=不可假定只读）
+V21 exit=1 expected_rule=R06 hit=yes | 凭据面：环境变量硬编码 PAT 字面量
+V22 exit=1 expected_rule=R09 hit=yes | 整块删掉 clippy -D warnings 语义 step（语义件缺失 = 判据弱化）
+V23 exit=1 expected_rule=R10 hit=yes | 整块删掉快速测试（af-dsl + af-compiler）语义 step（语义件缺失 = 判据弱化）
+SELFTEST SUMMARY: variants=23 unexpected=0
+exit=0
+
+# ★ 逐条判读（期望：正例 exit 0；23 个变体逐个 exit≠0 且命中预期规则）
+  V01 exit=1 expected_rule=R03 hit=yes |
+  V02 exit=1 expected_rule=R05 hit=yes |
+  V03 exit=1 expected_rule=R05 hit=yes |
+  V04 exit=1 expected_rule=R07 hit=yes |
+  V05 exit=1 expected_rule=R09 hit=yes |
+  V06 exit=1 expected_rule=R08 hit=yes |
+  V07 exit=1 expected_rule=R10 hit=yes |
+  V08 exit=1 expected_rule=R12 hit=yes |
+  V09 exit=1 expected_rule=R13 hit=yes |
+  V10 exit=1 expected_rule=R06 hit=yes |
+  V11 exit=1 expected_rule=R04 hit=yes |
+  V12 exit=1 expected_rule=R04 hit=yes |
+  V13 exit=1 expected_rule=R14 hit=yes |
+  V14 exit=1 expected_rule=R10 hit=yes |
+  V15 exit=1 expected_rule=R11 hit=yes |
+  V16 exit=1 expected_rule=R08 hit=yes |
+  V17 exit=1 expected_rule=R09 hit=yes |
+  V18 exit=1 expected_rule=R12 hit=yes |
+  V19 exit=1 expected_rule=R13 hit=yes |
+  V20 exit=1 expected_rule=R05 hit=yes |
+  V21 exit=1 expected_rule=R06 hit=yes |
+  V22 exit=1 expected_rule=R09 hit=yes |
+  V23 exit=1 expected_rule=R10 hit=yes |
+#   V22 exit=1 expected_rule=R09 hit=yes（整块删 clippy 语义 step ⇒ R09 判红）
+#   V23 exit=1 expected_rule=R10 hit=yes（整块删快速测试语义 step ⇒ R10 判红）
+#   SELFTEST SUMMARY: variants=23 unexpected=0 ⇒ 23/23 逐个红且命中预期规则；自检整体 exit 0。

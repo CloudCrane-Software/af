@@ -1,0 +1,109 @@
+# 读数 07（返修批新增）：否决项 fail-open 的**关闭**读数（M05 / M06）
+# 日期：2026-11-05 · G1 返修批
+# 场景：复核员亲测的两个「削弱变体」——
+#   M05 = 整块删掉「快速测试（af-dsl + af-compiler）」语义 step
+#   M06 = 整块删掉「clippy -D warnings」语义 step
+# 期望：改前（缺 else 分支）⇒ 检查器 **exit 0（fail-open，放行）**；
+#       改后（R09/R10 补 else 分支）⇒ 检查器 **exit 1 且命中 R09/R10**。
+
+# ── 变体夹具（两处语义 step 整块删除，其余一字不动）──────────────────────────
+$ sed -n '/- name: clippy -D warnings/,/cargo clippy/p' .github/workflows/f1.yml   （原面锚点）
+      - name: clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）
+        # fmt 红不遮蔽 clippy/test 判定——一次 run 收全三路诊断（对齐 ci/run.sh
+        # 「步骤失败不中断、跑完全部步骤收集完整诊断」哲学）；job 结论仍任一红即红。
+        if: ${{ always() }}
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo clippy --workspace --all-targets -- -D warnings
+
+$ sed -n '/- name: 快速测试（af-dsl/,/cargo test -p af-dsl/p' .github/workflows/f1.yml   （原面锚点）
+      - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
+        if: ${{ always() }}
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo test -p af-dsl -p af-compiler
+
+
+# ── 改前（复原件：仅摘掉 R09/R10 的 else 分支 = 复核员指出的根因一一对应）─────
+# 复现方式：把现役 `ci/gh_workflow_check.py` 复制一份，**只**摘掉
+#   `if clippy_ok: ... else: report.fail(...)` 与 `if test_ok: ... else: report.fail(...)`
+#   两段 else 分支（其余一字不改）⇒ 复原 fail-open 形态。
+$ python3 -I <复原件：仅摘 R09/R10 else> --root /tmp/g1fix/probe/M05
+[OK]   R08 /tmp/g1fix/probe/M05/.github/workflows/f1.yml: fmt --check 在位
+[OK]   R09 /tmp/g1fix/probe/M05/.github/workflows/f1.yml: clippy -D warnings 在位
+SUMMARY: files=1 rules=22 fail=0 failed_rules=-
+exit=0
+
+$ python3 -I <复原件：仅摘 R09/R10 else> --root /tmp/g1fix/probe/M06
+[OK]   R08 /tmp/g1fix/probe/M06/.github/workflows/f1.yml: fmt --check 在位
+[OK]   R10 /tmp/g1fix/probe/M06/.github/workflows/f1.yml: af-dsl+af-compiler 快速测试在位
+SUMMARY: files=1 rules=22 fail=0 failed_rules=-
+exit=0
+
+#   ★ 读数解释：改前 M05/M06 均 **exit 0 / fail=0 / failed_rules=-**，
+#     且 M06 里 **R09 连 [OK] 都不出现**、M05 里 **R10 连 [OK] 都不出现**
+#     ⇒ 与复核员亲测一致：删掉语义 step ⇒ 检查器放行 = fail-open。
+
+# ── 改后（现役 `ci/gh_workflow_check.py`）────────────────────────────────────
+$ python3 -I ci/gh_workflow_check.py --root /tmp/g1fix/probe/M05
+[OK]   R08 /tmp/g1fix/probe/M05/.github/workflows/f1.yml: fmt --check 在位
+[OK]   R09 /tmp/g1fix/probe/M05/.github/workflows/f1.yml: clippy -D warnings 在位
+[FAIL] R10 R10: /tmp/g1fix/probe/M05/.github/workflows/f1.yml: 未见快速测试语义件 `cargo test -p af-dsl -p af-compiler`（语义件缺失 = 判据弱化：删掉该 step = 硬门缺席且检查器放行）
+SUMMARY: files=1 rules=22 fail=1 failed_rules=R10
+exit=1
+
+$ python3 -I ci/gh_workflow_check.py --root /tmp/g1fix/probe/M06
+[OK]   R08 /tmp/g1fix/probe/M06/.github/workflows/f1.yml: fmt --check 在位
+[OK]   R10 /tmp/g1fix/probe/M06/.github/workflows/f1.yml: af-dsl+af-compiler 快速测试在位
+[FAIL] R09 R09: /tmp/g1fix/probe/M06/.github/workflows/f1.yml: 未见 clippy 语义件 `cargo clippy --workspace --all-targets -- -D warnings`（语义件缺失 = 判据弱化：删掉该 step = 硬门缺席且检查器放行）
+SUMMARY: files=1 rules=22 fail=1 failed_rules=R09
+exit=1
+
+#   ★ 读数解释：改后 M05 ⇒ exit 1 / failed_rules=R10；M06 ⇒ exit 1 / failed_rules=R09。
+#     失败信息写明「语义件缺失 = 判据弱化」+ 规则号 + 文件相对路径（见上 [FAIL] 行全文）。
+
+# ── 判据面零弱化核（改后正例仍绿）────────────────────────────────────────────
+$ python3 -I ci/gh_workflow_check.py
+[OK]   R13 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: concurrency 在位（同分支只保最新）
+[OK]   R15 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml job[f1-fast-gate]: runs-on 在位
+SUMMARY: files=1 rules=22 fail=0 failed_rules=-
+exit=0
+
+# ── 复现步骤（复核员可原样重跑；上文路径为本会话临时目录）────────────────────
+# ① 造 M05 / M06 两个变体目录（把对应语义 step 整块删掉，其余一字不动）：
+#    python3 - <<'PY'
+#    import pathlib
+#    src = pathlib.Path(".github/workflows/f1.yml").read_text(encoding="utf-8")
+#    clippy = ("      - name: clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）\n"
+#              "        # fmt 红不遮蔽 clippy/test 判定——一次 run 收全三路诊断（对齐 ci/run.sh\n"
+#              "        # 「步骤失败不中断、跑完全部步骤收集完整诊断」哲学）；job 结论仍任一红即红。\n"
+#              "        if: ${{ always() }}\n"
+#              "        run: |\n"
+#              "          export PATH=\"$HOME/.cargo/bin:$PATH\"\n"
+#              "          cargo clippy --workspace --all-targets -- -D warnings\n\n")
+#    test = ("      - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）\n"
+#            "        if: ${{ always() }}\n"
+#            "        run: |\n"
+#            "          export PATH=\"$HOME/.cargo/bin:$PATH\"\n"
+#            "          cargo test -p af-dsl -p af-compiler\n\n")
+#    for vid, old in (("M05", test), ("M06", clippy)):
+#        d = pathlib.Path("/tmp/g1fix/probe")/vid/".github/workflows"; d.mkdir(parents=True, exist_ok=True)
+#        (d/"f1.yml").write_text(src.replace(old, ""), encoding="utf-8")
+#    PY
+# ② 造「改前」复原件（只摘 R09/R10 两段 else，其余一字不改）：
+#    python3 - <<'PY'
+#    import pathlib
+#    s = pathlib.Path("ci/gh_workflow_check.py").read_text(encoding="utf-8")
+#    for blk in ('''    else:
+#        report.fail("R09", "R09: %s: 未见 clippy 语义件 `cargo clippy --workspace --all-targets -- -D warnings`"
+#                          "（语义件缺失 = 判据弱化：删掉该 step = 硬门缺席且检查器放行）" % rel)
+#''', '''    else:
+#        report.fail("R10", "R10: %s: 未见快速测试语义件 `cargo test -p af-dsl -p af-compiler`"
+#                          "（语义件缺失 = 判据弱化：删掉该 step = 硬门缺席且检查器放行）" % rel)
+#'''):
+#        s = s.replace(blk, "")
+#    pathlib.Path("/tmp/g1fix/prefix_checker.py").write_text(s, encoding="utf-8")
+#    PY
+# ③ 跑：python3 -I /tmp/g1fix/prefix_checker.py --root /tmp/g1fix/probe/M05   ⇒ 期望 exit 0（fail-open 复现）
+#    跑：python3 -I ci/gh_workflow_check.py      --root /tmp/g1fix/probe/M05   ⇒ 期望 exit 1 / failed_rules=R10
+#    跑：python3 -I ci/gh_workflow_check.py      --root /tmp/g1fix/probe/M06   ⇒ 期望 exit 1 / failed_rules=R09
