@@ -1,0 +1,1 @@
+gate_inputs_check: 判据正本漂移：ci/baselines/kani-inv-harness.manifest 期望 sha256=66cb63427862… 实得 dd67716e5574…——判据被改须走 update 同批评审重钉

@@ -1,0 +1,34 @@
+[PASS] gates
+       AGENT.md 主张 9 门（step1-8 硬门 + step9 FV advisory）
+       run.sh 实测 8 基础硬门 step[1, 2, 3, 4, 5, 6, 7, 8] + 1 advisory = 9 门（基础口径）
+       run.sh 另见 G0 机制批新 step[10, 11, 12, 14]（step10-14 槽位；当前合计 13 step）
+[PASS] gates-exec-binding
+       登记槽 step[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14]；执行事实槽 step[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 14]（step 助手调用行 + 执行重定向行 `> "$OUT/stepN.log"`）
+[FAIL] gates-g0-erratum
+       AGENT.md 勘误行主张九门+G0 五门=14 step；run.sh 实测 G0 批 4/5 个新 step，合计 13 step
+       锚：numbers.json ci.steps_total 登记 14 step ≠ run.sh 执行事实重算 13 step
+       红：G0 批未齐但执行事实槽位数与登记值漂移——整槽连摘形态（登记+执行一并摘槽、对账机检随槽清零后 xcheck 照绿，2026-10-31 红队复现在案）；摘槽须恢复执行——同批改账（numbers.json ci.steps_total/gates.ci_steps）只能吸收本登记锚、accountability-slot-floor 独立锚臂仍红（2026-11-03 一致化收缩变体修复）；槽位迁址/更名须同批评审同步 ACCOUNTABILITY_SLOTS（本文件）与 FLOOR_SLOTS（ci/step12_check.py 第⑤节）
+[PASS] subgates-roster-binding
+       名册 subgates.list = ['branches_check', 'xcheck', 'criteria_check', 'strategies_check']；ci/run.sh step14 槽接线集合 = ['branches_check', 'criteria_check', 'strategies_check', 'xcheck']
+[PASS] accountability-slot-floor
+       step10（ci/step10_check.py，承诺-交付对账 deliverables.yaml）执行事实行在场
+       step11（ci/step11_check.py，自述-实现对账 doc-claims.txt）执行事实行在场
+       step12（ci/step12_check.py，计数复算 numbers.json）执行事实行在场
+       独立锚口径：本臂只看 run.sh 执行事实与门脚本盘面真件，不消费 numbers.json 任何键——ci.steps_total 登记锚可被「摘槽+同批改账」自证吸收，本臂不可
+[PASS] packages
+       README 主张十包 37 件；components.json 实测 37 件（根级 pkg.* 段）
+       README 分解 {'aflowkit': 2, 'agensh': 8, 'camelkit': 1, 'crewkit': 7, 'debatekit': 2, 'reactkit': 2, 'reflexkit': 3, 'sweagent': 10, 'langgraph': 1, 'openworld': 1}
+       实测分解 {'aflowkit': 2, 'agensh': 8, 'crewkit': 7, 'debatekit': 2, 'reactkit': 2, 'reflexkit': 3, 'sweagent': 10, 'openworld': 1, 'camelkit': 1, 'langgraph': 1}
+[PASS] redlist
+       方案 §1.3 标题主张 23 项；表体 23 行；expected-fail.txt 实测 23 行
+       条目集合差：仅文书有 []；仅名单有 []
+[PASS] obs-dates
+       README: ['2026-11-30 23:59']
+       00-总纲: ['2026-11-30 23:59']
+       组件建设状态: ['2026-11-30 23:59']
+       runbook§六-3: ['2026-11-30 23:59']
+[PASS] runsh-header
+       头注无『N 步验收管道』字样（可接受）
+[LEGACY] codepoints 码位/债号/ADR 三方对账未实现（SPEC ⑧.2 / 总对账 §六.2：正本 error.rs 码位表摸排工作量未在本批全量落地）——机制覆盖面按 3/4 组对账交卷（门数/packages/词表）；不静默缺席
+== xcheck: 硬项 7/8 过；advisory 1/1 过（覆盖面 3/4：门数/packages/词表；码位组遗留登记见 [LEGACY] 行）
+== 对账明细落档：/home/pan-ding/af-dev/af/wt/rt-e1-rt-e6-gate-integrity/ci/out/xcheck-report.txt
