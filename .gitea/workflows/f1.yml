@@ -75,29 +75,43 @@ jobs:
             "http://${AUTH}${HOST}/${GITHUB_REPOSITORY}.git" .
           git --no-pager log --oneline -1
 
-      - name: runner 环境自检（F1 接线诊断：容器身份 / cargo 可得性 / rustup 源可达性）
+      - name: 工具链供给（runner 容器无 rust——按仓内钉住版自举；已装则直接复用）
         run: |
-          set -x
-          echo "PATH=$PATH"; echo "HOME=$HOME"
-          cat /etc/os-release 2>/dev/null | head -3
-          command -v cargo rustc rustup git curl 2>&1 || true
-          ls -d "$HOME/.cargo" "$HOME/.rustup" /usr/local/cargo /usr/local/rustup /opt/rust /var/lib/opch-ci/.cargo 2>/dev/null || true
-          env | grep -iE "cargo|rust" || true
-          # PATH 候选修补：容器若挂了带 rustup 的家目录，补 PATH 即可用
-          for d in "$HOME/.cargo/bin" /usr/local/cargo/bin /var/lib/opch-ci/.cargo/bin /opt/rust/bin; do
-            if [ -x "$d/cargo" ]; then echo "FOUND cargo at $d"; export PATH="$d:$PATH"; break; fi
-          done
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
           if command -v cargo >/dev/null 2>&1; then
-            echo "cargo 可用: $(cargo --version)"
+            echo "cargo 已在（复用既有供给）: $(cargo --version)"
           else
-            echo "cargo 不可得——探测 rustup 源（直连与 100.64.0.3:1080 代理）"
-            curl -sS -m 8 -o /dev/null -w "direct=%{http_code}\n" https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init || echo "direct=FAIL"
-            curl -sS -m 8 -x socks5h://100.64.0.3:1080 -o /dev/null -w "proxy=%{http_code}\n" https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init || echo "proxy=FAIL"
-            echo "RESULT: environment_unavailable——runner 容器无 rust 工具链且（待读数）"
-            exit 127
+            echo "runner 容器无 rust（OpenCloudOS 9.6 极简镜像，run143/144 诊断在案）——rustup 自举"
+            curl -sSfL https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init \
+              -o /tmp/rustup-init
+            chmod +x /tmp/rustup-init
+            /tmp/rustup-init -y --profile minimal --no-modify-path
           fi
+          export PATH="$HOME/.cargo/bin:$PATH"
+          # 按 rust-toolchain.toml 钉住的 channel（1.99.1）装工具链与 rustfmt/clippy 组件
+          CHANNEL="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+          echo "钉住 channel: $CHANNEL"
+          rustup toolchain install "$CHANNEL" --profile minimal \
+            --component rustfmt clippy 2>&1 | tail -3
+          rustup default "$CHANNEL"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          cargo --version && rustc --version && cargo fmt --version
+
       - name: fmt --check（硬门；主线预存红见 ci/REPORT.md，红即如实亮红）
-        run: cargo fmt --check --all
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fmt --check --all
+
+      - name: clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo test -p af-dsl -p af-compiler
 
       - name: clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）
         run: cargo clippy --workspace --all-targets -- -D warnings
