@@ -73,8 +73,29 @@ jobs:
           fi
           git clone --depth 1 --branch "$REF" \
             "http://${AUTH}${HOST}/${GITHUB_REPOSITORY}.git" .
-          git log --oneline -1
+          git --no-pager log --oneline -1
 
+      - name: runner 环境自检（F1 接线诊断：容器身份 / cargo 可得性 / rustup 源可达性）
+        run: |
+          set -x
+          echo "PATH=$PATH"; echo "HOME=$HOME"
+          cat /etc/os-release 2>/dev/null | head -3
+          command -v cargo rustc rustup git curl 2>&1 || true
+          ls -d "$HOME/.cargo" "$HOME/.rustup" /usr/local/cargo /usr/local/rustup /opt/rust /var/lib/opch-ci/.cargo 2>/dev/null || true
+          env | grep -iE "cargo|rust" || true
+          # PATH 候选修补：容器若挂了带 rustup 的家目录，补 PATH 即可用
+          for d in "$HOME/.cargo/bin" /usr/local/cargo/bin /var/lib/opch-ci/.cargo/bin /opt/rust/bin; do
+            if [ -x "$d/cargo" ]; then echo "FOUND cargo at $d"; export PATH="$d:$PATH"; break; fi
+          done
+          if command -v cargo >/dev/null 2>&1; then
+            echo "cargo 可用: $(cargo --version)"
+          else
+            echo "cargo 不可得——探测 rustup 源（直连与 100.64.0.3:1080 代理）"
+            curl -sS -m 8 -o /dev/null -w "direct=%{http_code}\n" https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init || echo "direct=FAIL"
+            curl -sS -m 8 -x socks5h://100.64.0.3:1080 -o /dev/null -w "proxy=%{http_code}\n" https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init || echo "proxy=FAIL"
+            echo "RESULT: environment_unavailable——runner 容器无 rust 工具链且（待读数）"
+            exit 127
+          fi
       - name: fmt --check（硬门；主线预存红见 ci/REPORT.md，红即如实亮红）
         run: cargo fmt --check --all
 
