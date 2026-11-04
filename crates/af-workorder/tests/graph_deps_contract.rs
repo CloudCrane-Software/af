@@ -23,12 +23,7 @@ use af_workorder::{
 
 /// 图仓侧:同一张图 g-3,直接引用 evaluator(版本由参数钉)。
 fn graph_roots(evaluator_version: &str) -> Vec<DepRef> {
-    vec![DepRef::new(
-        DepKind::Evaluator,
-        "pkg.x.evaluator",
-        evaluator_version,
-    )
-    .unwrap()]
+    vec![DepRef::new(DepKind::Evaluator, "pkg.x.evaluator", evaluator_version).unwrap()]
 }
 
 /// 组件仓侧:三层链 evaluator → adapter → template(三层版本各自参数化)。
@@ -41,23 +36,14 @@ fn component_repo(
     let mut table = DependencyTable::new();
     // 先声明 template(闭包最底层,倒序装载)。
     table
-        .declare(
-            "pkg.x.template",
-            template_version,
-            vec![],
-        )
+        .declare("pkg.x.template", template_version, vec![])
         .unwrap();
     // adapter 依赖 template。
     table
         .declare(
             "pkg.x.adapter",
             adapter_version,
-            vec![DepRef::new(
-                DepKind::Template,
-                "pkg.x.template",
-                template_version,
-            )
-            .unwrap()],
+            vec![DepRef::new(DepKind::Template, "pkg.x.template", template_version).unwrap()],
         )
         .unwrap();
     // evaluator 依赖 adapter。
@@ -65,12 +51,7 @@ fn component_repo(
         .declare(
             "pkg.x.evaluator",
             evaluator_version,
-            vec![DepRef::new(
-                DepKind::Adapter,
-                "pkg.x.adapter",
-                adapter_version,
-            )
-            .unwrap()],
+            vec![DepRef::new(DepKind::Adapter, "pkg.x.adapter", adapter_version).unwrap()],
         )
         .unwrap();
     table
@@ -83,10 +64,7 @@ fn direct_dependency_version_change_is_detected() {
     // 改前读数:GraphVersion("g-3") == GraphVersion("g-3"),两世界工单全等,零检出。
     let v1 = graph_deps_digest(&gv, &graph_roots("1"), &component_repo("1", "1", "1")).unwrap();
     let v2 = graph_deps_digest(&gv, &graph_roots("2"), &component_repo("2", "2", "1")).unwrap();
-    assert_ne!(
-        v1, v2,
-        "同图不同直接依赖版本 ⇒ digest 必须不同(契约被检出)"
-    );
+    assert_ne!(v1, v2, "同图不同直接依赖版本 ⇒ digest 必须不同(契约被检出)");
     println!("CONTRACT evaluator@1 digest = {v1}");
     println!("CONTRACT evaluator@2 digest = {v2}");
 }
@@ -99,10 +77,7 @@ fn transitive_dependency_version_propagates_to_root_digest() {
     // C 的版本 v1 → v2,A 与 B 的版本都不动 ⇒ A 的 digest 必须变。
     let c_v1 = graph_deps_digest(&gv, &roots, &component_repo("1", "1", "1")).unwrap();
     let c_v2 = graph_deps_digest(&gv, &roots, &component_repo("1", "1", "2")).unwrap();
-    assert_ne!(
-        c_v1, c_v2,
-        "传递链 A→B→C:C 版本变化必须传导到 A 的 digest"
-    );
+    assert_ne!(c_v1, c_v2, "传递链 A→B→C:C 版本变化必须传导到 A 的 digest");
     println!("CONTRACT 传递链 C(template)@1 ⇒ root digest = {c_v1}");
     println!("CONTRACT 传递链 C(template)@2 ⇒ root digest = {c_v2}");
     // 传导而不误伤:A/B 成员版本确实未变(变的是 C 的版本段)。
@@ -132,20 +107,18 @@ fn multi_version_coexistence_pins_orientation() {
     // evaluator@1 依赖 adapter@1;evaluator@2 依赖 adapter@2。
     both.declare("pkg.x.adapter", "1", vec![]).unwrap();
     both.declare("pkg.x.adapter", "2", vec![]).unwrap();
-    both
-        .declare(
-            "pkg.x.evaluator",
-            "1",
-            vec![DepRef::new(DepKind::Adapter, "pkg.x.adapter", "1").unwrap()],
-        )
-        .unwrap();
-    both
-        .declare(
-            "pkg.x.evaluator",
-            "2",
-            vec![DepRef::new(DepKind::Adapter, "pkg.x.adapter", "2").unwrap()],
-        )
-        .unwrap();
+    both.declare(
+        "pkg.x.evaluator",
+        "1",
+        vec![DepRef::new(DepKind::Adapter, "pkg.x.adapter", "1").unwrap()],
+    )
+    .unwrap();
+    both.declare(
+        "pkg.x.evaluator",
+        "2",
+        vec![DepRef::new(DepKind::Adapter, "pkg.x.adapter", "2").unwrap()],
+    )
+    .unwrap();
     let d1 = graph_deps_digest(&gv, &graph_roots("1"), &both).unwrap();
     let d2 = graph_deps_digest(&gv, &graph_roots("2"), &both).unwrap();
     assert_ne!(

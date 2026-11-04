@@ -80,7 +80,11 @@ impl DepRef {
         let version = version.into();
         check_ref_part(&name, "name")?;
         check_ref_part(&version, "version")?;
-        Ok(Self { kind, name, version })
+        Ok(Self {
+            kind,
+            name,
+            version,
+        })
     }
 
     /// 组合引用串 `name@version`。
@@ -294,23 +298,13 @@ mod tests {
         t.declare(
             "pkg.x.evaluator",
             "1",
-            vec![DepRef::new(
-                DepKind::Adapter,
-                "pkg.x.adapter",
-                "1",
-            )
-            .unwrap()],
+            vec![DepRef::new(DepKind::Adapter, "pkg.x.adapter", "1").unwrap()],
         )
         .unwrap();
         t.declare(
             "pkg.x.adapter",
             "1",
-            vec![DepRef::new(
-                DepKind::Template,
-                "pkg.x.template",
-                "1",
-            )
-            .unwrap()],
+            vec![DepRef::new(DepKind::Template, "pkg.x.template", "1").unwrap()],
         )
         .unwrap();
         t.declare("pkg.x.template", "1", vec![]).unwrap();

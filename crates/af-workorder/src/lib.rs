@@ -20,10 +20,10 @@
 //! 变更单签名是真 ed25519([`sign`]):在本 crate 内签发与验签,不经过 af-credential。
 //! SLA 截止已接 af-calendar,不再是字符串占位。
 
-pub mod gate_admit;
 pub mod change;
 pub mod decision;
 pub mod error;
+pub mod gate_admit;
 pub mod graph_deps;
 pub mod hash;
 pub mod identity;
@@ -32,9 +32,6 @@ pub mod sign;
 pub mod sla;
 pub mod state;
 
-pub use gate_admit::{
-    validate_required_gate_inputs, GateAdmitRejection, ProvidedGateInput, RequiredGateInput,
-};
 pub use af_calendar::{Calendar, CalendarError};
 pub use change::{ChangeOrder, DrainStrategy, RelayStrategy, SignedChangeOrder};
 pub use decision::{
@@ -44,6 +41,9 @@ pub use decision::{
 pub use error::{
     ChangeError, DecisionError, GateError, GraphDepsError, IdentityError, Missing,
     OrderDecodeError, RejectionEnvelope, RejectionKind, ShardError, SignError,
+};
+pub use gate_admit::{
+    validate_required_gate_inputs, GateAdmitRejection, ProvidedGateInput, RequiredGateInput,
 };
 pub use graph_deps::{
     dependency_closure, graph_deps_digest, ClosureMember, DepKind, DepRef, DependencyTable,
