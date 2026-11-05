@@ -1,6 +1,6 @@
 {
   "mode": "compile-all",
-  "registry_root": "./af/packages",
+  "registry_root": "/home/pan-ding/af-dev/af/wt/e9001-registry/af/packages",
   "total": 61,
   "compilable": 44,
   "compilable_pass_four_stage": 44,
@@ -279,7 +279,7 @@
         "bind": "pass",
         "plan": "pass"
       },
-      "plan_id": "plan.fs_grep_memory@1.0+4f7ebc750547"
+      "plan_id": "plan.fs_grep_memory@1.0+36d23ae00648"
     },
     {
       "id": "st-b-C046",
@@ -495,7 +495,7 @@
         "bind": "pass",
         "plan": "pass"
       },
-      "plan_id": "plan.os_level_dual_boundary_sandbox@1.0+5270898870c5"
+      "plan_id": "plan.os_level_dual_boundary_sandbox@1.0+eeec2db2e20d"
     },
     {
       "id": "st-b-C080",

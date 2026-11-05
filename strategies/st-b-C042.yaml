@@ -51,7 +51,7 @@ dsl_snippet: |
         sections:
           - { from: template, template_ref: pkg.mem.system, quota_tokens: 500 }
           - { from: input, fields: [question], policy: project, quota_tokens: 300 }
-          - { from: store, store: memory_files, policy: retrieve, component: pkg.mem.grep, args: { k: 8 }, quota_tokens: 4000 }
+          - { from: store, store: memory_files, policy: retrieve, component: pkg.sweng.locate, args: { k: 8 }, quota_tokens: 4000 }  # 选 b：retrieve 挂已注册 locate（不留 pkg.mem.grep 空转件）
   policies:
     budgets:
       - { id: token_cap, dimension: tokens_total, scope: node:recall_agent, cap: 60000 }

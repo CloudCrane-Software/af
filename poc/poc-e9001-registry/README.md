@@ -23,7 +23,7 @@
 | 门 | 读数 |
 |---|---|
 | fmt | `cargo fmt --check --all` exit 0 |
-| test | workspace 1620 passed / 0 failed / 9 ignored（基线 1617/0/9；+3 本批断言。p3_judge 须 `LC_CTYPE=C.UTF-8` + `env -u BASH_FUNC_which%%`） |
+| test | workspace 1620 passed / 0 failed / 9 ignored（基线 1617/0/9；+3 本批断言。返修重生：`env -u` 六代理变量 + `BASH_FUNC_which%%` + `LC_CTYPE=C.UTF-8`；凭据 grep 零命中） |
 | clippy `-D warnings` | exit 0 |
 | clippy_gate | PASS（0 签名 / 基线 0 签名）；json error=0 warning=0 |
 | gate_inputs | 14 件钉对账一致（本批未改被钉件） |

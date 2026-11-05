@@ -96,8 +96,8 @@ fn paper_report_graph_compiles_with_sources_artifact_port() {
     );
     assert_eq!(
         plan["body"]["compiled_from"]["registry_digest"],
-        reg.digest(),
-        "计划携带当前注册表 digest（G4 63 + E9001 56 = 119 条）"
+        "f5a6de7c9faa7859ab2b8c206a7517b996e770a78099baea9ac7cd1e565f7103",
+        "E9001 终态 digest 字面量钉（119 条；G4 63 + E9001 56）"
     );
     // 裁决5：reader sources 工件口进 artifact_contract（进图记账、不进 store）。
     let reader = plan["body"]["node_exec"]

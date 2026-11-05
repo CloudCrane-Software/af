@@ -96,7 +96,6 @@
   ],
   "not_bind_checked_left_as_is": [
     "pkg.skill.loader@1 (st-b-C062 store retrieve component)",
-    "pkg.ir.bm25_ce@1 (st-b-C064 store retrieve component)",
-    "pkg.mem.grep (st-b-C042 store retrieve component, bind 不走 context.component)"
+    "pkg.ir.bm25_ce@1 (st-b-C064 store retrieve component)"
   ]
 }

@@ -1,16 +1,0 @@
-   Compiling af-execline v0.1.0 (/home/pan-ding/af-dev/af/wt/e9001-registry/crates/af-execline)
-    Building [=======================> ] 383/384: p3_judge(test)                  Finished `test` profile [unoptimized + debuginfo] target(s) in 1.19s
-warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
-note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
-     Running tests/p3_judge.rs (/data/bench/targets/e9001-registry/debug/deps/p3_judge-891ad9fbc92d377f)
-
-running 6 tests
-test real_judge_fixture_trio_resolved ... ignored, 真判分 fixture：需本机 swev-venv 与现产 swev-judge.py（-- --ignored 运行）
-test cmp_p3_judge_templates_against_bench_source ... ok
-test judge_production_locator_is_current_machine_values ... ok
-test judge_fingerprint_gate_fail_loud_ex3002 ... ok
-test judge_import_chain_gate_fail_loud_ex3002 ... ok
-test judge_invoke_argv_contract_no_env_injection_no_wrapper_shell ... ok
-
-test result: ok. 5 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.11s
-
