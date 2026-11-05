@@ -1,0 +1,19 @@
+== 绿路：三面消费同一正本字节 ==
+crate-green    rc=0
+projector-green rc=0
+assertor-green rc=0
+== 红路：篡改正本 ⇒ 三面全红 ==
+crate-red      rc=101（期望非0）
+98df33cde2f7d12e98f09b515ef1436b0e6967f960d883e211142d854c00e72e  otel/semantic-roster.json
+98df33cde2f7d12e98f09b515ef1436b0e6967f960d883e211142d854c00e72e  /tmp/a1-roster-save.json
+projector-red  rc=1（期望非0）
+assertor-red   rc=1（期望非0）
+== 读数摘录 ==
+/tmp/a1-three-side.l0PcfY/crate-green.txt:test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+/tmp/a1-three-side.l0PcfY/crate-red.txt:test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+selftest: 8/8 符合预期（skip 0：正本缺席，不猜绿）
+selftest: 7/8 符合预期（skip 0：正本缺席，不猜绿）
+FATAL: 名册正本与约定块（span-conventions.md §6）不一致：
+  - 名册键集 ['bogus_l1', 'chat', 'execute_tool', 'invoke_agent'] ≠ 约定块语义层键集 ['chat', 'execute_tool', 'invoke_agent', 'invoke_workflow']
+  - order_domain_keys ['af.order_id'] ≠ production.order_keys ['af.order_id', 'af.work_order_id']
+FIXTURE_RESULT: PASS

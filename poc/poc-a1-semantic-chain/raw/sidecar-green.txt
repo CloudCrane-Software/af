@@ -1,0 +1,35 @@
+[roster] 语义层名册正本缺席（af/otel/semantic-roster.json 不在位）——名册判据沿用约定块，行为等价
+（快照 round=1 ts=1793860314601 （age=7.4s，鲜度在帽内=现役）→ 复原 8 个 trace 载荷）
+──── sidecar 快照断言 [/home/pan-ding/workspace/agent黑灯工厂/状态观测/otel-sidecar.json] ────
+  [PASS] A1 必备属性键在位（按约定块 required_keys）（判定 8 条）
+  [PASS] A2 无越界属性键（按约定块 allowed_keys）（判定 8 条）
+  [PASS] A3 禁用键不在位（af.payload / gen_ai.prompt 等）（判定 8 条）
+  [PASS] A4 L1 专属键（af.unit / af.order.stage*）只在 invoke_workflow 上（判定 7 条）
+  [PASS] A5 af.unit / af.order.stage 取值在词表内（判定 1 条）
+  [PASS] A6 互斥键组不同时出现（cache 计数键择一）（判定 8 条）
+  [PASS] I1 trace_id 合法（32 位小写 hex、非全零）（判定 8 条）
+  [PASS] I2 span_id 合法（16 位小写 hex、非全零）（判定 8 条）
+  [PASS] I3 parent_span_id 合法（全零=根，或 16 位小写 hex）（判定 8 条）
+  [PASS] I4 派生 ID 与 otlp-model §1.0 逐位相符（判定 8 条）
+  [PASS] K1 SpanKind 合法（OTLP 枚举 0-5）（判定 8 条）
+  [PASS] K2 SpanKind 符合约定（语义层固定 / L4 按 effect 分派）（判定 8 条）
+  [PASS] N1 span 命名符合约定（名册内）（判定 8 条）
+  [PASS] N2 af.span.layer 与 span 名一致（判定 7 条）
+  [PASS] R0 载荷非空（真空绿防线）（判定 8 条）
+  [PASS] R1 Resource service.name/service.version 在位（判定 8 条）
+  [PASS] R2 Resource af.* 键 ⊆ otlp-model §2 九键正字法（判定 8 条）
+  [PASS] R3 af.arm 本批永远省略（otlp-model §2 注1）（判定 8 条）
+  [PASS] R4 Resource 身份键在位（订单级恒有 + run 级投影必有，otlp-model §2）（判定 7 条）
+  [PASS] S1 每 trace 恰一个根 span（判定 7 条）
+  [PASS] S2 非根 span 的 parent 必在本 trace 内可解析（判定 7 条）
+  [PASS] S3 父链无环（判定 7 条）
+  [PASS] S4 层序正确（L2→L1、L3/L4→L2 且互为兄弟）（判定 7 条）
+  [PASS] S5 L3/L4 的 af.run_id 与 L2 祖先一致（判定 7 条）
+  [PASS] S6 树内 L2 必带 af.terminal.kind（判定 7 条）
+  [PASS] S7 unit×stage 映射要求的语义层在位（判定 7 条）
+  小计：PASS=26 FAIL=0 VACUOUS=0
+──── 名册覆盖（本次断言实际覆盖面）────
+  语义层名册：4/4 项在载荷中
+  工厂族名册：1/5 项在载荷中；缺：factory.order_round, factory.guardian_round, factory.harvest, factory.e2e_probe
+  载荷记录数：8（语义层 7 条 / 工厂族 1 条）
+  ⚠ 覆盖不全：名册有项而本次载荷无记录——该腿未覆盖，不得当「全绿」引用（语义层腿的运行时可断言性见 --production 模式：真库逐名册项回查）

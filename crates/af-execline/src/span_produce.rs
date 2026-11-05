@@ -1,9 +1,16 @@
-//! 语义层 span 生产者（RT-E138）。
+//! 语义层 span 生产者（RT-E138；A1 波次按名册正本取名）。
 //!
 //! 把订单产物投影为带**订单级标识键**的 span 行，写入状态面 JSON。
 //! 权威载体与 [`crate::tracetree`] 同源（落地契约-v0 §4.2）：
 //! L1 `invoke_workflow` ← ledger + MES；L2 `invoke_agent` ← harness.db；
 //! L3 `chat` ← `harness.model`；L4 `execute_tool` ← `harness.tool`。
+//!
+//! 语义层名册正本 = af 仓 `otel/semantic-roster.json`（全链单一源，A1）。
+//! 本模块 `include_str!` 把正本编进二进制，`materialize` 只从正本取
+//! 「层 → span 名」；正本缺席/不可解析 ⇒ 投影零行（fail-closed，绝不
+//! panic 进 `drive`）。契约（L1~L4 各是什么名、订单域键是哪些）由
+//! `tests/span_produce.rs` 的 `roster_contract_pins_*` 测试钉死——
+//! 改正本 ⇒ 测试红（三面夹具见 poc/poc-a1-semantic-chain）。
 //!
 //! 非关键车道：失败不阻断订单（与 `af-trace` OTel lane 同口径）。生产者
 //! **只写数据、不判绿**。本地状态面由 `AF_OTEL_PRODUCTION_STATE` 显式指定；
@@ -13,9 +20,11 @@
 //! 写面：读-合并-tmp-rename 原子替换（同 `af-trace::anchor` 的
 //! `atomic_write`）；同 `order_id` 重发覆盖该单旧行，其他订单保留。
 
+use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -34,6 +43,55 @@ pub const ENV_OTLP_ENDPOINT: &str = "AF_OTEL_ENDPOINT";
 /// 失败忽略（非关键车道），不改 `drive` 返回值。
 pub const ENV_OTLP_EMIT_CMD: &str = "AF_OTEL_EMIT_CMD";
 const PRODUCER_ID: &str = "af-execline/span_produce";
+
+// --------------------------------------------------------------------------- //
+// 语义层名册正本（A1 全链单一源）
+// --------------------------------------------------------------------------- //
+
+/// 名册正本机读件（af 仓 `otel/semantic-roster.json`）。生产代码的唯一
+/// 名册源；解析失败按缺席处理（`roster()` 返回 None → 投影零行）。
+const SEMANTIC_ROSTER_JSON: &str = include_str!("../../../otel/semantic-roster.json");
+
+static ROSTER: OnceLock<Option<SemanticRoster>> = OnceLock::new();
+
+/// 名册正本的 typed 视图。未识别字段（kind/legs/unpaved_legs…）忽略。
+#[derive(Debug, Clone, Deserialize)]
+pub struct SemanticRoster {
+    pub schema: String,
+    /// 订单域判定锚（状态面行级 `order_id`+`stable_id` 对应的 OTLP 键名）。
+    #[serde(rename = "order_domain_keys")]
+    pub order_domain_keys: Vec<String>,
+    /// span 名 → 层契约。键即 span 名（名册本身）。
+    #[serde(rename = "semantic_layers")]
+    pub layers: BTreeMap<String, RosterLayer>,
+}
+
+/// 单个语义层的名册契约（本生产者消费的子集）。
+#[derive(Debug, Clone, Deserialize)]
+pub struct RosterLayer {
+    pub layer: String,
+    pub parent: Option<String>,
+    /// 该层 span attrs 必带的订单级键（L1 三键；L2~L4 经 Resource + run 链）。
+    #[serde(default)]
+    pub span_order_keys: Vec<String>,
+}
+
+/// 名册正本（解析失败 ⇒ None，调用方按「正本缺席」fail-closed）。
+pub fn roster() -> Option<&'static SemanticRoster> {
+    ROSTER
+        .get_or_init(|| serde_json::from_str(SEMANTIC_ROSTER_JSON).ok())
+        .as_ref()
+}
+
+impl SemanticRoster {
+    /// 层号（"L1".."L4"）→ 正本 span 名。正本无此层 ⇒ None。
+    pub fn layer_name(&self, layer: &str) -> Option<&str> {
+        self.layers
+            .iter()
+            .find(|(_, v)| v.layer == layer)
+            .map(|(k, _)| k.as_str())
+    }
+}
 
 /// 状态面整文件。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -112,14 +170,34 @@ pub fn project_order(dir: &Path) -> Vec<SpanRow> {
 }
 
 fn materialize(order_id: &str, report: &TraceTreeReport) -> Vec<SpanRow> {
+    // 名册正本缺席/坏 ⇒ 零行（fail-closed；契约由测试钉死，见模块头注）。
+    let Some(roster) = roster() else {
+        return Vec::new();
+    };
+    let Some(name_l1) = roster.layer_name("L1") else {
+        return Vec::new();
+    };
+    let (Some(name_l2), Some(name_l3), Some(name_l4)) = (
+        roster.layer_name("L2"),
+        roster.layer_name("L3"),
+        roster.layer_name("L4"),
+    ) else {
+        return Vec::new();
+    };
+    let parent_of_l2 = roster
+        .layers
+        .get(name_l2)
+        .and_then(|l| l.parent.clone())
+        .unwrap_or_else(|| name_l1.to_string());
+
     let mut spans = Vec::new();
     let stable = report.stable_id.as_str();
     spans.push(SpanRow {
         order_id: order_id.to_string(),
         stable_id: stable.to_string(),
-        span_name: "invoke_workflow".into(),
+        span_name: name_l1.to_string(),
         parent_span_name: None,
-        span_id: format!("{order_id}:invoke_workflow"),
+        span_id: format!("{order_id}:{name_l1}"),
         source: "ledger.jsonl+mes-events.jsonl".into(),
         attrs: json!({
             "ledger_entries": report.ledger_entries,
@@ -129,14 +207,14 @@ fn materialize(order_id: &str, report: &TraceTreeReport) -> Vec<SpanRow> {
     });
     for agent in collect_agents(report) {
         let agent_id = format!(
-            "{order_id}:invoke_agent:{}:a{}",
+            "{order_id}:{name_l2}:{}:a{}",
             agent.run_dir_name, agent.attempt
         );
         spans.push(SpanRow {
             order_id: order_id.to_string(),
             stable_id: stable.to_string(),
-            span_name: "invoke_agent".into(),
-            parent_span_name: Some("invoke_workflow".into()),
+            span_name: name_l2.to_string(),
+            parent_span_name: Some(parent_of_l2.clone()),
             span_id: agent_id.clone(),
             source: "harness.db+critical.jsonl".into(),
             attrs: json!({
@@ -152,9 +230,9 @@ fn materialize(order_id: &str, report: &TraceTreeReport) -> Vec<SpanRow> {
             spans.push(SpanRow {
                 order_id: order_id.to_string(),
                 stable_id: stable.to_string(),
-                span_name: "chat".into(),
-                parent_span_name: Some("invoke_agent".into()),
-                span_id: format!("{agent_id}:chat"),
+                span_name: name_l3.to_string(),
+                parent_span_name: Some(name_l2.to_string()),
+                span_id: format!("{agent_id}:{name_l3}"),
                 source: "normal.jsonl harness.model".into(),
                 attrs: json!({
                     "run_id": agent.run_id,
@@ -169,9 +247,9 @@ fn materialize(order_id: &str, report: &TraceTreeReport) -> Vec<SpanRow> {
             spans.push(SpanRow {
                 order_id: order_id.to_string(),
                 stable_id: stable.to_string(),
-                span_name: "execute_tool".into(),
-                parent_span_name: Some("invoke_agent".into()),
-                span_id: format!("{agent_id}:execute_tool"),
+                span_name: name_l4.to_string(),
+                parent_span_name: Some(name_l2.to_string()),
+                span_id: format!("{agent_id}:{name_l4}"),
                 source: "normal.jsonl harness.tool+effects.db".into(),
                 attrs: json!({
                     "run_id": agent.run_id,
@@ -198,7 +276,7 @@ pub fn publish_order(dir: &Path, state_path: &Path) -> Result<usize, String> {
     let incoming = project_order(dir);
     if incoming.is_empty() {
         return Err(format!(
-            "订单 {} 投影出零条 span（ledger 无订单级键或零账本行）",
+            "订单 {} 投影出零条 span（ledger 无订单级键/零账本行/名册正本缺席）",
             dir.display()
         ));
     }

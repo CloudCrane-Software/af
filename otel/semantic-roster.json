@@ -1,0 +1,44 @@
+{
+  "schema": "af.otel.semantic-roster.v1",
+  "version": "2026-11-05",
+  "authority_for": "OTel 语义层全链名册：哪些 SpanName 算语义层、每个的订单级键契约、归属腿。生产者/投影器/断言器三面消费本正本（af 仓），不断言语义散抄。可执行键集/树形判据仍在 tools/otel/span-conventions.md §6（断言器判据面），断言器运行时对本正本做对账（一致才放行）。",
+  "order_domain_keys": ["af.order_id", "af.work_order_id"],
+  "resource_order_keys": ["af.order_id", "af.work_order_id", "af.line"],
+  "semantic_layers": {
+    "invoke_workflow": {
+      "layer": "L1",
+      "kind": "INTERNAL",
+      "parent": null,
+      "span_order_keys": ["af.order_id", "af.work_order_id", "af.line"],
+      "legs": ["af-execline-drive", "af-otel-projector"]
+    },
+    "invoke_agent": {
+      "layer": "L2",
+      "kind": "INTERNAL",
+      "parent": "invoke_workflow",
+      "span_order_keys": [],
+      "legs": ["af-execline-drive", "af-otel-projector"]
+    },
+    "chat": {
+      "layer": "L3",
+      "kind": "CLIENT",
+      "parent": "invoke_agent",
+      "span_order_keys": [],
+      "legs": ["af-execline-drive", "af-otel-projector"]
+    },
+    "execute_tool": {
+      "layer": "L4",
+      "kind": "BY_EFFECT",
+      "parent": "invoke_agent",
+      "span_order_keys": [],
+      "legs": ["af-execline-drive", "af-otel-projector"]
+    }
+  },
+  "unpaved_legs": [
+    {
+      "leg": "af-trace-online-lane",
+      "where": "crates/af-trace/src/otel.rs",
+      "assessment": "未铺腿。在线 lane 以 event.kind 命名 span、无 Resource、无订单级键、无父子（span-conventions.md 附录 A D-1~D-9 已登记）。本批只评估不铺：语义化需 kind→层名映射 + Resource/身份注入 + ID 派生，属 af 核心改动面，按 ADR-015-A~I 另行立项；在线 lane 的 L3/L4 点跨度与投影器同 §1.0 派生式，落地时以本正本为唯一名册源。"
+    }
+  ]
+}
