@@ -1,0 +1,9 @@
+$ /usr/bin/python3 -B ci/strategies_check.py --skip-compile   # cwd=/data/bench/r5-nogit-copy env={}
+exit=0
+
+[INFO] R0 入库对账跳过：非 git 工作树（导出 tarball/拷贝树）——跳过 R0（不改变 R1-R4 判定）
+[INFO] R5 跨树集合一致：65 件（基线 MANIFEST /data/bench/r5-nogit-copy/MANIFEST.json base_sha=2de44533bcb7（git 不可用：非 git 工作树）；only-in-worktree=0 only-in-head=0 content-diff=0 改名漂移=0）
+[INFO] 命名空间分解：A 线（st-C*）13 条，B 线（st-b-*）48 条，全部登记=True
+[INFO] index 计数对账 OK：total=61 tiers={'A': 11, 'B': 48, 'C': 2} dsl_states={'compilable': 44, 'not_applicable': 17}
+[INFO] R4 编译断言已按 --skip-compile 跳过（非常跑形态）
+== strategies_check: 全绿（schema/index 面）——磁盘条目 61（compilable=44），index 计数对账一致，R5 跨树集合一致；R4 af-dsl 编译断言本形态**未执行**（--skip-compile 跳过，非 CI 常跑形态）

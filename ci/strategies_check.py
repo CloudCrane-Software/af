@@ -30,8 +30,17 @@ numbers.json gates.ci_steps/ci.steps_total=14、gates.ci_hard=13 与 xcheck 门�
      strategies/ 全库条目逐一 load_str+validate，compilable 零违例；沙箱无
      strategies/ 时如实 SKIP——中立性门隔离臂失败集契约不受影响）。退出码
      非零即本门红。
+  R5 跨树集合对账（RT-E82）：工作树 strategies/ 磁盘集合与 HEAD 提交树集合
+     逐项比对，only-in-worktree（新增/未入库）/ only-in-head（缺失/旧树）/
+     content-diff（同名内容改写）/ 改名漂移（only 两侧同摘要配对）四类差异
+     逐条点名，非空即硬红。动因：R0 只判「在场且被 git 跟踪」（ls-files 跟踪
+     面），_head_files 取到的 HEAD 树集合仅用于 INFO 提醒——「跟踪面有」≠
+     「与提交树一致」：已 add 未 commit 的改写、工作树删件、未入库新增件都能
+     让门对着与 HEAD 不同的集合照绿。基线取 git HEAD 提交树（ls-tree 路径集
+     + 逐文件内容 sha256）；非 git 切片回退 MANIFEST.json 的 files[]；两者
+     都不可用即 fail-closed 红（无法证明同一份集合≠一致，不静默放行）。
 
-退出码：0=全过；1=任一硬红（schema/index/计数/编译断言）。
+退出码：0=全过；1=任一硬红（schema/index/计数/编译断言/跨树集合）。
 路径纪律（红队 P2-2 root 钉死）：仓内侧默认值一律由 __file__ 推导到本脚本
 所在仓库根，不对旧分支局部副本跑。
 pyc 纪律：本脚本只 import 标准库与 site-packages（yaml），不在 ci/ 下产生
@@ -39,6 +48,9 @@ __pycache__；run.sh 挂点仍以 python3 -B 调用（pyc-shadow 族防线双保
 """
 
 import argparse
+import hashlib
+import json
+import os
 import re
 import shutil
 import subprocess
@@ -177,6 +189,198 @@ def _head_files() -> set[str]:
     if proc.returncode != 0:
         return set()
     return {p for p in proc.stdout.splitlines() if p}
+
+
+# ---------------------------------------------------------------- R5 跨树集合对账
+# RT-E82：把 HEAD 提交树集合从「INFO 提醒面」升格为「判定基线」。R0 的 ls-files
+# 跟踪面只回答「文件会不会被 checkout 灭失」，不回答「工作树的集合与提交树是否
+# 同一份」——已暂存未提交的改写/删件/新增都能在 R0 眼下全绿而 HEAD 树早已不同。
+# 本腿对 strategies/ 全文件（非仅 st-*.yaml 条目）逐项对账，四类差异逐条指名。
+R5_SCOPE = "strategies"
+CROSSTREE_MANIFEST_ENV = "AF_CROSSTREE_MANIFEST"
+_DIGEST_CHUNK = 1 << 20
+
+
+def _digest_file(path: Path) -> str:
+    """文件内容 sha256（分块读，大文件不整读进内存）。"""
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(_DIGEST_CHUNK), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _worktree_digests() -> dict[str, str]:
+    """工作树 strategies/ 全部文件的 {仓内相对路径: 内容 sha256}。
+
+    集合口径与 R0 的盘面集合一致（strategies/ 下一切文件，含 index.yaml 与
+    非条目辅助文件）；排序遍历保证同一棵树两次读数逐字节一致。
+    """
+    out: dict[str, str] = {}
+    if not STRATS.is_dir():
+        return out
+    for p in sorted(STRATS.rglob("*")):
+        if p.is_file():
+            out[p.relative_to(REPO).as_posix()] = _digest_file(p)
+    return out
+
+
+def _git_head_digests() -> tuple[dict[str, str] | None, str]:
+    """HEAD 提交树 strategies/ 的 {路径: 内容 sha256}；不可用返 (None, 诊断)。
+
+    基线取「HEAD 提交树」而非索引/工作树：CI 以提交态 checkout 复跑，判定必须
+    对着将被检出复现的那份集合。ls-tree 取路径集，逐文件 git show 取内容后算
+    sha256（与工作树侧同一种摘要，跨侧可比）。
+    """
+    if shutil.which("git") is None:
+        return None, "git 不在 PATH"
+    try:
+        probe = subprocess.run(
+            ["git", "-C", str(REPO), "rev-parse", "--is-inside-work-tree"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, f"git rev-parse 调用失败：{e}"
+    if probe.returncode != 0 or probe.stdout.strip() != "true":
+        return None, "非 git 工作树"
+    try:
+        rev = subprocess.run(
+            ["git", "-C", str(REPO), "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, f"git rev-parse HEAD 调用失败：{e}"
+    if rev.returncode != 0:
+        return None, f"git HEAD 不可解析（exit={rev.returncode}）"
+    head_rev = rev.stdout.strip()
+    try:
+        ls = subprocess.run(
+            ["git", "-C", str(REPO), "ls-tree", "-r", "-z", "--name-only",
+             "HEAD", "--", R5_SCOPE],
+            capture_output=True, text=True, timeout=120,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return None, f"git ls-tree 调用失败：{e}"
+    if ls.returncode != 0:
+        return None, f"git ls-tree HEAD 失败（exit={ls.returncode}）"
+    digests: dict[str, str] = {}
+    for rel in sorted(p for p in ls.stdout.split("\0") if p):
+        try:
+            blob = subprocess.run(
+                ["git", "-C", str(REPO), "show", f"HEAD:{rel}"],
+                capture_output=True, timeout=60,
+            )
+        except (OSError, subprocess.TimeoutExpired) as e:
+            return None, f"git show HEAD:{rel} 调用失败：{e}"
+        if blob.returncode != 0:
+            return None, f"git show HEAD:{rel} 失败（exit={blob.returncode}）"
+        digests[rel] = hashlib.sha256(blob.stdout).hexdigest()
+    return digests, f"git HEAD {head_rev[:12]}"
+
+
+def _manifest_candidates() -> list[Path]:
+    """MANIFEST 基线候选路径：环境变量优先，其次仓根、父目录（导出切片形态）。"""
+    candidates: list[Path] = []
+    env = os.environ.get(CROSSTREE_MANIFEST_ENV)
+    if env:
+        candidates.append(Path(env))
+    candidates.append(REPO / "MANIFEST.json")
+    candidates.append(REPO.parent / "MANIFEST.json")
+    return candidates
+
+
+def _manifest_digests() -> tuple[dict[str, str] | None, str]:
+    """MANIFEST.json 基线（非 git 切片回退）：files[] 内 strategies/ 逐文件 sha256。"""
+    tried: list[str] = []
+    for path in _manifest_candidates():
+        tried.append(str(path))
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            return None, f"MANIFEST 读取失败 {path}：{e}"
+        files = data.get("files")
+        if not isinstance(files, list):
+            return None, f"MANIFEST 缺 files[]：{path}"
+        mapping: dict[str, str] = {}
+        for item in files:
+            if not isinstance(item, dict):
+                continue
+            rel = item.get("path")
+            digest = item.get("sha256")
+            if (isinstance(rel, str) and isinstance(digest, str)
+                    and rel.startswith(f"{R5_SCOPE}/")):
+                mapping[rel] = digest.strip().lower()
+        if not mapping:
+            return None, f"MANIFEST 无 {R5_SCOPE}/ 条目：{path}"
+        base = str(data.get("base_sha", "?"))[:12]
+        return mapping, f"MANIFEST {path} base_sha={base}"
+    return None, f"未找到 MANIFEST.json（尝试：{'、'.join(tried)}）"
+
+
+def _crosstree_baseline() -> tuple[dict[str, str] | None, str]:
+    """HEAD 基线解析：git 提交树优先；非 git 切片回退 MANIFEST；都不可用=None。"""
+    git_map, git_diag = _git_head_digests()
+    if git_map is not None:
+        return git_map, git_diag
+    man_map, man_diag = _manifest_digests()
+    if man_map is not None:
+        return man_map, f"{man_diag}（git 不可用：{git_diag}）"
+    return None, f"无 HEAD 基线（git：{git_diag}；manifest：{man_diag}）"
+
+
+def check_crosstree() -> None:
+    """R5 工作树 strategies/ 与 HEAD 提交树集合逐项对账（RT-E82）。
+
+    差异逐条指名、非空即硬红（既有 R0-R4 判定零改动，本腿只做增量）：
+      · only-in-worktree：工作树有、HEAD 无（新增/未入库文件，未经 HEAD 核对）
+      · only-in-head    ：HEAD 有、工作树无（工作树缺件或旧树，判定对着残缺集合）
+      · content-diff    ：同名内容 sha256 不同（工作树改写未随 HEAD）
+      · 改名漂移       ：only 两侧同摘要配对（集合不等照红，配对只作解读标注）
+    基线来源与遍历序写入输出；无 HEAD 基线时 fail-closed 红，不静默跳过。
+    """
+    worktree = _worktree_digests()
+    head, label = _crosstree_baseline()
+    if head is None:
+        err(f"R5 跨树集合无法判定（fail-closed，不静默放行）：{label}")
+        return
+
+    only_wt = sorted(set(worktree) - set(head))
+    only_head = sorted(set(head) - set(worktree))
+    content_diff = sorted(
+        rel for rel in set(worktree) & set(head) if worktree[rel] != head[rel]
+    )
+
+    # 改名漂移：only 两侧按内容摘要配对（路径集合已漂移，照红并点名配对）
+    wt_by_digest: dict[str, list[str]] = {}
+    for rel in only_wt:
+        wt_by_digest.setdefault(worktree[rel], []).append(rel)
+    head_by_digest: dict[str, list[str]] = {}
+    for rel in only_head:
+        head_by_digest.setdefault(head[rel], []).append(rel)
+    rename_pairs: list[tuple[list[str], list[str], str]] = []
+    for digest in sorted(wt_by_digest):
+        peers = head_by_digest.get(digest)
+        if peers:
+            rename_pairs.append((wt_by_digest[digest], peers, digest))
+
+    for rel in only_wt:
+        err(f"R5 only-in-worktree：{rel}——工作树有、HEAD 提交树无"
+            f"（新增/未入库文件，未经 HEAD 树基线核对）")
+    for rel in only_head:
+        err(f"R5 only-in-head：{rel}——HEAD 提交树有、工作树无"
+            f"（工作树缺件或旧树，当前判定对着残缺集合）")
+    for rel in content_diff:
+        err(f"R5 content-diff：{rel}——同名内容不同"
+            f"（HEAD={head[rel][:12]} 工作树={worktree[rel][:12]}）")
+    for wts, hds, digest in rename_pairs:
+        err(f"R5 改名漂移：{'、'.join(hds)}（HEAD）→ {'、'.join(wts)}（工作树）"
+            f"——内容摘要相同（{digest[:12]}），路径集合已漂移")
+
+    if not (only_wt or only_head or content_diff):
+        info(f"R5 跨树集合一致：{len(worktree)} 件（基线 {label}；"
+             f"only-in-worktree=0 only-in-head=0 content-diff=0 改名漂移=0）")
 
 
 # ---------------------------------------------------------------- R1 schema
@@ -441,6 +645,7 @@ def main() -> int:
         err("strategies/ 无条目 YAML——库为空（空库=覆盖面缩水）")
 
     check_durability()
+    check_crosstree()
 
     disk_states: dict[str, str] = {}
     disk_tiers: dict[str, str] = {}
@@ -466,7 +671,7 @@ def main() -> int:
     if errors:
         for line in errors:
             print(f"[FAIL] {line}")
-        print(f"== strategies_check: 红 {len(errors)} 项（schema/index 计数/编译断言）")
+        print(f"== strategies_check: 红 {len(errors)} 项（schema/index 计数/编译断言/跨树集合）")
         return 1
     n_compile = sum(1 for s in disk_states.values() if s == "compilable")
     # 诚实化（红队终局轮 RT-E81 修复批，2026-11-02）：--skip-compile 形态下**不得**再
@@ -474,11 +679,11 @@ def main() -> int:
     # 假陈述（该假陈述与 run.sh 接线弱化同型：门输出自称覆盖了实际没覆盖面）。
     if args.skip_compile:
         print(f"== strategies_check: 全绿（schema/index 面）——磁盘条目 {len(disk_states)}"
-              f"（compilable={n_compile}），index 计数对账一致；"
+              f"（compilable={n_compile}），index 计数对账一致，R5 跨树集合一致；"
               f"R4 af-dsl 编译断言本形态**未执行**（--skip-compile 跳过，非 CI 常跑形态）")
     else:
         print(f"== strategies_check: 全绿——磁盘条目 {len(disk_states)}（compilable={n_compile}），"
-              f"index 计数对账一致，编译断言经 af-dsl 装载测试")
+              f"index 计数对账一致，R5 跨树集合一致，编译断言经 af-dsl 装载测试")
     return 0
 
 

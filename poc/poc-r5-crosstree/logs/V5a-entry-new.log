@@ -1,0 +1,10 @@
+$ /usr/bin/python3 -B ci/strategies_check.py --skip-compile   # cwd=/data/bench/wt-r5-crosstree
+exit=1
+
+[INFO] R0 入库对账 OK：被测对象 67 件全部在 git 跟踪面内（strategies/ 全库 + crates/af-dsl/tests/strategy_library_test.rs）
+[INFO] R0 提醒：1 件被测对象已暂存未提交（['strategies/st-b-C999.yaml']…）——随批提交后方入 CI 提交态 checkout
+[INFO] 命名空间分解：A 线（st-C*）13 条，B 线（st-b-*）49 条，全部登记=False
+[INFO] R4 编译断言已按 --skip-compile 跳过（非常跑形态）
+[FAIL] R5 only-in-worktree：strategies/st-b-C999.yaml——工作树有、HEAD 提交树无（新增/未入库文件，未经 HEAD 树基线核对）
+[FAIL] R2 磁盘条目 st-b-C999 未登记进 index——全条目契约（甲 A 档 13 + 乙 B 档 49）
+== strategies_check: 红 2 项（schema/index 计数/编译断言/跨树集合）

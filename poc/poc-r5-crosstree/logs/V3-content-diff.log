@@ -1,0 +1,8 @@
+$ /usr/bin/python3 -B ci/strategies_check.py --skip-compile   # cwd=/data/bench/wt-r5-crosstree
+exit=1
+
+[INFO] R0 入库对账 OK：被测对象 66 件全部在 git 跟踪面内（strategies/ 全库 + crates/af-dsl/tests/strategy_library_test.rs）
+[INFO] 命名空间分解：A 线（st-C*）13 条，B 线（st-b-*）48 条，全部登记=True
+[INFO] R4 编译断言已按 --skip-compile 跳过（非常跑形态）
+[FAIL] R5 content-diff：strategies/README.md——同名内容不同（HEAD=bfec6b9f86fc 工作树=48603fc2b202）
+== strategies_check: 红 1 项（schema/index 计数/编译断言/跨树集合）

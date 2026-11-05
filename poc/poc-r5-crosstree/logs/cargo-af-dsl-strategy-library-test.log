@@ -1,0 +1,8 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests/strategy_library_test.rs (/data/bench/targets/r5-crosstree/debug/deps/strategy_library_test-6a44fa07159cb9b3)
+
+running 1 test
+test strategy_library_entries_compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
