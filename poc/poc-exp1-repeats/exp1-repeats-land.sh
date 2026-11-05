@@ -14,7 +14,7 @@
 set -u
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
-REPO_ROOT="${REPO_ROOT:-$(cd "$SELF_DIR/../../.." && pwd)}"
+REPO_ROOT="${REPO_ROOT:-$(cd "$SELF_DIR/../.." && pwd)}"
 BRANCH="${BRANCH:-feature/exp1-repeats-backfill}"
 REMOTE_REFSPEC="${REMOTE_REFSPEC:-origin}"
 ANOLIS="${ANOLIS:-anolis}"

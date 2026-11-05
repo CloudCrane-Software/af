@@ -604,33 +604,57 @@ def pooled_exploratory(main_runs, repeat_runs):
         for r in rows:
             by_paper.setdefault(r["paper"], []).append(r["treat"] - r["ctrl"])
         papers = sorted(by_paper)
-        rng = random.Random(BOOT_SEED)
-        vals = []
-        for _ in range(BOOT_N):
-            samp = []
-            for _i in range(len(papers)):
-                samp.extend(by_paper[papers[rng.randrange(len(papers))]])
-            vals.append(sum(samp) / len(samp) * 100.0)
-        vals.sort()
+        ci = [None, None]
+        if papers:
+            rng = random.Random(BOOT_SEED)
+            vals = []
+            for _ in range(BOOT_N):
+                samp = []
+                for _i in range(len(papers)):
+                    samp.extend(by_paper[papers[rng.randrange(len(papers))]])
+                vals.append(sum(samp) / len(samp) * 100.0)
+            vals.sort()
+            ci = [vals[int(0.025 * BOOT_N)], vals[int(0.975 * BOOT_N)]]
         out.append({
             "comparison": "%s−%s（pooled 探索性）" % (treat, ctrl),
             "n_observations": n_obs, "n_tasks": len(papers),
             "b_treat_better": b, "c_ctrl_better": c, "s_discordant": s,
             "diff_pp": diff_pp,
             "mcnemar_p_one_sided_treat_naive": p_ge(b, s),
-            "cluster_bootstrap95_pp": [vals[int(0.025 * BOOT_N)], vals[int(0.975 * BOOT_N)]],
+            "cluster_bootstrap95_pp": ci,
             "caveat": "探索性读数；并入主判定须开 EXP-1b（新 exp_id），本批不作判定",
         })
     return out
 
 
 # ---------------------------------------------------------------- 主流程
+def _link_escapes(root, p):
+    """链接 p 的目标是否逃出镜像根 root（realpath 口径；不可解析＝按逃逸处理）。
+
+    与主轮聚合器 tools/b-exp1-aggregate.py 同口径（RT-20261031 修复）：镜像与工件同在
+    可写盘面上，订单目录若是指向树外的符号链接，工件可被随时改写 ⇒ 整批拒绝聚合；
+    树内链接（目标仍在镜像树内）不算逃逸，不误拒。
+    """
+    try:
+        r = os.path.realpath(root)
+        tgt = os.path.realpath(p)
+    except OSError:
+        return True
+    return not (tgt == r or tgt.startswith(r + os.sep))
+
+
 def collect_orders(mirror, parser, materials_shas, problems, label):
+    mirror_abs = os.path.abspath(mirror)
     order_dirs = sorted(
-        d for d in glob.glob(os.path.join(os.path.abspath(mirror), "*"))
+        d for d in glob.glob(os.path.join(mirror_abs, "*"))
         if os.path.isdir(d) and parser(d) != (None, None))
     runs = []
     for d in order_dirs:
+        if os.path.islink(d) and _link_escapes(mirror_abs, d):
+            problems.append("%s: %s 订单目录是逃逸符号链接（%s → %s）→ 工件不在镜像树内"
+                            "（不受镜像只读保护，可随时改写）→ 拒绝聚合"
+                            % (label, os.path.basename(d), d, os.path.realpath(d)))
+            continue
         try:
             runs.append(extract_run(d, materials_shas, parser))
         except Exception as e:
@@ -809,17 +833,18 @@ def main(argv):
                      a["token_ratio_repeat_over_main_min"] or 0,
                      a["token_ratio_repeat_over_main_max"] or 0))
         print("  单轮不收敛任务（两轮 all_hit 或 reward 不一致）：%d 条" % flak["n_non_converging"])
-        for d in flak["non_converging"]:
+        for d in flak["non_converging_tasks"]:
             print("    %s %s：main(all_hit=%s,reward=%s) vs repeat(all_hit=%s,reward=%s) %s/%s"
                   % (d["arm"], d["paper"], d["main_all_hit"], d["main_reward"],
                      d["repeat_all_hit"], d["repeat_reward"], d["main_order"], d["repeat_order"]))
         print("\n== 探索性 pooled 读数（两轮合并；并入主判定须开 EXP-1b，本批不作判定）==")
         for p in pooled:
+            ci = p["cluster_bootstrap95_pp"]
+            ci_txt = ("[%.2f, %.2f]" % (ci[0], ci[1])) if ci[0] is not None else "NA"
             print("  %-24s n_obs=%d（任务 %d）diff=%+.2fpp 不一致对 s=%d "
-                  "朴素 McNemar p=%.4f 任务聚类 boot95=[%.2f, %.2f]pp"
+                  "朴素 McNemar p=%.4f 任务聚类 boot95=%spp"
                   % (p["comparison"], p["n_observations"], p["n_tasks"], p["diff_pp"],
-                     p["s_discordant"], p["mcnemar_p_one_sided_treat_naive"],
-                     p["cluster_bootstrap95_pp"][0], p["cluster_bootstrap95_pp"][1]))
+                     p["s_discordant"], p["mcnemar_p_one_sided_treat_naive"], ci_txt))
 
     # ---------------------------------------------------------------- ⑤ 成本
     tok_total = sum(r["tokens_total"] for r in repeat_runs if r["tokens_total"] is not None)

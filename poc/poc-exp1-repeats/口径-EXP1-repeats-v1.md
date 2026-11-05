@@ -8,6 +8,18 @@
 
 ---
 
+## 〇、最终裁法（先读这段）
+
+| 裁决项 | 裁法 | 依据（亲验） |
+|---|---|---|
+| 补跑**成本** | **≤4h 门通过**：72 单并发 4 ≈ **2.2 h**；≈$2.16（3¢/run 保守估）/ ≈$2.3（tokens 折算），cap $30 | 主轮实测基座 436.3 s/单（144 单 MES 墙钟合计 62,823 s）、主轮 144 单并发 4 实测 ≈4.4 h |
+| **harness 在位** | **在位**：af-order/af-engine 二进制、144 任务包（plan.json 144/144 命中冻结锚）、keycheck `KEY_OK len=49`（零明文）、提交脚本 7 项预检全过、聚合器**口径对拍 67/67 PASS** | 本会话亲跑（命令见 §四/§九） |
+| 补跑**可执行性** | **现在不可执行**：glm-cp 通道配额触顶（provider code 1310「已达到每周/每月使用上限」），限额 **2026-11-06 14:16:36** 重置 | 本会话真跑 16 单 + 单单探针实测（证据 `evidence/attempt1-quota429/`） |
+| **落数时点** | 补跑批自身 2.2 h ⇒ 数据落盘 **≈2026-11-06 16:30 之后**，**不在本会话可达窗口内** | 时点推算（quota 重置 + 实测基线） |
+| **最终裁法** | **补跑（已武装自动执行）+ 口径登记（本会话即刻落盘的缺口成文件）** —— 起批段（anolis 常驻，等窗口自动起批 + 早停闸）与落数段（本机常驻，回传→对拍门→聚合→落 data→commit/push）均已挂起，**不依赖任何代理在线**；若窗口始终不可用，起批段写 GAP-MARKER、落数段写缺口登记件，本卡按「缺口如实登记」收口 | §七 偏差①② + §八 |
+| **判定纪律** | 本件**不签发、不改写** EXP-1 主判定（主判定仍为 `inconclusive`）；两轮 pooled 只作**探索性**读数落盘，并入主判定须开新 exp_id「EXP-1b」 | 预注册 `preregistration.change_rule` |
+| **正本零改动** | `experiments-v1.json` / `exp1-allocation.json` / `exp1-materials.json` / `exp1-lock.json` / 主轮 `exp1-aggregate-summary.json` / `exp1-结果判读-v1.md` / `tools/b-*.py` / af 仓 Rust 代码 **全部未改** | 本会话只新增 `af/poc/poc-exp1-repeats/` |
+
 ## 一、件的定位与边界（一句话）
 
 把 EXP-1 预注册里已登记但从未执行的 **repeat 轮 72 run**（A0/A1/A2 各 24 任务第 2 次）
@@ -91,7 +103,21 @@ python3 -I af/poc/poc-exp1-repeats/exp1-repeats-aggregate.py --selfcheck-only \
 
 对拍项：6 臂 × {n_with_report, n_all_hit, all_hit_rate, citations_total_sum, tokens_total_sum}
 + 5 对照 × {n_paired, diff_pp, b, c, McNemar p, TOST 下界, TOST 上界}
-+ {n_orders, n_with_report}。**全部 PASS 才允许用本件聚合 repeat 轮读数。**
++ {n_orders, n_with_report} ＝ **67 项**。**全部 PASS 才允许用本件聚合 repeat 轮读数。**
+
+本会话亲跑结果：**67/67 PASS**（exit 0；`grep -c PASS`=68 含结论行，`grep -c FAIL`=0）。
+
+### 补充自检：repeat 轮代码路径（合成集，不入仓）
+
+对拍只证明「主轮读数能被复现」，不证明「E1R- 目录解析 / flakiness / pooled」这条新代码路径可用。
+故再做一次**合成自检**：把主轮镜像的 A0/A1/A2 三个臂的 72 个订单目录改名成 `E1R-<arm>-<paper>`
+拷到临时根，跑本件聚合器（落盘到临时目录，**不入仓**）：
+
+- 结果：exit 0；覆盖对账 72/72 无缺失无越界；产出 per-run 72 行 + summary；
+- 读数与主轮逐字一致（合成集本就是主轮副本）：A1−A2 diff +0.00pp / McNemar p=0.75 /
+  TOST CP90 [−8.26, +8.26]pp；flakiness 71 对全 0 翻转（token 比 1.000）；pooled A1−A0
+  n_obs=46 diff −4.35pp、任务聚类 boot95 [−13.04, 0.00]pp。
+- 结论：**新代码路径可跑通且与主轮口径同源**；合成件仅作自检，真实读数只认正式批工件。
 
 ## 五、成本口径（补跑 72 单的账）
 
@@ -154,6 +180,16 @@ python3 -I af/poc/poc-exp1-repeats/exp1-repeats-aggregate.py --selfcheck-only \
    - 轮询 anolis 的 `DONE-MARKER`（最长 12 h）→ 回传只读镜像（tar）→
      跑聚合器（口径对拍先行，不 PASS 则拒绝落数）→ 写 `data/` 三件 →
      commit + push（显式 refspec，非 force）到 `feature/exp1-repeats-backfill`。
+
+**已挂起状态（本会话亲验）**：
+
+| 段 | 挂起时刻 | 位置 | 进程 | 日志 |
+|---|---|---|---|---|
+| 起批段 | 2026-11-06 01:03:18 | anolis `setsid nohup bash exp1-repeats-armed-run.sh`（自会话脱离，PID 776197，sid 独立） | 等 T0=2026-11-06 14:16:40 | `/data/bench/exp1-armed/armed-run.log` |
+| 落数段 | 2026-11-06 01:05 | 本机 `setsid nohup bash exp1-repeats-land.sh`（PID 3774798） | 轮询 DONE/GAP 标记 | `af/poc/poc-exp1-repeats/data/land.log` |
+
+正式批状态根：`/data/bench/exp1-state-r2r`（与 attempt1 证据根
+`/data/bench/exp1-state-r2r-attempt1-quota429` 物理隔离）。
 
 **兜底**：若 14:16 窗口仍不可用（例如被 burn-runner 抢占），起批段写 `GAP-MARKER`，
 落数段写 `gap-登记-补跑窗口未开.md`，本卡按「缺口如实登记」收口（登记件模板已在本件 §七）。
