@@ -138,7 +138,7 @@
     },
     {
       "id": "MUT-007",
-      "description": "判分链登记表收缩必须红（红队 RT-E6/E51 发现回归探针）：从 ci/scorechain-manifest.txt 删掉 judge.rs 登记行（判分链门本体 crates/af-execline/src/judge.rs 脱离哈希锚保护面）后，k5 判分链 lint 必须以 exit 1 + 「判分链登记表被收缩」红——修复前该变异 lint 全绿（PASS「3 件」：登记表 4→3 件、在册行仍逐位对锚，故 judge.rs 可任意改写而 step1 硬门不红）复现在案；修复后由「判分链必需成员下界」对账（ci/k5-path-lint.py REQUIRED_MEMBERS）与「门输入全集钉」（ci/gate_inputs_check.sh GATE_INPUTS 含 ci/scorechain-manifest.txt）双臂拦截",
+      "description": "判分链登记表收缩必须红（红队 RT-E6/E51 发现回归探针）：从 ci/scorechain-manifest.txt 删掉 judge.rs 登记行（判分链门本体 crates/af-execline/src/judge.rs 脱离哈希锚保护面）后，k5 判分链 lint 必须以 exit 1 + 「判分链登记表被收缩」红——修复前该变异 lint 全绿（PASS「3 件」：登记表 4→3 件、在册行仍逐位对锚，故 judge.rs 可任意改写而 step1 硬门不红）复现在案；修复后由「判分链必需成员下界」对账（ci/k5-path-lint.py 下界派生规则 derive_required_members 仓面现算）与「门输入全集钉」（ci/gate_inputs_check.sh GATE_INPUTS 含 ci/scorechain-manifest.txt）双臂拦截",
       "action": "edit-drop-lines",
       "target": "ci/scorechain-manifest.txt",
       "args": {
