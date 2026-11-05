@@ -1,0 +1,2 @@
+[roster] 语义层名册正本缺席（af/otel/semantic-roster.json 不在位）——名册判据沿用约定块，行为等价
+PASS: 末次判定绿（status=green，ts=2026-11-05 14:32:40 age=12s ≤ 阈 1800s）

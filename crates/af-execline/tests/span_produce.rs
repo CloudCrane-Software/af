@@ -242,6 +242,44 @@ fn full_tree_emits_four_layers_all_keyed() {
     }
 }
 
+/// A1：语义层名册正本（`otel/semantic-roster.json`）的契约钉桩。
+/// 生产代码从正本取名（单源）；本测试把「正本必须是什么」钉死——
+/// 改正本（改名/删层/动订单域键）⇒ 本测试红（三面夹具的 crate 面）。
+#[test]
+fn roster_contract_pins_layers_and_order_domain_keys() {
+    let Some(r) = af_execline::span_produce::roster() else {
+        panic!("名册正本必须可解析（include_str otel/semantic-roster.json）");
+    };
+    assert_eq!(r.schema, "af.otel.semantic-roster.v1");
+    assert_eq!(r.order_domain_keys, ["af.order_id", "af.work_order_id"]);
+    let pinned = [
+        ("L1", "invoke_workflow", None),
+        ("L2", "invoke_agent", Some("invoke_workflow")),
+        ("L3", "chat", Some("invoke_agent")),
+        ("L4", "execute_tool", Some("invoke_agent")),
+    ];
+    for (layer, want_name, want_parent) in pinned {
+        assert_eq!(
+            r.layer_name(layer),
+            Some(want_name),
+            "层 {layer} 的 span 名必须钉为 {want_name}（正本被篡改？）"
+        );
+        let entry = &r.layers[want_name];
+        assert_eq!(entry.layer, layer);
+        assert_eq!(entry.parent.as_deref(), want_parent, "{want_name} 父链");
+    }
+    assert_eq!(
+        r.layers["invoke_workflow"].span_order_keys,
+        ["af.order_id", "af.work_order_id", "af.line"]
+    );
+    // 投影行只出正本名（含被钉名与投影输出的一致）。
+    let dir = write_full_tree("roster-pin");
+    let spans = project_order(&dir);
+    assert!(spans
+        .iter()
+        .all(|s| r.layers.contains_key(s.span_name.as_str())));
+}
+
 #[test]
 fn publish_upserts_by_order_id_and_counts_keyed_rows() {
     let a = write_full_tree("ord-A");
