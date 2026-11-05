@@ -59,11 +59,11 @@
       "note": "step14 子门单点名册计数（RT-E81 修复批新增）：ci/subgates.list 的条目数——名册是 step14 子门全集的**唯一正本**（与 gates.ci_step14_subgates 的名册生成臂、gates.ci_step14_subgates_regex 的对照臂三者一致；名册文件本体由 ci/baselines/gate-inputs.sha256 钉住，静默增删即漂移红）。"
     },
     "redlist.count": {
-      "value": 23,
+      "value": 24,
       "source": "grep -vc '^#' ci/neutrality-expected-fail.txt",
       "unit": "项",
-      "last_recomputed": "2026-10-28",
-      "note": "中立性门预期红名单（19→22→23 三代史即 C2:113 跨文书漂移案例；23=23=23 三方对账见主线 43e8215 提交说明）。2026-10-28 本批落地时复核：docs/VERSIONS.md 停记 22 而文件实为 23——文书侧漂移活例，已把该行改挂 {{numbers.redlist.count}} 占位符（单源机算）。"
+      "last_recomputed": "2026-11-05",
+      "note": "中立性门预期红名单（19→22→23→24；E9001 供给批 +1 all_e9001_declarations_resolve_with_builtin_impl_ref，隔离臂必红登记）。历史 19→22→23 三代即 C2:113 跨文书漂移案例；23=23=23 三方对账见主线 43e8215。2026-10-28 本批落地时复核：docs/VERSIONS.md 停记 22 而文件实为 23——文书侧漂移活例，已把该行改挂 {{numbers.redlist.count}} 占位符（单源机算）。"
     },
     "registry.pkgs": {
       "value": 37,

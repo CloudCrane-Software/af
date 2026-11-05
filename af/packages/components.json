@@ -350,6 +350,407 @@
       "name": "pkg.debatekit.belief",
       "version": "1",
       "impl_ref": "packages/debatekit@1.0.0/memory/belief.py"
+    },
+    {
+      "class": "model_route",
+      "name": "route.strong",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/strong.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.mid",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/mid.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3-Flash",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.weak",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/weak.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3-Flash",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.retrieval",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/retrieval.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3-Flash",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.critic",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/critic.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.scorer",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/scorer.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.chooser",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/chooser.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "tool",
+      "name": "pkg.repo.grep",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.repo.read",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.repo.edit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.repo.test",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.ret.codegrep",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.ret.lex_anchor",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.ret.graph_expand",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.hopqa.search",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.hopqa.lookup",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.cohesion.depgraph",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.cohesion.community",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.searchkit.corpus",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.bench.leaderboard",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.ctxrot.corpus",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.shell",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.readonly",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.editor",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.lint",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.custom",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.harness.shell",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.harness.edit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.harness.lint",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.skill.runtime",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.merge.strategy_v1",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.merge.strategy_v2",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.merge.compose_new",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.swe.checker",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.reflex.test_unit",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ci.rerun",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ci.merge_probe",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.fmt.compliance_probe",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.hooks.post_edit",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.critic.tool_suite",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.codet.dual_runner",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.otter.repro_runner",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ticket.done_probe",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.alpha.sample_filter",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.aci.ablate",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.bench.resolved",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.searchkit.assess",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ctxrot.curve",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.judge.improvement",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.review.scope_diff",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.skill.catalog_loader",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ir.indexer",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
     }
   ]
 }

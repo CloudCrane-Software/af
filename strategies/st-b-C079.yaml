@@ -18,7 +18,7 @@ dsl_snippet: |
     entry: confined_coder
     input: change_request
     output: { ref: change_result, from: merge_check }
-    intent: "OS 级双边界沙箱投影：v0.1 图面无 sandbox 段——confinement 经 escape env_adapter 构造绑定边界适配 impl pkg.sandbox.bwrap_seatbelt@1（bubblewrap/Seatbelt：workdir 可写+系统路径只读+代理域白名单=impl 参数面）；uses.tools 只列白名单工具（网络出口=pkg.net.proxy_allowlist 域白名单装订）；权限打断预算 0 → 图内零 human 节点。S073/S074 口径：权限打断减少 84%；对照臂=全权限提示模式，走 harness A/B 看 permission_prompts"
+    intent: "OS 级双边界沙箱投影：v0.1 图面无 sandbox 段——confinement 经 escape env_adapter 构造绑定边界适配 impl pkg.sandbox.bwrap_seatbelt@1（bubblewrap/Seatbelt：workdir 可写+系统路径只读+代理域白名单=impl 参数面）；uses.tools 只列已注册检索工具 pkg.repo.grep@1（fs.workdir_rw / net.proxy_allowlist 属沙箱/代理能力面，escape 已记账，不进 uses.tools）；权限打断预算 0 → 图内零 human 节点。S073/S074 口径：权限打断减少 84%；对照臂=全权限提示模式，走 harness A/B 看 permission_prompts"
   types:
     - name: change_request
       schema:
@@ -49,7 +49,7 @@ dsl_snippet: |
   nodes:
     - id: confined_coder
       kind: task
-      uses: { model: route.main@1, tools: [pkg.fs.workdir_rw@1, pkg.net.proxy_allowlist@1, pkg.repo.grep@1] }
+      uses: { model: route.main@1, tools: [pkg.repo.grep@1] }  # 选 b：fs.workdir_rw / net.proxy_allowlist 属沙箱/代理能力面（escape 已记账），检索走已注册 repo.grep
       consumes: { review: change_result }
       writes: [workspace]
       emits: { patch: patch_out }

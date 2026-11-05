@@ -33,6 +33,34 @@
       "version": "1",
       "effect_class": "persist",
       "impl_ref": "executor:builtin/pkg.sweng.publish_task_finished@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.lint",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.edit_udiff",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.edit_whole",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweng.edit_linted",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
     }
   ]
 }

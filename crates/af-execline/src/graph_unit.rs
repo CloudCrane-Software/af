@@ -2368,7 +2368,7 @@ fn node_tool_fn(
     bridge: Arc<dyn HostBridge + Send + Sync>,
     env: Arc<TbEnv>,
 ) -> Option<ToolFn> {
-    match sweng::name_of(reference) {
+    match sweng::tool_impl_name(sweng::name_of(reference)) {
         "pkg.sweagent.env" => {
             let bash = Arc::new(sweng::EnvBash::new(bridge, env));
             Some(Arc::new(move |args: &Value| {
