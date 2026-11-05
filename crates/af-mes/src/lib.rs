@@ -21,6 +21,7 @@ mod clock;
 mod error;
 mod event;
 mod final_query;
+mod mem_readings;
 pub mod mock;
 mod outbox;
 mod reader;
@@ -32,6 +33,10 @@ pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Accept, MesError};
 pub use event::MesEvent;
 pub use final_query::{guard_read_sql, select_final};
+pub use mem_readings::{
+    MemDefenseError, MemDefenseGate, MemDefenseVerdict, MemReadings, MemReadingsLog,
+    KIND_MEM_AVAILABLE_KB, KIND_SWAP_USED_KB, KIND_TMPFS_USED_B, MEM_DEFENSE_WORK_ORDER,
+};
 pub use reader::{EventFilter, MesReader};
 pub use schema::{
     DDL_MES_EVENT, DDL_MES_LINE_HOUR, DDL_MES_LINE_HOUR_MV, DEFAULT_DATABASE, DEFAULT_MAX_DELAY,
