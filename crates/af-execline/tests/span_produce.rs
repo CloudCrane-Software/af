@@ -2,6 +2,10 @@
 //!
 //! 夹具形状对照 `trace_tree_verify` 全绿单（ledger 真 order_id + 四层树）。
 //! 生产者不判绿；本文件只核「订单级键行 > 0」与「无真源不造行」。
+//!
+//! P3-A2（单根 trace）新增一节：投影树**恰一个根 span** 且父链可解析
+//! （断言器 S1/S2 的生产者面），以及 OTLP 发射挂钩的**幂等闸**
+//! （同订单同内容不重发——重发会在同一 trace 里再插一份全树、根翻倍）。
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -10,7 +14,7 @@ use std::sync::Mutex;
 use af_execline::span_produce::{
     count_fully_keyed_rows, count_key_drift_warns, count_order_keyed_rows, load_state,
     order_id_from_ledger, probe_key_drift, project_order, publish_from_env, publish_order,
-    ENV_STATE_PATH,
+    root_span_count, unresolved_parent_names, ENV_EMIT_MARKER, ENV_STATE_PATH,
 };
 use af_execline::tracetree::verify_order_dir;
 use af_execline::{DriverConfig, EngineClient, FixedClock, OrderLifecycleDriver, StubExecuteUnit};
@@ -566,4 +570,170 @@ fn key_drift_probe_silent_when_aligned() {
     assert!(spans
         .iter()
         .all(|s| s.attrs.get("ledger_key_drift").is_none()));
+}
+
+// ------------------------------------------------------------------------ //
+// P3-A2 单根 trace：投影树结构不变量 + OTLP 发射幂等闸。
+//
+// 背景（2026-11-05 亲读）：真库 trace `45c71671dd8d6efc…` 的 70 行只有 7 个
+// 不同 span_id，每个插了 10 遍——根 span（invoke_workflow）计 10 次，
+// 断言器 S1「每 trace 恰一个根 span」红。投影器派生 ID 只由 work_order_id
+// 决定 ⇒ 重发即同 trace 再生一份全树。本节把两件事钉在生产面：
+//   ① 投影本身恰一根、父链可解析（S1/S2 等价，改 materialize 立即红）；
+//   ② 发射挂钩对同订单同内容只呼一次脚本（幂等闸，防 CH 同 trace 多根）。
+// ------------------------------------------------------------------------ //
+
+/// 写一个假发射脚本：被呼一次就往计数器文件追加一行（python3 -I 直跑）。
+fn write_fake_emit_script(path: &Path, counter: &Path) {
+    let body = format!(
+        "import sys\nwith open({counter:?}, 'a', encoding='utf-8') as fh:\n    fh.write('emit\\n')\n",
+    );
+    fs::write(path, body).unwrap();
+}
+
+fn count_lines(path: &Path) -> usize {
+    fs::read_to_string(path)
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .count()
+}
+
+#[test]
+fn projected_tree_has_single_root_and_resolvable_parents() {
+    // 四层树夹具：恰一个根（invoke_workflow），其余行的 parent 均可在本投影内解析。
+    let dir = write_full_tree("T1-order");
+    let spans = project_order(&dir);
+    assert_eq!(root_span_count(&spans), 1, "一订单投影应恰一个根 span");
+    let root = spans
+        .iter()
+        .find(|s| s.parent_span_name.as_deref().unwrap_or("").is_empty())
+        .expect("必须有根行");
+    assert_eq!(root.span_name, "invoke_workflow", "根必须是 L1");
+    assert!(
+        unresolved_parent_names(&spans).is_empty(),
+        "非根行 parent 必须在本投影内可解析（防断链）"
+    );
+    // 无 harness 事件的 ledger-only 单：同样单根（L1 独占）。
+    let dir = parent().join("root-pin-ledger-only");
+    write_ledger(&dir, "wo-root-pin", &default_ops());
+    fs::write(dir.join("mes-events.jsonl"), "").unwrap();
+    let spans = project_order(&dir);
+    assert_eq!(spans.len(), 1);
+    assert_eq!(root_span_count(&spans), 1);
+    assert!(unresolved_parent_names(&spans).is_empty());
+}
+
+#[test]
+fn emit_hook_skips_reemit_when_projection_unchanged() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let scratch = parent();
+    let counter = scratch.join("emit-counter.txt");
+    let script = scratch.join("fake-emit.py");
+    let marker = scratch.join("emit-marker.json");
+    write_fake_emit_script(&script, &counter);
+
+    let prev_cmd = std::env::var("AF_OTEL_EMIT_CMD").ok();
+    let prev_marker = std::env::var(ENV_EMIT_MARKER).ok();
+    let prev_state = std::env::var(ENV_STATE_PATH).ok();
+    let prev_ep = std::env::var("AF_OTEL_ENDPOINT").ok();
+    std::env::remove_var(ENV_STATE_PATH);
+    std::env::set_var("AF_OTEL_ENDPOINT", "http://127.0.0.1:1");
+    std::env::set_var("AF_OTEL_EMIT_CMD", &script);
+    std::env::set_var(ENV_EMIT_MARKER, &marker);
+
+    let dir = write_full_tree(&format!("wo-emit-idem-{}", std::process::id()));
+    publish_from_env(&dir);
+    publish_from_env(&dir);
+    publish_from_env(&dir);
+    assert_eq!(
+        count_lines(&counter),
+        1,
+        "同订单同投影重复 drive 只能呼一次发射脚本（幂等闸；重发=同 trace 第二份根）"
+    );
+
+    // 还原环境。
+    match prev_cmd {
+        Some(v) => std::env::set_var("AF_OTEL_EMIT_CMD", v),
+        None => std::env::remove_var("AF_OTEL_EMIT_CMD"),
+    }
+    match prev_marker {
+        Some(v) => std::env::set_var(ENV_EMIT_MARKER, v),
+        None => std::env::remove_var(ENV_EMIT_MARKER),
+    }
+    match prev_state {
+        Some(v) => std::env::set_var(ENV_STATE_PATH, v),
+        None => std::env::remove_var(ENV_STATE_PATH),
+    }
+    match prev_ep {
+        Some(v) => std::env::set_var("AF_OTEL_ENDPOINT", v),
+        None => std::env::remove_var("AF_OTEL_ENDPOINT"),
+    }
+}
+
+#[test]
+fn emit_hook_reemits_when_projection_changes() {
+    let _guard = ENV_LOCK.lock().unwrap();
+    let scratch = parent();
+    let counter = scratch.join("emit-counter-change.txt");
+    let script = scratch.join("fake-emit-change.py");
+    let marker = scratch.join("emit-marker-change.json");
+    write_fake_emit_script(&script, &counter);
+
+    let prev_cmd = std::env::var("AF_OTEL_EMIT_CMD").ok();
+    let prev_marker = std::env::var(ENV_EMIT_MARKER).ok();
+    let prev_state = std::env::var(ENV_STATE_PATH).ok();
+    let prev_ep = std::env::var("AF_OTEL_ENDPOINT").ok();
+    std::env::remove_var(ENV_STATE_PATH);
+    std::env::set_var("AF_OTEL_ENDPOINT", "http://127.0.0.1:1");
+    std::env::set_var("AF_OTEL_EMIT_CMD", &script);
+    std::env::set_var(ENV_EMIT_MARKER, &marker);
+
+    let order_id = format!("wo-emit-change-{}", std::process::id());
+    let dir = write_full_tree(&order_id);
+    publish_from_env(&dir);
+    assert_eq!(count_lines(&counter), 1, "首轮必须发射");
+
+    // 追加一次 harness.model 事件 ⇒ chat 计数变 ⇒ 投影内容摘要变 ⇒ 重新发射。
+    let normal = dir
+        .join("runs")
+        .join(format!("{order_id}-a1"))
+        .join("normal.jsonl");
+    let rid = format!("{order_id}-run");
+    let extra = format!(
+        concat!(
+            r#"{{"seq":4,"level":"normal","kind":"harness.model","payload":{{"run_id":"{rid}","#,
+            r#""turn":2,"model":"m","finish":"stop","usage":{{"input_tokens":10,"output_tokens":2,"cache_read_tokens":1}}}},"ts_ms":5}}"#
+        ),
+        rid = rid
+    );
+    let mut text = fs::read_to_string(&normal).unwrap();
+    text.push_str(&extra);
+    text.push('\n');
+    fs::write(&normal, text).unwrap();
+
+    publish_from_env(&dir);
+    assert_eq!(
+        count_lines(&counter),
+        2,
+        "投影内容变化后必须重新发射（闸不挡真增量）"
+    );
+
+    // 还原环境。
+    match prev_cmd {
+        Some(v) => std::env::set_var("AF_OTEL_EMIT_CMD", v),
+        None => std::env::remove_var("AF_OTEL_EMIT_CMD"),
+    }
+    match prev_marker {
+        Some(v) => std::env::set_var(ENV_EMIT_MARKER, v),
+        None => std::env::remove_var(ENV_EMIT_MARKER),
+    }
+    match prev_state {
+        Some(v) => std::env::set_var(ENV_STATE_PATH, v),
+        None => std::env::remove_var(ENV_STATE_PATH),
+    }
+    match prev_ep {
+        Some(v) => std::env::set_var("AF_OTEL_ENDPOINT", v),
+        None => std::env::remove_var("AF_OTEL_ENDPOINT"),
+    }
 }
