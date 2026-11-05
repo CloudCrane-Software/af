@@ -1,0 +1,81 @@
+== RT-E138 现役面存在性搜索 2026-11-05T00:39:22+08:00 ==
+== 全盘（排除 /proc /sys）文件/目录名搜索 ==
+$ find / -name 'otlp-assert.py' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'all-gates.sh' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'gate-pins.list' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'otel-production.json' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'factory-keepalive.py' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'factory-watch.py' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name 'deploy-consistency-probe.sh' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name '技术债登记.md' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -name '剩余欠账总表.md' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+$ find / -type d -name '状态观测' -not -path '/proc/*' -not -path '/sys/*'
+rc=1 (空输出=零命中)
+---
+== 本仓（worktree HEAD）与全部本地/远端分支历史搜索 ==
+$ git log --all --oneline --diff-filter=A -- *otlp-assert*
+rc=0
+---
+$ git log --all --oneline --diff-filter=A -- *all-gates*
+rc=0
+---
+$ git log --all --oneline --diff-filter=A -- *gate-pins*
+rc=0
+---
+tools/gate-item-emit.py
+tools/gate-item-legacy-bridge.py
+tools/trigger-inbox-src-parity-probe.py
+tools/trigger-inbox.py
+tools/worktree-recycle-selfcheck.py
+tools/worktree-recycle.py
+$ git status --short
+ M poc/poc-rt-e138-span-producer/raw/missing-surface-search.log
+?? .offload/
+rc=0
+---
+$ git rev-parse HEAD
+c6880f4e1b1e0a2d2a4db06c31c24cccb440388d
+rc=0
+---
+== gitea 服务端仓清单（凭据不落输出；API 树搜索）==
+$ python3 -
+repos: ['opchadmin/af-poc-e-sample', 'testuser2/m1-90a-test-repo']
+opchadmin/af-poc-e-sample: files=8 otel/gate-hits=[]
+testuser2/m1-90a-test-repo: files=1 otel/gate-hits=[]
+rc=0
+---
+== 任务书引用的欠账总表唯一同名目录现状 ==
+$ ls -la /home/pan-ding/workspace/agent黑灯工厂/30-工件/
+total 12
+drwxr-xr-x 3 pan-ding pan-ding 4096 Nov  4 17:33 .
+drwxr-xr-x 4 pan-ding pan-ding 4096 Nov  4 17:33 ..
+drwxr-xr-x 2 pan-ding pan-ding 4096 Nov  4 17:50 孤件处置-20261104
+rc=0
+---
+$ ls -la /home/pan-ding/workspace/agent黑灯工厂/
+total 16
+drwxr-xr-x 4 pan-ding pan-ding 4096 Nov  4 17:33 .
+drwxr-xr-x 4 pan-ding pan-ding 4096 Oct 27 18:12 ..
+drwxr-xr-x 3 pan-ding pan-ding 4096 Nov  4 17:33 30-工件
+drwxr-xr-x 2 pan-ding pan-ding 4096 Oct 27 18:12 tools
+rc=0
+---
+== 搜索完毕 ==

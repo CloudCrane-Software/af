@@ -46,6 +46,7 @@ pub mod planbind;
 pub mod profile;
 pub mod record;
 pub mod shadow;
+pub mod span_produce;
 pub mod suite;
 pub mod tracetree;
 

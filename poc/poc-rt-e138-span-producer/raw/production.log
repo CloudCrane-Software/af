@@ -1,0 +1,10 @@
+（真库回查：窗口 360min（含未来戳容忍 5min）；名册 required 项 8 个；订单域逐行取回上限 5000 行）
+──── 真库名册/订单域总体判定（--production）────
+  [PASS] P1 每名册项近窗入库计数下界（§6 production.required_spans） —— 8 个 required 名册项全部在流；可选名册项 factory.e2e_probe 近窗计数 factory.e2e_probe=0
+  [PASS] P2 订单级键在位（订单域总体 100% 覆盖） —— 订单域行 20（真库总行数 1734），af.order_id+af.work_order_id 齐全 20/20（100.0%）
+  [PASS] P3 语义层 span 订单级键齐全率 —— 语义层行 19，缺订单级键 0
+  [PASS] P4 一条订单=一条 trace（订单标识 ↔ trace 一一对应） —— 订单标识 1 个 order_id / 1 个 work_order_id，涉及 trace 1 条；跨 trace 拆分 0 项、trace 内身份冲突 0 项
+  [PASS] P5 真库订单 trace 结构合规（单根/父链/层序/派生 ID/键集） —— 真库语义层行 19 上跑断言集 26 条，失败 0 项
+  小计：PASS=5 FAIL=0 NA=0
+（状态面：/home/pan-ding/workspace/agent黑灯工厂/状态观测/otel-production.json）
+production_rc=0
