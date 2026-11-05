@@ -46,12 +46,14 @@ claimed_value/sources/consensus/experiment/dsl_state`；`dsl_state` 三态闭集
 - `python3 -B ci/strategies_check.py` → **exit 0**（`raw/strategies_check.rerun-B.txt`
   与 `raw/strategies_check.after-edit.txt`）：R0 被测对象 66 件全跟踪；A 线 13 条
   + B 线 48 条全登记；计数 total=61 tiers{A:11,B:48,C:2}
-  dsl_states{compilable:32, needs_syntax:12, not_applicable:17}。
+  dsl_states{compilable:44, needs_syntax:0, not_applicable:17}。
 - `python3 -I ci/strategies_check.py` → **exit 2**（`raw/strategies_check.rerun-I.txt`）：
   isolated 模式排除用户 site-packages，本机 PyYAML 在
   `~/.local/lib/python3.11/site-packages`。仓内正本挂法是 `-B`。
-- 装载测试逐条（`raw/strategy_library_test.nocapture.txt`）：**32 条 COMPILE-OK，
-  12 条 NEEDS-SYNTAX，17 条 NOT-APPLICABLE，零失败**。
+- 装载测试逐条（`raw/strategy_library_test.nocapture.txt`）：**44 条 COMPILE-OK，
+  0 条 NEEDS-SYNTAX，17 条 NOT-APPLICABLE，零失败**。12 簇
+  （st-C103/C122、st-b-C001/C028/C029/C038/C062/C064/C079/C086/C124/C125）
+  已由 NEEDS-SYNTAX 转为 COMPILE-OK。
 
 **61 vs 59 差**：台账「59 簇」= libA A 档 11 + libB B 档 48（`index.yaml` batch 头
 与 `strategies/README.md` §二自述）。多出的两条是 **tier C 实验承载档回写条目**：
@@ -67,18 +69,19 @@ v1.2 契约修订收编 tier 闭集扩 A|B|C|D（`strategies_check.py:58-62`）�
 - 人读表：`three-state-list.md`（61 行逐条：rank/id/tier/topic/三态/判定依据/59 簇内
   外标记）。生成器 `build_three_state_list.py`（compilable=编译门实测 COMPILE-OK
   + snippet 行数；needs_syntax=note 摘录；not_applicable=na_reason 摘录）。
-- 分布：compilable 32 / needs_syntax 12 / not_applicable 17；59 簇外 =
-  {st-C122, st-C103}（C 档回写，均 needs_syntax）。
+- 分布：compilable 44 / needs_syntax 0 / not_applicable 17；59 簇外 =
+  {st-C122, st-C103}（C 档回写，均已 COMPILE-OK）。
 
 ## 三、可编译者逐条过 CI 读数
 
 **定义门（14d 编译断言）**：`cargo test -p af-dsl --test strategy_library_test
--- --nocapture` → **exit 0，32/32 COMPILE-OK，零失败**
-（`raw/strategy_library_test.nocapture.txt`）。**无因此改三态的条目（零条）。**
+-- --nocapture` → **exit 0，44/44 COMPILE-OK，零失败**
+（`raw/strategy_library_test.nocapture.txt`）。12 簇 NEEDS-SYNTAX→COMPILE-OK。
 
-COMPILE-OK 32 条：st-C005/C006/C007/C008/C009/C010/C012/C015/C016/C018/C019、
-st-b-C003/C035/C036/C037/C042/C048/C055/C056/C057/C060/C069/C071/C077/C078/
-C092/C095/C096/C097/C102/C109/C111。
+COMPILE-OK 44 条：st-C005/C006/C007/C008/C009/C010/C012/C015/C016/C018/C019/
+C103/C122、st-b-C001/C003/C028/C029/C035/C036/C037/C038/C042/C048/C055/C056/
+C057/C060/C062/C064/C069/C071/C077/C078/C079/C086/C092/C095/C096/C097/C102/
+C109/C111/C124/C125。
 
 **修掉的失败（1 处，执行面暴露）**：seam 推进到执行面时 st-b-C102 被 EX4006 证伪
 ——check 节点 builtin `pkg.sweng.test_unit` 产出的 verdict envelope 键为 `pass`
@@ -89,10 +92,11 @@ test_verdict 类型声明 `passed`。**修法：snippet 内 `passed`→`pass` �
 （各有别的执行面阻断，修了也跑不起，本批不顺手改）。
 
 **四段编译链深度读数**（seam `compile-all`，对生产注册表 af/packages，
-`raw/compile-all.prod-registry.json`）：32 条 compilable 中 **8 条过全链**
-（load+validate+lower+bind+plan：st-C005/C012/C016/b-C003/b-C037/b-C048/b-C055/
-b-C056），**24 条断在 bind（E9001 组件未注册）**。此为注册表覆盖缺口，
+`raw/compile-all.prod-registry.json`）：44 条 compilable 中 **10 条过全链**
+（load+validate+lower+bind+plan：st-C005/C012/C016/C103/b-C003/b-C037/b-C048/
+b-C055/b-C056/b-C124），**34 条断在 bind（E9001 组件未注册）**。此为注册表覆盖缺口，
 非 snippet 语法错误——按契约定义它们仍是如实的 compilable，本批不以此改任何三态。
+12 簇新 compilable 中 st-C103 与 st-b-C124 过全链，其余 10 条断在 bind。
 
 ## 四、闭环断点读数 + 最小接缝设计与实测
 
@@ -101,8 +105,8 @@ b-C056），**24 条断在 bind（E9001 组件未注册）**。此为注册表�
 建条目，EXP-1/EXP-2→st-C122/st-C103 已存在）。
 
 **断点**：消费 `dsl_snippet` 的只有装载测试与 14d 门——**环③整环缺失**。图执行器
-只消费 `af/packages/*/graphs/*.afb` 包内图。三重供给缺口使 32 条 compilable
-今天一条都跑不起来（对生产注册表）：(a) 全部 32 条引用注册表缺失的 prompt 模板；
+只消费 `af/packages/*/graphs/*.afb` 包内图。三重供给缺口使 44 条 compilable
+今天一条都跑不起来（对生产注册表）：(a) 全部 44 条引用注册表缺失的 prompt 模板；
 (b) 24 条 bind 即断（组件未注册）；(c) 预算/构造面：节点级 cents 预算（st-b-C037，
 EX4005 实测拒收）、tool_calls 维度、loop/map 构造、route 边守卫、builtin 表外工具
 均超 v1 执行器强制集。

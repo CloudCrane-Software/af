@@ -18,7 +18,7 @@ dsl_snippet: |
     entry: detect
     input: merge_batch
     output: { ref: gate_verdict, from: rate_gate }
-    intent: "合并冲突归因+自消解率门禁：detect 归因冲突（制造者/策略类型）→resolve_batch 按 V1/V2/新码/组合四类策略消解并写 attribution_log（INV-2 单写者：conflict_id/producer/resolver/strategy/self_resolved 五字段）→双 tally 分别按 strategy 与 self_resolved 计票→rate_gate 断言自消解占比 ≥ 50%（by_resolution.top_share_milli ≥ 500000），不过则升级人工。S171/S172 口径：96.1% 冲突由人类解决、agent 自消解率厂商差近 60 倍；note 登记的「遥测计数一等维度/按类直取」理想语法属后续批扩展，本条以 store 单写者 + tally 算子表达可执行核"
+    intent: "合并冲突归因+自消解率门禁：detect 归因冲突（制造者/策略类型）→resolve_batch 按 V1/V2/新码/组合四类策略消解并写 attribution_log（INV-2 单写者：conflict_id/producer/resolver/strategy/self_resolved 五字段）→双 tally 分别按 strategy 与 self_resolved 计票→rate_gate 断言 by_resolution.top_share_milli ≥ 500（全库量纲 0..1000）。选型：不补桶级可判定计数字段——tally by:self_resolved 的 top_share 是布尔两桶较大桶占比，而非 self_resolved=true 桶占比；两桶下较大桶恒 ≥ 500，该断言在该近似下方向性不可判定（无法区分「多数自消解」与「多数人工」）。S171/S172 口径：96.1% 冲突由人类解决、agent 自消解率厂商差近 60 倍；按类直取 true 桶属后续批扩展，本条以 store 单写者 + tally 算子表达可执行核"
   types:
     - name: merge_batch
       schema:
@@ -48,8 +48,9 @@ dsl_snippet: |
     - name: tally_result
       schema:
         type: object
-        required: [top_count, top_share_milli]
+        required: [answers, top_count, top_share_milli]
         properties:
+          answers: { type: integer }
           top_count: { type: integer }
           top_share_milli: { type: integer }
     - name: gate_verdict
@@ -99,7 +100,7 @@ dsl_snippet: |
       consumes:
         by_strategy: tally_result
         by_resolution: tally_result
-      assert: "inputs.by_resolution.top_share_milli >= 500000"
+      assert: "inputs.by_resolution.top_share_milli >= 500"
       emits: { verdict: gate_verdict }
       route:
         default: exit

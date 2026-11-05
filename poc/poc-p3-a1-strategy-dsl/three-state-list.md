@@ -26,7 +26,7 @@
 | 20 | 20 | `st-b-C098` | B | 验证与测试 | not_applicable | na_reason：能力标定基准：策略内容是「先用 CRBugBench 量化 review agent 抓真 bug 的上界，再决定是否进无人值守」的准入标定协议（S106 bo… | Y |
 | 21 | 21 | `st-b-C077` | B | 反思与自修正 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 70 行 | Y |
 | 22 | 22 | `st-b-C080` | B | 评测方法论 | not_applicable | na_reason：评测有效性方法论：策略内容是「基准污染自查 + 首错自查能力 + 多 judge 不可依赖」的评测纪律（S122 body.测试设计），约束的是实验解释而非运行… | Y |
-| 23 | 23 | `st-b-C125` | B | 多agent协同 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 115 行 | Y |
+| 23 | 23 | `st-b-C125` | B | 多agent协同 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 116 行 | Y |
 | 24 | 24 | `st-b-C071` | B | 工具与接口 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 85 行 | Y |
 | 25 | 25 | `st-b-C073` | B | 评测方法论 | not_applicable | na_reason：离线轨迹归因规程：策略内容是「对历史轨迹跑失败模式判官、把工具使用错误/语法错单独拆类、用聚类分布排工具改进优先级」的分析方法（S067 body.测试设计），… | Y |
 | 26 | 26 | `st-b-C028` | B | 上下文管理 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 81 行 | Y |
@@ -55,7 +55,7 @@
 | 49 | 49 | `st-b-C036` | B | 仓库级理解与检索 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 73 行 | Y |
 | 50 | 50 | `st-b-C001` | B | 测试时扩展 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 118 行 | Y |
 | 51 | 51 | `st-b-C029` | B | 上下文管理 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 111 行 | Y |
-| 52 | 52 | `st-b-C062` | B | 技能与插件 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 83 行 | Y |
+| 52 | 52 | `st-b-C062` | B | 技能与插件 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 88 行 | Y |
 | 53 | 53 | `st-b-C086` | B | 上下文管理 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 82 行 | Y |
 | 54 | 54 | `st-b-C105` | B | 上下文管理 | not_applicable | na_reason：消融实验方法：策略内容是「逐组件替换做可拆解消融、按模型/窗口分档读差距」的实验设计（S129 body.测试设计）；AFB 单图无法表达「同图多组件配置矩阵」… | Y |
 | 55 | 55 | `st-b-C124` | B | 成本与推理效率 | compilable | 编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 39 行 | Y |
