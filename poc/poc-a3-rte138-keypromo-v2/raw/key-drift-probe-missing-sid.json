@@ -1,0 +1,12 @@
+{
+  "warns": 0,
+  "probes": [
+    {
+      "order_dir": "/tmp/a3-v2-before/missing-sid",
+      "projector_first_row": "",
+      "rust_set_min": "",
+      "drifted": false,
+      "warn": 0
+    }
+  ]
+}
