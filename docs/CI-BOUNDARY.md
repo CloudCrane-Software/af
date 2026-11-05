@@ -234,3 +234,49 @@ AF 产品的 F2 全量门路径、判分链、账本、协议、注册表、`cra
   落在**本厂自管容器**内 ⇒ GitHub 端把它挪到托管 runner 是**环境面改写带来的新执行面**，
   与 §6.1 的「环境面改写登记」同列。
 
+## 七、工厂 all-gates 门日志 per-run 隔离（RT-E73，2026-11-05）
+
+> 本仓 `af/ci` **不拥有**工厂 `tools/all-gates.sh`（该件落 pandev-comp
+> `$HOME/workspace/agent黑灯工厂/tools/`，工作区根与 `tools/` 均不在任何 git 仓内）。
+> 本节只登记**门日志路径契约与消费者影响面**，供 af 侧读日志的路径不要按旧形态硬编码。
+> 本批 af 树写入面＝本节；工厂落点与读数见
+> `30-工件/rt-e73-perrun隔离-20261105/接线报告.md`（pandev-comp，不入库）。
+
+### 7.1 债面（台账 :41 / 逃逸台账 RT-E73）
+
+逃逸台账 RT-E73 拦截三件：①夹具路径 per-pid；②双实例同跑互不干扰自检；③门日志目录 per-run 隔离（同秒启动不共写）。
+
+- ①已落工厂夹具（现势 file:line）：`tools/test-kvfix-verdicts-contract.py:83`
+  `SCRATCH = … "kvfix-contract-scratch.%d" % os.getpid()`；
+  `tools/publish-scrub-gate.py:343-344` `selftest-%d % os.getpid()`。
+- ②③此前未见（台账 :41「部分」；逃逸台账修复对账末句「并行安全自检/日志目录隔离未见」）。本批只收这两件。
+
+### 7.2 隔离形态（只收紧）
+
+| 项 | 旧形态 | 新形态（RT-E73） |
+|---|---|---|
+| RUNDIR | `$HOME/all-gates-logs/<YYYYMMDD-HHMMSS>`（`mkdir -p`，同秒共写） | `$HOME/all-gates-logs/<YYYYMMDD-HHMMSS>-<pid>`（`mkdir` 排他；已存在则加 nsec 消歧） |
+| 分配点 | 启动即建目录 | **flock 拿到之后**再 `alloc_rundir`（拒跑实例不再留下空时间戳目录） |
+| 单例锁 | `$HOME/all-gates-logs/.all-gates.lock`（DEB-10 `flock -n`，第二实例 exit 2） | **不放宽**。`--selftest-perrun` / `--selftest-perrun-child` 在 flock 之前早退，以免 L3 常驻项在父持锁下再起本脚本被锁假红 |
+| 父目录 / 外置锚 | `$HOME/all-gates-logs/`、`gate-pins.anchor` | 位置不变 |
+
+落点（工厂现势 `all-gates.sh` sha256=`d44add1c9adf…`）：`alloc_rundir` :280；主流程锁 :1537-1541；锁后分配 :1546；L3 常驻项 :1165-1166
+`bash tools/all-gates.sh --selftest-perrun`（L3 `add_item` 38→39，只增不减；同批合入 RT-E58 mes-ttl 两项，未摘门）。
+
+### 7.3 消费者影响面
+
+新目录名是旧形态的**真后缀**，既有读法继续成立：
+
+- 汇总行仍打印 `日志目录：$RUNDIR`。L5/L6 自测 `grep -o '日志目录：[^ ]*'`（`l5-deploy-gate-selftest.sh:86` / `l6-deploy-gate-selftest.sh:72`）吃完整路径，含 pid 后缀。
+- `ls -t ~/all-gates-logs`、glob `~/all-gates-logs/*/item-*.result` 仍匹配。
+- 锁文件与 `gate-pins.anchor` 仍落父目录（`gate-pins-check.sh:42` / `gate-pins-refresh.sh:95`）。
+- 历史时间戳目录原样保留，不作迁移、不删。
+
+会断的写法：把 RUNDIR 钉死成「恰好 15 字符时间戳、无后缀」的路径拼接（本批工厂 `tools/` 扫描：生产代码无此拼接，仅注释里的历史目录名）。af/ci 不读 `~/all-gates-logs`，本仓无配套改动。
+
+### 7.4 本仓边界
+
+- **改**：本节（docs 新增一节）。
+- **不改**：`crates/`、`ci/`、`Cargo.toml`/`Cargo.lock`、本仓 `tools/`（与工厂 `tools/` 不是同一棵树）。
+- 工厂 `tools/gate-pins.list` 只许 `bash tools/gate-pins-refresh.sh` 机生成，禁手改。
+
