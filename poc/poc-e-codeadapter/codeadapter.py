@@ -387,6 +387,8 @@ class GiteaClient:
                 body = response.read().decode()
         except urllib.error.HTTPError as error:
             raise AdapterError(f"PA11 gitea API {method} {path} -> HTTP {error.code}: {error.read().decode()[:500]}") from error
+        except urllib.error.URLError as error:
+            raise AdapterError(f"PA11 gitea API {method} {path} -> URLError: {error.reason}") from error
         return json.loads(body) if body else None
 
     def push_branch(self, repo_dir: Path, branch: str, remote: str = "origin") -> str:
@@ -594,9 +596,45 @@ def cmd_run(args: argparse.Namespace) -> int:
     finally:
         # -- 6. 还 lease：工作树与 lease 生命周期绑定（还即移除足迹目录）------------
         # rmtree 尽力而为：移除失败不谎报 removed（如实记录），lease 归还仍执行。
+        # 归还失败不得替换在飞红因（PA14 优先）；仅 WARN 落 ledger/e2e.json。
         shutil.rmtree(run_dir, ignore_errors=True)
-        returned = lease(leases_db, ["return", "--lease-id", lease_id, "--holder", plan["holder"]])
-        mark("lease-returned", {"lease_id": returned["lease_id"], "state": returned["state"], "run_dir_removed": not run_dir.exists()})
+        inflight = sys.exc_info()[1]
+        try:
+            returned = lease(leases_db, ["return", "--lease-id", lease_id, "--holder", plan["holder"]])
+            mark("lease-returned", {"lease_id": returned["lease_id"], "state": returned["state"], "run_dir_removed": not run_dir.exists()})
+        except Exception as return_err:
+            try:
+                warn_detail = {
+                    "level": "WARN",
+                    "code": "lease-return-failed",
+                    "message": str(return_err),
+                    "preserved_error": str(inflight) if inflight is not None else "",
+                }
+                record("warn", warn_detail)
+                e2e_path = evidence_dir / f"{order_id}.e2e.json"
+                if e2e_path.is_file():
+                    e2e_payload = json.loads(e2e_path.read_text(encoding="utf-8"))
+                else:
+                    derived = adapter_order_state(ledger_records)
+                    if derived == "Closed":
+                        derived = "Failed"
+                    merge_sha = next(
+                        (r.get("merge_commit_sha") for r in ledger_records
+                         if r.get("kind") == "merge" and r.get("merge_commit_sha")),
+                        None,
+                    )
+                    e2e_payload = {
+                        "order": {"order_id": order_id, "state": derived,
+                                  "state_note": "adapter aborted on lease-return failure; af-order submit not executed; ledger-derived Closed downgraded to Failed (no false Closed)"},
+                        "merge_commit_sha": merge_sha,
+                    }
+                e2e_payload["lease_return_warn"] = warn_detail
+                write_json(e2e_path, e2e_payload)
+                mark("lease-return-warn", warn_detail)
+            except Exception:
+                pass
+            if inflight is None:
+                raise
 
     state = adapter_order_state(ledger_records)
     assert_closed_has_three_records(state, ledger_records)
