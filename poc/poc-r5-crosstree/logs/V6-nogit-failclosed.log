@@ -1,0 +1,8 @@
+$ /usr/bin/python3 -B ci/strategies_check.py --skip-compile   # cwd=/data/bench/r5-nogit-copy
+exit=1
+
+[INFO] R0 入库对账跳过：非 git 工作树（导出 tarball/拷贝树）——跳过 R0（不改变 R1-R4 判定）
+[INFO] 命名空间分解：A 线（st-C*）13 条，B 线（st-b-*）48 条，全部登记=True
+[INFO] R4 编译断言已按 --skip-compile 跳过（非常跑形态）
+[FAIL] R5 跨树集合无法判定（fail-closed，不静默放行）：无 HEAD 基线（git：非 git 工作树；manifest：未找到 MANIFEST.json（尝试：/data/bench/r5-nogit-copy/MANIFEST.json、/data/bench/MANIFEST.json））
+== strategies_check: 红 1 项（schema/index 计数/编译断言/跨树集合）
