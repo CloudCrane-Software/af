@@ -3,8 +3,8 @@
  "baseline": "origin/product/main 56ff52a",
  "total": 61,
  "distribution": {
-  "compilable": 32,
-  "needs_syntax": 12,
+  "compilable": 44,
+  "needs_syntax": 0,
   "not_applicable": 17
  },
  "clusters_59": {
@@ -264,9 +264,9 @@
    "tier": "B",
    "topic": "多agent协同",
    "rank": 23,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：缺「遥测计数器作为一等策略维度」与「按类直取计数」两处语法： ① budgets.dimension 八词表（turns/model_calls/tokens_…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 115 行",
    "experiment_status": "none"
   },
   {
@@ -297,9 +297,9 @@
    "tier": "B",
    "topic": "上下文管理",
    "rank": 26,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：缺「上下文压缩策略段」：v0.1 的 context.sections 只有装载期视图策略（store 段 full/latest_k/retrieve/sum…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 81 行",
    "experiment_status": "none"
   },
   {
@@ -429,9 +429,9 @@
    "tier": "B",
    "topic": "技能与插件",
    "rank": 38,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：缺「检索型算子」与「技能资产注入段」两处语法： ① ops 八算子（project/merge/slice/anonymize/shuffle_seeded/t…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 65 行",
    "experiment_status": "none"
   },
   {
@@ -495,9 +495,9 @@
    "tier": "B",
    "topic": "上下文管理",
    "rank": 44,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：缺「工具输出治理段」：v0.1 的 context.sections 只描述「已进入上下文的段」如何装裁，描述不了工具输出在进入上下文前的治理——无「按查询意图…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 79 行",
    "experiment_status": "none"
   },
   {
@@ -561,9 +561,9 @@
    "tier": "B",
    "topic": "测试时扩展",
    "rank": 50,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：采样聚合骨架（map + tally + select_best）在 v0.1 可表达，但「倒U停机闸」的两个核心机制缺语法： ① 停机判据需要跨轮滚动计数器（…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 118 行",
    "experiment_status": "none"
   },
   {
@@ -572,9 +572,9 @@
    "tier": "B",
    "topic": "上下文管理",
    "rank": 51,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：缺「上下文编辑策略段」：v0.1 的 context.sections 是装载期声明（来源+视图策略+配额），没有运行期「清除」语义——无清除触发位、无保留窗口…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 111 行",
    "experiment_status": "none"
   },
   {
@@ -583,9 +583,9 @@
    "tier": "B",
    "topic": "技能与插件",
    "rank": 52,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：缺「技能/资源渐进披露声明段」：v0.1 的 context.sections 只有 template/input/arg/edge/store 五来源，无法声…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 83 行",
    "experiment_status": "none"
   },
   {
@@ -594,9 +594,9 @@
    "tier": "B",
    "topic": "上下文管理",
    "rank": 53,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：缺「上下文压缩策略段」（与 st-b-C028 同族，本条四件套更具体）：阈值触发位、结构化交接摘要模板绑定、保留最近比例原文、摘要失败降级链，v0.1 均无对…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 82 行",
    "experiment_status": "none"
   },
   {
@@ -616,9 +616,9 @@
    "tier": "B",
    "topic": "成本与推理效率",
    "rank": 55,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：缺「缓存亲和声明」两处语法： ① 上下文布局约束：v0.1 的 context.sections 有声明序但无「稳定前缀/append-only/禁动态时间戳」…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 39 行",
    "experiment_status": "none"
   },
   {
@@ -660,9 +660,9 @@
    "tier": "B",
    "topic": "执行与沙箱",
    "rank": 59,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": true,
-   "basis": "needs_syntax_note：缺「执行环境边界声明段」：v0.1 的节点字段（uses/ops/route/loop/map/human/escape）与 policies 三账都不描述执行…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 72 行",
    "experiment_status": "none"
   },
   {
@@ -671,9 +671,9 @@
    "tier": "C",
    "topic": "记忆",
    "rank": 70,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": false,
-   "basis": "needs_syntax_note：待投影：本条目由循环产线守护按 G4 契约自动初建（tier 照实=C、claim 取册内断言、experiment 填终裁 EXP-1/inconclusiv…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 62 行",
    "experiment_status": "inconclusive"
   },
   {
@@ -682,9 +682,9 @@
    "tier": "C",
    "topic": "多agent协同",
    "rank": 81,
-   "dsl_state": "needs_syntax",
+   "dsl_state": "compilable",
    "in_59_clusters": false,
-   "basis": "needs_syntax_note：待投影：本条目由循环产线守护按 G4 契约自动初建（tier 照实=C、claim 取册内断言、experiment 填终裁 EXP-2/inconclusiv…",
+   "basis": "编译门实测 COMPILE-OK（load_str+validate 零违例）；dsl_snippet 118 行",
    "experiment_status": "inconclusive"
   }
  ]

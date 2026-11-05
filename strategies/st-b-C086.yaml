@@ -9,5 +9,87 @@ claimed_value:
 sources: [S082, S083]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: needs_syntax
-needs_syntax_note: "缺「上下文压缩策略段」（与 st-b-C028 同族，本条四件套更具体）：阈值触发位、结构化交接摘要模板绑定、保留最近比例原文、摘要失败降级链，v0.1 均无对应语法。\n扩展建议（示例）：\n  context:\n    compression:\n      trigger: { ratio: 0.80 }                        # ① 阈值触发\n      handoff_summary:                                 # ② 结构化交接摘要\n        template_ref: pkg.ctx.handoff\n        fields: [goal, done, next, blockers]\n      keep_recent_ratio: 0.25                          # ③ 保留最近 25% 原文\n      on_failure: truncate                             # ④ 摘要失败降级为截断\n簇内支撑：S082 的压缩阈值与 S083 的工具响应预算常量同源（chatCompressionService.ts:274），扩展参数应同文件锚定。"
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: compression_four_piece
+    graph_version: "1.0"
+    entry: solve_loop
+    input: ticket
+    output: { ref: resolution, from: conclude }
+    intent: "压缩四件套投影：①阈值触发=组件 pkg.ctx.compressor@1 内参数（S082/S083 同源锚 0.80；v0.1 段面无 trigger 位）②结构化交接摘要=handoff 模板段（vars 绑 goal/done/next/blockers）③保留最近比例原文=latest_k 段（比例 0.25 按窗口折算 k=8）④摘要失败降级 truncate=组件内降级链（v0.1 无 on_failure 位）。对照臂=纯截断至超限（st-b-C028 同族，簇内矛盾 S001↔S009 已登记，落地同台 A/B）"
+  types:
+    - name: ticket
+      schema:
+        type: object
+        required: [goal, done, next, blockers]
+        properties:
+          goal: { type: string }
+          done: { type: string }
+          next: { type: string }
+          blockers: { type: string }
+    - name: turn_note
+      schema:
+        type: object
+        required: [body]
+        properties:
+          body: { type: string }
+    - name: resolution
+      schema:
+        type: object
+        required: [status]
+        properties:
+          status: { type: string }
+  stores:
+    - name: history
+      type: message_log
+      writer: solve_loop
+      lifecycle: run
+      retention: { max_items: 512 }
+  nodes:
+    - id: solve_loop
+      kind: task
+      uses: { model: route.main@1 }
+      loop:
+        body:
+          nodes:
+            - id: step
+              kind: task
+              uses: { model: route.main@1 }
+              emits: { note: turn_note, state: turn_note }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.ctx.handoff, vars: { goal: input.goal, done: input.done, next: input.next, blockers: input.blockers }, quota_tokens: 500 }
+                  - { from: store, store: history, policy: summarize, component: pkg.ctx.compressor@1, quota_tokens: 1200 }
+                  - { from: store, store: history, policy: latest_k, args: { k: 8 }, quota_tokens: 700 }
+            - id: done_check
+              kind: check
+              uses: { unit: pkg.ticket.done_probe@1 }
+              consumes: { state: turn_note }
+              emits: { state: turn_note }
+          edges:
+            - { from: step, output: state, to: done_check, input: state }
+        max_iterations: 14
+        safety_points:
+          - { node: done_check, kind: check }
+        exit_when: "attempt.passed == true"
+        on_exhausted: continue
+      writes: [history]
+      emits: { state: { from_body: step.state } }
+    - id: conclude
+      kind: task
+      uses: { model: route.main@1 }
+      consumes: { state: turn_note }
+      emits: { resolution: resolution }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.ctx.conclude_system, quota_tokens: 300 }
+          - { from: edge, port: state, quota_tokens: 500 }
+  edges:
+    - { from: solve_loop, output: state, to: conclude, input: state }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 550 }
+    failures:
+      - { class: budget_exhausted, terminal: true, outcome: failed }

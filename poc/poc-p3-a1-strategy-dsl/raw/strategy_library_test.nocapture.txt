@@ -1,5 +1,5 @@
-    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
-     Running tests/strategy_library_test.rs (/data/bench/targets/p3-a1-strategy-dsl/debug/deps/strategy_library_test-0fdc4a2de29f665e)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.06s
+     Running tests/strategy_library_test.rs (/data/bench/targets/a2-p3a1-12clusters/debug/deps/strategy_library_test-6a44fa07159cb9b3)
 
 running 1 test
 [strategy-library] COMPILE-OK st-C005
@@ -13,17 +13,17 @@ running 1 test
 [strategy-library] COMPILE-OK st-C016
 [strategy-library] COMPILE-OK st-C018
 [strategy-library] COMPILE-OK st-C019
-[strategy-library] NEEDS-SYNTAX st-C103
-[strategy-library] NEEDS-SYNTAX st-C122
-[strategy-library] NEEDS-SYNTAX st-b-C001
+[strategy-library] COMPILE-OK st-C103
+[strategy-library] COMPILE-OK st-C122
+[strategy-library] COMPILE-OK st-b-C001
 [strategy-library] COMPILE-OK st-b-C003
 [strategy-library] NOT-APPLICABLE st-b-C022
-[strategy-library] NEEDS-SYNTAX st-b-C028
-[strategy-library] NEEDS-SYNTAX st-b-C029
+[strategy-library] COMPILE-OK st-b-C028
+[strategy-library] COMPILE-OK st-b-C029
 [strategy-library] COMPILE-OK st-b-C035
 [strategy-library] COMPILE-OK st-b-C036
 [strategy-library] COMPILE-OK st-b-C037
-[strategy-library] NEEDS-SYNTAX st-b-C038
+[strategy-library] COMPILE-OK st-b-C038
 [strategy-library] COMPILE-OK st-b-C042
 [strategy-library] NOT-APPLICABLE st-b-C046
 [strategy-library] COMPILE-OK st-b-C048
@@ -33,18 +33,18 @@ running 1 test
 [strategy-library] COMPILE-OK st-b-C057
 [strategy-library] NOT-APPLICABLE st-b-C058
 [strategy-library] COMPILE-OK st-b-C060
-[strategy-library] NEEDS-SYNTAX st-b-C062
+[strategy-library] COMPILE-OK st-b-C062
 [strategy-library] NOT-APPLICABLE st-b-C063
-[strategy-library] NEEDS-SYNTAX st-b-C064
+[strategy-library] COMPILE-OK st-b-C064
 [strategy-library] COMPILE-OK st-b-C069
 [strategy-library] COMPILE-OK st-b-C071
 [strategy-library] NOT-APPLICABLE st-b-C073
 [strategy-library] NOT-APPLICABLE st-b-C075
 [strategy-library] COMPILE-OK st-b-C077
 [strategy-library] COMPILE-OK st-b-C078
-[strategy-library] NEEDS-SYNTAX st-b-C079
+[strategy-library] COMPILE-OK st-b-C079
 [strategy-library] NOT-APPLICABLE st-b-C080
-[strategy-library] NEEDS-SYNTAX st-b-C086
+[strategy-library] COMPILE-OK st-b-C086
 [strategy-library] NOT-APPLICABLE st-b-C087
 [strategy-library] COMPILE-OK st-b-C092
 [strategy-library] COMPILE-OK st-b-C095
@@ -59,12 +59,12 @@ running 1 test
 [strategy-library] NOT-APPLICABLE st-b-C114
 [strategy-library] NOT-APPLICABLE st-b-C118
 [strategy-library] NOT-APPLICABLE st-b-C121
-[strategy-library] NEEDS-SYNTAX st-b-C124
-[strategy-library] NEEDS-SYNTAX st-b-C125
+[strategy-library] COMPILE-OK st-b-C124
+[strategy-library] COMPILE-OK st-b-C125
 [strategy-library] NOT-APPLICABLE st-b-C126
 [strategy-library] NOT-APPLICABLE st-b-C128
-[strategy-library] 条目 61：compilable=32 needs_syntax=12 not_applicable=17
+[strategy-library] 条目 61：compilable=44 needs_syntax=0 not_applicable=17
 test strategy_library_entries_compile ... ok
 
-test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
 

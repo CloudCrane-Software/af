@@ -9,5 +9,88 @@ claimed_value:
 sources: [S048, S050]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: needs_syntax
-needs_syntax_note: "缺「技能/资源渐进披露声明段」：v0.1 的 context.sections 只有 template/input/arg/edge/store 五来源，无法声明「技能入口摘要常驻 + 支撑资源按需展开」的两级装载，也没有「agent 是否真去读了支撑资源」的可观测装订面。\n扩展建议（示例，新增 skills 段或 context.section 增 from: skill）：\n  skills:\n    - name: pkg.skill.db_migration\n      entry: { ref: summary.md, policy: full, quota_tokens: 400 }     # 入口摘要常驻\n      resources:                                                       # 按需展开\n        - { ref: scripts/migrate.py, load: on_demand, executable: true }\n        - { ref: tests/fixtures.sql, load: on_demand }\n  # 观测面：resource_reads 进 steps 词表，供 stop/route 判「真去读了没有」\n簇内边界已登记：收益依赖支撑资源可执行且真被读取（S050 限定条件），不可执行资源的渐进披露不赚。"
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: progressive_skill_disclosure
+    graph_version: "1.0"
+    entry: bind_skill
+    input: job
+    output: { ref: job_result, from: execute }
+    intent: "渐进披露（vs 扁平单文件）：bind_skill 只装订技能入口摘要（template 段=summary.md 常驻 400 token）；execute 按需展开支撑资源（resource_catalog retrieve 段，component pkg.skill.loader@1, k=2）；used_resource 闸断言回取路径非空=agent 真去读了支撑资源（S050 限定条件：收益依赖资源可执行且真被读取；executable 位为组件侧参数）。S048/S050 口径：受控对比 pass_trial_rate +4.1%。v0.1 无 skill 源——入口=template 段、资源=store retrieve 段（note 登记的理想 skills 段属后续批）"
+  types:
+    - name: job
+      schema:
+        type: object
+        required: [goal]
+        properties:
+          goal: { type: string }
+    - name: resource_doc
+      schema:
+        type: object
+        required: [path, content_ref]
+        properties:
+          path: { type: string }
+          content_ref: { type: string }
+    - name: loaded_resource
+      schema:
+        type: object
+        required: [path]
+        properties:
+          path: { type: string }
+          ran: { type: boolean }
+    - name: job_result
+      schema:
+        type: object
+        required: [ok]
+        properties:
+          ok: { type: boolean }
+  stores:
+    - name: resource_catalog
+      type: collection
+      item: resource_doc
+      writer: load_catalog
+      lifecycle: run
+      retention: { max_items: 128 }
+  nodes:
+    - id: load_catalog
+      kind: transform
+      uses: { unit: pkg.skill.catalog_loader@1 }
+      writes: [resource_catalog]
+      emits: { ready: signal }
+    - id: bind_skill
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.skill.runtime@1] }
+      emits: { picked: signal }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.skill.db_migration.summary, quota_tokens: 400 }
+          - { from: input, fields: [goal], quota_tokens: 400 }
+    - id: execute
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.skill.runtime@1] }
+      consumes:
+        ready: signal
+        picked: signal
+      emits: { used: loaded_resource, result: job_result }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.skill.db_migration.summary, quota_tokens: 300 }
+          - { from: edge, port: ready, quota_tokens: 50 }
+          - { from: edge, port: picked, quota_tokens: 50 }
+          - { from: store, store: resource_catalog, policy: retrieve, component: pkg.skill.loader@1, args: { k: 2 }, quota_tokens: 1200 }
+    - id: used_resource
+      kind: gate
+      consumes: { used: loaded_resource }
+      assert: "inputs.used.path != ''"
+      emits: { used: loaded_resource }
+  edges:
+    - { from: load_catalog, output: ready, to: execute, input: ready }
+    - { from: bind_skill, output: picked, to: execute, input: picked }
+    - { from: execute, output: used, to: used_resource, input: used }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 350 }
+    failures:
+      - { class: budget_exhausted, terminal: true, outcome: failed }

@@ -9,5 +9,116 @@ claimed_value:
 sources: [S002, S155]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: needs_syntax
-needs_syntax_note: "缺「上下文编辑策略段」：v0.1 的 context.sections 是装载期声明（来源+视图策略+配额），没有运行期「清除」语义——无清除触发位、无保留窗口、无占位策略。\n扩展建议（示例，挂在节点 context 上）：\n  context:\n    editing:\n      trigger: { ratio: 0.80 }              # 接近窗口上限触发清理\n      clear_tool_results_after: 3           # 仅保留最近 3 条工具结果\n      keep_first_observation: true          # 首条观察留作锚点\n      on_clear: leave_placeholder           # 清除后留占位符（保消息结构）\n簇内提示：该手段与 S009 的「观测掩码/无损压缩」同族，落地时应与 LLM 摘要压缩（见 st-b-C028 的扩展建议）同台 A/B——摘要压缩有纯增成本 24–94% 的负面证据。"
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: tool_result_clearing
+    graph_version: "1.0"
+    entry: seed_anchor
+    input: edit_task
+    output: { ref: fix_result, from: wrap_up }
+    intent: "上下文编辑（tool result clearing）：tool_results 由 run_tool 单写（lifecycle=iteration），后续轮次只经 latest_k 视图（args.k=3=仅保留最近 3 条工具结果）装配；首条观察锚点=anchors 全量段（keep_first_observation）；触发比 0.80 与占位符策略为 harness 侧参数（v0.1 段面无运行期 trigger 位，清除语义=装载期视图策略的等价投影）。S002/S155 口径：context editing 单独 resolved_rate +29%；簇内提示：与 LLM 摘要压缩（st-b-C028）同台 A/B"
+  types:
+    - name: edit_task
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: anchor_note
+      schema:
+        type: object
+        required: [note_ref]
+        properties:
+          note_ref: { type: string }
+    - name: tool_result
+      schema:
+        type: object
+        required: [call_id, output_ref]
+        properties:
+          call_id: { type: string }
+          output_ref: { type: string }
+    - name: draft_patch
+      schema:
+        type: object
+        required: [patch_ref]
+        properties:
+          patch_ref: { type: string }
+    - name: fix_result
+      schema:
+        type: object
+        required: [ok]
+        properties:
+          ok: { type: boolean }
+  stores:
+    - name: anchors
+      type: collection
+      item: anchor_note
+      writer: seed_anchor
+      lifecycle: run
+      retention: { max_items: 8 }
+    - name: tool_results
+      type: collection
+      item: tool_result
+      writer: work_loop.run_tool
+      lifecycle: iteration
+      retention: { max_items: 64 }
+  nodes:
+    - id: seed_anchor
+      kind: task
+      uses: { model: route.main@1 }
+      writes: [anchors]
+      emits: { seed: anchor_note }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.editor.system, quota_tokens: 400 }
+          - { from: input, fields: [issue], quota_tokens: 400 }
+    - id: work_loop
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: run_tool
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.repo.edit@1, pkg.repo.test@1] }
+              writes: [tool_results]
+              emits: { result: tool_result, draft: draft_patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.editor.system, quota_tokens: 400 }
+                  - { from: input, fields: [issue], quota_tokens: 300 }
+                  - { from: store, store: anchors, policy: full, quota_tokens: 300 }
+                  - { from: store, store: tool_results, policy: latest_k, args: { k: 3 }, quota_tokens: 900 }
+            - id: progress
+              kind: check
+              uses: { unit: pkg.ci.rerun@1 }
+              consumes: { draft: draft_patch }
+              emits: { draft: draft_patch }
+          edges:
+            - { from: run_tool, output: draft, to: progress, input: draft }
+        max_iterations: 10
+        carried:
+          - { store: tool_results, max_items: 64 }
+        safety_points:
+          - { node: progress, kind: check }
+        exit_when: "attempt.passed == true"
+        on_exhausted: continue
+      emits: { draft: { from_body: run_tool.draft } }
+    - id: wrap_up
+      kind: task
+      uses: { model: route.main@1 }
+      consumes: { draft: draft_patch }
+      emits: { result: fix_result }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.editor.wrapup_system, quota_tokens: 300 }
+          - { from: edge, port: draft, quota_tokens: 500 }
+  edges:
+    - { from: work_loop, output: draft, to: wrap_up, input: draft }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 500 }
+      - { id: loop_turns, dimension: turns, scope: loop:work_loop, cap: 40 }
+    failures:
+      - { class: budget_exhausted, terminal: true, outcome: failed }
