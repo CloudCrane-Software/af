@@ -19,18 +19,22 @@
   =记录值），外加 gate verdict 严格 == `pass`（af-workorder `gate_admit.rs`
   同词汇表，未知词一律非绿）。任一不符=拒绝合入。gitea Actions runner 不可用
   时以复核制替代，门不跳过。
-- **订单账**：af-order CLI `submit`（stub 单元一次性驱动 Created→…→Closed），
+- **订单账**：适配器侧 `{order_id}.ledger.jsonl` 记 patch / gate / merge
+  （门红记 `gate_result=red`，状态 Failed，不合入即不 Closed）。Closed 必须有
+  这三记录。af-order CLI `submit` 只在合入成功之后调用（不手改其台账）；
   工件面挂 `state/orders/<order_id>/artifacts/`（artifacts.json + patch +
-  gate_result + manifest.sha256）；`ledger.jsonl`/`mes-events.jsonl` 由 af-order
-  驱动写，本适配器不手改账本。
+  gate_result + adapter ledger + manifest.sha256）。
 
 ## 生命周期绑定（lease ↔ worktree）
 
 运行足迹固定 `<run-root>/<lease_id>/`（repo 克隆 + worktree +
 `lease-binding.json`）。`release`（还）与 `reap`（过期回收）都移除整个足迹目录：
-lease 过期后 worktree 不留存为「活」件。`reap` 先跑 `lease_store.py reap`
-（active→expired 既有语义），再清掉全部非 active lease 的足迹；可独立执行、
-可复跑，作「租约过期可回收」的独立验证。
+lease 过期后 worktree 不留存为「活」件。`release` 先验 holder（存在/active/
+未过期/holder 匹配），成功 `return` 后再 rmtree；错 holder 时租约与树都不动。
+`reap` 先跑 `lease_store.py reap`（active→expired 既有语义），再清掉全部非
+active lease 的足迹；可独立执行、可复跑，作「租约过期可回收」的独立验证。
+patch / 门 / 合入前强制同一四态复核；`apply_edits` 全编辑内存规划后一次性提交，
+第二项失败时树无前序残留。
 
 ## 用法
 
@@ -39,7 +43,7 @@ lease 过期后 worktree 不留存为「活」件。`reap` 先跑 `lease_store.p
 python3 -I poc/poc-e-codeadapter/codeadapter.py run \
   --plan <plan.json> --run-root af-state/poc-e/runs --evidence-dir <evidence-dir>
 
-# 还 lease（先移足迹再归还）
+# 还 lease（先验 holder/四态，成功 return 后再移足迹；错 holder 树与租约都不动）
 python3 -I poc/poc-e-codeadapter/codeadapter.py release \
   --run-dir <run-root>/<lease_id> --leases-db af-state/resources/leases.db --holder poc-e
 
@@ -55,6 +59,7 @@ bash poc/poc-e-codeadapter/gate_f1.sh <worktree> <out-dir>   # 0=绿（SUMMARY �
 
 ```bash
 python3 -I poc/poc-e-codeadapter/tests/test_codeadapter.py
+# 或：cd poc/poc-e-codeadapter && python3 -m pytest tests/test_codeadapter.py -q
 ```
 
 ## 边界（如实）
