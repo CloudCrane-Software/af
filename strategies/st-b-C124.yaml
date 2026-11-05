@@ -9,5 +9,44 @@ claimed_value:
 sources: [S168, S169]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: needs_syntax
-needs_syntax_note: "缺「缓存亲和声明」两处语法：\n① 上下文布局约束：v0.1 的 context.sections 有声明序但无「稳定前缀/append-only/禁动态时间戳」的布局约束表达，缓存友好的布局不可声明、不可校验；\n② cache_key 粘性路由：uses.model 是静态端点串，无「同 cache_key 粘住同端点/同会话」的路由面。\n扩展建议（示例）：\n  meta:\n    cache_affinity:\n      stable_prefix: [template, static_docs]        # 稳定段前置（禁动态内容）\n      layout: append_only                           # 布局约束\n  # 节点/uses 级：\n  #   uses: { model: route.main@1, cache_key: { from: input.session_id, sticky: true } }\n簇内提示：两卡 link_dead=true（确证线带豁免），落地上限前应先在自家 harness 复测价差假设。"
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: cache_friendly_layout
+    graph_version: "1.0"
+    entry: serve
+    input: request
+    output: { ref: reply, from: serve }
+    intent: "缓存亲和投影：①稳定前缀=sections 声明序——静态系统模板 + 静态文档段前置、动态 input 段在尾（append-only 布局=段序无运行时重排，v0.1 等价表达）；②cache_key 粘性=uses.model 静态端点串 route.main@1（同图同端点=前缀粘住；会话亲和由 harness 按 input.session_id 归并）。S168/S169 口径：cached input ≈10 倍价差、官方称省最多 90%；两卡 link_dead=true 已登记豁免——B 组（本图）vs A 组（动态前缀/时间戳/共享 cache_key）走 harness A/B 看 cached input 占比"
+  types:
+    - name: request
+      schema:
+        type: object
+        required: [query, session_id]
+        properties:
+          query: { type: string }
+          session_id: { type: string }
+    - name: reply
+      schema:
+        type: object
+        required: [answer]
+        properties:
+          answer: { type: string }
+  nodes:
+    - id: serve
+      kind: task
+      uses: { model: route.main@1 }
+      emits: { reply: reply }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.serve.system_prompt, quota_tokens: 1200 }
+          - { from: template, template_ref: pkg.serve.static_docs, quota_tokens: 2400 }
+          - { from: input, fields: [query], quota_tokens: 400 }
+          - { from: input, fields: [session_id], quota_tokens: 100 }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 250 }
+      - { id: cache_window, dimension: tokens_in, scope: node:serve, cap: 4000 }
+    failures:
+      - { class: budget_exhausted, terminal: true, outcome: failed }

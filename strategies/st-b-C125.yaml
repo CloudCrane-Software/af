@@ -9,5 +9,121 @@ claimed_value:
 sources: [S171, S172]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: needs_syntax
-needs_syntax_note: "缺「遥测计数器作为一等策略维度」与「按类直取计数」两处语法：\n① budgets.dimension 八词表（turns/model_calls/tokens_*/tool_calls/cents/clock_ms）全是资源维度，无遥测维度；policies.stop[].when 与 loop.exit_when 的 CEL 作用域（全局五根 steps/budget/last_tool/last_message/input + 节点端口）不可见 store 内累计值——「自消解率门禁」无处挂载。\n② tally 算子只产出 answers/top_count/top_share_milli（tally_result），无法直取某个策略类的计数再算比率。\n扩展建议（示例）：\n  policies:\n    stop:\n      - { when: \"telemetry.merge.self_resolve_rate < 500\", outcome: escalated_human }   # 遥测根 + 毫分比率\n  # 或 ops 增类计数直取：\n  ops:\n    - { op: tally, port: conflicts, by: strategy, into: stats, class_counts: { self_resolved: true } }\n落地前，合并冲突的归因与门禁只能写在 harness 外挂遥测里，AFB 图内不可表达。"
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: merge_conflict_attribution_gate
+    graph_version: "1.0"
+    entry: detect
+    input: merge_batch
+    output: { ref: gate_verdict, from: rate_gate }
+    intent: "合并冲突归因+自消解率门禁：detect 归因冲突（制造者/策略类型）→resolve_batch 按 V1/V2/新码/组合四类策略消解并写 attribution_log（INV-2 单写者：conflict_id/producer/resolver/strategy/self_resolved 五字段）→双 tally 分别按 strategy 与 self_resolved 计票→rate_gate 断言 by_resolution.top_share_milli ≥ 500（全库量纲 0..1000）。选型：不补桶级可判定计数字段——tally by:self_resolved 的 top_share 是布尔两桶较大桶占比，而非 self_resolved=true 桶占比；两桶下较大桶恒 ≥ 500，该断言在该近似下方向性不可判定（无法区分「多数自消解」与「多数人工」）。S171/S172 口径：96.1% 冲突由人类解决、agent 自消解率厂商差近 60 倍；按类直取 true 桶属后续批扩展，本条以 store 单写者 + tally 算子表达可执行核"
+  types:
+    - name: merge_batch
+      schema:
+        type: object
+        required: [task, files]
+        properties:
+          task: { type: string }
+          files: { type: array, items: { type: string } }
+    - name: conflict
+      schema:
+        type: object
+        required: [conflict_id, producer, strategy]
+        properties:
+          conflict_id: { type: string }
+          producer: { type: string }
+          strategy: { type: string }
+    - name: attribution
+      schema:
+        type: object
+        required: [conflict_id, producer, resolver, strategy, self_resolved]
+        properties:
+          conflict_id: { type: string }
+          producer: { type: string }
+          resolver: { type: string }
+          strategy: { type: string }
+          self_resolved: { type: boolean }
+    - name: tally_result
+      schema:
+        type: object
+        required: [answers, top_count, top_share_milli]
+        properties:
+          answers: { type: integer }
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+    - name: gate_verdict
+      schema:
+        type: object
+        required: [pass, self_resolve_share_milli]
+        properties:
+          pass: { type: boolean }
+          self_resolve_share_milli: { type: integer }
+  stores:
+    - name: attribution_log
+      type: collection
+      item: attribution
+      writer: resolve_batch
+      lifecycle: run
+      retention: { max_items: 1024 }
+  nodes:
+    - id: detect
+      kind: task
+      uses: { model: route.main@1 }
+      emits: { conflicts: "list<conflict>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.merge.attribution_system, quota_tokens: 600 }
+          - { from: input, fields: [task, files], quota_tokens: 800 }
+    - id: resolve_batch
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.merge.strategy_v1@1, pkg.merge.strategy_v2@1, pkg.merge.compose_new@1] }
+      consumes: { conflicts: "list<conflict>" }
+      writes: [attribution_log]
+      emits: { records: "list<attribution>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.merge.resolver_system, quota_tokens: 500 }
+          - { from: edge, port: conflicts, quota_tokens: 900 }
+    - id: tally_strategies
+      kind: transform
+      consumes: { records: "list<attribution>" }
+      ops:
+        - { op: tally, port: records, by: strategy, into: by_strategy }
+        - { op: tally, port: records, by: self_resolved, into: by_resolution }
+      emits:
+        by_strategy: tally_result
+        by_resolution: tally_result
+    - id: rate_gate
+      kind: gate
+      consumes:
+        by_strategy: tally_result
+        by_resolution: tally_result
+      assert: "inputs.by_resolution.top_share_milli >= 500"
+      emits: { verdict: gate_verdict }
+      route:
+        default: exit
+        rules:
+          - { when: "rate_gate.passed == false", goto: escalate }
+    - id: escalate
+      kind: task
+      uses: { model: route.main@1 }
+      consumes: { verdict: gate_verdict }
+      emits: { resolution: gate_verdict }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.merge.escalation_system, quota_tokens: 500 }
+          - { from: edge, port: verdict, quota_tokens: 600 }
+  edges:
+    - { from: detect, output: conflicts, to: resolve_batch, input: conflicts }
+    - { from: resolve_batch, output: records, to: tally_strategies, input: records }
+    - { from: tally_strategies, output: by_strategy, to: rate_gate, input: by_strategy }
+    - { from: tally_strategies, output: by_resolution, to: rate_gate, input: by_resolution }
+    - { from: rate_gate, output: verdict, to: escalate, input: verdict }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 900 }
+      - { id: resolve_turns, dimension: turns, scope: node:resolve_batch, cap: 20 }
+    failures:
+      - { class: budget_exhausted, terminal: true, outcome: failed }

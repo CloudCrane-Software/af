@@ -12,5 +12,67 @@ experiment:
   status: inconclusive
   exp_id: "EXP-1"
   note: "终裁 inconclusive；n_p=23；main_diff_pp=0.0pp；mcnemar_p_one_sided=0.75；main_tost_cp90_pp=[-8.255294512711242, 8.255294512711242]pp；gate_fires=False；来源 exp1-aggregate-summary.json（镜像 sig=1dc540302dad，completed=143）；判定程序唯一性门 b-verdict-unique exit=0。主断言卡 S161 → 簇 C122（tier C）。"
-dsl_state: needs_syntax
-needs_syntax_note: "待投影：本条目由循环产线守护按 G4 契约自动初建（tier 照实=C、claim 取册内断言、experiment 填终裁 EXP-1/inconclusive）。claimed_value{metric,direction,context} 策略册无对应字段（direction 为 R1 闭集占位、非判读结论）；dsl_snippet 需 AFB 语义级撰写——投影补齐走既有待办路径（loop-state projection_todos），补前本条目不参与任何判读引用。"
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: negative_only_rule_polarity
+    graph_version: "1.0"
+    entry: edit
+    input: change_ticket
+    output: { ref: polarity_verdict, from: polarity_gate }
+    intent: "规则极性治理投影：edit 上下文只装订负向约束模板（「不要重构无关代码」类——pkg.rules.negative_only；正向「遵循代码风格」类模板不装订=极性治理的装配面）；polarity_gate 验证 diff 未触碰范围外文件（scope 漂移=正向规则历史危害信号的口径化）。EXP-1 终裁 inconclusive（n_p=23，main 0.0pp，note 照实登记）——本图只投影「只写负向」的可执行面；随机/精编/正向对照臂走 harness 同批任务"
+  types:
+    - name: change_ticket
+      schema:
+        type: object
+        required: [task, in_scope_files]
+        properties:
+          task: { type: string }
+          in_scope_files: { type: array, items: { type: string } }
+    - name: edit_patch
+      schema:
+        type: object
+        required: [diff_ref, touched_files, polarity_clean]
+        properties:
+          diff_ref: { type: string }
+          touched_files: { type: array, items: { type: string } }
+          polarity_clean: { type: boolean }
+    - name: polarity_verdict
+      schema:
+        type: object
+        required: [polarity_clean]
+        properties:
+          polarity_clean: { type: boolean }
+  nodes:
+    - id: edit
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.fs.workdir_rw@1, pkg.repo.edit@1] }
+      consumes: { review: polarity_verdict }
+      emits: { patch: edit_patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.rules.negative_only, quota_tokens: 500 }
+          - { from: input, fields: [task], quota_tokens: 400 }
+          - { from: input, fields: [in_scope_files], quota_tokens: 300 }
+          - { from: edge, port: review, optional: true, quota_tokens: 200 }
+    - id: polarity_gate
+      kind: gate
+      uses: { unit: pkg.review.scope_diff@1 }
+      consumes: { patch: edit_patch }
+      assert: "inputs.patch.polarity_clean == true"
+      emits: { verdict: polarity_verdict }
+      route:
+        default: exit
+        rules:
+          - { when: "polarity_gate.passed == false", goto: edit }
+  edges:
+    - { from: edit, output: patch, to: polarity_gate, input: patch }
+    - { from: polarity_gate, output: verdict, to: edit, input: review }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 300 }
+      - { id: edit_turns, dimension: turns, scope: node:edit, cap: 12 }
+    failures:
+      - { class: gate_refused, retry: { max: 1, backoff_ms: 0 } }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

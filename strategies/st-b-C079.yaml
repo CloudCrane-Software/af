@@ -9,5 +9,77 @@ claimed_value:
 sources: [S073, S074]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: needs_syntax
-needs_syntax_note: "缺「执行环境边界声明段」：v0.1 的节点字段（uses/ops/route/loop/map/human/escape）与 policies 三账都不描述执行环境 confinement——无文件系统可写边界、无网络代理白名单、无权限打断预算；escape 的 env_adapter 类只做 L4 记账，不声明边界本身。\n扩展建议（示例，挂在节点或图级）：\n  nodes:\n    - id: coder\n      kind: task\n      sandbox:                                   # 新增执行环境边界段\n        fs: { writable: [workdir], read_only: [system_paths] }   # bubblewrap/Seatbelt 双边界\n        net: { mode: proxy_allowlist, domains: [registry.npmjs.org, pypi.org] }\n        permission_budget: { prompts: 0 }        # 权限打断预算（减少 84% 口径）\n落地前，沙箱边界只能实现在执行器/容器层（AFB 外），图内不可声明、不可静态核对。"
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: os_level_dual_boundary_sandbox
+    graph_version: "1.0"
+    entry: confined_coder
+    input: change_request
+    output: { ref: change_result, from: merge_check }
+    intent: "OS 级双边界沙箱投影：v0.1 图面无 sandbox 段——confinement 经 escape env_adapter 构造绑定边界适配 impl pkg.sandbox.bwrap_seatbelt@1（bubblewrap/Seatbelt：workdir 可写+系统路径只读+代理域白名单=impl 参数面）；uses.tools 只列白名单工具（网络出口=pkg.net.proxy_allowlist 域白名单装订）；权限打断预算 0 → 图内零 human 节点。S073/S074 口径：权限打断减少 84%；对照臂=全权限提示模式，走 harness A/B 看 permission_prompts"
+  types:
+    - name: change_request
+      schema:
+        type: object
+        required: [ticket, workdir]
+        properties:
+          ticket: { type: string }
+          workdir: { type: string }
+    - name: patch_out
+      schema:
+        type: object
+        required: [diff_ref]
+        properties:
+          diff_ref: { type: string }
+    - name: change_result
+      schema:
+        type: object
+        required: [merged]
+        properties:
+          merged: { type: boolean }
+  stores:
+    - name: workspace
+      type: collection
+      item: patch_out
+      writer: confined_coder
+      lifecycle: run
+      retention: { max_items: 64 }
+  nodes:
+    - id: confined_coder
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.fs.workdir_rw@1, pkg.net.proxy_allowlist@1, pkg.repo.grep@1] }
+      consumes: { review: change_result }
+      writes: [workspace]
+      emits: { patch: patch_out }
+      escape:
+        kind: env_adapter
+        impl_ref: pkg.sandbox.bwrap_seatbelt@1
+        reason: "fs 可写边界=workdir+系统路径只读；net 代理域白名单上网；权限打断预算 0（84% 口径）"
+        owner: platform
+        share_budget_pct: 10
+      context:
+        sections:
+          - { from: template, template_ref: pkg.coder.confined_system, quota_tokens: 500 }
+          - { from: input, fields: [ticket, workdir], quota_tokens: 400 }
+          - { from: edge, port: review, optional: true, quota_tokens: 200 }
+    - id: merge_check
+      kind: check
+      uses: { unit: pkg.ci.merge_probe@1 }
+      consumes: { patch: patch_out }
+      emits: { merged: change_result }
+      route:
+        default: exit
+        rules:
+          - { when: "merge_check.passed == false", goto: confined_coder }
+  edges:
+    - { from: confined_coder, output: patch, to: merge_check, input: patch }
+    - { from: merge_check, output: merged, to: confined_coder, input: review }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+      - { id: confinement_prompts, dimension: tool_calls, scope: node:confined_coder, cap: 30 }
+    failures:
+      - { class: environment_failure, retry: { max: 2, backoff_ms: 5000 } }
+      - { class: unauthorized, terminal: true, outcome: failed }

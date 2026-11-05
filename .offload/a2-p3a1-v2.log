@@ -1,0 +1,48 @@
+先核对工作树、父提交和 7551774 证据面，再按 M1 从 `origin/product/main` 重植分支。工作树已在 `origin/product/main` 的 detached HEAD。接着 fetch、确认 7551774，再切出 v2 分支并 cherry-pick。主线上已有 5 件 fail-open 夹具和「闭环接缝」节；7551774 上两者都是 0。开始建分支并 cherry-pick。M1 已落地：fail-open=5、「闭环接缝」=1。接着核对 18 件证据、读 C125/C062 与叙述文件，并启动 M2 测试。18 件证据已在 HEAD。接着读 C125/C062 参照、tally 量纲和待改叙述，并启动编译测试。M1 已核完。先改 C125/C062 与叙述，同时起 cherry-pick 后的装载测试。装载测试已是 44/0/17。开始改 C125、C062 和三处叙述。C062 的 `route` 缺 `rules` 字段。去看 schema，再按先例把规则补上。E2205 夹具已咬人。接着跑 fmt、strategies_check，并并行启动 compile-all 与全量测试。compile-all 实读是 44/10/34，不是预估的 8/36。正在按实数改 README，并继续等全量测试。门读数齐了。接着写 changelog、提交并推送。分支 `feature/a2-p3a1-12clusters-v2` 已推到 origin，HEAD `e9557aae1594c966803777940b968ba0d5eb0e1e`。父提交是 `origin/product/main`（59403d1），不是 salvage/a429e6f。
+
+## M1 基线重植
+从 `origin/product/main` 建枝，cherry-pick `7551774`。3 处冲突（`raw/{gate-test-workspace,strategy_library_test.nocapture,zero-weakening}.txt`）全部 `--theirs`（7551774 侧）。
+
+读数：`fail-open-r3-nofloor=5`，`strategies/README.md`「闭环接缝」=1。cherry-pick 提交 `a8637de`，父提交 `59403d1`。
+
+## M2 证据与叙述 → 44/0/17
+装载测试尾行 `compilable=44 needs_syntax=0 not_applicable=17`，12 条全 COMPILE-OK。`python3 -B ci/strategies_check.py` 全绿（compilable=44）。
+
+- `raw/strategies_check.baseline.txt`：历史 32/12/17 **未改**，加一行「基线当刻快照，当前分布见 after-edit」
+- `poc/poc-p3-a1-strategy-dsl/README.md`：当刻实跑 / 分布 / COMPILE-OK 名单 / 四段链改为 44/0/17
+- `compile-all` 重跑：total=61，compilable=44，四段全链=10（原 8 + st-C103 + st-b-C124），bind 断 34
+
+## M3 st-b-C125 rate_gate
+- 断言 `>= 500000` → `>= 500`（量纲 0..1000）
+- `tally_result` 补 `answers`，与全库口径对齐
+- **选型：不补桶级计数字段**。intent 写明：`tally by:self_resolved` 的 `top_share` 是布尔两桶较大桶占比，两桶下较大桶恒 ≥ 500，该断言方向性不可判定
+
+## M4 st-b-C062 used_resource
+补 `route: {default: exit, rules: []}`，output 改为 `from: used_resource`，execute.result 接到闸。`loaded_resource.ran` 进 required，assert 为 `path != '' && ran == true`。失败类补 `gate_refused`。
+
+## 五门
+| 门 | 读数 |
+|---|---|
+| fmt | rc=0 |
+| `cargo test -j4 --workspace --no-fail-fast` | suites=160，passed=**1598**，failed=1，ignored=9（rc=101） |
+| clippy | json rc=0，error=0，warning=0；`clippy_gate.py` **PASS**（0 签名） |
+| gate_inputs | rc=0，14 件钉一致 |
+| `python3 -B ci/strategies_check.py` | rc=0，**44/0/17** |
+
+改前→改后 nocapture 差分恰好 12 条 NEEDS-SYNTAX→COMPILE-OK：st-C103/C122、st-b-C001/C028/C029/C038/C062/C064/C079/C086/C124/C125。
+
+夹具：把 st-b-C125 `by_resolution` 改成未登记类型 → 两处 **E2205**（consumes + emits）；还原后仍 COMPILE-OK。
+
+## 分支 + HEAD
+- 分支：`feature/a2-p3a1-12clusters-v2`（已 `git push -u origin`）
+- HEAD：`e9557aae1594c966803777940b968ba0d5eb0e1e`
+- 栈：`59403d1` → `a8637de`（cherry-pick）→ `e9557aa`（v2 修正）
+- changelog-draft：`/home/pan-ding/workspace/agent黑灯工厂/30-工件/changelog-draft-a2-p3a1-v2.md`
+
+## 边界
+1. workspace 唯一红是既有 `p3_judge::judge_invoke_argv_contract_no_env_injection_no_wrapper_shell`（`BASH_FUNC_which%%` 换行拆 env dump）。`origin/product/main` 同红；`env -u 'BASH_FUNC_which%%'` 同测绿。本批零改 crates。
+2. `python3 -I ci/strategies_check.py` 仍 exit 2（缺 PyYAML）；正本挂法是 `-B`。
+3. 44 条 compilable 对生产注册表仍有 34 条 bind 断在 E9001（组件未注册）。
+4. C125 自消解率门在两桶 tally 近似下方向性不可判定，已在 intent 登记，未扩 DSL。
+5. crates / Cargo.toml / Cargo.lock / ci 门脚本 / af/packages 零改动。
+Finishing session…

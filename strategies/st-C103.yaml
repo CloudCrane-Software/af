@@ -12,5 +12,123 @@ experiment:
   status: inconclusive
   exp_id: "EXP-2"
   note: "终裁 inconclusive；n_p=21；main_diff_pp=4.761904761904762pp；mcnemar_p_one_sided=0.5；main_tost_cp90_pp=[-14.797362979153771, 20.169505170841482]pp；gate_fires=False；来源 exp2-aggregate-summary.json（镜像 sig=960b8aa1b06a，completed=28）；判定程序唯一性门 b-verdict-unique exit=0。主断言卡 S115 → 簇 C103（tier C）。"
-dsl_state: needs_syntax
-needs_syntax_note: "待投影：本条目由循环产线守护按 G4 契约自动初建（tier 照实=C、claim 取册内断言、experiment 填终裁 EXP-2/inconclusive）。claimed_value{metric,direction,context} 策略册无对应字段（direction 为 R1 闭集占位、非判读结论）；dsl_snippet 需 AFB 语义级撰写——投影补齐走既有待办路径（loop-state projection_todos），补前本条目不参与任何判读引用。"
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: debate_vs_self_consistency
+    graph_version: "1.0"
+    entry: draw_samples
+    input: debate_prompt
+    output: { ref: trial_verdict, from: adjudicate }
+    intent: "辩论 vs 自洽性同预算对照：draw_samples 按 slots 对齐响应数 →debate_arm 互评改进环（critic↔rebuttal，exit_when=自洽收敛）与 consistency_arm（tally 计票+select_best 多数派）各挂等额 cents 预算 300/300=响应数对齐口径 →adjudicate 判优。S115 口径：响应数对齐后辩论优势消失甚至更差、提升源于自洽而非自我纠错。EXP-2 终裁 inconclusive（n_p=21，note 照实登记）；两臂产物类型同构（response）保证可比"
+  types:
+    - name: debate_prompt
+      schema:
+        type: object
+        required: [question, slots]
+        properties:
+          question: { type: string }
+          slots: { type: array, items: { type: string } }
+    - name: response
+      schema:
+        type: object
+        required: [answer, slot]
+        properties:
+          answer: { type: string }
+          slot: { type: string }
+    - name: ballot
+      schema:
+        type: object
+        required: [top_count, top_share_milli]
+        properties:
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+    - name: trial_verdict
+      schema:
+        type: object
+        required: [winner]
+        properties:
+          winner: { type: string }
+  nodes:
+    - id: draw_samples
+      kind: task
+      map:
+        over: input.slots
+        body:
+          nodes:
+            - id: respond
+              kind: task
+              uses: { model: route.main@1 }
+              emits: { response: response }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.debate.respond_system, quota_tokens: 400 }
+                  - { from: arg, name: item, quota_tokens: 200 }
+                  - { from: input, fields: [question], quota_tokens: 300 }
+          edges: []
+      emits: { responses: { from_body: respond.response } }
+    - id: debate_arm
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: critic
+              kind: task
+              uses: { model: route.main@1 }
+              consumes: { critique: response }
+              emits: { critique: response, answer: response }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.debate.critic_system, quota_tokens: 400 }
+                  - { from: arg, name: responses, quota_tokens: 400 }
+                  - { from: edge, port: critique, optional: true, quota_tokens: 300 }
+            - id: rebuttal
+              kind: check
+              consumes: { critique: response }
+              emits: { critique: response }
+              route:
+                default: exit
+                rules:
+                  - { when: "rebuttal.passed == false", goto: critic }
+          edges:
+            - { from: critic, output: critique, to: rebuttal, input: critique }
+            - { from: rebuttal, output: critique, to: critic, input: critique }
+        args:
+          responses: draw_samples.responses
+        max_iterations: 4
+        safety_points:
+          - { node: rebuttal, kind: check }
+        exit_when: "attempt.passed == true"
+        on_exhausted: continue
+      emits: { answer: { from_body: critic.answer } }
+    - id: consistency_arm
+      kind: transform
+      consumes: { responses: "list<response>" }
+      ops:
+        - { op: tally, port: responses, by: answer, into: box }
+        - { op: select_best, port: responses, prefer: box.top_count, into: consensus }
+      emits: { consensus: response }
+    - id: adjudicate
+      kind: task
+      uses: { model: route.main@1 }
+      consumes:
+        debate: response
+        consensus: response
+      emits: { verdict: trial_verdict }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.debate.adjudicator_system, quota_tokens: 400 }
+          - { from: edge, port: debate, quota_tokens: 400 }
+          - { from: edge, port: consensus, quota_tokens: 400 }
+  edges:
+    - { from: draw_samples, output: responses, to: debate_arm, input: responses }
+    - { from: draw_samples, output: responses, to: consistency_arm, input: responses }
+    - { from: debate_arm, output: answer, to: adjudicate, input: debate }
+    - { from: consistency_arm, output: consensus, to: adjudicate, input: consensus }
+  policies:
+    budgets:
+      - { id: debate_budget, dimension: cents, scope: loop:debate_arm, cap: 300 }
+      - { id: consistency_budget, dimension: cents, scope: node:consistency_arm, cap: 300 }
+    failures:
+      - { class: budget_exhausted, terminal: true, outcome: completed }

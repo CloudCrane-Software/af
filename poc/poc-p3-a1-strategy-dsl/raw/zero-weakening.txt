@@ -1,54 +1,35 @@
-== git rev-parse HEAD / 56ff52a / origin/product/main ==
-a429e6f12b95cd2dd18ffcb0f9069a96e2d8fb5f
-56ff52a57c022983d74d994fd4e1c63e98f45235
-bc1ef7d9eb2e1f3466536f8c9e58af75249429a3
+# zero-weakening 重锚（2026-11-05 A2-v2 复核 F1c 返修）：基线=59403d1(poc-e 合流)=本分支合流父提交
+# 真实 diff：
+ poc/poc-p3-a1-strategy-dsl/README.md               |   34 +-
+ .../raw/compile-all.prod-registry.json             |  132 +-
+ .../raw/compile-all.prod-registry.stderr           |  316 +++-
+ .../raw/gate-clippy.gate.txt                       |    1 -
+ poc/poc-p3-a1-strategy-dsl/raw/gate-clippy.jsonl   | 1266 +++++++--------
+ poc/poc-p3-a1-strategy-dsl/raw/gate-clippy.stderr  |  348 ++++-
+ poc/poc-p3-a1-strategy-dsl/raw/gate-clippy.txt     |   34 +-
+ .../raw/gate-test-workspace.txt                    | 1617 ++++++++++++--------
+ .../raw/gate-test.summary.txt                      |    4 +-
+ .../raw/strategies_check.after-edit.txt            |    6 +-
+ .../raw/strategies_check.baseline.txt              |    1 +
+ .../raw/strategy_library_test.nocapture.txt        |   30 +-
+ poc/poc-p3-a1-strategy-dsl/raw/zero-weakening.txt  |   83 +-
+ poc/poc-p3-a1-strategy-dsl/three-state-list.json   |   52 +-
+ poc/poc-p3-a1-strategy-dsl/three-state-list.md     |   26 +-
+ strategies/index.yaml                              |   26 +-
+ strategies/st-C103.yaml                            |  122 +-
+ strategies/st-C122.yaml                            |   66 +-
+ strategies/st-b-C001.yaml                          |  122 +-
+ strategies/st-b-C028.yaml                          |   85 +-
+ strategies/st-b-C029.yaml                          |  115 +-
+ strategies/st-b-C038.yaml                          |   83 +-
+ strategies/st-b-C062.yaml                          |   92 +-
+ strategies/st-b-C064.yaml                          |   69 +-
+ strategies/st-b-C079.yaml                          |   76 +-
+ strategies/st-b-C086.yaml                          |   86 +-
+ strategies/st-b-C124.yaml                          |   43 +-
+ strategies/st-b-C125.yaml                          |  120 +-
+ 28 files changed, 3495 insertions(+), 1560 deletions(-)
 
-== branch ==
-feat/p3-a1-strategy-dsl
-
-== git diff --stat 56ff52a -- . ':(exclude)poc/' ':(exclude).offload/' ==
- strategies/README.md      | 18 ++++++++++++++++++
- strategies/st-b-C102.yaml |  4 ++--
- 2 files changed, 20 insertions(+), 2 deletions(-)
-
-== crates/ ==
-crates_diff_files=0
-
-== Cargo.toml / Cargo.lock ==
-
-== crate 数 ==
-56ff52a: 22
-HEAD:    22
-worktree:22
-
-== clippy-baseline sha256 ==
-a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  ci/clippy-baseline.txt
-pin:
-a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  0  clippy-baseline.txt
-
-== 对 origin/product/main 的 diff 面（远端已前移，非本批改动；本批仓面仅 strategies/ 两件） ==
- .github/workflows/f1.yml                           |  166 ---
- ci/baselines/gate-inputs.sha256                    |    2 -
- ci/baselines/task-package-writepoints.json         |  542 ---------
- ci/f2_dispatch.py                                  |  579 ---------
- ci/f2_runner.py                                    |  846 -------------
- ci/gate_inputs_check.sh                            |    6 -
- ci/gh_workflow_check.py                            | 1087 -----------------
- ci/integrator_bind_check.py                        |  881 --------------
- ci/run.sh                                          |   18 -
- ci/task_package_manifest_check.py                  |  653 ----------
- ci/test_gate_inputs_rte6_pins.py                   |  138 ---
- ci/test_task_package_manifest_check.py             |  322 -----
- ci/test_xcheck_subgate_census.py                   |  124 --
- ci/xcheck.py                                       |   83 +-
- .../tests/adjudicate_fault_injection_acceptance.rs | 1279 --------------------
- docs/CI-BOUNDARY.md                                |  112 --
- docs/F2-DISPATCH-RUNNER.md                         |  242 ----
- docs/INTEGRATOR-SOP.md                             |  415 -------
- docs/adr/015-trigger-inbox-resident-contract.md    |  104 --
- docs/adr/README.md                                 |    1 -
- strategies/README.md                               |   18 +
- strategies/st-b-C102.yaml                          |    4 +-
- tools/trigger-inbox-src-parity-probe.py            |  209 ----
- tools/trigger-inbox.py                             |  383 ------
- 24 files changed, 21 insertions(+), 8193 deletions(-)
+# 三项实体断言复核（2026-11-05）：
+crates_diff=0 Cargo_diff=0 crates_count=22
+test_triplet=1598/1/9（p3_judge 环境红豁免：与 main 同因同红，env -u BASH_FUNC_which%% 同测绿）
