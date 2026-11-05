@@ -1,5 +1,7 @@
 # VERIFY-TRUSTED-ROOT.md — cosign 离线验签第二条路（--trusted-root）补测
 
+> **2026-11-05 作废登记**：`verify-tr/tr-key.key` 已 `git rm`（历史不动）；配对公钥移入 `revoked/tr-key.pub`。对应私钥曾于公开仓暴露，任何以此链验证的制品一律不可信。`ci/run.sh` step6 已改为 fail-closed（可读原因 `key revoked`）。下文是 2026-10-19 实测史实，复现命令中的 `tr-key.key` / `tr-key.pub` 路径已作废。详见 `README.md`。
+
 对应 `poc-cas/RESULT.md` ④-5/⑤："纯离线验证必须 --insecure-ignore-tlog 或预置 --trusted-root（未测）"。本次全部真实执行，2026-10-19，cosign v3.1.3（`af/bin/cosign`）。工作目录 `poc/poc-cas/verify-tr/`（未动上级已有密钥对 cosign.key/cosign.pub）。
 
 ## ① 结论
@@ -99,7 +101,7 @@ exit 1
 
 ## 附：本次产物（verify-tr/ 内保留）
 
-- `trusted-root.json`（6787B，initialize 产物，--trusted-root 实测输入）
-- `tr-key.pub` / `tr-key.key`（本次新生成密钥对，未动上级已有密钥对）
-- `artifact-tr.txt` / `tr-bundle.json`（正例工件与 v0.3 bundle）
+- `trusted-root.json`（6787B，initialize 产物，--trusted-root 实测输入；sigstore 公共 TUF 根，非本 poc 密钥对）
+- `tr-key.pub` / `tr-key.key`：**2026-11-05 作废**。私钥已 `git rm`；公钥在 `../revoked/tr-key.pub`。
+- `artifact-tr.txt` / `tr-bundle.json`（正例工件与 v0.3 bundle；由已作废键签发，不可再当信任锚）
 - `artifact-tampered.txt` / `tr-bundle-badtlog.json` / `bad-root.json`（三个负例输入，均为小文件）

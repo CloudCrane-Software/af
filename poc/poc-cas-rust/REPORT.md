@@ -1,5 +1,7 @@
 # REPORT.md — poc-cas-rust：纯 Rust CAS 客户端闭环（不借助 crane CLI）
 
+> **2026-11-05 作废登记**：`casr-sign.key` 已 `git rm`（历史不动）；配对公钥移入 `revoked/casr-sign.pub`。对应私钥曾于公开仓暴露，任何以此链验证的制品一律不可信。下文是 2026-10 实测史实，复现命令中的 `casr-sign.key` / `casr-sign.pub` 路径已作废，不得再当放行锚。详见 `README.md`。
+
 环境：Rust 1.99.1 / cargo 1.99.1，ureq 3.4.2（no default features）+ sha2 0.10.9 + serde_json，zot v2.1.22（端口 5190，存储根 `data/` 在本任务目录内），cosign v3.1.3。全部结论来自本会话真实执行；命令原文与输出摘录见③。
 
 ## ① 结论

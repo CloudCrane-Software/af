@@ -21,6 +21,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 
 	pb "github.com/sigstore/rekor-tiles/v2/pkg/generated/protobuf"
 	"github.com/sigstore/rekor-tiles/v2/pkg/note"
@@ -40,6 +42,20 @@ func fatalf(step string, err error) {
 }
 
 func ok(step string) { fmt.Printf("PASS %s\n", step) }
+
+// refuseRevoked fail-closes if a key path sits under a revoked/ archive
+// directory. Archived pubs are evidence, not live trust roots (POC5, 2026-11-05).
+func refuseRevoked(path, which string) {
+	if path == "" {
+		return
+	}
+	for _, p := range strings.Split(filepath.Clean(path), string(filepath.Separator)) {
+		if p == "revoked" {
+			fmt.Fprintf(os.Stderr, "FAIL-CLOSED key revoked: refusing to verify with archived %s %s\n", which, path)
+			os.Exit(1)
+		}
+	}
+}
 
 func loadPEMPubKey(path string) ([]byte, error) {
 	pemBytes, err := os.ReadFile(path)
@@ -62,6 +78,9 @@ func main() {
 	artifactFile := flag.String("artifact", "", "the original artifact (trace checkpoint) file")
 	artifactPub := flag.String("artifact-pub", "", "PEM public key of the artifact signer (ECDSA P-256)")
 	flag.Parse()
+
+	refuseRevoked(*logPub, "log public key")
+	refuseRevoked(*artifactPub, "artifact public key")
 
 	// ---- step 0: load inputs ----
 	logPubDER, err := loadPEMPubKey(*logPub)

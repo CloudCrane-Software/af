@@ -3,6 +3,8 @@
 生成时间：2026-10-19。素材：`af/BOOTSTRAP.md` + `af/crates/*/RESULT.md`（11 份）+ `af/poc/*/RESULT.md`（4 份）。
 核对结果：crates/ 下 11 个目录、poc/ 下 4 个目录，**15/15 均有 RESULT.md，无"缺报告"**。
 
+> **2026-11-05 作废登记（POC5）**：poc-cas / poc-cas-rust / poc-rekor 的 5 件 POC 私钥已 `git rm`（历史不动）；配对公钥移入各 poc `revoked/`。对应私钥曾于公开仓暴露，任何以此链验证的制品一律不可信。下表 2026-10-19 实测结论仍是史实，验签复现命令已作废。
+
 ---
 
 ## 一、状态表

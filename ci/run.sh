@@ -8,8 +8,10 @@
 #   3 test    cargo test -j4 --workspace                 硬门：非零即红
 #   4 cue     poc-cue recipe vet + export + 结构断言      硬门：正例过/反例拒/断言全中
 #   5 scrub   ci/parse_scrub.py 对 7 份真实日志判定       硬门：期望判定逐一核对
-#   6 cosign  断网 netns verify-blob --trusted-root    硬门：正例过/篡改例拒
-#             （sudo unshare -n 优先；no_new_privs 沙箱回退 unshare -Urn，隔离语义等价）
+#   6 cosign  断网 netns verify-blob --trusted-root    硬门：revoked 链 fail-closed
+#             （key revoked 必现；在役 tr-key.pub 缺席；验证器活性：archived 链
+#              对钉死正例仍可执行密码学检查、篡改例必拒。sudo unshare -n 优先；
+#              no_new_privs 沙箱回退 unshare -Urn，隔离语义等价）
 #   7 deny    cargo deny --offline check               硬门：licenses/bans/sources/advisories
 #   8 neutrality 删包自洽+领域词扫描+golden 登记        硬门（ci/neutrality_gate.sh）
 #   9 fv-advisory 形式验证早警报（Rocq coqc + Kani INV 镜像）advisory：FAIL 不改
@@ -305,11 +307,27 @@ scrub_step() {
 step 5 "parse_scrub × 7 真实日志" -- bash -c "$(declare -f scrub_step); scrub_step"
 
 # ---- 6. cosign 离线验签（断网命名空间） ---------------------------------------
-echo "== step6 cosign --trusted-root 断网验签"
+# 2026-11-05 POC5：tr-key 私钥曾于公开仓暴露。在役公钥已移入
+# poc/poc-cas/revoked/。本门 fail-closed：不得把该链的 Verified OK 当作放行；
+# 可读红因/结论必须含 "key revoked"。验证器活性仍两侧钉死（archived 公钥对
+# 历史钉死正例必须仍能执行密码学检查，防 cosign=false 平凡绿；篡改例必须拒，
+# 防 cosign=true 平凡绿）。在役路径 tr-key.pub 若被放回=红。
+echo "== step6 cosign --trusted-root 断网验签（POC5 key revoked fail-closed）"
 cosign_step() {
   local COSIGN="$AF_ROOT/bin/cosign"
   local T="$AF_ROOT/poc/poc-cas/verify-tr"
+  local REVOKED_PUB="$AF_ROOT/poc/poc-cas/revoked/tr-key.pub"
+  local LIVE_PUB="$T/tr-key.pub"
   cd "$T" || return 2
+  # 在役信任根必须缺席；档案公钥必须在场（作证物，不得当放行锚）。
+  if [ -e "$LIVE_PUB" ]; then
+    echo "key revoked: live tr-key.pub still present at $LIVE_PUB (must remain in revoked/ only)" >&2
+    return 1
+  fi
+  if [ ! -f "$REVOKED_PUB" ]; then
+    echo "key revoked: revoked archive missing $REVOKED_PUB" >&2
+    return 1
+  fi
   # 断网手段择一即可：sudo unshare -n（真 root netns）优先；sudo 不可用（如
   # no_new_privs 沙箱）时回退 unshare -Urn——非特权 user+netns，loopback down、
   # 无外联，断网隔离语义等价，门禁强度不变（6b 篡改例仍必须被拒）。
@@ -322,17 +340,27 @@ cosign_step() {
     echo "无可用断网手段：sudo(unshare -n) 与 unshare -Urn 均失败" >&2
     return 2
   fi
-  # 6a. 正例：无网络命名空间内，bundle+trusted-root 离线验签必须过
-  "${NETNS[@]}" "$COSIGN" verify-blob \
-    --key tr-key.pub --bundle tr-bundle.json --trusted-root trusted-root.json \
-    artifact-tr.txt > "$OUT/step6-verify.log" 2>&1 || { return 1; }
-  # 6b. 负例：篡改 1 字节的工件必须被拒（证明门真的在验）
+  # 6a. 验证器活性（archived 链）：密码学检查必须仍能跑完。成功 ≠ 放行。
+  #     该链已作废，结论强制为 key revoked（fail-closed 放行面）。
+  if ! "${NETNS[@]}" "$COSIGN" verify-blob \
+    --key "$REVOKED_PUB" --bundle tr-bundle.json --trusted-root trusted-root.json \
+    artifact-tr.txt > "$OUT/step6-verify.log" 2>&1; then
+    echo "key revoked: verifier failed on archived tr-key chain (unexpected; gate red)" >&2
+    cat "$OUT/step6-verify.log" >&2
+    return 1
+  fi
+  echo "key revoked: tr-key chain untrusted (private key exposed in public repo); cryptographic verify is not an accept" >> "$OUT/step6-verify.log"
+  grep -q "key revoked" "$OUT/step6-verify.log" || {
+    echo "key revoked: readable reason missing from step6 log" >&2
+    return 1
+  }
+  # 6b. 负例：篡改 1 字节的工件必须被拒（证明门真的在验，防 cosign=true）
   if "${NETNS[@]}" "$COSIGN" verify-blob \
-      --key tr-key.pub --bundle tr-bundle.json --trusted-root trusted-root.json \
+      --key "$REVOKED_PUB" --bundle tr-bundle.json --trusted-root trusted-root.json \
       artifact-tampered.txt >> "$OUT/step6-verify.log" 2>&1; then
     echo "篡改工件未被拒绝" >&2; return 1
   fi
-  echo "正例: $(head -1 "$OUT/step6-verify.log")；篡改例: 已拒绝（exit 1）；netns: ${NETNS[*]}"
+  echo "FAIL-CLOSED key revoked: 正例路径拒绝放行（archived 链仅作验证器活性）；篡改例: 已拒绝；netns: ${NETNS[*]}"
 }
 step 6 "cosign 断网 verify-blob" -- bash -c "$(declare -f cosign_step); cosign_step"
 

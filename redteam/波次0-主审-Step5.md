@@ -117,6 +117,8 @@ gitea main(4dc1040) 含 PoC 种子提交
 
 **会出什么问题**：这些密钥目前按各 REPORT 是 PoC 一次性资产，但仓库同时是未来 release-gate/cosign 正式签名能力的来源——一旦有人图方便复用（密钥就在手边），泄漏立即生效且已无法从 git 历史与镜像中无声去除（需 history rewrite + 镜像 purge + 全部克隆作废）。缓解事实也如实记录：`.gitignore` 的 `**/target/` 规则在 `60f6861` 已加入，只是对已跟踪文件无效；poc-dspy 的 .venv 仅在工作区、未被跟踪。
 
+**2026-11-05 仓内静默子集处置（POC5，历史不动）**：五件私钥已 `git rm`（只存在于 git 历史，禁 history rewrite / force push）；配对公钥与 poc-rekor 私有信任根移入各 poc `revoked/` 档案。`ci/run.sh` step6 改为 fail-closed（可读原因 `key revoked`；在役 `tr-key.pub` 缺席；archived 链仅作验证器活性）。公开仓/镜像面止血由运营者另行处置，本批不依赖仓面动作。本段是审查结论的后续登记，不改写上方史实。
+
 ---
 
 ### F3（medium）grok `--always-approve` × 9 实例 × 共享凭据面（文档称 5）
