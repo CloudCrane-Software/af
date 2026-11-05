@@ -1,0 +1,23 @@
+# 修后 af-meter 绿（生产修复已恢复）
+
+cargo test --offline -p af-meter --lib -- --test-threads=1
+  test result: ok. 37 passed; 0 failed; 0 ignored;  exit 0
+  日志：lib-tests-green.txt
+
+cargo test --offline -p af-meter -- --test-threads=1  exit 0
+  lib        37 passed / 0 failed / 0 ignored
+  bifrost     3 passed
+  ledger     18 passed
+  properties  4 passed
+  routing     5 passed
+  vocab       1 passed
+  doctest     0 passed
+  日志：crate-tests-green.txt
+
+钉面 6 条（lib.rs #[test] 12→18，既有 12 条零删）：
+  try_consume_on_concurrency_is_unsupported_and_does_not_occupy
+  min_try_consume_rejects_nested_concurrency_and_leaves_stock
+  max_try_consume_rejects_when_concurrency_is_chosen
+  max_try_consume_still_deducts_stock_when_stock_is_chosen   （修前已绿，回归）
+  route_does_not_use_concurrency_via_quantity_deduct
+  route_skips_nested_concurrency_and_uses_stock_fallback

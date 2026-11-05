@@ -1,0 +1,26 @@
+# 四门读数（修后终态码，本续完会话实测）
+
+环境：
+  CARGO_TARGET_DIR=/tmp/risk3-afmeter-concurrency-target
+  （任务书指定 /data/bench/targets/risk3-afmeter-concurrency；上轮因 /data ENOSPC
+   改用 /tmp 热缓存，本轮 /data 已有余量，沿用上轮 21G 缓存以免冷编。）
+  CARGO_BUILD_JOBS=8 LANG=C.UTF-8
+  清掉 BASH_FUNC_which%%（p3_judge env dump 会被带换行的 which 函数拆坏，与本改动无关）
+
+| 门 | 命令 | exit | 读数 | 日志 |
+|---|---|---|---|---|
+| 1 fmt | cargo fmt --all -- --check | 0 | 无 diff | raw/gate1-fmt.log |
+| 2 test | cargo test --offline --workspace --no-fail-fast | 0 | 159 套件 **1592 passed / 0 failed / 9 ignored** | raw/gate2-test-workspace.log |
+| 3a clippy -D | cargo clippy --workspace --all-targets -- -D warnings | 0 | 零告警（Checking 含 af-meter） | raw/gate3-clippy-D-warnings.log |
+| 3b clippy json | cargo clippy --workspace --all-targets --message-format=json（touch crates/**/*.rs 强制重检，411 fresh / 180 cached artifact） | 0 | compiler-message **errors=0 warnings=0** | raw/gate3-clippy.jsonl + recompile-stderr.log |
+| 3c clippy gate | python3 -I ci/clippy_gate.py raw/gate3-clippy.jsonl | 0 | CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名（基线 0 签名） | raw/gate3-clippy-gate.log |
+| 4 gate_inputs | bash ci/gate_inputs_check.sh check | 0 | 判据正本钉对账一致: 14 件 | raw/gate4-gate-inputs.log |
+
+clippy-baseline.txt sha256 a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4
+钉 ci/baselines/clippy-baseline.sha256：a48639e75b52…  0  clippy-baseline.txt（未变）
+
+归因（相对任务书钉 1578/0/9）：
+  failed=0、ignored=9 未变
+  passed +14 = 本施工 +6（af-meter lib.rs #[test] 12→18）
+               + 本树 HEAD 已含的 risk5 A1–A8 +8
+               （poc/poc-risk5-fault-injection/FINGERPRINT.md 记 1578→1586）
