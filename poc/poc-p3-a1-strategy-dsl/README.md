@@ -1,10 +1,10 @@
 # POC · P3-A1 策略→DSL 整合（59 簇三态清单 + 可编译者过 CI + 闭环最小接缝）
 
-- 基线：任务书钉死 `origin/product/main` **56ff52a**。本工作树从 salvage
-  提交 `a429e6f` 续作（GLM 通道停用闸前在飞改动存档），本地分支指针
-  `feat/p3-a1-strategy-dsl`（无 commit / 无 push）。远端 `origin/product/main`
-  会话期间已前移到 `bc1ef7d`，零弱化核以 56ff52a 为基线。
-- 本批仓面改动（相对 56ff52a，排除 poc/）：
+- 基线（2026-11-05 v2 重植后实况，原 salvage 态叙述见文末存照）：父提交=
+  `59403d1`（poc-e 合流提交）；本分支=`feature/a2-p3a1-12clusters-v2`（已
+  push origin，HEAD=e9557aa 及其后证据同步提交）；远端 `origin/product/main`
+  现已前移到 `04f4d99`（A1/A4 合流后）。零弱化核以 59403d1 为基线。
+- 本批仓面改动（相对 56ff52a，排除 poc/）——【存照：重植前口径】：
   1. `strategies/st-b-C102.yaml`：dsl_snippet 内 `passed`→`pass` 字段名对齐
      （2 处，三态仍 compilable）；
   2. `strategies/README.md`：**只增** §四（闭环接缝指针），既有 §一–§三零改。
@@ -107,7 +107,7 @@ b-C055/b-C056/b-C124），**34 条断在 bind（E9001 组件未注册）**。此
 **断点**：消费 `dsl_snippet` 的只有装载测试与 14d 门——**环③整环缺失**。图执行器
 只消费 `af/packages/*/graphs/*.afb` 包内图。三重供给缺口使 44 条 compilable
 今天一条都跑不起来（对生产注册表）：(a) 全部 44 条引用注册表缺失的 prompt 模板；
-(b) 24 条 bind 即断（组件未注册）；(c) 预算/构造面：节点级 cents 预算（st-b-C037，
+(b) 34 条 bind 即断（组件未注册）；(c) 预算/构造面：节点级 cents 预算（st-b-C037，
 EX4005 实测拒收）、tool_calls 维度、loop/map 构造、route 边守卫、builtin 表外工具
 均超 v1 执行器强制集。
 
@@ -149,7 +149,7 @@ EX4005 实测拒收）、tool_calls 维度、loop/map 构造、route 边守卫�
 | clippy | touch 323 个 `crates/**/*.rs` 后 `cargo clippy --workspace --all-targets -j8 --message-format=json` | json **exit 0**，error 级 **0** 条，warning 级 0 条；`python3 ci/clippy_gate.py` **PASS**（0 签名 / 基线 0 签名）；`ci/clippy-baseline.txt` sha256 `a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4` 与钉逐位一致 |
 | gate_inputs | `bash ci/gate_inputs_check.sh check` | **exit 0**（12 件判据正本钉对账一致；本批未改被钉件，无需重钉） |
 | 专属门 | `python3 -B ci/strategies_check.py` | **exit 0** 全绿；`python3 -I` **exit 2**（缺 PyYAML，见边界） |
-| 零弱化 | `git diff --stat 56ff52a`（排除 poc/） | `strategies/README.md` +18、`strategies/st-b-C102.yaml` 4 ±；crates/ 0、Cargo.toml/lock 0、crate 数 22→22 |
+| 零弱化 | `git diff --stat 56ff52a`（排除 poc/，存照） | `strategies/README.md` +18、`strategies/st-b-C102.yaml` 4 ±；crates/ 0、Cargo.toml/lock 0、crate 数 22→22 |
 
 **test 红因（本批未改 crates，禁改既有测试）**：唯一失败
 `af-execline --test p3_judge`
@@ -173,9 +173,9 @@ counts，`--skip-compile` → **exit 0**（`raw/fail-open-r3-nofloor/run.txt`）
 
 **边界**：
 1. `python3 -I` 本机 exit 2（PyYAML 在用户 site-packages）；正本挂法 `-B` 全绿。
-2. `origin/product/main` 已前移到 `bc1ef7d`；对现 ref 的 diff 面含远端新提交，
-   非本批改动。零弱化以任务书钉死的 56ff52a 为基线。
-3. 24 条 bind 断、模板缺席、执行器 v1 范围均为跨批供给面工程，本批只量化+登记。
+2. `origin/product/main` 现已前移到 `04f4d99`；本分支基线 59403d1 与其文件集
+   不相交（A1/A4 只动 crates/otel/poc-a1，本批只动 strategies/与本 poc），合流无冲突预期。零弱化以 59403d1 为基线。
+3. 34 条 bind 断、模板缺席、执行器 v1 范围均为跨批供给面工程，本批只量化+登记。
 4. seam 是一次性命令行接缝（无守护/监听/服务）；覆盖层 route 声明镜像生产正本
    的 `key_ref` 引用名，非明文密钥。
 5. st-b-C036/C071/C097 的 `passed` 同型漂移登记未修。
@@ -183,10 +183,10 @@ counts，`--skip-compile` → **exit 0**（`raw/fail-open-r3-nofloor/run.txt`）
 
 ## 六、指纹
 
-- 基线：`56ff52a57c022983d74d994fd4e1c63e98f45235`。
-- 工作树 HEAD（salvage 存档）：`a429e6f12b95cd2dd18ffcb0f9069a96e2d8fb5f`；
+- 基线：`59403d1c27c447c290cf09cfd43ab293ccf975dc`（poc-e 合流提交=v2 重植父提交；原 56ff52a 系重植前任务书钉线，存照保留）。
+- 工作树 HEAD（v2 实况）：`e9557aae1594c966803777940b968ba0d5eb0e1e`（salvage 存档 a429e6f 系重植前父，存照）；
   本地分支 `feat/p3-a1-strategy-dsl`（无 commit）。
-- 仓面 diff vs 56ff52a（排除 poc/）：`strategies/st-b-C102.yaml` sha256
+- 仓面 diff vs 56ff52a（排除 poc/，存照口径；v2 实况以 59403d1 为基见上）：`strategies/st-b-C102.yaml` sha256
   `11ef78343fa565ed7d5e304ef7d776e122d9302b9dd41807bf05d4c800e0e1f9`；
   `strategies/README.md` sha256
   `bfec6b9f86fc10eb5eb049b1a7a168925907037535ab04689b014b23a8d2bd3a`。

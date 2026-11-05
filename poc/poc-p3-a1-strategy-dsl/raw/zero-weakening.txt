@@ -1,7 +1,18 @@
-== git diff --stat a429e6f（本批=12 条目+index+清单/证据件；基线=salvage 抢救存档，见边界）:
- .../raw/gate-test-workspace.txt                    | 2292 ++++++++++++++------
- .../raw/strategy_library_test.nocapture.txt        |   32 +-
- poc/poc-p3-a1-strategy-dsl/raw/zero-weakening.txt  |   13 +-
+# zero-weakening 重锚（2026-11-05 A2-v2 复核 F1c 返修）：基线=59403d1(poc-e 合流)=本分支合流父提交
+# 真实 diff：
+ poc/poc-p3-a1-strategy-dsl/README.md               |   34 +-
+ .../raw/compile-all.prod-registry.json             |  132 +-
+ .../raw/compile-all.prod-registry.stderr           |  316 +++-
+ .../raw/gate-clippy.gate.txt                       |    1 -
+ poc/poc-p3-a1-strategy-dsl/raw/gate-clippy.jsonl   | 1266 +++++++--------
+ poc/poc-p3-a1-strategy-dsl/raw/gate-clippy.stderr  |  348 ++++-
+ poc/poc-p3-a1-strategy-dsl/raw/gate-clippy.txt     |   34 +-
+ .../raw/gate-test-workspace.txt                    | 1617 ++++++++++++--------
+ .../raw/gate-test.summary.txt                      |    4 +-
+ .../raw/strategies_check.after-edit.txt            |    6 +-
+ .../raw/strategies_check.baseline.txt              |    1 +
+ .../raw/strategy_library_test.nocapture.txt        |   30 +-
+ poc/poc-p3-a1-strategy-dsl/raw/zero-weakening.txt  |   83 +-
  poc/poc-p3-a1-strategy-dsl/three-state-list.json   |   52 +-
  poc/poc-p3-a1-strategy-dsl/three-state-list.md     |   26 +-
  strategies/index.yaml                              |   26 +-
@@ -11,21 +22,14 @@
  strategies/st-b-C028.yaml                          |   85 +-
  strategies/st-b-C029.yaml                          |  115 +-
  strategies/st-b-C038.yaml                          |   83 +-
- strategies/st-b-C062.yaml                          |   87 +-
+ strategies/st-b-C062.yaml                          |   92 +-
  strategies/st-b-C064.yaml                          |   69 +-
  strategies/st-b-C079.yaml                          |   76 +-
  strategies/st-b-C086.yaml                          |   86 +-
  strategies/st-b-C124.yaml                          |   43 +-
- strategies/st-b-C125.yaml                          |  119 +-
- 18 files changed, 2753 insertions(+), 761 deletions(-)
+ strategies/st-b-C125.yaml                          |  120 +-
+ 28 files changed, 3495 insertions(+), 1560 deletions(-)
 
-== crates/ diff:
-0
-== Cargo.toml/lock diff:
-0
-== crate 数:
-22
-== 全量测试三元组（raw/gate-test-workspace.txt）:
-passed 1578
-failed 0
-ignored 9
+# 三项实体断言复核（2026-11-05）：
+crates_diff=0 Cargo_diff=0 crates_count=22
+test_triplet=1598/1/9（p3_judge 环境红豁免：与 main 同因同红，env -u BASH_FUNC_which%% 同测绿）
