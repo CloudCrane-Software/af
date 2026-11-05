@@ -3,6 +3,8 @@
 任务：把已定案的验收固化成一条可跑的管道，产出物全部在 `AF/ci/` 下。
 执行日：2026-10-19。所有结论均来自本任务内真实执行的命令（命令原文与输出见③）。
 
+> **2026-11-05 作废登记（POC5）**：step6 原正例链 `tr-key.pub + tr-bundle.json + trusted-root.json` 的私钥 `tr-key.key` 曾于公开仓暴露，已 `git rm`；公钥移入 `poc/poc-cas/revoked/tr-key.pub`。`ci/run.sh` step6 改为 fail-closed：在役 `tr-key.pub` 必须缺席；放行面可读原因为 `key revoked`；archived 链仅作验证器活性（正例密码学检查仍执行、篡改例必拒）。下文 2026-10-19「正例过/篡改例拒」是当时史实，不再是在役判据。
+
 ---
 
 ## ① 结论
@@ -44,7 +46,7 @@ ci/
 - **step3 test**：`cargo test -j4 --workspace`，退出码硬门。
 - **step4 CUE**：`poc/poc-cue/bin/cue` 对 recipe 产线样例：4a `vet recipe-default.cue + operator-override.cue` 必须过；4b `export` 落 `out/step4-recipe-merged.json`；4c Python 结构断言（L4 覆盖生效 15/0.05 + L3 默认保留 4/3/5/120/85 + 顶层键集闭合，9 值逐一核对）；4d 反例 `operator-override-bad.cue`（maxAttempts=99）必须被 vet 拒绝（非零才过）。
 - **step5 scrub 门**：`parse_scrub.py` 按 ask 指定测试集逐一判定：`scrub-baseline.log`、`scrub-after-gc.log` 应 exit 0；`scrub-corrupt1/2/3a/3b-*.log`（= corrupt3b-consistent + corrupt3b-inplace）应 exit 1；任一不符 → 步骤红。退出码语义：0 全 ok / 1 检出 affected / 2 解析失败（无表头、坏行、文件不可读——**宁可误红不可漏报**，空输入、垃圾输入、未知 STATUS 都按 2 处理）。表头前的 zot debug JSON 行忽略（真实 corrupt1.log 即此形状）；表头后非空行必须是数据行。
-- **step6 cosign**：在 `poc/poc-cas/verify-tr/` 内：6a `sudo unshare -n bin/cosign verify-blob --key tr-key.pub --bundle tr-bundle.json --trusted-root trusted-root.json artifact-tr.txt` 必须过（sudo 下 HOME=/root、无 `~/.sigstore` 缓存，顺带证明自包含）；6b 篡改工件 `artifact-tampered.txt` 同命令必须 exit 1（证明门真的在验）。
+- **step6 cosign**：2026-10-19 原口径（史实）：在 `poc/poc-cas/verify-tr/` 内 6a 正例必须过、6b 篡改例必须拒。**2026-11-05 在役口径**：该链已作废（`tr-key.key` git rm，公钥在 `poc/poc-cas/revoked/`）。fail-closed：在役 `tr-key.pub` 缺席；放行面 `key revoked`；archived 公钥对钉死正例仍跑密码学检查（防验证器=`false`）、篡改例必拒（防验证器=`true`）。
 - **管道语义**：步骤失败**不中断**（一次跑完拿全量诊断），汇总表打 `out/SUMMARY.txt`，任一硬门红 → 总 exit 1。路径全部相对脚本定位仓库根，与调用 cwd 无关（已从 /tmp 调用实测）。
 
 过程记录：第一版 run.sh 的步 4/5/6 内层 `bash -c` 未继承 `AF_ROOT/OUT`（首轮红，退出码/报错如实留痕），加 `export` 修复后全部绿——管道自身的一次真实调试。

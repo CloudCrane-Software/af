@@ -69,7 +69,7 @@ YAML 主干 + CEL 谓词（ADR-001），正本《DSL-语法提案-B》+ 择优�
 | 3 | pre-step provenance 门 + `cargo test -j4 --workspace` | 硬门 |
 | 4 | CUE recipe vet+export+断言 | 硬门 |
 | 5 | parse_scrub × 7 真实日志 | 硬门 |
-| 6 | cosign 断网 verify-blob | 硬门 |
+| 6 | cosign 断网 verify-blob（POC5：revoked 链 fail-closed，`key revoked`） | 硬门 |
 | 7 | `cargo deny --offline check` | 硬门 |
 | 8 | 中立性门（删包自洽+领域词扫描+golden 登记） | 硬门 |
 | 9 | FV advisory（Rocq+Kani 快检；9a/9b 基线机算） | advisory（WARN/FAIL 不改退出码；FAIL 落 step9-failures.json 供 step10 消费） |

@@ -1,5 +1,7 @@
 # REPORT — poc-rekor：rekor-tiles 私有部署签名+离线验证链
 
+> **2026-11-05 作废登记**：`keys/log-ed25519-priv.pem` 与 `keys/cosign-gen/trace-signer.key` 已 `git rm`（历史不动）；配对公钥与私有信任根移入 `revoked/`。对应私钥曾于公开仓暴露，任何以此链验证的制品一律不可信。`verify/main.go` 对 `revoked/` 下公钥 fail-closed（可读原因 `key revoked`）。下文是 2026-10-19 实测史实，复现命令中的私钥/在役公钥路径已作废。详见 `README.md`。
+
 - 任务 id：`poc-rekor`
 - 执行者：验证工程师（Agent 工厂底座）
 - 日期：2026-10-19
@@ -232,19 +234,22 @@ cosign 加密密钥当 log signer：--signer-filepath trace-signer.key --signer-
 ```
 af/poc/poc-rekor/
 ├── REPORT.md                        # 本报告
+├── README.md                        # 2026-11-05 作废登记
 ├── bin/                             # rekor-server-posix / pocverify / proxy
 ├── rekor-tiles/                     # 浅克隆 @3ef36dad（构建缓存已置 .gocache/.tmp）
 ├── keys/
-│   ├── log-ed25519-priv.pem         # log key（openssl ed25519，PKCS#8）
-│   ├── log-ed25519-pub.pem
-│   ├── cosign-gen/trace-signer.{key,pub}   # cosign ECDSA P-256（scrypt 加密）
 │   ├── signing-config-empty.json    #   零外部服务签名配置
-│   ├── signing-config-private.json  #   指向私有 rekor v2
-│   └── trusted-root-private.json    #   私有信任根（log 公钥）
+│   └── signing-config-private.json  #   指向私有 rekor v2
+├── revoked/                         # 2026-11-05 档案：log/trace-signer 公钥 + 私有信任根
+│   ├── log-ed25519-pub.pem
+│   ├── trace-signer.pub
+│   └── trusted-root-private.json
 ├── evidence/                        # trace checkpoint 产物/签名/TLE/checkpoint/proof/负例件
 ├── data/storage*/                   # tessera posix 存储（三套：主链/加测/原生链）
-├── verify/                          # 离线验证器与同源反代（Go 源码）
+├── verify/                          # 离线验证器与同源反代（Go 源码；revoked/ 路径 fail-closed）
 └── server*.log, proxy.log, static-server*.log
 ```
+
+私钥 `log-ed25519-priv.pem` / `trace-signer.key` 已于 2026-11-05 `git rm`（只存在于 git 历史）。
 
 常驻进程已全部终止，5230-5239 端口已确认释放（`ss -tln` 为空）。
