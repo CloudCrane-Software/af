@@ -18,6 +18,11 @@
 //! OTLP 入库由 `AF_OTEL_EMIT_CMD` 指向投影器发射脚本。两变量都未设则
 //! `drive` 路径静默跳过，既有测试与 ledger/MES 语义不变。
 //!
+//! OTLP 发射带**幂等闸**（P3-A2 单根 trace）：派生 span ID 只由
+//! `work_order_id` 决定，同一订单重发会在同一 trace 里再插一份全树、
+//! 根 span 翻倍（断言器 S1 红）。`emit_otlp_from_env` 对「订单目录 +
+//! 投影内容摘要」记标记（`AF_OTEL_EMIT_MARKER`），内容未变不重发。
+//!
 //! 写面：读-合并-tmp-rename 原子替换（同 `af-trace::anchor` 的
 //! `atomic_write`）；同 `order_id` 重发覆盖该单旧行，其他订单保留。
 //!
@@ -54,6 +59,12 @@ pub const ENV_OTLP_ENDPOINT: &str = "AF_OTEL_ENDPOINT";
 /// 投影+OTLP 发射脚本（`poc/.../emit-semantic-otlp.py`）。未设置 ⇒ 不发网络。
 /// 失败忽略（非关键车道），不改 `drive` 返回值。
 pub const ENV_OTLP_EMIT_CMD: &str = "AF_OTEL_EMIT_CMD";
+/// 发射幂等标记件路径（JSON：订单目录 → 投影内容摘要）。未设置 ⇒ 落到
+/// 系统临时目录 `af-otel-emit-marker.json`。见 [`emit_otlp_from_env`] 的
+/// 幂等闸：同一订单目录、投影内容未变则不重复呼发射脚本——投影 span ID 由
+/// `work_order_id` 确定性派生，重发会在**同一 trace** 里再插一份全树，
+/// 根 span 翻倍（断言器 S1「每 trace 恰一个根 span」判红，P3-A2）。
+pub const ENV_EMIT_MARKER: &str = "AF_OTEL_EMIT_MARKER";
 const PRODUCER_ID: &str = "af-execline/span_produce";
 
 // --------------------------------------------------------------------------- //
@@ -415,6 +426,17 @@ pub fn publish_from_env(order_dir: &Path) {
 /// 经既有 OTLP collector 入库。只在 `AF_OTEL_EMIT_CMD` 指向发射脚本时动作；
 /// 端点缺省 `http://100.64.0.8:4318`（与 `tools/otel/otel_emit.py` 同源）。
 /// 脚本/collector 失败一律吞掉，不阻断订单。
+///
+/// # 幂等闸（P3-A2 单根 trace）
+///
+/// 投影器派生的 span ID 只由 `work_order_id` 决定（`span-conventions.md`
+/// §4.1 派生式），**同一订单重发 = 同一 trace 里再插一份全树**：根 span
+/// （`invoke_workflow`，parent 全零）随之翻倍，断言器 S1「每 trace 恰一个
+/// 根 span」判红（实测 trace `45c71671` 根 span 数=10=重发轮次）。
+/// 因此本挂钩对「订单目录 + 投影内容摘要」记标记：内容未变 ⇒ 跳过呼脚本
+/// （零 collector 增生）；内容变（新轮次/新账本行）⇒ 才重新发射。
+/// 投影为空（fail-closed 不产行）时不设闸——交给发射脚本自裁（它按零行
+/// fail-loud，rc=1），行为与加闸前一致。
 pub fn emit_otlp_from_env(order_dir: &Path) {
     let Ok(script) = std::env::var(ENV_OTLP_EMIT_CMD) else {
         return;
@@ -426,10 +448,124 @@ pub fn emit_otlp_from_env(order_dir: &Path) {
         .ok()
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| "http://100.64.0.8:4318".to_string());
-    let _ = std::process::Command::new("python3")
-        .args(["-I", &script, "--endpoint", &endpoint, "--harvest"])
-        .arg(order_dir)
-        .status();
+    let invoke = || {
+        std::process::Command::new("python3")
+            .args(["-I", &script, "--endpoint", &endpoint, "--harvest"])
+            .arg(order_dir)
+            .status()
+    };
+    let rows = project_order(order_dir);
+    if rows.is_empty() {
+        // 投影为空（fail-closed 不产行）：不设闸，呼脚本让它按零行 fail-loud。
+        let _ = invoke();
+        return;
+    }
+    let digest = projection_digest(order_dir, &rows);
+    let marker_path = emit_marker_path();
+    let mut entries = read_emit_marker(&marker_path);
+    let key = order_dir.display().to_string();
+    if entries.get(&key).map(String::as_str) == Some(digest.as_str()) {
+        return; // 已入库且内容未变：跳过（同 trace 不增生第二份根）
+    }
+    if invoke().map(|s| s.success()).unwrap_or(false) {
+        entries.insert(key, digest);
+        write_emit_marker(&marker_path, &entries);
+    }
+}
+
+/// 投影内容摘要（sha256 十六进制）：订单目录路径 + 每行整行 JSON。
+/// 行内容含 `span_id`/`parent_span_name`/attrs（计数等），任一变化都使摘要
+/// 变——「内容未变不重发」的判定面对齐发射脚本实际会发的东西。
+fn projection_digest(dir: &Path, rows: &[SpanRow]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(dir.display().to_string().as_bytes());
+    hasher.update(b"\n");
+    for row in rows {
+        hasher.update(serde_json::to_string(row).unwrap_or_default().as_bytes());
+        hasher.update(b"\n");
+    }
+    hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// 发射幂等标记件路径：`AF_OTEL_EMIT_MARKER` 覆盖，缺省系统临时目录。
+fn emit_marker_path() -> PathBuf {
+    match std::env::var(ENV_EMIT_MARKER) {
+        Ok(p) if !p.is_empty() => PathBuf::from(p),
+        _ => std::env::temp_dir().join("af-otel-emit-marker.json"),
+    }
+}
+
+/// 读标记件（`订单目录 → 摘要`）。缺席/坏 JSON ⇒ 空表（不拦首发射）。
+fn read_emit_marker(path: &Path) -> BTreeMap<String, String> {
+    let Ok(bytes) = fs::read(path) else {
+        return BTreeMap::new();
+    };
+    serde_json::from_slice(&bytes).unwrap_or_default()
+}
+
+/// 原子写标记件（tmp + rename，同状态面写口径）。写失败静默——非关键车道，
+/// 最坏后果是下次重发（回到加闸前行为），不阻断订单。
+fn write_emit_marker(path: &Path, entries: &BTreeMap<String, String>) {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            if fs::create_dir_all(parent).is_err() {
+                return;
+            }
+        }
+    }
+    let Ok(body) = serde_json::to_vec(entries) else {
+        return;
+    };
+    let tmp = match path.file_name() {
+        Some(name) => {
+            let mut tmp_name = name.to_os_string();
+            tmp_name.push(".tmp");
+            path.with_file_name(tmp_name)
+        }
+        None => return,
+    };
+    let wrote = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&tmp)
+        .and_then(|mut f| {
+            f.write_all(&body)?;
+            f.flush()?;
+            f.sync_data()
+        });
+    if wrote.is_err() {
+        let _ = fs::remove_file(&tmp);
+        return;
+    }
+    let _ = fs::rename(&tmp, path);
+}
+
+/// 投影行里「根 span」计数：`parent_span_name` 缺席或空串（对应 OTLP
+/// `parentSpanId` 全零）。一订单 = 一 trace 恰一根 span 的生产者面判据
+/// （断言器 S1 的本地面），由 `tests/span_produce.rs` 钉桩。
+pub fn root_span_count(rows: &[SpanRow]) -> usize {
+    rows.iter()
+        .filter(|r| r.parent_span_name.as_deref().unwrap_or("").is_empty())
+        .count()
+}
+
+/// 非根行的 `parent_span_name` 在本投影内找不到同名 span 的行（断链，
+/// 断言器 S2 的生产者面）。返回断链行的 `span_id`。
+pub fn unresolved_parent_names(rows: &[SpanRow]) -> Vec<String> {
+    let names: BTreeSet<&str> = rows.iter().map(|r| r.span_name.as_str()).collect();
+    rows.iter()
+        .filter(|r| {
+            let parent = r.parent_span_name.as_deref().unwrap_or("");
+            !parent.is_empty() && !names.contains(parent)
+        })
+        .map(|r| r.span_id.clone())
+        .collect()
 }
 
 /// 读状态面；缺席或无法解析 ⇒ 空壳（不造 span 行）。
