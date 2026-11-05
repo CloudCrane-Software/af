@@ -1,0 +1,39 @@
+# HEAD bc1ef7d crates/af-meter/src/lib.rs 数量路径（修前）
+
+try_consume :363-373 — available 够就 deduct 再 Ok(())，Concurrency 走同一条数量路径：
+
+    pub fn try_consume(&mut self, need: Count, now: Time) -> Result<(), MeterError> {
+        let r = self.given(now);
+        if r.available < need {
+            return Err(MeterError::Insufficient { ... });
+        }
+        self.deduct(need);
+        Ok(())
+    }
+
+deduct :402-416 — Concurrency 分支空操作；Min 递归进该空分支：
+
+    fn deduct(&mut self, amount: Count) {
+        match self {
+            ...
+            Meter::Concurrency { .. } => {
+                // 并发占用走 acquire/release，不走数量扣减。
+            }
+            Meter::Min(kids) => {
+                for k in kids {
+                    k.deduct(amount);
+                }
+            }
+            ...
+        }
+    }
+
+route :462-474 — available >= need 即 deduct 并返回 Use：
+
+        if r.available >= need {
+            supplies[i].meter.deduct(need);
+            let remaining_after = supplies[i].meter.given(now).available;
+            return Decision::Use { ... };
+        }
+
+Concurrency 的 available 是空槽数，于是 route 把并发供给当成已扣减成功。

@@ -1,0 +1,114 @@
+   Compiling af-meter v0.1.0 (/home/pan-ding/af-dev/af/wt/risk3-afmeter-concurrency/crates/af-meter)
+    Building [=======================> ] 307/315: af-meter                        Building [=======================> ] 309/315: properties(test), routing(t…    Building [=======================> ] 310/315: properties(test), vocab(tes…    Building [=======================> ] 311/315: properties(test), vocab(tes…    Building [=======================> ] 312/315: properties(test), vocab(tes…    Building [=======================> ] 313/315: properties(test), ledger(te…    Building [=======================> ] 314/315: properties(test)                Finished `test` profile [unoptimized + debuginfo] target(s) in 1.65s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (/tmp/risk3-afmeter-concurrency-target/debug/deps/af_meter-0e3c38300b814b43)
+
+running 37 tests
+test bifrost::tests::all_zero_weights_are_refused ... ok
+test bifrost::tests::budget_ratio_uses_remaining_cents ... ok
+test bifrost::tests::budget_records_the_injected_instant_without_changing_the_ratio ... ok
+test bifrost::tests::exact_exhaustion_is_zero_weight_not_a_negative ... ok
+test bifrost::tests::half_up_is_not_renormalized_to_one_hundred ... ok
+test bifrost::tests::header_pin_weight_is_not_the_key_percent ... ok
+test bifrost::tests::injected_now_refreshes_a_clone_and_leaves_the_supply ... ok
+test bifrost::tests::negative_remaining_is_refused_before_any_fragment ... ok
+test bifrost::tests::one_positive_backup_keeps_a_zero_primary ... ok
+test bifrost::tests::primary_zero_with_positive_backup_is_kept ... ok
+test bifrost::tests::quantize_percent_rounds_half_up ... ok
+test bifrost::tests::role_is_not_list_position ... ok
+test bifrost::tests::rounding_collapse_to_all_zero_is_refused ... ok
+test bifrost::tests::shape_errors_precede_balance_checks ... ok
+test bifrost::tests::spent_above_budget_is_negative_remaining_and_refused ... ok
+test budget::tests::negative_spend_does_not_mutate ... ok
+test budget::tests::over_budget_does_not_mutate ... ok
+test budget::tests::over_cap_does_not_mutate ... ok
+test budget::tests::spends_exact_cap_and_exact_remaining ... ok
+test tests::concurrency_acquire_and_release ... ok
+test tests::defer_when_no_supply_covers ... ok
+test tests::max_deducts_only_chosen_child ... ok
+test tests::max_try_consume_rejects_when_concurrency_is_chosen ... ok
+test tests::max_try_consume_still_deducts_stock_when_stock_is_chosen ... ok
+test tests::min_blocked_by_dead_stock_never_recovers ... ok
+test tests::min_deducts_all_children ... ok
+test tests::min_try_consume_rejects_nested_concurrency_and_leaves_stock ... ok
+test tests::nested_weekly_window_binds_and_recovers_at_weekly_reset ... ok
+test tests::rate_full_time_ceils_to_the_whole_second_it_actually_fills ... ok
+test tests::rate_token_bucket_refills_continuously ... ok
+test tests::route_does_not_use_concurrency_via_quantity_deduct ... ok
+test tests::route_skips_nested_concurrency_and_uses_stock_fallback ... ok
+test tests::serde_roundtrip_nested_meter ... ok
+test tests::stock_exhaust_reports_no_recovery ... ok
+test tests::ticks_and_unix_millis_are_different_types ... ok
+test tests::try_consume_on_concurrency_is_unsupported_and_does_not_occupy ... ok
+test tests::window_resets_and_does_not_accumulate ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/bifrost.rs (/tmp/risk3-afmeter-concurrency-target/debug/deps/bifrost-8228ad8be5d147cf)
+
+running 3 tests
+test budget_balances_80_20 ... ok
+test supply_exhausted_primary_weight_zero ... ok
+test supply_recovers_on_injected_day_boundary ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/ledger.rs (/tmp/risk3-afmeter-concurrency-target/debug/deps/ledger-557a95245c71c082)
+
+running 18 tests
+test bad_declaration_is_rejected_before_create ... ok
+test concurrent_consumers_conserve_the_window ... ok
+test concurrent_first_open_one_creator ... ok
+test concurrent_same_key_is_charged_once ... ok
+test consume_is_idempotent_and_conflict_does_not_charge ... ok
+test declaration_mismatch_fails_closed_and_keeps_committed_rows ... ok
+test extra_table_fails_closed ... ok
+test fall_back_day_ends_at_next_civil_midnight ... ok
+test insufficient_rolls_back_and_restart_keeps_the_committed_charge ... ok
+test lazy_reset_opens_the_next_civil_window ... ok
+test open_created_then_reopen_checks_recipe_and_declaration ... ok
+test ordinary_day_boundary_is_the_next_civil_midnight ... ok
+test recover_persists_the_sent_mark_across_reopen ... ok
+test recover_redelivers_the_same_idempotency_key ... ok
+test same_instant_falls_on_different_civil_days ... ok
+test spring_forward_day_ends_at_next_civil_midnight ... ok
+test user_version_mismatch_and_torn_init_fail_closed ... ok
+test week_crossing_spring_forward_uses_civil_mondays ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/properties.rs (/tmp/risk3-afmeter-concurrency-target/debug/deps/properties-be79f36fe20da397)
+
+running 4 tests
+test budget_spend_never_overdrafts ... ok
+test consumer_ledger_merge_is_commutative ... ok
+test min_windows_conserve_and_grant_the_same_amount ... ok
+test window_quota_conserved_over_any_event_sequence ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/routing.rs (/tmp/risk3-afmeter-concurrency-target/debug/deps/routing-72a73074cd98a049)
+
+running 5 tests
+test daily_exhausted_but_weekly_surplus_switches_to_api_until_daily_resets ... ok
+test defer_when_nothing_covers ... ok
+test estimate_above_daily_capacity_routes_to_api ... ok
+test golden_timeline_over_schedule ... ok
+test weekly_binding_recovers_at_weekly_reset ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/vocab.rs (/tmp/risk3-afmeter-concurrency-target/debug/deps/vocab-dbfd79dd7d5d2b38)
+
+running 1 test
+test credential_limit_consumed_without_unit_conversion ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_meter
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

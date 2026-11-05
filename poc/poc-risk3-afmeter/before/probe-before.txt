@@ -1,0 +1,43 @@
+# 先红探针（HEAD 生产码 + 6 条钉面测试）
+
+协议：把当前工作树里的 6 条钉面测试拼进 `git show HEAD:crates/af-meter/src/lib.rs`
+（Concurrency 数量路径仍是 no-op），跑 `cargo test --offline -p af-meter --lib`。
+生产修复已从工作树暂时拿掉；测完立刻用 `/tmp/risk3-lib.rs.fixed` 恢复。
+
+命令：
+  CARGO_TARGET_DIR=/tmp/risk3-afmeter-concurrency-target
+  cargo test --offline -p af-meter --lib -- --test-threads=1
+
+读数：test result: FAILED. 32 passed; 5 failed; 0 ignored; exit 101
+完整日志：lib-tests-red.txt
+过滤 6 条：pin-tests-red-filtered.txt（1 passed / 5 failed / 31 filtered out）
+
+修前已绿的对照项（钉面第 4 条，HEAD 上 Max 选中 Stock 仍走数量扣减）：
+  tests::max_try_consume_still_deducts_stock_when_stock_is_chosen ... ok
+
+五条红（即本 bug）：
+
+1. tests::try_consume_on_concurrency_is_unsupported_and_does_not_occupy
+   called `Result::unwrap_err()` on an `Ok` value: ()
+   → try_consume(1) 对 Concurrency(limit=2) 返回 Ok(())，槽位未占、数量路径当成功。
+
+2. tests::min_try_consume_rejects_nested_concurrency_and_leaves_stock
+   called `Result::unwrap_err()` on an `Ok` value: ()
+   → Min(Concurrency, Stock) 的 try_consume 返回 Ok；Min 递归进 Concurrency 空分支，
+     兄弟 Stock 仍被扣（断言 remaining==10 还没跑到就已经因 Ok 崩）。
+
+3. tests::max_try_consume_rejects_when_concurrency_is_chosen
+   called `Result::unwrap_err()` on an `Ok` value: ()
+   → Max(Concurrency(8), Stock(3)) 选中 available=8 的 Concurrency，try_consume 返回 Ok。
+
+4. tests::route_does_not_use_concurrency_via_quantity_deduct
+   route 不得经 deduct 把 Concurrency 当成 Use，got Use { supply: "slots", remaining_after: 2 }
+   → available（空槽数=2）>= need=1，route 走 deduct no-op，仍报 Use；
+     remaining_after 仍是 2（槽没动）。
+
+5. tests::route_skips_nested_concurrency_and_uses_stock_fallback
+   assertion `left == right` failed
+     left: "nested"
+    right: "api"
+   → Min(Concurrency, Stock) 的 available=min(2,10)=2 >= 1，route 把 "nested" 当 Use，
+     没落到后备 Stock "api"。

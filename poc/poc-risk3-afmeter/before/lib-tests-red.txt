@@ -1,0 +1,85 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running unittests src/lib.rs (/tmp/risk3-afmeter-concurrency-target/debug/deps/af_meter-0e3c38300b814b43)
+
+running 37 tests
+test bifrost::tests::all_zero_weights_are_refused ... ok
+test bifrost::tests::budget_ratio_uses_remaining_cents ... ok
+test bifrost::tests::budget_records_the_injected_instant_without_changing_the_ratio ... ok
+test bifrost::tests::exact_exhaustion_is_zero_weight_not_a_negative ... ok
+test bifrost::tests::half_up_is_not_renormalized_to_one_hundred ... ok
+test bifrost::tests::header_pin_weight_is_not_the_key_percent ... ok
+test bifrost::tests::injected_now_refreshes_a_clone_and_leaves_the_supply ... ok
+test bifrost::tests::negative_remaining_is_refused_before_any_fragment ... ok
+test bifrost::tests::one_positive_backup_keeps_a_zero_primary ... ok
+test bifrost::tests::primary_zero_with_positive_backup_is_kept ... ok
+test bifrost::tests::quantize_percent_rounds_half_up ... ok
+test bifrost::tests::role_is_not_list_position ... ok
+test bifrost::tests::rounding_collapse_to_all_zero_is_refused ... ok
+test bifrost::tests::shape_errors_precede_balance_checks ... ok
+test bifrost::tests::spent_above_budget_is_negative_remaining_and_refused ... ok
+test budget::tests::negative_spend_does_not_mutate ... ok
+test budget::tests::over_budget_does_not_mutate ... ok
+test budget::tests::over_cap_does_not_mutate ... ok
+test budget::tests::spends_exact_cap_and_exact_remaining ... ok
+test tests::concurrency_acquire_and_release ... ok
+test tests::defer_when_no_supply_covers ... ok
+test tests::max_deducts_only_chosen_child ... ok
+test tests::max_try_consume_rejects_when_concurrency_is_chosen ... FAILED
+test tests::max_try_consume_still_deducts_stock_when_stock_is_chosen ... ok
+test tests::min_blocked_by_dead_stock_never_recovers ... ok
+test tests::min_deducts_all_children ... ok
+test tests::min_try_consume_rejects_nested_concurrency_and_leaves_stock ... FAILED
+test tests::nested_weekly_window_binds_and_recovers_at_weekly_reset ... ok
+test tests::rate_full_time_ceils_to_the_whole_second_it_actually_fills ... ok
+test tests::rate_token_bucket_refills_continuously ... ok
+test tests::route_does_not_use_concurrency_via_quantity_deduct ... FAILED
+test tests::route_skips_nested_concurrency_and_uses_stock_fallback ... FAILED
+test tests::serde_roundtrip_nested_meter ... ok
+test tests::stock_exhaust_reports_no_recovery ... ok
+test tests::ticks_and_unix_millis_are_different_types ... ok
+test tests::try_consume_on_concurrency_is_unsupported_and_does_not_occupy ... FAILED
+test tests::window_resets_and_does_not_accumulate ... ok
+
+failures:
+
+---- tests::max_try_consume_rejects_when_concurrency_is_chosen stdout ----
+
+thread 'tests::max_try_consume_rejects_when_concurrency_is_chosen' (3140899) panicked at crates/af-meter/src/lib.rs:687:39:
+called `Result::unwrap_err()` on an `Ok` value: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- tests::min_try_consume_rejects_nested_concurrency_and_leaves_stock stdout ----
+
+thread 'tests::min_try_consume_rejects_nested_concurrency_and_leaves_stock' (3140903) panicked at crates/af-meter/src/lib.rs:666:39:
+called `Result::unwrap_err()` on an `Ok` value: ()
+
+---- tests::route_does_not_use_concurrency_via_quantity_deduct stdout ----
+
+thread 'tests::route_does_not_use_concurrency_via_quantity_deduct' (3140907) panicked at crates/af-meter/src/lib.rs:731:22:
+route 不得经 deduct 把 Concurrency 当成 Use，got Use { supply: "slots", remaining_after: 2 }
+
+---- tests::route_skips_nested_concurrency_and_uses_stock_fallback stdout ----
+
+thread 'tests::route_skips_nested_concurrency_and_uses_stock_fallback' (3140908) panicked at crates/af-meter/src/lib.rs:758:17:
+assertion `left == right` failed
+  left: "nested"
+ right: "api"
+
+---- tests::try_consume_on_concurrency_is_unsupported_and_does_not_occupy stdout ----
+
+thread 'tests::try_consume_on_concurrency_is_unsupported_and_does_not_occupy' (3140912) panicked at crates/af-meter/src/lib.rs:646:39:
+called `Result::unwrap_err()` on an `Ok` value: ()
+
+
+failures:
+    tests::max_try_consume_rejects_when_concurrency_is_chosen
+    tests::min_try_consume_rejects_nested_concurrency_and_leaves_stock
+    tests::route_does_not_use_concurrency_via_quantity_deduct
+    tests::route_skips_nested_concurrency_and_uses_stock_fallback
+    tests::try_consume_on_concurrency_is_unsupported_and_does_not_occupy
+
+test result: FAILED. 32 passed; 5 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p af-meter --lib`

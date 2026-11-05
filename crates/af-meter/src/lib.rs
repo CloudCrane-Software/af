@@ -369,8 +369,7 @@ impl Meter {
                 recovers_at: r.recovers_at,
             });
         }
-        self.deduct(need);
-        Ok(())
+        self.deduct(need)
     }
 
     /// Concurrency 专用：占用一个槽位，`release_at` 到期后由 `refresh` 自动释放。
@@ -398,8 +397,54 @@ impl Meter {
         }
     }
 
+    /// 数量扣减路径是否会落到 [`Meter::Concurrency`] 叶子。
+    ///
+    /// Max 只看将被扣减的那个子计量；Min 任一子计量命中即真。
+    fn quantity_consume_unsupported(&self) -> bool {
+        match self {
+            Meter::Concurrency { .. } => true,
+            Meter::Min(kids) => kids.iter().any(Self::quantity_consume_unsupported),
+            Meter::Max(kids) => self
+                .chosen_max_child()
+                .and_then(|i| kids.get(i))
+                .is_some_and(Self::quantity_consume_unsupported),
+            _ => false,
+        }
+    }
+
+    /// Max 择优：available 最大者；并列保留靠前的子计量。空树为 `None`。
+    fn chosen_max_child(&self) -> Option<usize> {
+        let Meter::Max(kids) = self else {
+            return None;
+        };
+        if kids.is_empty() {
+            return None;
+        }
+        let mut best = 0usize;
+        let mut best_available: Option<Count> = None;
+        for (i, k) in kids.iter().enumerate() {
+            let a = k.read().available;
+            let replace = match best_available {
+                Some(b) => a > b,
+                None => true,
+            };
+            if replace {
+                best_available = Some(a);
+                best = i;
+            }
+        }
+        Some(best)
+    }
+
     /// 前提：已用 `given`/`try_consume` 确认可覆盖。Min 扣所有子计量；Max 扣最大者。
-    fn deduct(&mut self, amount: Count) {
+    /// 路径上若碰到 Concurrency，整笔拒绝、不改任何子计量。
+    fn deduct(&mut self, amount: Count) -> Result<(), MeterError> {
+        if self.quantity_consume_unsupported() {
+            return Err(MeterError::Unsupported(
+                "try_consume 不适用于 Concurrency 节点",
+            ));
+        }
+        let max_idx = self.chosen_max_child();
         match self {
             Meter::Stock { remaining } | Meter::Window { remaining, .. } => {
                 *remaining -= amount;
@@ -407,33 +452,19 @@ impl Meter {
             Meter::Rate { tokens, .. } => {
                 *tokens -= amount;
             }
-            Meter::Concurrency { .. } => {
-                // 并发占用走 acquire/release，不走数量扣减。
-            }
+            Meter::Concurrency { .. } => {}
             Meter::Min(kids) => {
                 for k in kids {
-                    k.deduct(amount);
+                    k.deduct(amount)?;
                 }
             }
             Meter::Max(kids) => {
-                let mut best = 0usize;
-                let mut best_available: Option<Count> = None;
-                for (i, k) in kids.iter().enumerate() {
-                    let a = k.read().available;
-                    let replace = match best_available {
-                        Some(b) => a > b,
-                        None => true,
-                    };
-                    if replace {
-                        best_available = Some(a);
-                        best = i;
-                    }
-                }
-                if let Some(k) = kids.get_mut(best) {
-                    k.deduct(amount);
+                if let Some(k) = max_idx.and_then(|i| kids.get_mut(i)) {
+                    k.deduct(amount)?;
                 }
             }
         }
+        Ok(())
     }
 }
 
@@ -465,8 +496,7 @@ pub fn route(supplies: &mut [Supply], need: Count, now: Time) -> Decision {
     let mut earliest: Option<Ticks> = None;
     for &i in &order {
         let r = supplies[i].meter.given(now);
-        if r.available >= need {
-            supplies[i].meter.deduct(need);
+        if r.available >= need && supplies[i].meter.deduct(need).is_ok() {
             let remaining_after = supplies[i].meter.given(now).available;
             return Decision::Use {
                 supply: supplies[i].name.clone(),
@@ -638,6 +668,135 @@ mod tests {
         assert_eq!(r.available, 1);
         assert_eq!(r.recovers_at, None);
         m.acquire(30, 100).unwrap();
+    }
+
+    #[test]
+    fn try_consume_on_concurrency_is_unsupported_and_does_not_occupy() {
+        let mut m = Meter::concurrency(2);
+        let err = m.try_consume(1, 0).unwrap_err();
+        assert!(
+            matches!(err, MeterError::Unsupported(_)),
+            "quantity consume on Concurrency must fail closed, got {err:?}"
+        );
+        let r = m.given(0);
+        assert_eq!(r.available, 2);
+        let Meter::Concurrency {
+            in_use, releases, ..
+        } = &m
+        else {
+            panic!("应是 Concurrency")
+        };
+        assert_eq!(*in_use, 0);
+        assert!(releases.is_empty());
+    }
+
+    #[test]
+    fn min_try_consume_rejects_nested_concurrency_and_leaves_stock() {
+        let mut m = Meter::min(vec![Meter::concurrency(2), Meter::stock(10)]);
+        let err = m.try_consume(1, 0).unwrap_err();
+        assert!(
+            matches!(err, MeterError::Unsupported(_)),
+            "Min 数量扣减遇 Concurrency 必须拒绝，got {err:?}"
+        );
+        let Meter::Min(kids) = &m else {
+            panic!("应是 Min")
+        };
+        let Meter::Concurrency { in_use, .. } = &kids[0] else {
+            panic!("应是 Concurrency")
+        };
+        let Meter::Stock { remaining } = &kids[1] else {
+            panic!("应是 Stock")
+        };
+        assert_eq!(*in_use, 0);
+        assert_eq!(*remaining, 10, "兄弟 Stock 不得在 Concurrency no-op 时被扣");
+    }
+
+    #[test]
+    fn max_try_consume_rejects_when_concurrency_is_chosen() {
+        let mut m = Meter::max(vec![Meter::concurrency(8), Meter::stock(3)]);
+        let err = m.try_consume(1, 0).unwrap_err();
+        assert!(
+            matches!(err, MeterError::Unsupported(_)),
+            "Max 选中 Concurrency 时数量扣减必须拒绝，got {err:?}"
+        );
+        let Meter::Max(kids) = &m else {
+            panic!("应是 Max")
+        };
+        let Meter::Concurrency { in_use, .. } = &kids[0] else {
+            panic!("应是 Concurrency")
+        };
+        let Meter::Stock { remaining } = &kids[1] else {
+            panic!("应是 Stock")
+        };
+        assert_eq!(*in_use, 0);
+        assert_eq!(*remaining, 3);
+    }
+
+    #[test]
+    fn max_try_consume_still_deducts_stock_when_stock_is_chosen() {
+        let mut m = Meter::max(vec![Meter::concurrency(2), Meter::stock(100)]);
+        m.try_consume(60, 0).unwrap();
+        let Meter::Max(kids) = &m else {
+            panic!("应是 Max")
+        };
+        let Meter::Concurrency { in_use, .. } = &kids[0] else {
+            panic!("应是 Concurrency")
+        };
+        let Meter::Stock { remaining } = &kids[1] else {
+            panic!("应是 Stock")
+        };
+        assert_eq!(*in_use, 0);
+        assert_eq!(*remaining, 40);
+    }
+
+    #[test]
+    fn route_does_not_use_concurrency_via_quantity_deduct() {
+        let mut supplies = vec![Supply {
+            name: "slots".into(),
+            priority: 0,
+            meter: Meter::concurrency(2),
+        }];
+        match route(&mut supplies, 1, 0) {
+            Decision::Defer { .. } => {}
+            other => panic!("route 不得经 deduct 把 Concurrency 当成 Use，got {other:?}"),
+        }
+        let Meter::Concurrency { in_use, .. } = &supplies[0].meter else {
+            panic!("应是 Concurrency")
+        };
+        assert_eq!(*in_use, 0);
+    }
+
+    #[test]
+    fn route_skips_nested_concurrency_and_uses_stock_fallback() {
+        let mut supplies = vec![
+            Supply {
+                name: "nested".into(),
+                priority: 0,
+                meter: Meter::min(vec![Meter::concurrency(2), Meter::stock(10)]),
+            },
+            Supply {
+                name: "api".into(),
+                priority: 1,
+                meter: Meter::stock(100),
+            },
+        ];
+        match route(&mut supplies, 1, 0) {
+            Decision::Use {
+                supply,
+                remaining_after,
+            } => {
+                assert_eq!(supply, "api");
+                assert_eq!(remaining_after, 99);
+            }
+            other => panic!("{other:?}"),
+        }
+        let Meter::Min(kids) = &supplies[0].meter else {
+            panic!("应是 Min")
+        };
+        let Meter::Stock { remaining } = &kids[1] else {
+            panic!("应是 Stock")
+        };
+        assert_eq!(*remaining, 10, "嵌套 Stock 不得被扣");
     }
 
     #[test]
