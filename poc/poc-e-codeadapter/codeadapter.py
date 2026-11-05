@@ -603,24 +603,36 @@ def cmd_run(args: argparse.Namespace) -> int:
             returned = lease(leases_db, ["return", "--lease-id", lease_id, "--holder", plan["holder"]])
             mark("lease-returned", {"lease_id": returned["lease_id"], "state": returned["state"], "run_dir_removed": not run_dir.exists()})
         except Exception as return_err:
-            warn_detail = {
-                "level": "WARN",
-                "code": "lease-return-failed",
-                "message": str(return_err),
-                "preserved_error": str(inflight) if inflight is not None else "",
-            }
-            record("warn", warn_detail)
-            e2e_path = evidence_dir / f"{order_id}.e2e.json"
-            if e2e_path.is_file():
-                e2e_payload = json.loads(e2e_path.read_text(encoding="utf-8"))
-            else:
-                e2e_payload = {
-                    "order": {"order_id": order_id, "state": adapter_order_state(ledger_records)},
-                    "merge_commit_sha": None,
+            try:
+                warn_detail = {
+                    "level": "WARN",
+                    "code": "lease-return-failed",
+                    "message": str(return_err),
+                    "preserved_error": str(inflight) if inflight is not None else "",
                 }
-            e2e_payload["lease_return_warn"] = warn_detail
-            write_json(e2e_path, e2e_payload)
-            mark("lease-return-warn", warn_detail)
+                record("warn", warn_detail)
+                e2e_path = evidence_dir / f"{order_id}.e2e.json"
+                if e2e_path.is_file():
+                    e2e_payload = json.loads(e2e_path.read_text(encoding="utf-8"))
+                else:
+                    derived = adapter_order_state(ledger_records)
+                    if derived == "Closed":
+                        derived = "Failed"
+                    merge_sha = next(
+                        (r.get("merge_commit_sha") for r in ledger_records
+                         if r.get("kind") == "merge" and r.get("merge_commit_sha")),
+                        None,
+                    )
+                    e2e_payload = {
+                        "order": {"order_id": order_id, "state": derived,
+                                  "state_note": "adapter aborted on lease-return failure; af-order submit not executed; ledger-derived Closed downgraded to Failed (no false Closed)"},
+                        "merge_commit_sha": merge_sha,
+                    }
+                e2e_payload["lease_return_warn"] = warn_detail
+                write_json(e2e_path, e2e_payload)
+                mark("lease-return-warn", warn_detail)
+            except Exception:
+                pass
             if inflight is None:
                 raise
 

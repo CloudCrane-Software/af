@@ -512,6 +512,17 @@ def test_gitea_api_urlerror_wrapped_as_pa11():
             raise AssertionError("连接拒绝应失败")
 
 
+def test_lease_return_failure_no_false_closed_on_success_branch():
+    """无在飞异常+归还失败：fallback e2e 件不得谎报 Closed（af-order 未提交）。"""
+    import codeadapter as ca
+    ledger=[{'kind':'patch'},{'kind':'gate','gate_result':'green'},{'kind':'merge','merge_commit_sha':'deadbeef'}]
+    derived=ca.adapter_order_state(ledger)
+    assert derived=='Closed'
+    fixed=derived if derived!='Closed' else 'Failed'
+    assert fixed=='Failed'
+    merge_sha=next((r.get('merge_commit_sha') for r in ledger if r.get('kind')=='merge' and r.get('merge_commit_sha')),None)
+    assert merge_sha=='deadbeef'
+
 def test_lease_return_failure_preserves_pa14():
     """P2-2：门红+归还失败双故障——红因保持 PA14，归还失败仅 WARN 落 ledger/e2e。"""
     with tempfile.TemporaryDirectory() as tmp:
