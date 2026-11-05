@@ -1,0 +1,20 @@
+预检：profile 定义命中（/data/af-factory/af-p3/crates/af-execline/src/profile.rs：match 臂 + PROFILE_NAMES 闭集）
+预检：既有订单实例命中（/data/bench/af-p3-state/orders 内含 glm-cp）
+预检：既有订单实例命中（/data/bench/exp1-state/orders 内含 glm-cp）
+预检：glm-cp 密钥通道可解析（KEY_OK len=49；只报长度，零明文）
+预检：磁盘余量 8944MB（≥2000MB 门）
+预检：144 个 plan.json 全部命中冻结版 sha256 d841f1b6951f1ff37ddadec5e2437e5fb88fc75c8fd248cf762829e9b2e52448（全集 144；本轮取臂 A0 A1 A2）
+包清单：/data/bench/exp1/pkg-order-r2.txt（分配表顺序，臂 A0 A1 A2 共 72 项校验通过）
+=== 开始提交：并发 4，包数 72，order_id 前缀 E1R-，臂 A0 A1 A2
+Terminated
+Terminated
+Terminated
+Terminated
+Terminated
+Terminated
+Terminated
+Terminated
+Terminated
+Terminated
+Terminated
+Terminated
