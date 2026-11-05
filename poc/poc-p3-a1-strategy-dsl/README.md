@@ -197,3 +197,15 @@ counts，`--skip-compile` → **exit 0**（`raw/fail-open-r3-nofloor/run.txt`）
 - 运行环境：anolis 工作树 `wt/p3-a1-strategy-dsl`；CARGO_TARGET_DIR=
   `/data/bench/targets/p3-a1-strategy-dsl`（/data 盘，独占）；
   HTTPS_PROXY=`http://100.64.0.8:7890`（grok 通道出口，未改）。
+
+
+### gate-clippy.gate.txt 捕获口径（2026-11-05 回补批注）
+
+该件为**手工捕获件**（非 CI 产物；== AF CI 管道开始 2026-11-05 23:14:16 root=/data/bench/wt-clippy-gateshape
+step0 FAIL: mutations 探针清单漂移（删/改探针未走 update-registry-baseline 同批评审） step2 只打控制台不落 raw/）。再捕获时必须
+连门退出码一并落盘——否则再生即丢机读字段（2026-11-05 e9557aae 曾因只重定向 stdout
+丢掉  行，本批按历史 blob  形状回补）：
+
+
+
+先例： 的  即同模式（json 重定向+exit 追加）。
