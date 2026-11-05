@@ -1,0 +1,3 @@
+117dd0a537ff2d09ac8f269432078e3e1e0334defa707512ff982fc78af42cf8  tools/otel/otlp-assert.py
+0ae7127b0b74ee04e9de6ef6b73483179c1747453b0b2ad793e8c7c85f7ef49d  tools/otel/af-otel-projector.py
+0b59268c8a9435b88878d0c05ec3c76a9b2b1346a75e925e18a92581d0b3b0df  tools/otel/otel_emit.py

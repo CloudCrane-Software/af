@@ -1,0 +1,19 @@
+{
+  "warns": 1,
+  "probes": [
+    {
+      "order_dir": "/tmp/a3-v2-drift",
+      "projector_first_row": "sid-zzz",
+      "rust_set_min": "sid-aaa",
+      "drifted": true,
+      "warn": 1
+    },
+    {
+      "order_dir": "/tmp/a3-v2-before/missing-sid",
+      "projector_first_row": "",
+      "rust_set_min": "",
+      "drifted": false,
+      "warn": 0
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+fmt_rc=0
+test_workspace=1605 passed / 0 failed / 9 ignored  (env -u BASH_FUNC_which%% cargo test -j4 --workspace --no-fail-fast)
+span_produce=13 passed / 0 failed
+clippy_json=error 0 / warning 0
+clippy_gate=PASS （基线 0 签名）
+gate_inputs=判据正本钉对账一致: 14 件  rc=0
+otlp-assert.py sha256=117dd0a537ff2d09ac8f269432078e3e1e0334defa707512ff982fc78af42cf8  本批零改
+af-otel-projector.py sha256=0ae7127b0b74ee04e9de6ef6b73483179c1747453b0b2ad793e8c7c85f7ef49d  本批零改
+production-check 读到工厂既有 status=red/P5 @ 16:15（本批未跑 --production、未发射、未改判据件）

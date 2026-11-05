@@ -1,0 +1,9 @@
+invoke_workflow missing-sid [stable_id= final=Closed] ledger=8 行 MES=[]
+└─ invoke_agent <缺失>
+findings（6 条）：
+  - L1 invoke_workflow: MES 缺 release 行
+  - L1 invoke_workflow: MES 缺 start 行
+  - L1 invoke_workflow: MES 缺 complete 行
+  - L1 invoke_workflow: ledger close 已 ok 但 MES 缺 close 行
+  - L1→L2: 读取 records.jsonl 失败（plan→run 父子边无法建立）：No such file or directory (os error 2)
+  - L2 invoke_agent: 引用 run 未建立（见 L1→L2 findings）

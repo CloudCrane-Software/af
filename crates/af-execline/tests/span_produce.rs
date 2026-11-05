@@ -8,9 +8,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use af_execline::span_produce::{
-    count_order_keyed_rows, load_state, order_id_from_ledger, project_order, publish_from_env,
-    publish_order, ENV_STATE_PATH,
+    count_fully_keyed_rows, count_key_drift_warns, count_order_keyed_rows, load_state,
+    order_id_from_ledger, probe_key_drift, project_order, publish_from_env, publish_order,
+    ENV_STATE_PATH,
 };
+use af_execline::tracetree::verify_order_dir;
 use af_execline::{DriverConfig, EngineClient, FixedClock, OrderLifecycleDriver, StubExecuteUnit};
 use af_workorder::{BudgetVoucher, LineBinding, Priority, Sla};
 
@@ -397,4 +399,171 @@ fn publish_from_env_skips_when_unset() {
     if let Some(p) = previous {
         std::env::set_var(ENV_STATE_PATH, p);
     }
+}
+
+// ------------------------------------------------------------------------ //
+// 键推广（A3 v2）：每行携带完整订单级键集（order_id + work_order_id）。
+// work_order_id = Rust 侧 tracetree BTreeSet 最小值；与投影器首行取键独立，
+// 容许漂移。既有测试断言零改动；本节全部为新增。
+// ------------------------------------------------------------------------ //
+
+fn write_ledger_sids(dir: &Path, order_id: &str, sids: &[&str], ops: &[(&str, bool, &str)]) {
+    fs::create_dir_all(dir).unwrap();
+    let mut lines = Vec::new();
+    for (i, (op, ok, state)) in ops.iter().enumerate() {
+        let sid = sids[i.min(sids.len().saturating_sub(1))];
+        let sid_field = if sid.is_empty() {
+            String::new()
+        } else {
+            format!(r#""stable_id":"{sid}","#)
+        };
+        lines.push(format!(
+            concat!(
+                r#"{{"seq":{seq},"ts_ms":1,"order_id":"{oid}",{sid_field}"op":"{op}","#,
+                r#""idem_key":"{oid}/{op}","ok":{ok},"state_after":"{state}","order_after":{{}}}}"#
+            ),
+            seq = i + 1,
+            oid = order_id,
+            sid_field = sid_field,
+            op = op,
+            ok = ok,
+            state = state,
+        ));
+    }
+    fs::write(dir.join("ledger.jsonl"), lines.join("\n") + "\n").unwrap();
+}
+
+#[test]
+fn full_tree_rows_carry_full_order_key_set() {
+    let dir = write_full_tree("T2-keyset");
+    let spans = project_order(&dir);
+    assert_eq!(spans.len(), 4, "四层树应投影 4 行");
+    assert!(
+        spans
+            .iter()
+            .all(|s| !s.order_id.is_empty() && !s.work_order_id.is_empty()),
+        "每行必须同时携带 order_id 与 work_order_id"
+    );
+    assert!(
+        spans
+            .iter()
+            .all(|s| s.work_order_id == format!("sid-{}", s.order_id)),
+        "本夹具每行 stable_id 同值：work_order_id 等于 Rust 侧集合最小值"
+    );
+}
+
+#[test]
+fn publish_counts_fully_keyed_rows_and_upserts() {
+    let a = write_full_tree("ord-K1");
+    let b = write_full_tree("ord-K2");
+    let state = parent().join("otel-production-keyset.json");
+    let _ = publish_order(&a, &state).unwrap();
+    let n = publish_order(&b, &state).unwrap();
+    let loaded = load_state(&state).unwrap();
+    assert_eq!(count_order_keyed_rows(&loaded), n);
+    assert_eq!(
+        count_fully_keyed_rows(&loaded),
+        n,
+        "真源齐备订单：双键行数必须等于键行数"
+    );
+    assert_eq!(count_key_drift_warns(&loaded), 0, "齐备同值账本无漂移 WARN");
+}
+
+#[test]
+fn legacy_state_without_work_order_id_field_loads_with_default() {
+    let state = parent().join("otel-production-legacy.json");
+    let legacy = serde_json::json!({
+        "schema": "af.otel.production.v1",
+        "updated_at_unix": 0,
+        "producer": "af-execline/span_produce",
+        "spans": [{
+            "order_id": "ord-legacy",
+            "stable_id": "sid-ord-legacy",
+            "span_name": "invoke_workflow",
+            "span_id": "ord-legacy:invoke_workflow",
+            "source": "ledger.jsonl+mes-events.jsonl",
+            "attrs": {}
+        }]
+    });
+    fs::write(&state, serde_json::to_vec_pretty(&legacy).unwrap()).unwrap();
+    let loaded = load_state(&state).expect("旧 schema 行（无 work_order_id 字段）必须可加载");
+    assert_eq!(loaded.spans.len(), 1);
+    assert_eq!(loaded.spans[0].order_id, "ord-legacy");
+    assert_eq!(loaded.spans[0].work_order_id, "", "缺省字段按空串兼容");
+    assert_eq!(count_order_keyed_rows(&loaded), 1);
+    assert_eq!(
+        count_fully_keyed_rows(&loaded),
+        0,
+        "旧行半键：不进双键计数（如实）"
+    );
+}
+
+#[test]
+fn missing_stable_id_emits_zero_rows_fail_closed() {
+    let dir = parent().join("ord-missing-sid");
+    write_ledger_sids(&dir, "ord-missing-sid", &[""], &default_ops());
+    fs::write(dir.join("mes-events.jsonl"), "").unwrap();
+    let report = verify_order_dir(&dir);
+    assert!(
+        report.stable_id.is_empty(),
+        "缺 stable_id 字段时 tracetree 集合为空"
+    );
+    assert!(
+        !report
+            .findings
+            .iter()
+            .any(|f| f.contains("stable_id") && (f.contains("缺") || f.contains("空"))),
+        "tracetree 对字段缺席不报 finding，实得 {:?}",
+        report.findings
+    );
+    let spans = project_order(&dir);
+    assert!(
+        spans.is_empty(),
+        "缺 stable_id fail-closed 不产出半键行，实得 {} 行",
+        spans.len()
+    );
+}
+
+#[test]
+fn key_drift_probe_warns_when_first_row_differs_from_set_min() {
+    let dir = parent().join("ord-drift");
+    // 首行 sid-zzz（投影器取此），其余 sid-aaa（BTreeSet 最小=sid-aaa）。
+    let mut sids: Vec<&str> = vec!["sid-zzz"];
+    sids.extend(std::iter::repeat_n("sid-aaa", 7));
+    write_ledger_sids(&dir, "ord-drift", &sids, &default_ops());
+    fs::write(dir.join("mes-events.jsonl"), "").unwrap();
+    let probe = probe_key_drift(&dir);
+    assert_eq!(probe.projector_first_row, "sid-zzz");
+    assert_eq!(probe.rust_set_min, "sid-aaa");
+    assert!(probe.drifted, "首行≠集合最小必须 WARN");
+    let spans = project_order(&dir);
+    assert!(
+        !spans.is_empty(),
+        "漂移仍产出行（容许漂移，以 Rust 取值为准写本面）"
+    );
+    assert!(
+        spans.iter().all(|s| s.work_order_id == "sid-aaa"),
+        "本面 work_order_id 走 Rust 集合最小"
+    );
+    let l1 = spans
+        .iter()
+        .find(|s| s.span_name == "invoke_workflow")
+        .unwrap();
+    assert_eq!(l1.attrs["ledger_key_drift"], serde_json::json!(true));
+    let state = parent().join("otel-production-drift.json");
+    let _ = publish_order(&dir, &state).unwrap();
+    let loaded = load_state(&state).unwrap();
+    assert_eq!(count_key_drift_warns(&loaded), 1);
+}
+
+#[test]
+fn key_drift_probe_silent_when_aligned() {
+    let dir = write_full_tree("ord-aligned");
+    let probe = probe_key_drift(&dir);
+    assert!(!probe.drifted, "齐备同值账本不应 WARN");
+    assert_eq!(probe.projector_first_row, probe.rust_set_min);
+    let spans = project_order(&dir);
+    assert!(spans
+        .iter()
+        .all(|s| s.attrs.get("ledger_key_drift").is_none()));
 }

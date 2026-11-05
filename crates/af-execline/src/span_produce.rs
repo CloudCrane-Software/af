@@ -1,7 +1,8 @@
 //! 语义层 span 生产者（RT-E138；A1 波次按名册正本取名）。
 //!
-//! 把订单产物投影为带**订单级标识键**的 span 行，写入状态面 JSON。
-//! 权威载体与 [`crate::tracetree`] 同源（落地契约-v0 §4.2）：
+//! 把订单产物投影为带**订单级标识键集**（`order_id` + `work_order_id`）的
+//! span 行，写入**本地**状态面 JSON。权威载体与 [`crate::tracetree`] 同源
+//! （落地契约-v0 §4.2）：
 //! L1 `invoke_workflow` ← ledger + MES；L2 `invoke_agent` ← harness.db；
 //! L3 `chat` ← `harness.model`；L4 `execute_tool` ← `harness.tool`。
 //!
@@ -19,8 +20,19 @@
 //!
 //! 写面：读-合并-tmp-rename 原子替换（同 `af-trace::anchor` 的
 //! `atomic_write`）；同 `order_id` 重发覆盖该单旧行，其他订单保留。
+//!
+//! 键取法（A3 返修 v2，ADR-003）：Rust 与投影器**独立取键，容许漂移**。
+//! 本模块 `work_order_id` = tracetree 的 ledger `stable_id` 集合最小值
+//! （`BTreeSet::iter().next()`）；`tools/otel/af-otel-projector.py` 取
+//! ledger **首行** `stable_id`（`:90`，写入 `af.work_order_id` 于 `:408`/
+//! `:437`）。判据面（P2 / CH）以投影器侧为准。两侧不等时
+//! [`probe_key_drift`] 记 WARN（`attrs.ledger_key_drift`），不改发射、
+//! 不改 P2 红绿。本状态面 JSON **无消费者入 CH**；CH 订单域行来自投影器。
+//! 缺 `stable_id`（集合空或最小值为空串）fail-closed **不产出行**，避免
+//! 半键行。tracetree 对「字段缺席」当前不报 finding（只在多值漂移时报），
+//! 本生产者不以核对器 finding 为门。
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -113,10 +125,21 @@ impl ProductionState {
     }
 }
 
-/// 一条语义 span。`order_id` 是订单级标识键，必须来自 ledger 真源。
+/// 一条语义 span。订单级标识键集必须来自 ledger 真源：`order_id`
+///（`ledger.jsonl` 的 `order_id` 字段）+ `work_order_id`（同账本
+/// `stable_id` 的 **Rust 侧**取值 = tracetree `BTreeSet` 最小值）。
+///
+/// 与投影器 `af.work_order_id` **同一字段真源、独立取键**：投影器取首行，
+/// 本侧取集合最小；漂移时值可以不等。判据面以投影器 / CH 为准。旧状态面
+/// 行缺本字段时按空串兼容读入（`serde(default)`）。缺 `stable_id` 的账本
+/// 由 [`project_order`] fail-closed 不产出行，不落半键。
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SpanRow {
     pub order_id: String,
+    /// 第二订单级键 = 账本 `stable_id` 的 Rust 侧取值（集合最小）。
+    /// 与投影器 `af.work_order_id` 独立取键，容许漂移。
+    #[serde(default)]
+    pub work_order_id: String,
     pub stable_id: String,
     pub span_name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -132,6 +155,77 @@ pub fn count_order_keyed_rows(state: &ProductionState) -> usize {
         .spans
         .iter()
         .filter(|row| !row.order_id.is_empty())
+        .count()
+}
+
+/// 状态面里订单级键集齐全（`order_id` 与 `work_order_id` 均非空）的 span 行数。
+/// 键推广不变量：真源齐备订单投影行双键计数 == 键行计数。缺 `stable_id` 的
+/// 账本由 [`project_order`] fail-closed 不产出行，故新行不会以空
+/// `work_order_id` 入面；本计数仍把空 `work_order_id` 排除，以兼容
+/// `serde(default)` 读入的旧半键行。
+pub fn count_fully_keyed_rows(state: &ProductionState) -> usize {
+    state
+        .spans
+        .iter()
+        .filter(|row| !row.order_id.is_empty() && !row.work_order_id.is_empty())
+        .count()
+}
+
+/// 两侧取键漂移探针。`drifted == true` 即 WARN（计入
+/// [`count_key_drift_warns`]，不改变发射 / 不改 P2 红绿）。
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeyDriftProbe {
+    /// 投影器算法：ledger.jsonl **首行** `stable_id`（字段缺席 → 空串）。
+    pub projector_first_row: String,
+    /// Rust / tracetree 算法：全部行现有 `stable_id` 的 `BTreeSet` 最小值。
+    pub rust_set_min: String,
+    pub drifted: bool,
+}
+
+/// 比较投影器首行取键与 Rust 集合最小取键。两侧独立，容许不等。
+pub fn probe_key_drift(dir: &Path) -> KeyDriftProbe {
+    let text = fs::read_to_string(dir.join("ledger.jsonl")).unwrap_or_default();
+    let mut projector_first_row = String::new();
+    let mut seen_first = false;
+    let mut rust_ids: BTreeSet<String> = BTreeSet::new();
+    for line in text.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(line) else {
+            continue;
+        };
+        // 投影器：lines[0].get("stable_id", "")——缺席与空串都是空。
+        let as_projector = value
+            .get("stable_id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        if !seen_first {
+            projector_first_row = as_projector;
+            seen_first = true;
+        }
+        // tracetree：字段在场（含空串）才入集合。
+        if let Some(s) = value.get("stable_id").and_then(|v| v.as_str()) {
+            rust_ids.insert(s.to_string());
+        }
+    }
+    let rust_set_min = rust_ids.iter().next().cloned().unwrap_or_default();
+    let drifted = projector_first_row != rust_set_min;
+    KeyDriftProbe {
+        projector_first_row,
+        rust_set_min,
+        drifted,
+    }
+}
+
+/// 状态面里 `attrs.ledger_key_drift == true` 的 span 行数（WARN 计数）。
+pub fn count_key_drift_warns(state: &ProductionState) -> usize {
+    state
+        .spans
+        .iter()
+        .filter(|row| row.attrs.get("ledger_key_drift").and_then(|v| v.as_bool()) == Some(true))
         .count()
 }
 
@@ -157,7 +251,8 @@ pub fn order_id_from_ledger(dir: &Path) -> Option<String> {
     None
 }
 
-/// 把一份订单目录投影为 span 行。无 ledger 订单键或零账本行 ⇒ 空。
+/// 把一份订单目录投影为 span 行。无 ledger 订单键、零账本行、或
+/// `stable_id` 空（缺席 / 空串最小）⇒ 空（fail-closed，不落半键行）。
 pub fn project_order(dir: &Path) -> Vec<SpanRow> {
     let Some(order_id) = order_id_from_ledger(dir) else {
         return Vec::new();
@@ -166,10 +261,13 @@ pub fn project_order(dir: &Path) -> Vec<SpanRow> {
     if report.ledger_entries == 0 {
         return Vec::new();
     }
-    materialize(&order_id, &report)
+    if report.stable_id.is_empty() {
+        return Vec::new();
+    }
+    materialize(&order_id, &report, &probe_key_drift(dir))
 }
 
-fn materialize(order_id: &str, report: &TraceTreeReport) -> Vec<SpanRow> {
+fn materialize(order_id: &str, report: &TraceTreeReport, drift: &KeyDriftProbe) -> Vec<SpanRow> {
     // 名册正本缺席/坏 ⇒ 零行（fail-closed；契约由测试钉死，见模块头注）。
     let Some(roster) = roster() else {
         return Vec::new();
@@ -189,21 +287,27 @@ fn materialize(order_id: &str, report: &TraceTreeReport) -> Vec<SpanRow> {
         .get(name_l2)
         .and_then(|l| l.parent.clone())
         .unwrap_or_else(|| name_l1.to_string());
-
     let mut spans = Vec::new();
     let stable = report.stable_id.as_str();
+    let mut l1_attrs = json!({
+        "ledger_entries": report.ledger_entries,
+        "final_state": report.final_state,
+        "mes_kinds": report.mes_kinds,
+    });
+    if drift.drifted {
+        l1_attrs["ledger_key_drift"] = json!(true);
+        l1_attrs["projector_first_row"] = json!(drift.projector_first_row);
+        l1_attrs["rust_set_min"] = json!(drift.rust_set_min);
+    }
     spans.push(SpanRow {
         order_id: order_id.to_string(),
+        work_order_id: stable.to_string(),
         stable_id: stable.to_string(),
         span_name: name_l1.to_string(),
         parent_span_name: None,
         span_id: format!("{order_id}:{name_l1}"),
         source: "ledger.jsonl+mes-events.jsonl".into(),
-        attrs: json!({
-            "ledger_entries": report.ledger_entries,
-            "final_state": report.final_state,
-            "mes_kinds": report.mes_kinds,
-        }),
+        attrs: l1_attrs,
     });
     for agent in collect_agents(report) {
         let agent_id = format!(
@@ -212,6 +316,7 @@ fn materialize(order_id: &str, report: &TraceTreeReport) -> Vec<SpanRow> {
         );
         spans.push(SpanRow {
             order_id: order_id.to_string(),
+            work_order_id: stable.to_string(),
             stable_id: stable.to_string(),
             span_name: name_l2.to_string(),
             parent_span_name: Some(parent_of_l2.clone()),
@@ -229,6 +334,7 @@ fn materialize(order_id: &str, report: &TraceTreeReport) -> Vec<SpanRow> {
         if agent.chat_events > 0 {
             spans.push(SpanRow {
                 order_id: order_id.to_string(),
+                work_order_id: stable.to_string(),
                 stable_id: stable.to_string(),
                 span_name: name_l3.to_string(),
                 parent_span_name: Some(name_l2.to_string()),
@@ -246,6 +352,7 @@ fn materialize(order_id: &str, report: &TraceTreeReport) -> Vec<SpanRow> {
         if agent.tool_events > 0 {
             spans.push(SpanRow {
                 order_id: order_id.to_string(),
+                work_order_id: stable.to_string(),
                 stable_id: stable.to_string(),
                 span_name: name_l4.to_string(),
                 parent_span_name: Some(name_l2.to_string()),
@@ -276,7 +383,7 @@ pub fn publish_order(dir: &Path, state_path: &Path) -> Result<usize, String> {
     let incoming = project_order(dir);
     if incoming.is_empty() {
         return Err(format!(
-            "订单 {} 投影出零条 span（ledger 无订单级键/零账本行/名册正本缺席）",
+            "订单 {} 投影出零条 span（ledger 无订单级键、零账本行、stable_id 空或名册正本缺席——fail-closed 不落半键）",
             dir.display()
         ));
     }

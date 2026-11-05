@@ -1,0 +1,8 @@
+{"seq": 1, "ts_ms": 1, "order_id": "ord-missing-sid", "op": "create_order", "idem_key": "x/create_order", "ok": true, "state_after": "Created", "order_after": {}}
+{"seq": 2, "ts_ms": 2, "order_id": "ord-missing-sid", "op": "bind_line", "idem_key": "x/bind_line", "ok": true, "state_after": "Created", "order_after": {}}
+{"seq": 3, "ts_ms": 3, "order_id": "ord-missing-sid", "op": "attach_voucher", "idem_key": "x/attach_voucher", "ok": true, "state_after": "Created", "order_after": {}}
+{"seq": 4, "ts_ms": 4, "order_id": "ord-missing-sid", "op": "release", "idem_key": "x/release", "ok": true, "state_after": "Released", "order_after": {}}
+{"seq": 5, "ts_ms": 5, "order_id": "ord-missing-sid", "op": "start", "idem_key": "x/start", "ok": true, "state_after": "InProgress", "order_after": {}}
+{"seq": 6, "ts_ms": 6, "order_id": "ord-missing-sid", "op": "attach_artifact", "idem_key": "x/attach_artifact", "ok": true, "state_after": "InProgress", "order_after": {}}
+{"seq": 7, "ts_ms": 7, "order_id": "ord-missing-sid", "op": "complete", "idem_key": "x/complete", "ok": true, "state_after": "Completed", "order_after": {}}
+{"seq": 8, "ts_ms": 8, "order_id": "ord-missing-sid", "op": "close", "idem_key": "x/close", "ok": true, "state_after": "Closed", "order_after": {}}
