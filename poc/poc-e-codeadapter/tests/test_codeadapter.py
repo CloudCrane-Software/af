@@ -2,8 +2,9 @@
 """PoC-E 代码域适配器单测（poc-supply 同款自跑风格，python3 -I 直接执行）。
 
 只测纯函数与生命周期语义的机械面（四项绑定复核、改动清单校验、补丁件哈希、
-lease 四态、多编辑原子性、错 holder 释放、门红订单态），lease/git/gitea 的
-真实面由端到端单验证（见 30-工件 pocE e2e）。
+lease 四态、多编辑原子性、错 holder 释放、门红订单态、URLError→PA11、
+finally 归还失败保原红因），lease/git/gitea 的真实面由端到端单验证
+（见 30-工件 pocE e2e）。
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import urllib.error
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -24,6 +26,7 @@ sys.path.insert(0, str(SUPPLY_DIR))
 
 from codeadapter import (  # noqa: E402
     AdapterError,
+    GiteaClient,
     adapter_order_state,
     apply_edits,
     assert_closed_has_three_records,
@@ -487,6 +490,126 @@ def test_integrator_actual_is_independently_sampled():
         assert "actual = sample_integrator_actual(" in source
         assert '"suite_digest": gate_result["suite_digest"]' not in source
         assert '"verdict": gate_result["verdict"]' not in source.split("actual = sample_integrator_actual", 1)[1][:400]
+
+
+def test_gitea_api_urlerror_wrapped_as_pa11():
+    """P2-1：连接拒绝（127.0.0.1:1）包装为 PA11，不得裸抛 URLError。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        creds = Path(tmp) / "creds"
+        creds.write_text("http://user:token@127.0.0.1:1\n", encoding="utf-8")
+        client = GiteaClient("http://127.0.0.1:1", creds, "127.0.0.1:1")
+        try:
+            client.api("GET", "/version")
+        except AdapterError as error:
+            text = str(error)
+            assert "PA11" in text, text
+            assert "URLError" in text or "Connection refused" in text or "111" in text, text
+            assert isinstance(error.__cause__, urllib.error.URLError), type(error.__cause__)
+            assert error.__cause__.reason is not None
+        except urllib.error.URLError as error:
+            raise AssertionError(f"修后不得裸抛 URLError: {error!r}") from error
+        else:
+            raise AssertionError("连接拒绝应失败")
+
+
+def test_lease_return_failure_preserves_pa14():
+    """P2-2：门红+归还失败双故障——红因保持 PA14，归还失败仅 WARN 落 ledger/e2e。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+        worktree = _git_repo(tmp_path / "wt")
+        repo = worktree
+        evidence = tmp_path / "evidence"
+        evidence.mkdir()
+        run_root = tmp_path / "runs"
+        run_root.mkdir()
+        gate = tmp_path / "gate_fail.sh"
+        gate.write_text(
+            "#!/bin/bash\n"
+            "OUT=\"$2\"\n"
+            "mkdir -p \"$OUT\"\n"
+            "echo 'step1  FAIL' > \"$OUT/SUMMARY.txt\"\n"
+            "echo 'PIPELINE-RED (exit 1)' >> \"$OUT/SUMMARY.txt\"\n"
+            "exit 1\n",
+            encoding="utf-8",
+        )
+        os.chmod(gate, 0o755)
+        plan = {
+            "order_id": "WO-GATE-RED-RETURN",
+            "lease_id": "lease-grr",
+            "branch": "poc-e/wo-gate-red-return",
+            "registry": str(tmp_path / "reg"),
+            "leases_db": str(tmp_path / "leases.db"),
+            "gate_script": str(gate),
+            "af_order_bin": "/bin/true",
+            "order_spec": str(tmp_path / "spec.json"),
+            "order_state_dir": str(tmp_path / "state"),
+            "workspace": str(tmp_path),
+            "target_dir": str(tmp_path / "target"),
+            "node_id": "anolis",
+            "mount": "root",
+            "resource": "anolis/root",
+            "reserved_bytes": 1024,
+            "holder": "poc-e",
+            "ttl_ms": 60_000,
+            "repo_url": "http://example.invalid/repo.git",
+            "base_branch": "main",
+            "edits": [{"action": "append", "path": "src/lib.rs", "text": "// gate-red-return\n"}],
+            "change_summary": "gate-red-return-replay",
+            "gitea_api_base": "http://127.0.0.1:1",
+            "gitea_credentials": str(tmp_path / "creds"),
+            "gitea_host_suffix": "example.invalid",
+            "gitea_repo": "org/repo",
+        }
+        plan_path = tmp_path / "plan.json"
+        plan_path.write_text(json.dumps(plan), encoding="utf-8")
+        args = SimpleNamespace(
+            plan=str(plan_path),
+            run_root=str(run_root),
+            evidence_dir=str(evidence),
+        )
+        import codeadapter as ca
+
+        class Boom:
+            def __init__(self, *a, **k):
+                raise AssertionError("门红不得构造 GiteaClient")
+
+        real_lease = ca.lease
+
+        def lease_return_fails(db, argv_tail):
+            if argv_tail and argv_tail[0] == "return":
+                raise AdapterError("PA10 命令失败 exit=1: injected lease return failure")
+            return real_lease(db, argv_tail)
+
+        with mock.patch.object(ca, "collect_observation", return_value=tmp_path / "obs.json"), \
+             mock.patch.object(ca, "preflight", return_value={"post_free_bytes": 1, "admit": True}), \
+             mock.patch.object(ca, "open_worktree", return_value=(repo, worktree)), \
+             mock.patch.object(ca, "GiteaClient", Boom), \
+             mock.patch.object(ca, "lease", side_effect=lease_return_fails):
+            try:
+                cmd_run(args)
+            except AdapterError as error:
+                text = str(error)
+                assert "PA14" in text, f"红因应保持 PA14，实际: {text}"
+                assert "injected lease return failure" not in text
+            else:
+                raise AssertionError("门红+归还失败 cmd_run 应失败")
+
+        ledger_path = evidence / "WO-GATE-RED-RETURN.ledger.jsonl"
+        records = load_adapter_ledger(ledger_path)
+        kinds = [item.get("kind") for item in records]
+        assert "patch" in kinds
+        assert "gate" in kinds
+        assert "merge" not in kinds
+        warn_recs = [item for item in records if item.get("kind") == "warn" or item.get("level") == "WARN"]
+        assert warn_recs, f"归还失败应记 WARN 进 ledger，实际 kinds={kinds}"
+        warn = warn_recs[-1]
+        assert "injected lease return failure" in str(warn.get("message") or warn)
+        assert adapter_order_state(records) == "Failed"
+        e2e = json.loads((evidence / "WO-GATE-RED-RETURN.e2e.json").read_text(encoding="utf-8"))
+        assert e2e["order"]["state"] != "Closed"
+        assert e2e["gate_result"] == "red"
+        warn_blob = json.dumps(e2e.get("lease_return_warn") or e2e, ensure_ascii=False)
+        assert "WARN" in warn_blob or "injected lease return failure" in warn_blob
 
 
 def main() -> int:
