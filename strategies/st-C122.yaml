@@ -47,7 +47,7 @@ dsl_snippet: |
   nodes:
     - id: edit
       kind: task
-      uses: { model: route.main@1, tools: [pkg.fs.workdir_rw@1, pkg.repo.edit@1] }
+      uses: { model: route.main@1, tools: [pkg.repo.edit@1] }  # 选 b：workdir_rw 属沙箱能力面（非工具实现），escape 已记账；编辑走已注册 repo.edit
       consumes: { review: polarity_verdict }
       emits: { patch: edit_patch }
       context:

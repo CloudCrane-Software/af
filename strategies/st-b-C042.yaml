@@ -44,7 +44,7 @@ dsl_snippet: |
       kind: task
       uses:
         model: route.main@1
-        memory: [pkg.mem.grep, pkg.mem.read, pkg.mem.write]   # grep/read/write 三件即记忆面
+        tools: [pkg.sweng.locate, pkg.sweng.view, pkg.sweng.edit]   # 选 b：文件系统+grep 即记忆 → 已注册 locate/view/edit（不新造 pkg.mem.* 空转件）
       writes: [memory_files]
       emits: { answer: answer }
       context:

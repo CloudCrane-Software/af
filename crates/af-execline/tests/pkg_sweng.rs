@@ -115,6 +115,32 @@ fn builtin_impl_ref_dual_form() {
 }
 
 #[test]
+fn tool_impl_name_aliases_hit_wired_four_arms() {
+    assert_eq!(
+        sweng::tool_impl_name("pkg.sweng.locate"),
+        "pkg.sweng.locate"
+    );
+    assert_eq!(
+        sweng::tool_impl_name("pkg.sweagent.env"),
+        "pkg.sweagent.env"
+    );
+    assert_eq!(sweng::tool_impl_name("pkg.repo.grep"), "pkg.sweng.locate");
+    assert_eq!(sweng::tool_impl_name("pkg.repo.read"), "pkg.sweng.view");
+    assert_eq!(sweng::tool_impl_name("pkg.repo.edit"), "pkg.sweng.edit");
+    assert_eq!(sweng::tool_impl_name("pkg.aci.shell"), "pkg.sweagent.env");
+    assert_eq!(
+        sweng::tool_impl_name("pkg.merge.strategy_v1"),
+        "pkg.sweng.edit"
+    );
+    let decl = sweng::tool_decl("pkg.repo.grep@1", "/testbed").expect("别名应有模型面");
+    assert_eq!(decl.name, "repo.grep");
+    let env_alias = sweng::tool_decl("pkg.aci.shell@1", "/testbed").expect("env 别名应有模型面");
+    assert_eq!(env_alias.name, "aci.shell");
+    let env_id = sweng::tool_decl("pkg.sweagent.env@1", "/testbed").expect("env 身份件");
+    assert_eq!(env_id.name, "bash");
+}
+
+#[test]
 fn sweng_v1_component_table_lists_exactly_fifteen() {
     assert_eq!(
         sweng::SWENG_V1_COMPONENTS.len(),

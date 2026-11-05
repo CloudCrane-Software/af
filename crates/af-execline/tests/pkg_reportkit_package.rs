@@ -2,7 +2,7 @@
 //!
 //! 验收面：
 //! - af-dsl 图清单：reportkit 第 5 包、pkg.reportkit.paper_report@1.0 在册；
-//! - 组件注册表：63 条终态（57→63，+6 件逐名/类/effect 断言）；
+//! - 组件注册表：119 条终态（63 + E9001 供给批 56，+6 件逐名/类/effect 断言仍在）；
 //! - 图正本干跑（真编译器全链 in-test）：exit 0、reader sources 工件口
 //!   进 artifact_contract（裁决5 记账面）、cite_check/rubric_check unit 绑定；
 //! - prompts/MANIFEST（裁决10）与 citations 五字段 required（裁决4）。
@@ -33,7 +33,11 @@ fn reportkit_is_fifth_package_with_paper_report_graph() {
 #[test]
 fn registry_reaches_g4_terminal_sixty_three() {
     let reg = ComponentRegistry::load(repo_packages()).unwrap();
-    assert_eq!(reg.component_count(), 63, "57 + reportkit 6（G4 终态）");
+    assert_eq!(
+        reg.component_count(),
+        119,
+        "63（G4 终态）+ 56（E9001 供给批）"
+    );
     // +6 件逐名/类/effect（设计 §3 全文照抄面）。
     let expect = [
         (
@@ -77,7 +81,7 @@ fn paper_report_graph_compiles_with_sources_artifact_port() {
     let verdict = af_dsl::validate(&doc);
     assert!(verdict.is_ok(), "图应零违例：{verdict}");
     let reg = ComponentRegistry::load(repo_packages()).unwrap();
-    let plan_src = af_compiler::plan_json(&doc, &reg).expect("图应产计划（63 条 digest）");
+    let plan_src = af_compiler::plan_json(&doc, &reg).expect("图应产计划（119 条 digest）");
     // 双跑确定性。
     let plan_src2 = af_compiler::plan_json(&doc, &reg).unwrap();
     assert_eq!(plan_src, plan_src2, "双跑逐字节一致");
@@ -92,8 +96,8 @@ fn paper_report_graph_compiles_with_sources_artifact_port() {
     );
     assert_eq!(
         plan["body"]["compiled_from"]["registry_digest"],
-        "63c3478e9321e1c58318620a592e9953ef34cee3a5d19ea4c3300a722fafe15b",
-        "G4 终态 digest（63 条）"
+        reg.digest(),
+        "计划携带当前注册表 digest（G4 63 + E9001 56 = 119 条）"
     );
     // 裁决5：reader sources 工件口进 artifact_contract（进图记账、不进 store）。
     let reader = plan["body"]["node_exec"]

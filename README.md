@@ -44,7 +44,7 @@ eval/dspy-ir/bench），语义结论在各 crate 的 `RESULT.md`。
   - `reportkit/`——研究报告包（`paper_report@1.0` 报告环），F5c 真单
     Closed（cite_check+rubric 双 passed）。
 - 声明集：`adaskit/ autogen/ swarmkit/` 包图清单 + 根级 `components.json`
-  ——组件声明合计 63 条（根 44 + 包级 19），`registry_digest` 入计划对象。
+  ——组件声明合计 119 条（根 96 + 包级 23），`registry_digest` 入计划对象。
 - 规范正本：`af/packages/README.md`。
 
 ### AFB 语法（v0.1 + fix1/fix2 + 契约族）

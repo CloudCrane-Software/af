@@ -1,0 +1,102 @@
+{
+  "batch": "E9001",
+  "baseline": "origin/product/main bb7d1e3ac814280f514eab05dcfe663b15dbdbb2",
+  "before": {"compilable": 44, "pass_four_stage": 10, "e9001_bind_fail": 34},
+  "after": {"compilable": 44, "pass_four_stage": 44, "e9001_bind_fail": 0},
+  "registry": {
+    "before_count": 63,
+    "after_count": 119,
+    "added": 56,
+    "before_digest": "63c3478e9321e1c58318620a592e9953ef34cee3a5d19ea4c3300a722fafe15b",
+    "after_digest": "f5a6de7c9faa7859ab2b8c206a7517b996e770a78099baea9ac7cd1e565f7103"
+  },
+  "choice_a_register": {
+    "model_route": [
+      {"name": "route.strong@1", "alias_of": "route.main endpoint GLM-5.3", "strategies": ["st-b-C102", "st-b-C111"]},
+      {"name": "route.mid@1", "alias_of": "route.cheap endpoint GLM-5.3-Flash", "strategies": ["st-b-C102", "st-b-C111"]},
+      {"name": "route.weak@1", "alias_of": "route.cheap endpoint GLM-5.3-Flash", "strategies": ["st-b-C109"]},
+      {"name": "route.retrieval@1", "alias_of": "route.cheap endpoint GLM-5.3-Flash", "strategies": ["st-b-C035", "st-b-C036"]},
+      {"name": "route.critic@1", "alias_of": "route.main endpoint GLM-5.3", "strategies": ["st-b-C060"]},
+      {"name": "route.scorer@1", "alias_of": "route.main endpoint GLM-5.3", "strategies": ["st-b-C092"]},
+      {"name": "route.chooser@1", "alias_of": "route.main endpoint GLM-5.3", "strategies": ["st-b-C095"]}
+    ],
+    "tool": [
+      {"name": "pkg.repo.grep@1", "impl": "executor:builtin/pkg.sweng.locate@af-execline", "strategies": ["st-b-C038", "st-b-C079"]},
+      {"name": "pkg.repo.read@1", "impl": "executor:builtin/pkg.sweng.view@af-execline", "strategies": ["st-b-C038"]},
+      {"name": "pkg.repo.edit@1", "impl": "executor:builtin/pkg.sweng.edit@af-execline", "strategies": ["st-C122", "st-b-C029"]},
+      {"name": "pkg.repo.test@1", "impl": "executor:builtin/pkg.sweagent.env@af-execline", "strategies": ["st-b-C029"]},
+      {"name": "pkg.ret.codegrep", "impl": "executor:builtin/pkg.sweng.locate@af-execline", "strategies": ["st-b-C035"]},
+      {"name": "pkg.ret.lex_anchor", "impl": "executor:builtin/pkg.sweng.locate@af-execline", "strategies": ["st-b-C036"]},
+      {"name": "pkg.ret.graph_expand", "impl": "executor:builtin/pkg.sweng.locate@af-execline", "strategies": ["st-b-C036"]},
+      {"name": "pkg.hopqa.search@1", "impl": "executor:builtin/pkg.sweng.locate@af-execline", "strategies": ["st-C006"]},
+      {"name": "pkg.hopqa.lookup@1", "impl": "executor:builtin/pkg.sweng.view@af-execline", "strategies": ["st-C006"]},
+      {"name": "pkg.cohesion.depgraph@1", "impl": "executor:builtin/pkg.sweng.locate@af-execline", "strategies": ["st-C008"]},
+      {"name": "pkg.cohesion.community@1", "impl": "executor:builtin/pkg.sweng.locate@af-execline", "strategies": ["st-C008"]},
+      {"name": "pkg.searchkit.corpus@1", "impl": "executor:builtin/pkg.sweng.view@af-execline", "strategies": ["st-C009"]},
+      {"name": "pkg.bench.leaderboard@1", "impl": "executor:builtin/pkg.sweng.view@af-execline", "strategies": ["st-C007"]},
+      {"name": "pkg.ctxrot.corpus@1", "impl": "executor:builtin/pkg.sweng.view@af-execline", "strategies": ["st-C015"]},
+      {"name": "pkg.aci.shell@1", "impl": "executor:builtin/pkg.sweagent.env@af-execline", "strategies": ["st-C019"]},
+      {"name": "pkg.aci.readonly@1", "impl": "executor:builtin/pkg.sweng.view@af-execline", "strategies": ["st-C019"]},
+      {"name": "pkg.aci.editor@1", "impl": "executor:builtin/pkg.sweng.edit@af-execline", "strategies": ["st-C019"]},
+      {"name": "pkg.aci.lint@1", "impl": "executor:builtin/pkg.sweagent.env@af-execline", "strategies": ["st-C019"]},
+      {"name": "pkg.aci.custom@1", "impl": "executor:builtin/pkg.sweagent.env@af-execline", "strategies": ["st-C019"]},
+      {"name": "pkg.harness.shell@1", "impl": "executor:builtin/pkg.sweagent.env@af-execline", "strategies": ["st-C007"]},
+      {"name": "pkg.harness.edit@1", "impl": "executor:builtin/pkg.sweng.edit@af-execline", "strategies": ["st-C007"]},
+      {"name": "pkg.harness.lint@1", "impl": "executor:builtin/pkg.sweagent.env@af-execline", "strategies": ["st-C007"]},
+      {"name": "pkg.skill.runtime@1", "impl": "executor:builtin/pkg.sweagent.env@af-execline", "strategies": ["st-b-C062", "st-b-C064"]},
+      {"name": "pkg.merge.strategy_v1@1", "impl": "executor:builtin/pkg.sweng.edit@af-execline", "strategies": ["st-b-C125"]},
+      {"name": "pkg.merge.strategy_v2@1", "impl": "executor:builtin/pkg.sweng.edit@af-execline", "strategies": ["st-b-C125"]},
+      {"name": "pkg.merge.compose_new@1", "impl": "executor:builtin/pkg.sweng.edit@af-execline", "strategies": ["st-b-C125"]},
+      {"name": "pkg.sweng.lint@1", "impl": "executor:builtin/pkg.sweagent.env@af-execline", "strategies": ["st-C010"]},
+      {"name": "pkg.sweng.edit_udiff", "impl": "executor:builtin/pkg.sweng.edit@af-execline", "strategies": ["st-b-C071"]},
+      {"name": "pkg.sweng.edit_whole", "impl": "executor:builtin/pkg.sweng.edit@af-execline", "strategies": ["st-b-C071"]},
+      {"name": "pkg.sweng.edit_linted", "impl": "executor:builtin/pkg.sweng.edit@af-execline", "strategies": ["st-b-C069"]}
+    ],
+    "unit": [
+      {"name": "pkg.swe.checker@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C028"]},
+      {"name": "pkg.reflex.test_unit@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-C018"]},
+      {"name": "pkg.ci.rerun@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C029"]},
+      {"name": "pkg.ci.merge_probe@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C079"]},
+      {"name": "pkg.fmt.compliance_probe@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C071"]},
+      {"name": "pkg.hooks.post_edit@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C057"]},
+      {"name": "pkg.critic.tool_suite@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C077"]},
+      {"name": "pkg.codet.dual_runner@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C078"]},
+      {"name": "pkg.otter.repro_runner@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C097"]},
+      {"name": "pkg.ticket.done_probe@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C086"]},
+      {"name": "pkg.alpha.sample_filter@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C096"]},
+      {"name": "pkg.aci.ablate@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-C019"]},
+      {"name": "pkg.bench.resolved@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-C007"]},
+      {"name": "pkg.searchkit.assess@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-C009"]},
+      {"name": "pkg.ctxrot.curve@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-C015"]},
+      {"name": "pkg.judge.improvement@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C001"]},
+      {"name": "pkg.review.scope_diff@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-C122"]},
+      {"name": "pkg.skill.catalog_loader@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C062"]},
+      {"name": "pkg.ir.indexer@1", "impl": "executor:builtin/pkg.sweng.test_unit@af-execline", "strategies": ["st-b-C064"]}
+    ]
+  },
+  "choice_b_downgrade": [
+    {
+      "component": "pkg.fs.workdir_rw@1",
+      "reason": "沙箱能力面，仓内无独立工具实现；escape 已记账",
+      "coords": [
+        "strategies/st-C122.yaml uses.tools 卸下，保留 pkg.repo.edit@1",
+        "strategies/st-b-C079.yaml uses.tools 卸下，保留 pkg.repo.grep@1"
+      ]
+    },
+    {
+      "component": "pkg.net.proxy_allowlist@1",
+      "reason": "代理白名单能力面，仓内无独立工具实现；escape 已记账",
+      "coords": ["strategies/st-b-C079.yaml uses.tools 卸下"]
+    },
+    {
+      "component": "pkg.mem.grep / pkg.mem.read / pkg.mem.write",
+      "reason": "策略主张即「文件系统+grep 即记忆」；不新造 memory 空转件",
+      "coords": ["strategies/st-b-C042.yaml uses.memory → uses.tools [pkg.sweng.locate, pkg.sweng.view, pkg.sweng.edit]"]
+    }
+  ],
+  "not_bind_checked_left_as_is": [
+    "pkg.skill.loader@1 (st-b-C062 store retrieve component)",
+    "pkg.ir.bm25_ce@1 (st-b-C064 store retrieve component)",
+    "pkg.mem.grep (st-b-C042 store retrieve component, bind 不走 context.component)"
+  ]
+}

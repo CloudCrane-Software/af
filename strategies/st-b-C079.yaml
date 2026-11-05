@@ -49,7 +49,7 @@ dsl_snippet: |
   nodes:
     - id: confined_coder
       kind: task
-      uses: { model: route.main@1, tools: [pkg.fs.workdir_rw@1, pkg.net.proxy_allowlist@1, pkg.repo.grep@1] }
+      uses: { model: route.main@1, tools: [pkg.repo.grep@1] }  # 选 b：fs.workdir_rw / net.proxy_allowlist 属沙箱/代理能力面（escape 已记账），检索走已注册 repo.grep
       consumes: { review: change_result }
       writes: [workspace]
       emits: { patch: patch_out }

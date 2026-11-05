@@ -91,6 +91,43 @@ pub fn name_of(reference: &str) -> &str {
         .map_or(reference, |(name, _)| name)
 }
 
+/// E9001 供给批：策略库缺件名 → 已接线 builtin 名（真实现别名）。
+///
+/// 身份名（15 件 G4 表）原样返回。新名只映射到 `node_tool_fn` 已接线的
+/// 四条执行臂（env / locate / view / edit）——注册表 `impl_ref` 与本表
+/// 同靶，执行面按名解析到同一闭包，不是空转声明。
+pub fn tool_impl_name(name: &str) -> &str {
+    match name {
+        "pkg.repo.grep"
+        | "pkg.ret.codegrep"
+        | "pkg.ret.lex_anchor"
+        | "pkg.ret.graph_expand"
+        | "pkg.hopqa.search"
+        | "pkg.cohesion.depgraph"
+        | "pkg.cohesion.community" => "pkg.sweng.locate",
+        "pkg.repo.read"
+        | "pkg.hopqa.lookup"
+        | "pkg.aci.readonly"
+        | "pkg.searchkit.corpus"
+        | "pkg.bench.leaderboard"
+        | "pkg.ctxrot.corpus" => "pkg.sweng.view",
+        "pkg.repo.edit"
+        | "pkg.harness.edit"
+        | "pkg.aci.editor"
+        | "pkg.sweng.edit_udiff"
+        | "pkg.sweng.edit_whole"
+        | "pkg.sweng.edit_linted"
+        | "pkg.merge.strategy_v1"
+        | "pkg.merge.strategy_v2"
+        | "pkg.merge.compose_new" => "pkg.sweng.edit",
+        "pkg.aci.shell" | "pkg.harness.shell" | "pkg.skill.runtime" | "pkg.aci.custom"
+        | "pkg.sweng.lint" | "pkg.aci.lint" | "pkg.harness.lint" | "pkg.repo.test" => {
+            "pkg.sweagent.env"
+        }
+        other => other,
+    }
+}
+
 /// 组 builtin 锚：`executor:builtin/<名>@af-execline`（名不带版本段）。
 pub fn builtin_impl_ref(name: &str) -> String {
     format!("{BUILTIN_IMPL_PREFIX}{name}@{BUILTIN_HOST_CRATE}")
@@ -134,9 +171,29 @@ fn model_name(reference: &str) -> String {
 }
 
 /// ToolDecl 表查找（T1 按运行时 workdir 生成 bash 先例声明；unit 类无模型面）。
+/// E9001 别名按 [`tool_impl_name`] 落到已接线四臂；模型面名仍用原引用
+///（env 身份件除外——T1 先例 name="bash"）。
 pub fn tool_decl(reference: &str, workdir: &str) -> Option<ToolDecl> {
-    match name_of(reference) {
-        "pkg.sweagent.env" => serde_json::from_value(tb::bash_tool_decl(workdir)).ok(),
+    let original = name_of(reference);
+    match tool_impl_name(original) {
+        "pkg.sweagent.env" if original == "pkg.sweagent.env" => {
+            serde_json::from_value(tb::bash_tool_decl(workdir)).ok()
+        }
+        "pkg.sweagent.env" => Some(decl_from_json(
+            &model_name(reference),
+            &format!(
+                "Execute a bash command in the task environment (workdir {workdir}). Returns the command output followed by a final `exit=<code>` line."
+            ),
+            json!({
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "The bash command to execute."},
+                    "timeout_sec": {"type": "integer", "description": "Kill timeout in seconds."}
+                },
+                "required": ["command"]
+            }),
+            "external_once",
+        )),
         "pkg.sweagent.aci.search" => Some(decl_from_json(
             &model_name(reference),
             "Read-only code search in the repository container: regex pattern over file contents, returns matching lines as path:line:text, truncated to max_hits.",

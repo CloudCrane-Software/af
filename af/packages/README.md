@@ -137,3 +137,22 @@ sweng 首批先例：装载期只登记引用，实现本体归 G4/执行面）�
 - 测试：`crates/af-compiler/tests/registry_decl_test.rs`（50 名可解析/
   版本+类逐名、57 总量、7 名单版本消歧、真实声明 E9003 类不匹配拒）。
 
+## E9001 供给批（策略库 bind 缺件，2026-11-05）
+
+af-dsl 策略库 44 条 compilable 中 34 条断在 bind（E9001 组件未注册）。本扩容
+**真注册**缺件名：`impl_ref` 指向已接线 executor builtin（tool 四臂
+env/locate/view/edit，unit 锚 `pkg.sweng.test_unit`），model_route 带与
+`route.main`/`route.cheap` 同形的真实端点。不是空转声明。
+
+- 扩容量：model_route 7 + tool 30 + unit 19 = **56**；终态总量 **119**
+  （G4 63 + 56）。落位：sweng 包级 +4（lint/edit_udiff/edit_whole/edit_linted），
+  其余暂驻根级（无图可声明，不新建空包目录——同 P2-L12 纪律）。
+- 选 b 未注册（改策略，不硬凑）：`pkg.fs.workdir_rw` / `pkg.net.proxy_allowlist`
+  （沙箱/代理能力面，escape 已记账）从 st-C122 / st-b-C079 的 `uses.tools`
+  卸下；st-b-C042 `uses.memory` 的 `pkg.mem.*` 降级为已注册
+  `pkg.sweng.locate/view/edit`（策略主张即「文件系统+grep 即记忆」）。
+- fail-closed 不变：声明缺 `effect_class`/`endpoint`、类不匹配仍 E9001/E9003。
+- 测试：`registry_decl_test.rs` 增 `DECLS_E9001` 56 名 + builtin impl_ref 断言；
+  `bind_test.rs` / `pkg_reportkit_package.rs` 总量 119；`pkg_sweng.rs`
+  `tool_impl_name` 别名落到已接线四臂。
+

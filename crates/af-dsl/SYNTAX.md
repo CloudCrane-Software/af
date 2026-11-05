@@ -81,7 +81,7 @@
    含预算 scope 穿体语义（C_AL09，FALSE-POSITIVE-SEMANTIC：合法穿体必过 +
    悬空路径照报 E2207 反例）与文档化边界 14 份 PASS 钉。
 4. **组件声明契约**：`uses.*` 引用串 ↔ `af/packages/**/components.json`
-   声明（class/name/version/effect_class；63 条，`registry_digest` 入计划
+   声明（class/name/version/effect_class；119 条，`registry_digest` 入计划
    对象执行面核对 E9004）。
 
 ## 五、定版状态

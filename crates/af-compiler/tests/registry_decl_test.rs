@@ -134,7 +134,8 @@ fn all_50_p2l12_declarations_resolve_with_expected_version_and_class() {
     }
 }
 
-/// 注册表总量：P2-L11 首批 7 + P2-L12 扩容 50 + G4 reportkit 6 = 63 条声明。
+/// 注册表总量：P2-L11 首批 7 + P2-L12 扩容 50 + G4 reportkit 6 + E9001
+/// 供给批 56 = 119 条声明。
 /// （测试名保留 P2-L12 历史口径——中立性预期红名单按名引用，不随计数演进
 /// 改名；计数同步与包落地同 commit——裁决§二。）
 #[test]
@@ -142,8 +143,8 @@ fn repo_registry_total_is_57_after_p2l12_expansion() {
     let reg = repo_registry();
     assert_eq!(
         reg.component_count(),
-        63,
-        "7（P2-L11 首批）+ 50（P2-L12 扩容）+ 6（G4 reportkit）"
+        119,
+        "7（P2-L11 首批）+ 50（P2-L12 扩容）+ 6（G4 reportkit）+ 56（E9001）"
     );
 }
 
@@ -222,4 +223,129 @@ policies:
         "名已注册，不应再报 E9001：{:?}",
         report.violations
     );
+}
+
+/// E9001 供给批 56 名（名, 版本, 类）——策略库 bind 缺件闭包。每条
+/// impl_ref 指向已接线 builtin（tool 四臂 / unit test_unit），不是空转声明。
+const DECLS_E9001: &[(&str, &str, ComponentClass)] = &[
+    // model_route ×7（真端点，与 route.main/cheap 同 factory-routes 面）
+    ("route.strong", "1", ComponentClass::ModelRoute),
+    ("route.mid", "1", ComponentClass::ModelRoute),
+    ("route.weak", "1", ComponentClass::ModelRoute),
+    ("route.retrieval", "1", ComponentClass::ModelRoute),
+    ("route.critic", "1", ComponentClass::ModelRoute),
+    ("route.scorer", "1", ComponentClass::ModelRoute),
+    ("route.chooser", "1", ComponentClass::ModelRoute),
+    // tool ×30
+    ("pkg.repo.grep", "1", ComponentClass::Tool),
+    ("pkg.repo.read", "1", ComponentClass::Tool),
+    ("pkg.repo.edit", "1", ComponentClass::Tool),
+    ("pkg.repo.test", "1", ComponentClass::Tool),
+    ("pkg.ret.codegrep", "1", ComponentClass::Tool),
+    ("pkg.ret.lex_anchor", "1", ComponentClass::Tool),
+    ("pkg.ret.graph_expand", "1", ComponentClass::Tool),
+    ("pkg.hopqa.search", "1", ComponentClass::Tool),
+    ("pkg.hopqa.lookup", "1", ComponentClass::Tool),
+    ("pkg.cohesion.depgraph", "1", ComponentClass::Tool),
+    ("pkg.cohesion.community", "1", ComponentClass::Tool),
+    ("pkg.searchkit.corpus", "1", ComponentClass::Tool),
+    ("pkg.bench.leaderboard", "1", ComponentClass::Tool),
+    ("pkg.ctxrot.corpus", "1", ComponentClass::Tool),
+    ("pkg.aci.shell", "1", ComponentClass::Tool),
+    ("pkg.aci.readonly", "1", ComponentClass::Tool),
+    ("pkg.aci.editor", "1", ComponentClass::Tool),
+    ("pkg.aci.lint", "1", ComponentClass::Tool),
+    ("pkg.aci.custom", "1", ComponentClass::Tool),
+    ("pkg.harness.shell", "1", ComponentClass::Tool),
+    ("pkg.harness.edit", "1", ComponentClass::Tool),
+    ("pkg.harness.lint", "1", ComponentClass::Tool),
+    ("pkg.skill.runtime", "1", ComponentClass::Tool),
+    ("pkg.merge.strategy_v1", "1", ComponentClass::Tool),
+    ("pkg.merge.strategy_v2", "1", ComponentClass::Tool),
+    ("pkg.merge.compose_new", "1", ComponentClass::Tool),
+    ("pkg.sweng.lint", "1", ComponentClass::Tool),
+    ("pkg.sweng.edit_udiff", "1", ComponentClass::Tool),
+    ("pkg.sweng.edit_whole", "1", ComponentClass::Tool),
+    ("pkg.sweng.edit_linted", "1", ComponentClass::Tool),
+    // unit ×19（impl_ref → pkg.sweng.test_unit，drive_check_node 按锚分发）
+    ("pkg.swe.checker", "1", ComponentClass::Unit),
+    ("pkg.reflex.test_unit", "1", ComponentClass::Unit),
+    ("pkg.ci.rerun", "1", ComponentClass::Unit),
+    ("pkg.ci.merge_probe", "1", ComponentClass::Unit),
+    ("pkg.fmt.compliance_probe", "1", ComponentClass::Unit),
+    ("pkg.hooks.post_edit", "1", ComponentClass::Unit),
+    ("pkg.critic.tool_suite", "1", ComponentClass::Unit),
+    ("pkg.codet.dual_runner", "1", ComponentClass::Unit),
+    ("pkg.otter.repro_runner", "1", ComponentClass::Unit),
+    ("pkg.ticket.done_probe", "1", ComponentClass::Unit),
+    ("pkg.alpha.sample_filter", "1", ComponentClass::Unit),
+    ("pkg.aci.ablate", "1", ComponentClass::Unit),
+    ("pkg.bench.resolved", "1", ComponentClass::Unit),
+    ("pkg.searchkit.assess", "1", ComponentClass::Unit),
+    ("pkg.ctxrot.curve", "1", ComponentClass::Unit),
+    ("pkg.judge.improvement", "1", ComponentClass::Unit),
+    ("pkg.review.scope_diff", "1", ComponentClass::Unit),
+    ("pkg.skill.catalog_loader", "1", ComponentClass::Unit),
+    ("pkg.ir.indexer", "1", ComponentClass::Unit),
+];
+
+#[test]
+fn decls_e9001_table_counts() {
+    let count = |want: ComponentClass| DECLS_E9001.iter().filter(|(_, _, c)| *c == want).count();
+    assert_eq!(count(ComponentClass::ModelRoute), 7);
+    assert_eq!(count(ComponentClass::Tool), 30);
+    assert_eq!(count(ComponentClass::Unit), 19);
+    assert_eq!(DECLS_E9001.len(), 56, "恰好 56 名");
+    let names: std::collections::BTreeSet<&str> = DECLS_E9001.iter().map(|(n, _, _)| *n).collect();
+    assert_eq!(names.len(), 56, "名字唯一");
+}
+
+#[test]
+fn all_e9001_declarations_resolve_with_builtin_impl_ref() {
+    let reg = repo_registry();
+    for (name, version, class) in DECLS_E9001 {
+        let versions = reg
+            .versions_of(name)
+            .unwrap_or_else(|| panic!("{name} 应已注册（E9001 供给批）"));
+        let decl = versions.get(*version).unwrap_or_else(|| {
+            panic!(
+                "{name}@{version} 应已声明（已声明版本：{:?}）",
+                versions.keys()
+            )
+        });
+        assert_eq!(decl.class, *class, "{name}@{version} 类应为 {class:?}");
+        let impl_ref = decl
+            .impl_ref
+            .as_deref()
+            .unwrap_or_else(|| panic!("{name} 应有 impl_ref"));
+        match class {
+            ComponentClass::ModelRoute => {
+                assert!(
+                    decl.endpoint.is_some(),
+                    "{name}（model_route）声明应带 endpoint"
+                );
+                assert!(
+                    impl_ref.starts_with("packages/factory-routes@1/model_route/"),
+                    "{name} impl_ref 应落 factory-routes：{impl_ref}"
+                );
+            }
+            ComponentClass::Tool => {
+                assert!(
+                    decl.effect_class.is_some(),
+                    "{name}（tool）声明应带 effect_class"
+                );
+                assert!(
+                    impl_ref.starts_with("executor:builtin/"),
+                    "{name} impl_ref 应为 builtin 锚：{impl_ref}"
+                );
+            }
+            ComponentClass::Unit => {
+                assert_eq!(
+                    impl_ref, "executor:builtin/pkg.sweng.test_unit@af-execline",
+                    "{name} unit 锚应指向 test_unit 真实现"
+                );
+            }
+            _ => panic!("{name} 意外类 {class:?}"),
+        }
+    }
 }
