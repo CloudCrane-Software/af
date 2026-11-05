@@ -234,3 +234,29 @@ AF 产品的 F2 全量门路径、判分链、账本、协议、注册表、`cra
   落在**本厂自管容器**内 ⇒ GitHub 端把它挪到托管 runner 是**环境面改写带来的新执行面**，
   与 §6.1 的「环境面改写登记」同列。
 
+## 七、工作区 all-gates L3 mes-ttl 审计消费腿（RT-E58，2026-11-05）
+
+本节只新增口径，不改 §一—§六 任何既有语义。本仓 `ci/run.sh` **不**新增 step
+编号；消费腿挂在工作区级在役发布面 `tools/all-gates.sh` 的 **L3 族**（与
+`otel-reconcile-probe --check` / `obs-patrol-probe --check` 同构）。
+
+- **债**：逃逸台账 RT-E58 / 阶段欠账台账:39。拦截①②③已落 `tools/mes-ttl-sweep.py`
+  （①钉死清单数量下界红牌 `audit-shrink`；②审计失败/缩水 rc 上抛，现口径 4/5；
+  ③水位行恒带「审计表数/承诺表数」）。机器消费者腿此前未施工
+  （`grep -c ttl tools/all-gates.sh`=0）。
+- **机读核**：`tools/mes-ttl-audit-consumer.py`（一次性只读进程，**零新增守护**）。
+  `--check` 读近 N 行 `状态观测/mes-ttl-decision-point.jsonl` 与近 N 条
+  `kind=otel-readonly-audit` 证据行：红牌 / 审计 rc 非零 / 数量下界破 ⇒ 门红；
+  缺件/坏 JSON ⇒ rc=2 不可证不猜绿。主锚 5221 不可达（sweep 总 rc=1）**不是**
+  otel 审计红牌，不把 OBS-D7 死锚误判成本门红。
+- **门项**（工作区 `tools/all-gates.sh` `register_L3`，`add_item L3` 形态）：
+  `--selftest`（夹具：往决策点注一条红牌必红、干净必绿）+ `--check`（实扫消费面）。
+- **退出码对齐** `all-gates.sh` `run_item`（:360-365）：rc=0 ⇒ PASS；rc=2 ⇒ FAIL；
+  其余非零 ⇒ FAIL。红文案含字面量 `FAIL`。
+- **钉桩**：改 `tools/all-gates.sh` 后跑 `bash tools/gate-pins-refresh.sh` 重锚
+  （登记串 `tools/gate-pins.list sha256=<64hex>；tools/all-gates.sh sha256=<64hex>`）；
+  探针本体入 `tools/gate-pins.list` sha256 行。不改
+  `tools/deploy-consistency-probe.sh` 的 `PIN_MD5`。
+- **判据只增不减**：本门只新增消费面，不弱化 sweep 拦截①②③、不改
+  `tools/mes-ttl-sweep.py`、不改 `tools/otel/otlp-assert.py`。
+
