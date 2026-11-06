@@ -47,6 +47,22 @@
 #   语义件判不出 ⇒ 假红——故维持 ① 版 unset 形态（见 ① 版头注「runner 面」条）。
 #   strategies_check 步同样套 env -u 前缀（其内部 cargo 编译断言同受代理剥离纪律）。
 #
+# ★ 2026-11-06 改版记录 ③（checkout 面健壮化；判据件/语义件零改动）：
+#   live 红灯复盘（run 42196414373，head 02f32e9）：gates job 六步全红，根因**不在
+#   判据面**，而在自定义 checkout 的 clone 步——`git clone … .` 直连 github.com:443
+#   134s 超时（curl 28）失败，其后各步在空 workspace 上依次报
+#   「could not find Cargo.toml」/「can't open file …/ci/*.py」（exit 101/2）。
+#   另一次实测（run 42197092071）：上一次 run 的残留树让 clone 直接撞
+#   「fatal: destination path '.' already exists and is not an empty directory.」。
+#   ★ clone 目标形态本身无需改：anolis runner 的 workspace = _work/af =
+#     /data/gh-runner-work/af/af（判据器 R02 回显同款绝对路径实证），`clone … .`
+#     即把树放进 workspace 根，后续步骤 cwd=GITHUB_WORKSPACE 相对路径直接可达
+#     （run 42190831838 同形态全绿实证）。「af/af」是 runner 布局固有路径，
+#     不是双叠 bug。
+#   本版只做 checkout 面健壮化（不动任何判据/命令语义/job 名/runs-on/代理剥离）：
+#     ① 克隆前清空 workspace 残留（actions/checkout clean 同款语义）；
+#     ② clone 有限重试 3 次（治直连抖动）；清不净/连不上仍 fail-closed 判红。
+#
 # ★ 专项门点选值来源：on 触发面被 R04 钉死为仅 pull_request（禁
 #   workflow_dispatch/workflow_call，两处均禁），而 pull_request 事件无 inputs
 #   上下文 ⇒ 点选值经 `github.event.inputs.special_gates` 读取、PR 上恒为空
@@ -174,7 +190,31 @@ jobs:
           if [ -z "$URL" ]; then
             URL="https://github.com/${AF_REPOSITORY}.git"
           fi
-          git clone --depth 1 --branch "$REF" "$URL" .
+          # 自托管 runner（anolis）workspace 面健壮化——只动 checkout 面：
+          #   ① 上一次 run 的残留树会让 `git clone … .` 撞
+          #      "destination path '.' already exists and is not an empty
+          #      directory."（run 42197092071 实测）；
+          #   ② github.com:443 直连偶发 curl 28 超时（run 42196414373 实测，
+          #      134s 连不上；同时段复测 200，属抖动）。
+          # 处置：克隆前清空 workspace（残留即清）+ clone 有限重试 3 次。
+          # 清不净/连不上 ⇒ 本 step 仍 fail-closed 判红——不吞红、不放宽。
+          attempt=0
+          until [ "$attempt" -ge 3 ]; do
+            if [ -n "$(ls -A . 2>/dev/null)" ]; then
+              echo "workspace 有残留——清空后克隆（attempt=$attempt）"
+              find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+            fi
+            if git clone --depth 1 --branch "$REF" "$URL" .; then
+              break
+            fi
+            attempt=$((attempt + 1))
+            echo "clone 失败（第 $attempt/3 次）——5s 后重试" >&2
+            sleep 5
+          done
+          if [ "$attempt" -ge 3 ]; then
+            echo "clone 三次均失败——判红（fail-closed）" >&2
+            exit 1
+          fi
           git --no-pager log --oneline -1
           echo "检出 PR 头树：ref=$REF url=$URL 期望 head.sha=${AF_HEAD_SHA:-未提供}"
 
