@@ -1,0 +1,10 @@
+== 离线轨迹归因批 · 聚类分布报表 ==
+总轨迹=3  resolved=1  failed=2  indeterminate=0
+失败模式分布（failed 内占比）：
+  工具使用错误(tool_usage_error) count=0    share=0.0%
+  语法错(syntax_error)  count=2    share=100.0%
+  其他(other)          count=0    share=0.0%
+按 EX 码：EX4005=1  EX4006=1
+源 poc/poc-p3-a1-strategy-dsl/raw/records.jsonl：rows=1 unparsed=0
+源 poc/poc-p3-a1-strategy-dsl/raw/results.jsonl：rows=2 unparsed=0
+报表已落：poc/poc-s17-trace-attribution/readings/report-real-p3a1.json

@@ -1,0 +1,10 @@
+== 离线轨迹归因批 · 聚类分布报表 ==
+总轨迹=16  resolved=6  failed=10  indeterminate=0
+失败模式分布（failed 内占比）：
+  工具使用错误(tool_usage_error) count=3    share=30.0%
+  语法错(syntax_error)  count=4    share=40.0%
+  其他(other)          count=3    share=30.0%
+按 EX 码：(none)=4  EX4001=1  EX4005=1  EX4006=1  EX4007=1  EX4008=1  EX4009=1
+源 poc/poc-s17-trace-attribution/corpus/results.jsonl：rows=13 unparsed=0
+源 poc/poc-s17-trace-attribution/corpus/records.jsonl：rows=3 unparsed=0
+报表已落：poc/poc-s17-trace-attribution/readings/report-corpus.json
