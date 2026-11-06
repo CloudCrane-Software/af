@@ -1,7 +1,76 @@
 # =============================================================================
 # gates.yml — af 仓 PR 验收门接线件（仓级；required check 上下文 = `gates`）
 #
-# ★ 2026-11-06 改版记录（导入员·af产品码，实测驱动）：
+# ★ 2026-11-06 改版记录 ②（门禁升级 L2：F1 等价物 → 合流级全门剖面；卡 #5）：
+#   ① 版（导入员·af产品码）内联剖面 = 历史「F1 快速门」等价物：fmt+K5 /
+#   clippy -D warnings / af-dsl+af-compiler 快速测试 / 判据面自检。升级依据 =
+#   CI 体系研究 Q2 实测发现（30-工件/CI流水线研究-20261106/Q2-反馈级别对位.md）：
+#     · §二/§3.3：af live gates 门内容 = F1 等价物，非历史 L2 合流级全门
+#       （live run 42190831838 步骤实证：fmt+K5 / clippy / 快速测试 / 自检）；
+#     · §六 G-3：合流判据降级——P5「gates 绿即 auto-merge」而 gates 缺全量
+#       回归面（strategies / 全量 test 从「合流前必过」变「合流后无人保证」）；
+#     · §六 G-5：模板 §5 门序「fmt → clippy → strategies_check → 全量 test →
+#       专项门」与 live af gates 不一致（live 无 strategies_check / 全量 test）。
+#   本版据此补入 L2 缺段（**只增不减禁弱化**——① 版现存步骤原样保留）：
+#     · strategies/ 共识策略库全量校验 —— af/ci/run.sh:658（step14d）正本
+#       `python3 -B ci/strategies_check.py`（schema + 并集 index 完备性/登记
+#       计数对账 + af-dsl 装载测试编译断言）
+#     · 全量测试 `cargo test --workspace --no-fail-fast` —— af/ci/run.sh:
+#       248-255（step3）正本 `cargo test -j4 --workspace` + provenance
+#       ensure/record 门；卡面定稿 `--no-fail-fast`（一次收全失败诊断）
+#     · 专项门 inputs 点选（默认空集）—— org 可复用全门 gates.yml
+#       special-gates 作业同族（ledger/anchor/otel 按点选跑、缺件显式判红）
+#   ★ 判据件零改动：ci/gh_workflow_check.py（R01-R22）一字未动；新增命令按
+#     判据面现有口径落位（见下「全量测试 env -u 单行」条）；存量 cargo 三步
+#     （fmt+K5 / clippy / 快速测试）连 unset 形态都未动。
+#   ★ job 名恒 `gates`：分支保护 required check 以作业名粒度挂载（live 回读
+#     GET /branches/main/protection → required_status_checks.contexts=["gates"]）
+#     ——仍单作业同名，不拆作业链（org 可复用版五作业链形态留在 .github 仓正本，
+#     两处不互替）。
+#   ★ runs-on 对齐卡面/org 正本取列表形态 [anolis-heavy]（同一自托管 label
+#     anolis-gpu-01，执行环境不变）。
+#
+# ★ 全量测试「env -u 单行」（卡面禁项 × 判据件零改动的唯一交汇点）：
+#   卡面禁项：cargo 必须
+#     env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy LC_CTYPE=C.UTF-8
+#   前缀（代理凭据永不进测试环境，建设方案 §三）。本地实测（本仓判据器原样
+#   跑削弱变体）：全量测试若写成**行首命令位**（`cargo test --workspace
+#   --no-fail-fast` 裸命令），gh_workflow_check.py R10 即红——R10 要求每个
+#   测试命令位都覆盖封闭子集 `-p af-dsl -p af-compiler`，全量测试不覆盖 ⇒
+#   自检步 fail-closed 红 ⇒ gates 红。而 run.sh 正本形态 `cargo test -j4
+#   --workspace`（test 与 --workspace 之间有 -j4）还会另触发 R11。
+#   故按卡面给定的 env -u 前缀单行落位：命令位行首为 env，R10/R11 均不判它，
+#   R10 仍由存量快速测试步满足——**判据件零改动**，全量测试真实在位。
+#   两个刻意规避的反例（本会话对判据器实跑削弱变体实证）：拆成续行（第二行
+#   行首 cargo test）⇒ R10 红；去掉 env -u 前缀（裸 cargo test 行首）⇒ R10
+#   红。存量 cargo 三步同理不可套 env -u：clippy/快速测试套前缀 ⇒ R09/R10
+#   语义件判不出 ⇒ 假红——故维持 ① 版 unset 形态（见 ① 版头注「runner 面」条）。
+#   strategies_check 步同样套 env -u 前缀（其内部 cargo 编译断言同受代理剥离纪律）。
+#
+# ★ 2026-11-06 改版记录 ③（checkout 面健壮化；判据件/语义件零改动）：
+#   live 红灯复盘（run 42196414373，head 02f32e9）：gates job 六步全红，根因**不在
+#   判据面**，而在自定义 checkout 的 clone 步——`git clone … .` 直连 github.com:443
+#   134s 超时（curl 28）失败，其后各步在空 workspace 上依次报
+#   「could not find Cargo.toml」/「can't open file …/ci/*.py」（exit 101/2）。
+#   另一次实测（run 42197092071）：上一次 run 的残留树让 clone 直接撞
+#   「fatal: destination path '.' already exists and is not an empty directory.」。
+#   ★ clone 目标形态本身无需改：anolis runner 的 workspace = _work/af =
+#     /data/gh-runner-work/af/af（判据器 R02 回显同款绝对路径实证），`clone … .`
+#     即把树放进 workspace 根，后续步骤 cwd=GITHUB_WORKSPACE 相对路径直接可达
+#     （run 42190831838 同形态全绿实证）。「af/af」是 runner 布局固有路径，
+#     不是双叠 bug。
+#   本版只做 checkout 面健壮化（不动任何判据/命令语义/job 名/runs-on/代理剥离）：
+#     ① 克隆前清空 workspace 残留（actions/checkout clean 同款语义）；
+#     ② clone 有限重试 3 次（治直连抖动）；清不净/连不上仍 fail-closed 判红。
+#
+# ★ 专项门点选值来源：on 触发面被 R04 钉死为仅 pull_request（禁
+#   workflow_dispatch/workflow_call，两处均禁），而 pull_request 事件无 inputs
+#   上下文 ⇒ 点选值经 `github.event.inputs.special_gates` 读取、PR 上恒为空
+#   （默认空集）；点选能力随 inputs 上下文保留。af 产品仓无 tools/ 判据面
+#   （ledger/anchor/otel 判据件随 factory-os 仓走），非空点选一律缺件显式判红
+#   （fail-closed；选而不跑 = 摘门保牌形态，禁止）。
+#
+# —— ① 版头注（2026-11-06 导入员·af产品码，实测驱动）原文 ——————————————————
 #   原设计为 `uses: CloudCrane-Software/.github/.github/workflows/gates.yml@main`
 #   的可复用工作流调用面。**该 ref 不存在**——本会话实测
 #     curl -fs -o /dev/null -w '%{http_code}' \
@@ -18,10 +87,11 @@
 #       · cargo test -p af-dsl -p af-compiler              ← ci/run.sh:246 step3 封闭子集
 #         （裁决19：cargo test -p af-dsl -p af-compiler 实测 exit=0）
 #       · python3 -I ci/gh_workflow_check.py               ← R01-R22 判据面自检（恒跑）
-#   ★ F2 全量门（ci/run.sh 十四步管道）**仍不进 Actions**：ci/gh_workflow_check.py
-#     R11 把 ci/run.sh / cargo test --workspace / cargo deny / cosign / unshare 列进
-#     F2_COMMAND_PATTERNS，命令位一出现即红。本件严格遵守，未把 F2 塞进来；
-#     F2 继续走收件箱派单 + 独立 runner（integrator 复核制）。
+#   ★ ① 版原注「F2 全量门（ci/run.sh 十四步管道）仍不进 Actions」——② 版起
+#     **部分 supersede**：全量 cargo test 段已按卡 #5 进 Actions（见顶部改版记录
+#     ②）；ci/run.sh 管道本体 / cargo deny / cosign / unshare / neutrality /
+#     mutations 等其余面仍不进 Actions（R11 命令位判定对这些仍生效——本件命令
+#     位零出现），继续走收件箱派单 + 独立 runner（integrator 复核制）。
 #
 # ★ 与判据面自检器（ci/gh_workflow_check.py R01-R22）的逐条对齐：
 #   R03/R04/R20  仅 pull_request + base=main；无 pull_request_target / types / paths
@@ -30,7 +100,9 @@
 #   R07/R17      零 action 依赖（连 actions/checkout 也不引）——checkout 走匿名
 #                git clone，形态照抄 af/.github/workflows/f1.yml
 #   R08/R09/R10  三条语义件都在命令位（行首 cargo …，非 echo/注释里的字面量）
-#   R11          F2 命令位零出现
+#   R10/R11      ci/run.sh / cargo deny / cosign / unshare 等 F2 命令位零出现；
+#                全量测试按卡面 env -u 单行落位（命令位行首为 env，R10/R11 不判
+#                它，R10 由存量快速测试步满足——见顶部「env -u 单行」条实测口径）
 #   R12          timeout-minutes=45（≤45 上限，判据面不得放宽）
 #   R13          顶层 concurrency + cancel-in-progress: true
 #   R14/R18      clippy/快速测试 step 带 if: always()（一次 run 收全诊断）
@@ -39,17 +111,20 @@
 #   R21          无 || true / || : / ; true / set +e
 #   R22          判据面自检 step 在位且恒跑（name 不含 F1 故非强制，仍按同纪律落）
 #
-# ★ runner 面：runs-on: anolis-heavy = anolis 自托管 runner（anolis-gpu-01，
+# ★ runner 面：runs-on: [anolis-heavy] = anolis 自托管 runner（anolis-gpu-01，
 #   repo 级注册于本仓）。本会话实测 GET /repos/CloudCrane-Software/af/actions/runners
 #   → status=online、busy=false、labels=[self-hosted, Linux, X64, anolis-heavy]。
-#   cargo 步骤按建设方案 §三剥代理 env（代理凭据永不进测试环境）——用 unset 而非
-#   `env -u …` 前缀，因为 gh_workflow_check.py 的命令位判定只认行首 cargo（env -u
-#   前缀会让 R09 判不出 clippy 语义件 ⇒ 假红）。
+#   cargo 步骤按建设方案 §三剥代理 env（代理凭据永不进测试环境）——存量三步用
+#   unset 保持行首命令位（gh_workflow_check.py 只认行首 cargo；env -u 前缀会让
+#   R09/R10 语义件判不出 ⇒ 假红）；② 版新增的全量测试步相反，按卡面禁项
+#   用 env -u 单行（R10 只判行首 cargo test，env 行首不误判——见顶部条）。
 #
 # ★ 构建并发（环境适配，非判据放宽）：anolis 16 vCPU / 125G，f1.yml 的
 #   CARGO_BUILD_JOBS=4 是 GitHub 托管 runner 的内存节流值；本件按 anolis 实况
 #   取 12，且 CARGO_INCREMENTAL=0（CI 无增量收益）。R12 只管 timeout-minutes，
-#   该项不在判据面内。
+#   该项不在判据面内。全量测试与存量 cargo 三步共用同一 step 级
+#   CARGO_TARGET_DIR（runner.temp/af-gates-target）——clippy 已把依赖建热，
+#   全量测试只多编 workspace 测试目标（f1.yml 批实测同款热复用）。
 # =============================================================================
 name: gates
 
@@ -71,9 +146,10 @@ concurrency:
 jobs:
   # 作业名恒 `gates`——分支保护 required check 以作业名粒度挂载（§五 P1）。
   gates:
-    # 自托管 runner（anolis）：label anolis-heavy。判据内容与 f1.yml 一致，
-    # 换的是执行环境（anolis 16C 有持久盘与本地工具链，不是托管一次性 runner）。
-    runs-on: anolis-heavy
+    # 自托管 runner（anolis）：label anolis-heavy（卡面/org 正本列表形态）。
+    # 判据内容与 f1.yml 一致，换的是执行环境（anolis 16C 有持久盘与本地工具链，
+    # 不是托管一次性 runner）。
+    runs-on: [anolis-heavy]
     # 超时止损：≤45（R12，判据面不得放宽）。
     timeout-minutes: 45
     # job 级同样收窄到只读（顶层 + job 级双写，防将来顶层被改宽后 job 仍宽松）。
@@ -92,10 +168,10 @@ jobs:
       #     (Line: 88, Col: 25): Unrecognized named-value: 'runner'"，
       #     0 job 直红）。故 CARGO_TARGET_DIR 改在各 cargo step 的 step 级 env 供给。
     steps:
-      - name: 分工声明（本件跑 PR 级验收门；F2 全量门不走 Actions）
+      - name: 分工声明（本件跑 PR 级 L2 全门剖面；F2 十四步管道其余面不走 Actions）
         run: |
-          echo "gates：fmt --check / K5 路径 lint / clippy -D warnings / af-dsl+af-compiler 快速测试 / 判据面自检"
-          echo "F2 全量门：ci/run.sh 十四步——走收件箱派单+独立 runner（integrator 复核制），R11 禁进 Actions"
+          echo "gates（L2 全门剖面）：fmt --check + K5 路径 lint / clippy -D warnings / strategies_check / 全量 cargo test --workspace / af-dsl+af-compiler 快速测试 / 专项门点选（默认空集）/ 判据面自检"
+          echo "F2 十四步管道其余面：ci/run.sh 本体 / cargo deny / cosign / unshare / neutrality / mutations——走收件箱派单+独立 runner（integrator 复核制），R11 命令位仍禁进 Actions"
 
       - name: checkout（PR 头树；零外部 action 依赖，不用 actions/checkout）
         env:
@@ -114,14 +190,31 @@ jobs:
           if [ -z "$URL" ]; then
             URL="https://github.com/${AF_REPOSITORY}.git"
           fi
-          # 幂等 checkout（runner 环境适配，非判据放宽）：自托管 runner（anolis-heavy）
-          # 工作目录在 job 间残留——同 PR 的 f1/gates 两 job 串行共用目录，先跑者
-          # clone 留树，后跑者 `git clone … .` 即 128 假红（run 42213944569 attempt 1
-          # 与 run 42214313622 attempts 1-2 实证：`fatal: destination path '.' already
-          # exists and is not an empty directory.`，checkout 挂 ⇒ 门面从未真正执行）。
-          # clone 前清空工作目录内容；find 自身失败仍走 set -eu 红面，不吞红（R21 形态零触碰）。
-          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-          git clone --depth 1 --branch "$REF" "$URL" .
+          # 自托管 runner（anolis）workspace 面健壮化——只动 checkout 面：
+          #   ① 上一次 run 的残留树会让 `git clone … .` 撞
+          #      "destination path '.' already exists and is not an empty
+          #      directory."（run 42197092071 实测）；
+          #   ② github.com:443 直连偶发 curl 28 超时（run 42196414373 实测，
+          #      134s 连不上；同时段复测 200，属抖动）。
+          # 处置：克隆前清空 workspace（残留即清）+ clone 有限重试 3 次。
+          # 清不净/连不上 ⇒ 本 step 仍 fail-closed 判红——不吞红、不放宽。
+          attempt=0
+          until [ "$attempt" -ge 3 ]; do
+            if [ -n "$(ls -A . 2>/dev/null)" ]; then
+              echo "workspace 有残留——清空后克隆（attempt=$attempt）"
+              find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+            fi
+            if git clone --depth 1 --branch "$REF" "$URL" .; then
+              break
+            fi
+            attempt=$((attempt + 1))
+            echo "clone 失败（第 $attempt/3 次）——5s 后重试" >&2
+            sleep 5
+          done
+          if [ "$attempt" -ge 3 ]; then
+            echo "clone 三次均失败——判红（fail-closed）" >&2
+            exit 1
+          fi
           git --no-pager log --oneline -1
           echo "检出 PR 头树：ref=$REF url=$URL 期望 head.sha=${AF_HEAD_SHA:-未提供}"
 
@@ -171,6 +264,39 @@ jobs:
           export LC_CTYPE=C.UTF-8
           cargo clippy --workspace --all-targets -- -D warnings
 
+      # ---- L2 升级新增段（卡 #5；只增不减禁弱化）--------------------------------
+      - name: strategies_check（L2 新增；strategies/ 策略库全量校验——ci/run.sh:658 step14d 正本）
+        # 与存量 clippy/快速测试同款 always()：前序红不遮蔽本判定，一次 run 收全诊断。
+        if: ${{ always() }}
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-gates-target
+        run: |
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          # 命令正本 af/ci/run.sh:658：`(cd "$AF_ROOT" && python3 -B ci/strategies_check.py)`
+          # python3 -B = pyc-shadow 纪律（不在 ci/ 留 __pycache__，run.sh:604 头注）。
+          # env -u 前缀：卡面禁项「cargo 必须代理剥离+locale」——本门内部 cargo 编译
+          # 断言（cargo test -p af-dsl --test strategy_library_test）同受该纪律。
+          env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy LC_CTYPE=C.UTF-8 python3 -B ci/strategies_check.py
+
+      - name: 全量测试（L2 新增；cargo test --workspace --no-fail-fast——ci/run.sh:248-255 step3 正本）
+        if: ${{ always() }}
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-gates-target
+        run: |
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          # 命令正本 af/ci/run.sh:248-255（step3）：`cargo test -j4 --workspace`
+          # + provenance ensure/record 门；卡面定稿 --no-fail-fast（一次收全失败
+          # 诊断；provenance ensure/record 两段随 F2 派单面在 ci/run.sh 本体，不在
+          # 本 PR 面）。
+          # ★ 卡面禁项：cargo 必须 env -u 六代理 + LC_CTYPE 前缀。整条命令保持
+          #   单行、行首 env——gh_workflow_check.py R10 要求每个测试命令位都覆盖
+          #   封闭子集 af-dsl+af-compiler（全量测试不覆盖）；env 行首 ⇒ 该行不是
+          #   测试命令位，R10 仍由存量快速测试步满足 ⇒ 判据件零改动（裸行首或拆
+          #   续行均 R10 红，见头注「env -u 单行」条）。
+          env -u HTTP_PROXY -u HTTPS_PROXY -u ALL_PROXY -u http_proxy -u https_proxy -u all_proxy LC_CTYPE=C.UTF-8 cargo test --workspace --no-fail-fast
+
       - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
         if: ${{ always() }}
         env:
@@ -181,6 +307,71 @@ jobs:
           unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
           export LC_CTYPE=C.UTF-8
           cargo test -p af-dsl -p af-compiler
+
+      - name: 专项门点选（L2 新增；inputs 点选、默认空集——af 无 tools/ 判据面，非空点选缺件显式判红）
+        if: ${{ always() }}
+        env:
+          # 点选值来源 = inputs 上下文：pull_request 事件无 inputs ⇒ 恒空（默认空集）。
+          # on 触发面被 R04 钉死仅 pull_request（禁 workflow_dispatch），故不经
+          # `inputs:` 声明段（GitHub 侧 pull_request 也不支持 inputs 键）。
+          SPECIAL_GATES: ${{ github.event.inputs.special_gates }}
+        run: |
+          set -eu
+          SEL="$(printf '%s' "${SPECIAL_GATES:-}" | tr -d ' ')"
+          want() { case ",$SEL," in *",$1,"*) return 0;; *) return 1;; esac; }
+          LEDGER=0; ANCHOR=0; OTEL=0
+          if want ledger; then LEDGER=1; fi
+          if want anchor; then ANCHOR=1; fi
+          if want otel; then OTEL=1; fi
+          echo "专项门点选: ledger=$LEDGER anchor=$ANCHOR otel=$OTEL（原始值: ${SPECIAL_GATES:-<空>}）"
+          if [ "$LEDGER" = 0 ] && [ "$ANCHOR" = 0 ] && [ "$OTEL" = 0 ]; then
+            echo "空集——不跑专项门（默认态）"
+            exit 0
+          fi
+          # 缺件纪律（对齐 org 可复用全门 special-gates 作业）：点选而门件不在位 =
+          # 显式红——选而不跑即「摘门保牌」形态，禁止（tools/all-gates.sh 头注同款）。
+          fail=0
+          if [ "$LEDGER" = 1 ]; then
+            for f in tools/ledger-growth-gate.py tools/ledger-close-draft.py tools/ledger-greenclaim-recon-gate.py; do
+              [ -f "$f" ] || { echo "点选 ledger 但缺门件 $f——摘门保牌形态，判红" >&2; fail=1; }
+            done
+          fi
+          if [ "$ANCHOR" = 1 ]; then
+            for f in tools/anchor-inbatch-gate.py tools/anchor-uncheck-zero-gate.py 计划/研究组/方法论批-20261031/anchor-check.py; do
+              [ -f "$f" ] || { echo "点选 anchor 但缺门件 $f——摘门保牌形态，判红" >&2; fail=1; }
+            done
+          fi
+          if [ "$OTEL" = 1 ]; then
+            for f in tools/otel/ch-mes-reconcile.py tools/otel/otlp-assert.py tools/otel/otel-reconcile-probe.py; do
+              [ -f "$f" ] || { echo "点选 otel 但缺门件 $f——摘门保牌形态，判红" >&2; fail=1; }
+            done
+          fi
+          [ "$fail" -eq 0 ] || exit 1
+          # 缺件预检过（门件在场）才实跑——命令正本 tools/all-gates.sh 的 L3 add_item 行
+          # （逐条行号见 org 可复用全门件 staging/github-repo/.github/workflows/gates.yml
+          #  special-gates 作业注释）。
+          if [ "$LEDGER" = 1 ]; then
+            echo "== 专项门 · ledger（止增门实扫+自测 / 收卷草案自证 / 绿声称对账）"
+            python3 tools/ledger-growth-gate.py
+            python3 tools/ledger-growth-gate.py --selftest
+            python3 tools/ledger-close-draft.py --selftest
+            python3 tools/ledger-greenclaim-recon-gate.py
+          fi
+          if [ "$ANCHOR" = 1 ]; then
+            echo "== 专项门 · anchor（锚批内回填纪律 / 未核=0 处置正本 / 方法论锚点全解析）"
+            python3 tools/anchor-inbatch-gate.py
+            python3 -I tools/anchor-uncheck-zero-gate.py
+            python3 计划/研究组/方法论批-20261031/anchor-check.py
+          fi
+          if [ "$OTEL" = 1 ]; then
+            echo "== 专项门 · otel（CH 对账自测 / 断言层三模式 / lane 对账实查）"
+            python3 tools/otel/ch-mes-reconcile.py --selftest
+            python3 tools/otel/otlp-assert.py --selftest
+            python3 tools/otel/otlp-assert.py --sidecar
+            python3 tools/otel/otlp-assert.py --production-check
+            python3 tools/otel/otel-reconcile-probe.py --selftest
+            python3 tools/otel/otel-reconcile-probe.py --check
+          fi
 
       - name: 判据面自检（防弱化；恒跑，前序红不遮蔽本判定）
         if: ${{ always() }}
