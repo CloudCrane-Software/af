@@ -9,5 +9,137 @@ claimed_value:
 sources: [S160, S162, S163]
 consensus: {corpora: 1, cards: 3}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: not_applicable
-na_reason: "受控评测协议：策略内容是「配对 A/B + 控制模型/预算/工具集 + 同时比较 pass rate、token 消耗与回归率」的实验设计（S160 body.测试设计），目的是给技能资产定边际收益；AFB 七段描述运行时图，不描述离线对照实验的分配与统计口径，无可编译节点语义。"
+dsl_state: compilable
+# S17 供给注册批 A（设计稿 strategies17-供给面设计-20261106.md §五）：
+# not_applicable → compilable。原 na_reason 的三态判据被 §四 的三分类
+# 复核推翻（与 st-C007/st-C019/st-b-C001 既有 compilable 先例不符），
+# 依据见 dsl_snippet 的 intent 段；组件声明见 af/packages/components.json。
+dsl_snippet: |
+  version: 1
+  meta:
+    name: skill_marginal_gain_paired_ab
+    graph_version: "1.0"
+    entry: on_arm
+    input: skill_input
+    output: { ref: skill_report, from: report }
+    intent: "SWE-Skills-Bench 投影（设计稿 §五.2）：成对开/关 skill = 两个显式兄弟 map 节点（同 tasks、同模型档 route.main@1、同 plan 级 cost_cap/token_cap = 等预算控制，先例 st-b-C001:21「同预算双账同额」）；on 臂 sections 带 skill 模板（vars.skill_ref），off 臂同模板换填充文本（对照组=注入随机填充，同机制）→ check pkg.skill.pair_delta@1 按 task_id 配对算 resolved_delta_pp/token_delta/regressed + 汇总 → 报告。"
+  types:
+    - name: skill_input
+      schema:
+        type: object
+        required: [question, tasks, skill_ref]
+        properties:
+          question: { type: string }
+          tasks: { type: array, items: { type: string } }
+          skill_ref: { type: string }
+    - name: arm_outcome
+      schema:
+        type: object
+        required: [task_id, resolved, tokens, cents, regressed]
+        properties:
+          task_id: { type: string }
+          resolved: { type: boolean }
+          tokens: { type: integer }
+          cents: { type: integer }
+          regressed: { type: boolean }
+    - name: pair_delta
+      schema:
+        type: object
+        required: [task_id, resolved_delta_pp, token_delta, regressed]
+        properties:
+          task_id: { type: string }
+          resolved_delta_pp: { type: integer }
+          token_delta: { type: integer }
+          regressed: { type: boolean }
+    - name: skill_summary
+      schema:
+        type: object
+        required: [net_gain_milli, mean_delta_pp, zero_gain_share_milli]
+        properties:
+          net_gain_milli: { type: integer }
+          mean_delta_pp: { type: integer }
+          zero_gain_share_milli: { type: integer }
+    - name: pair_delta_bundle
+      schema:
+        type: object
+        required: [deltas, summary]
+        properties:
+          deltas:
+            type: array
+            items: { type: pair_delta }
+          summary: { type: skill_summary }
+    - name: skill_report
+      schema:
+        type: object
+        required: [net_gain_milli, mean_delta_pp, zero_gain_share_milli, tasks]
+        properties:
+          net_gain_milli: { type: integer }
+          mean_delta_pp: { type: integer }
+          zero_gain_share_milli: { type: integer }
+          tasks: { type: integer }
+  nodes:
+    - id: on_arm
+      kind: task
+      map:
+        over: input.tasks
+        body:
+          nodes:
+            - id: runner
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.harness.shell@1, pkg.harness.edit@1, pkg.harness.lint@1] }
+              emits: { outcome: arm_outcome }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.skill_arm_system, vars: { skill_ref: input.skill_ref, mode: "on" }, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          edges: []
+      emits: { on_results: { from_body: runner.outcome } }
+    - id: off_arm
+      kind: task
+      map:
+        over: input.tasks
+        body:
+          nodes:
+            - id: runner
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.harness.shell@1, pkg.harness.edit@1, pkg.harness.lint@1] }
+              emits: { outcome: arm_outcome }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.skill_arm_system, vars: { skill_ref: "filler-text-placeholder", mode: "off" }, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          edges: []
+      emits: { off_results: { from_body: runner.outcome } }
+    - id: assess
+      kind: check
+      uses: { unit: pkg.skill.pair_delta@1 }
+      consumes:
+        on_results: "list<arm_outcome>"
+        off_results: "list<arm_outcome>"
+      emits: { assessment: pair_delta_bundle }
+    - id: report
+      kind: task
+      uses: { model: route.cheap@1 }
+      consumes: { assessment: pair_delta_bundle }
+      emits: { report: skill_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.skill_delta_system, quota_tokens: 400 }
+          - { from: edge, port: assessment, policy: project, quota_tokens: 400 }
+  edges:
+    - { from: on_arm, output: on_results, to: assess, input: on_results }
+    - { from: off_arm, output: off_results, to: assess, input: off_results }
+    - { from: assess, output: assessment, to: report, input: assessment }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 6000 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 6000000 }
+    failures:
+      - class: tool_error
+        route: same_node
+        feedback: error_observation
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed

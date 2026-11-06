@@ -2,7 +2,7 @@
 //!
 //! 验收面：
 //! - af-dsl 图清单：reportkit 第 5 包、pkg.reportkit.paper_report@1.0 在册；
-//! - 组件注册表：119 条终态（63 + E9001 供给批 56，+6 件逐名/类/effect 断言仍在）；
+//! - 组件注册表：127 条终态（63 + E9001 供给批 56 + S17 批 8，+6 件逐名/类/effect 断言仍在）；
 //! - 图正本干跑（真编译器全链 in-test）：exit 0、reader sources 工件口
 //!   进 artifact_contract（裁决5 记账面）、cite_check/rubric_check unit 绑定；
 //! - prompts/MANIFEST（裁决10）与 citations 五字段 required（裁决4）。
@@ -35,8 +35,8 @@ fn registry_reaches_g4_terminal_sixty_three() {
     let reg = ComponentRegistry::load(repo_packages()).unwrap();
     assert_eq!(
         reg.component_count(),
-        119,
-        "63（G4 终态）+ 56（E9001 供给批）"
+        127,
+        "63（G4 终态）+ 56（E9001 供给批）+ 8（S17 供给注册批 A：unit 7 + tool 1）"
     );
     // +6 件逐名/类/effect（设计 §3 全文照抄面）。
     let expect = [
@@ -81,7 +81,7 @@ fn paper_report_graph_compiles_with_sources_artifact_port() {
     let verdict = af_dsl::validate(&doc);
     assert!(verdict.is_ok(), "图应零违例：{verdict}");
     let reg = ComponentRegistry::load(repo_packages()).unwrap();
-    let plan_src = af_compiler::plan_json(&doc, &reg).expect("图应产计划（119 条 digest）");
+    let plan_src = af_compiler::plan_json(&doc, &reg).expect("图应产计划（127 条 digest）");
     // 双跑确定性。
     let plan_src2 = af_compiler::plan_json(&doc, &reg).unwrap();
     assert_eq!(plan_src, plan_src2, "双跑逐字节一致");
@@ -96,8 +96,8 @@ fn paper_report_graph_compiles_with_sources_artifact_port() {
     );
     assert_eq!(
         plan["body"]["compiled_from"]["registry_digest"],
-        "f5a6de7c9faa7859ab2b8c206a7517b996e770a78099baea9ac7cd1e565f7103",
-        "E9001 终态 digest 字面量钉（119 条；G4 63 + E9001 56）"
+        "4a49856fb7d650258a9f5fbb5c122dcac7031c8f959b98d61edde6c3c04f0d44",
+        "S17 供给注册批 A 后 digest 字面量钉（127 条；G4 63 + E9001 56 + S17 8）"
     );
     // 裁决5：reader sources 工件口进 artifact_contract（进图记账、不进 store）。
     let reader = plan["body"]["node_exec"]

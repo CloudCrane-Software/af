@@ -33,17 +33,18 @@ fn repo_registry() -> ComponentRegistry {
 }
 
 /// 装载面：六份清单文件（根级 routes+扩容 + adaskit + autogen + sweng +
-/// swarmkit + reportkit）共 119 条声明（P2-L11 首批 7 + P2-L12 扩容 50 + G4
-/// reportkit 6 + E9001 供给批 56——63→119 与包落地同 commit；闸门 §⑤ 清款，
-/// 逐名断言见 `registry_decl_test.rs`）；两次装载 digest 逐位一致（确定性）；
-/// 版本表按名字可达。
+/// swarmkit + reportkit）共 127 条声明（P2-L11 首批 7 + P2-L12 扩容 50 + G4
+/// reportkit 6 + E9001 供给批 56 + S17 供给注册批 A 8——119→127 与包落地同
+/// commit；闸门 §⑤ 清款，逐名断言见 `registry_decl_test.rs`）；两次装载
+/// digest 逐位一致（确定性）；版本表按名字可达。
 #[test]
 fn repo_components_registry_loads_deterministically() {
     let reg = repo_registry();
     assert_eq!(
         reg.component_count(),
-        119,
-        "P2-L11 首批 7 + P2-L12 扩容 50 + G4 reportkit 6 + E9001 供给批 56（63→119）"
+        127,
+        "P2-L11 首批 7 + P2-L12 扩容 50 + G4 reportkit 6 + E9001 供给批 56\
+         + S17 供给注册批 A 8（unit 7 + tool 1；119→127）"
     );
 
     let again = repo_registry();

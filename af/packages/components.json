@@ -751,6 +751,55 @@
       "name": "pkg.ir.indexer",
       "version": "1",
       "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.iface.mcp_client",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.iface.mcp_client@af-execline",
+      "effect_class": "external_once"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.retrieval.ndcg",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.skill.pair_delta",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.review.bug_capture",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.cost.efficiency",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ab.placebo",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.iface.adherence",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ablate.matrix",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
     }
   ]
 }

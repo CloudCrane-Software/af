@@ -53,7 +53,7 @@ af-sandbox/af-station/af-stop/af-trace/af-workorder）均为 0.1.0，语义结�
 |---|---|---|
 | sweng 图 | `sop_full@1.1`（token_cap 1M 校准）/ `sop_no_qa@1.0` / `sop_minimal@1.0` / `fix_swe_task@1.0` | F4D 真单 Closed（sop_full@1.1 四节点全链） |
 | reportkit 图 | `paper_report@1.0` | F5c 真单 Closed（cite_check+rubric 双 passed） |
-| 组件声明 | 119 条（根级 96 + 包级 23；G4 63 + E9001 供给批 56），`registry_digest` 入计划对象 | 根级 `components.json` + 各包 `components.json`；装载器 `af-compiler::components` |
+| 组件声明 | 127 条（根级 104 + 包级 23；G4 63 + E9001 供给批 56 + S17 供给注册批 A 8），`registry_digest` 入计划对象 | 根级 `components.json` + 各包 `components.json`；装载器 `af-compiler::components` |
 | 判分链 | reportkit citation/rubric 双验证器（sha256 冻结锚）+ swebench 冻结链 | `af/packages/reportkit/units/`；F4/F5 线订单实证 |
 
 ## 四、CI 与验证

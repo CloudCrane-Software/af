@@ -64,6 +64,9 @@ pub const REF_SWEBENCH_EVAL: &str = "pkg.sweagent.swebench_eval@1";
 pub const REF_ACI_SCHEMA: &str = "pkg.sweagent.aci_schema@1";
 pub const REF_SWENG_TEST_UNIT: &str = "pkg.sweng.test_unit@1";
 pub const REF_HUMAN_GATE: &str = "pkg.sweagent.human_gate@1";
+/// S17 供给注册批 A：接口选型面记录型包装器（st-b-C126，实现住
+/// [`crate::pkg::iface`]——本表只持引用串，15 件 G4 身份表不外延）。
+pub const REF_IFACE_MCP_CLIENT: &str = "pkg.iface.mcp_client@1";
 
 /// 15 件全集（验收/对账面；tests/pkg_sweng.rs 锁 15 计数）。
 pub const SWENG_V1_COMPONENTS: &[&str] = &[
@@ -96,6 +99,10 @@ pub fn name_of(reference: &str) -> &str {
 /// 身份名（15 件 G4 表）原样返回。新名只映射到 `node_tool_fn` 已接线的
 /// 四条执行臂（env / locate / view / edit）——注册表 `impl_ref` 与本表
 /// 同靶，执行面按名解析到同一闭包，不是空转声明。
+///
+/// S17 供给注册批 A：`pkg.iface.mcp_client` 走 `other` 恒等臂（本名即执行
+/// 面键——`node_tool_fn` 的记录型包装器分支按原名接，`pkg::iface`），
+/// 无别名改写：包装器的 `tool_name` 入参才是底层工具名。
 pub fn tool_impl_name(name: &str) -> &str {
     match name {
         "pkg.repo.grep"
@@ -298,6 +305,24 @@ pub fn tool_decl(reference: &str, workdir: &str) -> Option<ToolDecl> {
                 "required": ["summary"]
             }),
             "persist",
+        )),
+        // S17 供给注册批 A · st-b-C126：接口选型记录型包装器（模型面）。
+        // `interface` = 本次调用归派的接口标签（图契约的指派接口清单成员）；
+        // `tool_name` = 底层已接线工具引用（如 pkg.repo.grep@1，表外即失败
+        // 记账）；`args` = 底层工具入参对象。执行住 pkg::iface::mcp_client。
+        "pkg.iface.mcp_client" => Some(decl_from_json(
+            &model_name(reference),
+            "Call an assigned interface tool and record the invocation name-level (interface, tool_name, args_digest, ok) for interface-adherence accounting. The underlying tool must already be a wired builtin; unknown names are recorded as failures.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "interface": {"type": "string", "description": "Interface label this call is attributed to (must be a member of the graph's assigned interface list)."},
+                    "tool_name": {"type": "string", "description": "Underlying wired tool reference, e.g. pkg.repo.grep@1."},
+                    "args": {"type": "object", "description": "Argument object forwarded to the underlying tool."}
+                },
+                "required": ["interface", "tool_name"]
+            }),
+            "external_once",
         )),
         _ => None,
     }
