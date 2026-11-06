@@ -14,6 +14,10 @@
 //! - [`prompts`]：template_ref 解析唯一机制（裁决10：`pkg.<包>.<名>[@<版本>]`
 //!   → `<包根>/<包>/prompts/<名>.md` + `MANIFEST.sha256` 清单核对；两包共用，
 //!   解析器一套；报告包模板落 `reportkit/prompts/` 走同一解析器）。
+//! - [`reliab`]：判分可信度协议（S17 · st-b-C022，债 D-57，设计稿 §七.4）——
+//!   三值判定 `Decision{pass,fail,undecidable}`（与 `resolved: Option<bool>`
+//!   的 null=供给面失败语义正交）+ 多评委校准 [`reliab::calibrate`] + 判分
+//!   污染审计 [`reliab::audit_contamination`]；纯函数面，零 I/O。
 //!
 //! `planbind.rs` 通用装订器（E9004→EX4004 执行面消费唯一正本，裁决9）由
 //! G4 Phase 2（reportkit 批）落位——届时 digest 核对与模板解析在此汇流；
@@ -21,4 +25,5 @@
 
 pub mod iface;
 pub mod prompts;
+pub mod reliab;
 pub mod sweng;
