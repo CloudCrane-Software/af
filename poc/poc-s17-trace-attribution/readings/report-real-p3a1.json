@@ -1,0 +1,63 @@
+{
+  "population": {
+    "total_traces": 3,
+    "resolved": 1,
+    "failed": 2,
+    "indeterminate": 0
+  },
+  "failure_distribution": {
+    "tool_usage_error": {
+      "count": 0,
+      "share_milli": 0
+    },
+    "syntax_error": {
+      "count": 2,
+      "share_milli": 1000
+    },
+    "other": {
+      "count": 0,
+      "share_milli": 0
+    }
+  },
+  "by_error_code": {
+    "EX4005": 1,
+    "EX4006": 1
+  },
+  "by_source": {
+    "poc/poc-p3-a1-strategy-dsl/raw/results.jsonl": {
+      "tool_usage_error": 0,
+      "syntax_error": 2,
+      "other": 0
+    }
+  },
+  "failed_traces": [
+    {
+      "trace_id": "p3a1-st-b-C037",
+      "class": "syntax_error",
+      "error_code": "EX4005",
+      "status": "setup_failed",
+      "source": "poc/poc-p3-a1-strategy-dsl/raw/results.jsonl"
+    },
+    {
+      "trace_id": "p3a1-st-b-C102",
+      "class": "syntax_error",
+      "error_code": "EX4006",
+      "status": "run_failed",
+      "source": "poc/poc-p3-a1-strategy-dsl/raw/results.jsonl"
+    }
+  ],
+  "sources": [
+    {
+      "path": "poc/poc-p3-a1-strategy-dsl/raw/records.jsonl",
+      "rows": 1,
+      "unparsed": 0,
+      "mes_work_orders_seen": 0
+    },
+    {
+      "path": "poc/poc-p3-a1-strategy-dsl/raw/results.jsonl",
+      "rows": 2,
+      "unparsed": 0,
+      "mes_work_orders_seen": 0
+    }
+  ]
+}

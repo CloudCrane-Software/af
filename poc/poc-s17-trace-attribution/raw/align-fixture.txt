@@ -1,0 +1,8 @@
+== 人工对齐率（judge vs human）==
+标注=10  有效=10  一致=9  对齐率=90.0%
+  工具使用错误(tool_usage_error) n=4   agree=3  
+  语法错(syntax_error)  n=4   agree=4  
+  其他(other)          n=2   agree=2  
+分歧：
+  fix-amb-1 human=tool_usage_error judge=other (-)
+对齐读数已落：poc/poc-s17-trace-attribution/readings/align-fixture.json

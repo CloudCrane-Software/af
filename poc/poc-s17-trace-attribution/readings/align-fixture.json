@@ -1,0 +1,47 @@
+{
+  "labeled": 10,
+  "valid": 10,
+  "agree": 9,
+  "alignment_rate_milli": 900,
+  "per_class": {
+    "tool_usage_error": {
+      "n": 4,
+      "agree": 3
+    },
+    "syntax_error": {
+      "n": 4,
+      "agree": 4
+    },
+    "other": {
+      "n": 2,
+      "agree": 2
+    }
+  },
+  "confusion": {
+    "tool_usage_error": {
+      "tool_usage_error": 3,
+      "syntax_error": 0,
+      "other": 1
+    },
+    "syntax_error": {
+      "tool_usage_error": 0,
+      "syntax_error": 4,
+      "other": 0
+    },
+    "other": {
+      "tool_usage_error": 0,
+      "syntax_error": 0,
+      "other": 2
+    }
+  },
+  "disagreements": [
+    {
+      "trace_id": "fix-amb-1",
+      "human": "tool_usage_error",
+      "judge": "other",
+      "error_code": ""
+    }
+  ],
+  "orphans": [],
+  "annotation_bad_rows": 0
+}
