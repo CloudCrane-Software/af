@@ -512,10 +512,8 @@ fn read_emit_marker(path: &Path) -> BTreeMap<String, String> {
 /// 最坏后果是下次重发（回到加闸前行为），不阻断订单。
 fn write_emit_marker(path: &Path, entries: &BTreeMap<String, String>) {
     if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            if fs::create_dir_all(parent).is_err() {
-                return;
-            }
+        if !parent.as_os_str().is_empty() && fs::create_dir_all(parent).is_err() {
+            return;
         }
     }
     let Ok(body) = serde_json::to_vec(entries) else {
