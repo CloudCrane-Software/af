@@ -38,19 +38,17 @@ impl FakeBridge {
     }
 
     fn calls(&self) -> Vec<(String, String, u32)> {
-        self.calls
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 
 impl HostBridge for FakeBridge {
     fn run(&self, host: &str, script: &str, timeout_sec: u32) -> BridgeResult {
-        self.calls
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push((host.to_string(), script.to_string(), timeout_sec));
+        self.calls.lock().unwrap_or_else(|e| e.into_inner()).push((
+            host.to_string(),
+            script.to_string(),
+            timeout_sec,
+        ));
         self.scripted
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -69,7 +67,10 @@ fn fake_env() -> TbEnv {
 }
 
 fn locate_hit() -> BridgeResult {
-    Ok((true, "django/__init__.py:1:VERSION = (5, 2)\n__AF_RC=0".into()))
+    Ok((
+        true,
+        "django/__init__.py:1:VERSION = (5, 2)\n__AF_RC=0".into(),
+    ))
 }
 
 // ============================================================
@@ -84,15 +85,8 @@ fn mcp_client_records_call_with_digest_and_real_execution() {
     let log = iface::IfaceLog::new();
     let args = json!({"query": "VERSION"});
 
-    let out = iface::mcp_client(
-        &log,
-        "mcp",
-        "pkg.repo.grep@1",
-        &bridge,
-        &env,
-        &args,
-    )
-    .expect("已接线底层工具应成功");
+    let out = iface::mcp_client(&log, "mcp", "pkg.repo.grep@1", &bridge, &env, &args)
+        .expect("已接线底层工具应成功");
 
     // 观察文本 = 首行记账摘要 + 底层观察原文（点名级可复核）。
     let text = out.as_str().expect("观察应为字符串");
@@ -101,7 +95,10 @@ fn mcp_client_records_call_with_digest_and_real_execution() {
         "{text}"
     );
     assert!(text.contains("ok=true"), "{text}");
-    assert!(text.contains("django/__init__.py:1:VERSION = (5, 2)"), "{text}");
+    assert!(
+        text.contains("django/__init__.py:1:VERSION = (5, 2)"),
+        "{text}"
+    );
     assert!(text.contains("exit=0"), "{text}");
 
     // 底层真跑：容器命令经 locate 臂发出（grep -rnE …）。
@@ -123,7 +120,9 @@ fn mcp_client_records_call_with_digest_and_real_execution() {
     let digest = row["args_digest"].as_str().expect("args_digest 应为字符串");
     assert_eq!(digest.len(), 64, "sha256 十六进制小写 64 字符");
     assert!(
-        digest.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
+        digest
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()),
         "{digest}"
     );
 }
@@ -220,11 +219,20 @@ fn adherence_matches_declared_output_shape() {
     // 三键逐字（设计稿 §五.6 的 emits 形状）。
     // 键集恰为设计稿三键（排序后比对——serde_json 的 preserve_order 经依赖
     // 统一开启，Map=IndexMap 插入序，不得按字面序断言）。
-    let mut keys: Vec<&str> = out.as_object().expect("对象").keys().map(String::as_str).collect();
+    let mut keys: Vec<&str> = out
+        .as_object()
+        .expect("对象")
+        .keys()
+        .map(String::as_str)
+        .collect();
     keys.sort_unstable();
     assert_eq!(
         keys,
-        vec!["adherence_rate_milli", "failure_cost_class", "off_interface_calls"],
+        vec![
+            "adherence_rate_milli",
+            "failure_cost_class",
+            "off_interface_calls"
+        ],
         "键集须恰为设计稿三键"
     );
     // 3/4 在指派接口内 → 750 milli；1 条走 cli → off_interface_calls=1。
@@ -249,9 +257,13 @@ fn adherence_failure_classes_follow_documented_thresholds() {
     // 0 失败 → none；1/10=100 milli → material；1/100=10 milli → marginal。
     let rows: Vec<(&str, &str, bool)> = (0..9).map(|_| ("mcp", "pkg.repo.grep", true)).collect();
     let clean = log_with(&rows);
-    assert_eq!(clean.adherence(&["mcp".to_string()])["failure_cost_class"], "none");
+    assert_eq!(
+        clean.adherence(&["mcp".to_string()])["failure_cost_class"],
+        "none"
+    );
 
-    let mut rows10: Vec<(&str, &str, bool)> = (0..9).map(|_| ("mcp", "pkg.repo.grep", true)).collect();
+    let mut rows10: Vec<(&str, &str, bool)> =
+        (0..9).map(|_| ("mcp", "pkg.repo.grep", true)).collect();
     rows10.push(("mcp", "pkg.repo.grep", false));
     let one_of_ten = log_with(&rows10);
     assert_eq!(
@@ -305,10 +317,14 @@ fn mcp_client_is_wired_in_dispatch_and_model_face() {
     );
 
     // 模型面在场（缺它 = 图节点装载期「无模型面声明」红）。
-    let decl = sweng::tool_decl("pkg.iface.mcp_client@1", "/testbed")
-        .expect("记录型包装器应有模型面声明");
+    let decl =
+        sweng::tool_decl("pkg.iface.mcp_client@1", "/testbed").expect("记录型包装器应有模型面声明");
     assert_eq!(decl.name, "iface.mcp_client");
-    let required = decl.parameters.get("required").and_then(Value::as_array).expect("required 数组");
+    let required = decl
+        .parameters
+        .get("required")
+        .and_then(Value::as_array)
+        .expect("required 数组");
     let required: Vec<&str> = required.iter().filter_map(Value::as_str).collect();
     assert_eq!(required, vec!["interface", "tool_name"]);
 }

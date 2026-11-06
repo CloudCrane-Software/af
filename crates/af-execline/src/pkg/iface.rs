@@ -116,10 +116,7 @@ impl IfaceLog {
 
     /// 序列快照（单测/读数面；顺序 = 调用顺序）。
     pub fn calls(&self) -> Vec<Value> {
-        self.calls
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+        self.calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// 调用条数。
@@ -200,9 +197,8 @@ pub fn mcp_client(
     let outcome = crate::graph_unit::wired_tool_call(underlying, bridge, env, args);
     let ok = outcome.is_ok();
     let digest = log.record(interface, &tool_name, args, ok);
-    let header = format!(
-        "[iface] interface={interface} tool={tool_name} args_digest={digest} ok={ok}"
-    );
+    let header =
+        format!("[iface] interface={interface} tool={tool_name} args_digest={digest} ok={ok}");
     match outcome {
         Ok(Value::String(text)) => Ok(Value::String(format!("{header}\n{text}"))),
         Ok(other) => Ok(Value::String(format!(
