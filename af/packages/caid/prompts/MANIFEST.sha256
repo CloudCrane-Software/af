@@ -1,0 +1,5 @@
+# caid prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+5b195d322a4db020deef2fb6e5c257d70f830dfd158ee180b448c4d139ac1c25  prompts/integrator_system.md
+71f53637381a7b5ef0192d54b193301b5fd0958d3fc50e15e43128786e70b6ac  prompts/orchestrator_system.md
+44d5a82732dd5ae22fd16fb55fbe55612b4f33fa61097c10e389d3414ee46fa9  prompts/worker_system.md

@@ -1,0 +1,5 @@
+# roles prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+60080a7ca821db8db387f02db2ed0a8b4429f1c08cb3199445e4703ce556212c  prompts/coder_system.md
+fdb929c8c4861711cb301cf4d7d23be8a5465966b34d7a686b6cbe576f476672  prompts/locator_system.md
+1b6afa30d8f073ec7a0db43176149a0f0a0113f343ff924bd73330c857b9f9e7  prompts/orchestrator_system.md

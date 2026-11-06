@@ -1,0 +1,4 @@
+# agent prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+e7e460631c40c9ce05339f1d52221a6a4f124e2d90cc360a07a96761b80cd0f5  prompts/finalize_system.md
+9acc25a983dad3db38c3b6df3997d5d028a5a50f3b03aea57f595fe7f6c46af8  prompts/system.md

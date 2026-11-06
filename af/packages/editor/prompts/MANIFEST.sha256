@@ -1,0 +1,4 @@
+# editor prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+225fe2d527a1cb944d8053fc993f234b850938c9787b54e26399e6a87aa7ef8f  prompts/system.md
+c669bc4b1e522c2f735167eec5e59a165f3b4727f52fa4d29931d84e0a59a033  prompts/wrapup_system.md

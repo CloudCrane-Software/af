@@ -1,0 +1,6 @@
+# aci prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+fc5c33da3a38caf2f14eac2d8f264b4e3a6b04a5e2f45488947fff4e26883b10  prompts/custom_system.md
+e6232de6004ebd43ab1b67824f7c42073c9e5391ce63637a808d82bca83573ae  prompts/full_system.md
+946f533e3fca4a63f154960a97e0a79e14d2f2d3a27d3e6d94ba455d5b6e633b  prompts/readonly_system.md
+3373898a551b4aa71911adf52350b09ba2e7200f05f997a5c17f0a3887473d57  prompts/shell_only_system.md

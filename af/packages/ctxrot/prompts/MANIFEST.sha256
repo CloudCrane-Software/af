@@ -1,0 +1,4 @@
+# ctxrot prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+e0030f61f916b51c4df65ed041da23a57bc2021a4259a3ce9feee091b37193f4  prompts/loader_system.md
+55e9525eda58fac5ce0e080144461157f0dc2df364533c51eef7c6124617bf9d  prompts/solver_system.md
