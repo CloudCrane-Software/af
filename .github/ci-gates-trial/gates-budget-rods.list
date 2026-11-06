@@ -1,0 +1,3 @@
+demo-parity|800|120
+# 注释行（标定常量留仓内：cal_scale|cal_seconds 试用政策值）
+demo-router|800|60
