@@ -38,25 +38,25 @@
       "note": "step13 共宿槽子门执行数钉键（红队 2026-10-31「摘门保牌」发现修复新增）：13a fix-scan / 13b arm-wiring / 13c budget-cast-lint 三条 `step 13x \"…\"` 调用行逐条机数。gates.ci_steps 是槽位集合口径（13a/b/c 同槽去重后只算一槽），槽内子门被静默摘除（删 `step 13b` 调用留登记行）时槽位集合不变、槽位键看不见——本键在调用行粒度复算，删任一子门调用即 3→2 红。增删子门须同批改本键（门数账自举纪律）。"
     },
     "gates.ci_step14_subgates": {
-      "value": 4,
+      "value": 5,
       "source": "for n in $(grep -E '^[A-Za-z0-9_]+[[:space:]]*$' ci/subgates.list); do grep -vE '^[[:space:]]*#' ci/run.sh | grep -cE \"python3( -B)? ci/$n\\.py\"; done | awk '{s+=($1>0?1:0)} END{print s+0}'",
       "unit": "子检查",
-      "last_recomputed": "2026-11-02",
-      "note": "step14 共宿槽子检查接线数钉键（红队 2026-10-31「摘门保牌」发现修复新增；2026-11-02 RT-E81 修复批改版）：本键 source **由单点名册 ci/subgates.list 生成**（名册逐件在场数——名册每件在 ci/run.sh 有非评论接线行即计 1）。14a branches_check / 14b xcheck / 14c criteria_check / 14d strategies_check 四件。【RT-E81 修复史实】初版 source 是手写正则枚举：「同名替换」攻击把 14d 的 `ci/strategies_check.py` 调用行换成 `ci/xcheck.py` 时枚举内仍 4 行匹配、复算值不变、step12 与 xcheck gates-exec-binding 全链照绿——14d 子门（策略库 schema+并集 index 完备性/计数对账+af-dsl 编译断言）实际静默消失（假绿复现在案）。本键改由名册生成后，摘门/同名替换即名册逐件在场数 4→3 漂移红；名册本体不可静默收缩由 ci/gate_inputs_check.sh 的 sha256 钉承担（ci/subgates.list 已入 GATE_INPUTS 清单）。三臂（名册计数/正则计数/名册逐件在场数）由 ci/step12_check.py 第④节断言三者一致；名册集合==ci/run.sh step14 槽实际接线集合（双向）与接线行不带弱化标志（--skip-compile/--text-mode）由 step12 与 ci/xcheck.py 互为跨锚硬核。增删子检查须同批改本键+两辅助键+名册+钉文件（门数账自举纪律）。"
+      "last_recomputed": "2026-11-06",
+      "note": "step14 共宿槽子检查接线数钉键（红队 2026-10-31「摘门保牌」发现修复新增；2026-11-02 RT-E81 修复批改版；2026-11-06 D-54 harness 回归门批 4→5）：本键 source **由单点名册 ci/subgates.list 生成**（名册逐件在场数——名册每件在 ci/run.sh 有非评论接线行即计 1）。14a branches_check / 14b xcheck / 14c criteria_check / 14d strategies_check / 14e harness_regression_gate 五件（14e 接线行含两次调用——门面+--selftest，grep -c 计行不计次故仍计 1）。【RT-E81 修复史实】初版 source 是手写正则枚举：「同名替换」攻击把 14d 的 `ci/strategies_check.py` 调用行换成 `ci/xcheck.py` 时枚举内仍 4 行匹配、复算值不变、step12 与 xcheck gates-exec-binding 全链照绿——14d 子门（策略库 schema+并集 index 完备性/计数对账+af-dsl 编译断言）实际静默消失（假绿复现在案）。本键改由名册生成后，摘门/同名替换即名册逐件在场数漂移红；名册本体不可静默收缩由 ci/gate_inputs_check.sh 的 sha256 钉承担（ci/subgates.list 已入 GATE_INPUTS 清单）。三臂（名册计数/正则计数/名册逐件在场数）由 ci/step12_check.py 第④节断言三者一致；名册集合==ci/run.sh step14 槽实际接线集合（双向）与接线行不带弱化标志（--skip-compile/--text-mode）由 step12 与 ci/xcheck.py 互为跨锚硬核。增删子检查须同批改本键+两辅助键+名册+钉文件（门数账自举纪律）。"
     },
     "gates.ci_step14_subgates_regex": {
-      "value": 4,
-      "source": "grep -cE '^  \\(cd \"\\$AF_ROOT\" && python3( -B)? ci/(branches_check|xcheck|criteria_check|strategies_check)' ci/run.sh",
+      "value": 5,
+      "source": "grep -cE '^  \\(cd \"\\$AF_ROOT\" && python3( -B)? ci/(branches_check|xcheck|criteria_check|strategies_check|harness_regression_gate)' ci/run.sh",
       "unit": "子检查",
-      "last_recomputed": "2026-11-02",
-      "note": "step14 子门正则计数**对照臂**（RT-E81 修复批新增）：手写正则枚举 branches_check|xcheck|criteria_check|strategies_check 的接线行计数——与 gates.ci_step14_subgates（名册生成臂）、gates.ci_step14_subgates_roster（名册计数臂）三者由 ci/step12_check.py 第④节断言一致。对照臂的作用：名册漏枚举（新增子门只改名册未改正则）即 名册计数≠正则计数 红；名册外的接线行（名册外多件）由 step12/xcheck 的集合双向对账另行硬红。"
+      "last_recomputed": "2026-11-06",
+      "note": "step14 子门正则计数**对照臂**（RT-E81 修复批新增；2026-11-06 D-54 批枚举加 harness_regression_gate、4→5）：手写正则枚举 branches_check|xcheck|criteria_check|strategies_check|harness_regression_gate 的接线行计数——与 gates.ci_step14_subgates（名册生成臂）、gates.ci_step14_subgates_roster（名册计数臂）三者由 ci/step12_check.py 第④节断言一致。对照臂的作用：名册漏枚举（新增子门只改名册未改正则）即 名册计数≠正则计数 红；名册外的接线行（名册外多件）由 step12/xcheck 的集合双向对账另行硬红。"
     },
     "gates.ci_step14_subgates_roster": {
-      "value": 4,
+      "value": 5,
       "source": "grep -cE '^[A-Za-z0-9_]+[[:space:]]*$' ci/subgates.list",
       "unit": "子检查",
-      "last_recomputed": "2026-11-02",
-      "note": "step14 子门单点名册计数（RT-E81 修复批新增）：ci/subgates.list 的条目数——名册是 step14 子门全集的**唯一正本**（与 gates.ci_step14_subgates 的名册生成臂、gates.ci_step14_subgates_regex 的对照臂三者一致；名册文件本体由 ci/baselines/gate-inputs.sha256 钉住，静默增删即漂移红）。"
+      "last_recomputed": "2026-11-06",
+      "note": "step14 子门单点名册计数（RT-E81 修复批新增；2026-11-06 D-54 批 4→5）：ci/subgates.list 的条目数——名册是 step14 子门全集的**唯一正本**（与 gates.ci_step14_subgates 的名册生成臂、gates.ci_step14_subgates_regex 的对照臂三者一致；名册文件本体由 ci/baselines/gate-inputs.sha256 钉住，静默增删即漂移红）。"
     },
     "redlist.count": {
       "value": 24,

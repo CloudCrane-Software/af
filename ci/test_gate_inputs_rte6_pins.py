@@ -42,6 +42,8 @@ CONSUMED = {
     "ci/budget-cast-whitelist.json":       ("step13c budget_cast_lint.py:196 cast 白名单", "gate-inputs"),
     "ci/debt-register.md":                 ("step13b/13c 债号在册判定（arm_wiring_check.py:42 等）", "gate-inputs"),
     "ci/subgates.list":                    ("step14 子门名册（xcheck 子门级断言 + step12 ④名册绑定）", "gate-inputs"),
+    "ci/baselines/harness-regression-set.json":    ("step14e harness 回归门定义面（harness_regression_gate.py：模型/seed/任务集钉/双阈值/校准锚）", "gate-inputs"),
+    "ci/baselines/harness-regression-tasks.json":  ("step14e harness 回归门任务集（120 题；digest 另钉于定义件 task_set.sha256 双钉）", "gate-inputs"),
     "ci/baselines/kani-inv-harness.manifest":          ("step9 9b Kani harness 清单（baseline_calc.sh verify-kani + run.sh 9b count 行）", "gate-inputs"),
     "proofs/rocq-规范库-v0/theorems-manifest.txt":     ("step9 9a 定理清单（run.sh 9a-2 名集+陈述哈希对账 + baseline_calc.sh verify-rocq）", "gate-inputs"),
     "mutations/registry.yaml":             ("step0 mutation_runner.sh check-registry 探针清单", "mutations-registry"),

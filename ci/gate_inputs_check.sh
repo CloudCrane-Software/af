@@ -58,6 +58,11 @@ GATE_INPUTS=(
   "ci/debt-register.md"
   # —— step14 子门单点名册（红队终局轮 RT-E81 修复批，2026-11-02）——
   "ci/subgates.list"                    # step14 子门全集正本（step12 名册绑定 + xcheck 子门级断言消费）
+  # —— harness 版本级回归门判据正本（D-54 s17-harness-regression-gate 批，2026-11-06）——
+  "ci/baselines/harness-regression-set.json"    # 回归集定义件（模型/seed/任务集钉/双阈值/校准锚；harness_regression_gate.py 定义面消费）
+  "ci/baselines/harness-regression-tasks.json"  # 120 题回归任务集（digest 另钉于定义件 task_set.sha256——双钉）
+  #     注：读数台账 ci/baselines/harness-readings.jsonl 是 append-only 可变账
+  #     （发布管线逐 release 追加），不入本钉面；其口径由定义件钉、逐条由门核对。
   # —— step9 基线清单正本（RT-E6 清偿批 2026-11-04 补钉：ci/baseline_calc.sh 对称
   #    管理的 9a/9b 两件此前无族钉——kani 件只有 numbers.json 值锚
   #    fv.kani_inv_harness.manifest_sha256（「摘基线+同批改账」可吸收）；rocq 件的
