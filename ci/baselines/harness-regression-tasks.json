@@ -1,0 +1,602 @@
+[
+ {
+  "instance_id": "astropy__astropy-12907",
+  "repo": "astropy/astropy",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "astropy__astropy-13033",
+  "repo": "astropy/astropy",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "astropy__astropy-13236",
+  "repo": "astropy/astropy",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "astropy__astropy-13453",
+  "repo": "astropy/astropy",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "astropy__astropy-13579",
+  "repo": "astropy/astropy",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "astropy__astropy-14096",
+  "repo": "astropy/astropy",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "astropy__astropy-14182",
+  "repo": "astropy/astropy",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "django__django-10880",
+  "repo": "django/django",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "django__django-10914",
+  "repo": "django/django",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "django__django-10999",
+  "repo": "django/django",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "django__django-11066",
+  "repo": "django/django",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "django__django-11087",
+  "repo": "django/django",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "django__django-11095",
+  "repo": "django/django",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "django__django-11099",
+  "repo": "django/django",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-13989",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20488",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20676",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20826",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-20859",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-22719",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-22865",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "mwaskom__seaborn-3069",
+  "repo": "mwaskom/seaborn",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pallets__flask-5014",
+  "repo": "pallets/flask",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "psf__requests-1142",
+  "repo": "psf/requests",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "psf__requests-2931",
+  "repo": "psf/requests",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "psf__requests-5414",
+  "repo": "psf/requests",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "psf__requests-6028",
+  "repo": "psf/requests",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pydata__xarray-2905",
+  "repo": "pydata/xarray",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pydata__xarray-3151",
+  "repo": "pydata/xarray",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pydata__xarray-3677",
+  "repo": "pydata/xarray",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pydata__xarray-4075",
+  "repo": "pydata/xarray",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pydata__xarray-4094",
+  "repo": "pydata/xarray",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pydata__xarray-4629",
+  "repo": "pydata/xarray",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pydata__xarray-4687",
+  "repo": "pydata/xarray",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-4970",
+  "repo": "pylint-dev/pylint",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6903",
+  "repo": "pylint-dev/pylint",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7080",
+  "repo": "pylint-dev/pylint",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-7277",
+  "repo": "pylint-dev/pylint",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-10051",
+  "repo": "pytest-dev/pytest",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-10081",
+  "repo": "pytest-dev/pytest",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-10356",
+  "repo": "pytest-dev/pytest",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5262",
+  "repo": "pytest-dev/pytest",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5631",
+  "repo": "pytest-dev/pytest",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5787",
+  "repo": "pytest-dev/pytest",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5809",
+  "repo": "pytest-dev/pytest",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-10297",
+  "repo": "scikit-learn/scikit-learn",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-10844",
+  "repo": "scikit-learn/scikit-learn",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-10908",
+  "repo": "scikit-learn/scikit-learn",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-11310",
+  "repo": "scikit-learn/scikit-learn",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-11578",
+  "repo": "scikit-learn/scikit-learn",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12585",
+  "repo": "scikit-learn/scikit-learn",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12973",
+  "repo": "scikit-learn/scikit-learn",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-10323",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-10435",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-10449",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-10466",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-10614",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-11445",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-11510",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "sympy__sympy-11618",
+  "repo": "sympy/sympy",
+  "tier": "D1"
+ },
+ {
+  "instance_id": "astropy__astropy-14369",
+  "repo": "astropy/astropy",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "astropy__astropy-8707",
+  "repo": "astropy/astropy",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "django__django-10554",
+  "repo": "django/django",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "django__django-10973",
+  "repo": "django/django",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "django__django-11333",
+  "repo": "django/django",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "django__django-11400",
+  "repo": "django/django",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "django__django-11451",
+  "repo": "django/django",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-14623",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-21568",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-24870",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-25479",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-25775",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "mwaskom__seaborn-3187",
+  "repo": "mwaskom/seaborn",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "psf__requests-1724",
+  "repo": "psf/requests",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "psf__requests-1766",
+  "repo": "psf/requests",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "psf__requests-1921",
+  "repo": "psf/requests",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "psf__requests-2317",
+  "repo": "psf/requests",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pydata__xarray-3095",
+  "repo": "pydata/xarray",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pydata__xarray-3305",
+  "repo": "pydata/xarray",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pydata__xarray-3993",
+  "repo": "pydata/xarray",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pydata__xarray-4356",
+  "repo": "pydata/xarray",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pydata__xarray-4966",
+  "repo": "pydata/xarray",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-4661",
+  "repo": "pylint-dev/pylint",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6528",
+  "repo": "pylint-dev/pylint",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-8898",
+  "repo": "pylint-dev/pylint",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-5840",
+  "repo": "pytest-dev/pytest",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-7205",
+  "repo": "pytest-dev/pytest",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "pytest-dev__pytest-8399",
+  "repo": "pytest-dev/pytest",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-12682",
+  "repo": "scikit-learn/scikit-learn",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "scikit-learn__scikit-learn-25102",
+  "repo": "scikit-learn/scikit-learn",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-10673",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-7462",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-7590",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-8120",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sphinx-doc__sphinx-8548",
+  "repo": "sphinx-doc/sphinx",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sympy__sympy-13877",
+  "repo": "sympy/sympy",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sympy__sympy-14248",
+  "repo": "sympy/sympy",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sympy__sympy-17318",
+  "repo": "sympy/sympy",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sympy__sympy-19783",
+  "repo": "sympy/sympy",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "sympy__sympy-20438",
+  "repo": "sympy/sympy",
+  "tier": "D2"
+ },
+ {
+  "instance_id": "astropy__astropy-13398",
+  "repo": "astropy/astropy",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "astropy__astropy-13977",
+  "repo": "astropy/astropy",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-10097",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-11138",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-11276",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-11532",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-13121",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-14011",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-14315",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-14672",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-15629",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-16263",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "django__django-16938",
+  "repo": "django/django",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "matplotlib__matplotlib-25122",
+  "repo": "matplotlib/matplotlib",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "pydata__xarray-6992",
+  "repo": "pydata/xarray",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-4551",
+  "repo": "pylint-dev/pylint",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-4604",
+  "repo": "pylint-dev/pylint",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "pylint-dev__pylint-6386",
+  "repo": "pylint-dev/pylint",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "sympy__sympy-13091",
+  "repo": "sympy/sympy",
+  "tier": "D3"
+ },
+ {
+  "instance_id": "sympy__sympy-16597",
+  "repo": "sympy/sympy",
+  "tier": "D3"
+ }
+]

@@ -29,3 +29,11 @@ branches_check
 xcheck
 criteria_check
 strategies_check
+# 14e harness 版本级回归门（D-54，2026-11-06 s17-harness-regression-gate 卡）：
+#     固定模型+任务集+seed 回归集定义面 fail-closed（空回归集红/摘要漂移红/阈值
+#     弱化红）+ 读数面劣化阈值阻断（resolve pp 与 token/题 双曲线）+ --selftest
+#     负例夹具 19 枚随每次 CI 实跑。接线行含两次调用（门面 + selftest），名册计
+#     数/正则计数/逐件在场三臂仍各计 1（grep -c 计行不计次）。判据正本两件
+#     （ci/baselines/harness-regression-set.json + harness-regression-tasks.json）
+#     同批入 GATE_INPUTS 并 update 重钉。
+harness_regression_gate
