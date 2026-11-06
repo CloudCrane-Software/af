@@ -10,4 +10,4 @@ sources: [S049, S053, S177]
 consensus: {corpora: 1, cards: 3}
 experiment: {status: none, exp_id: "-", note: "-"}
 dsl_state: not_applicable
-na_reason: "技能资产的内容级治理规程：策略约束的是「技能文本怎么写才可自动检查、怎么命名命令/路径、触发率与加载成本如何同测」（S177 body.测试设计），属技能资产准入与离线度量；AFB 无技能资产一等公民（sections 的 template_ref 只是提示词装载），无可编译面。"
+na_reason: "技能资产的内容级治理规程：策略约束的是「技能文本怎么写才可自动检查、怎么命名命令/路径、触发率与加载成本如何同测」（S177 body.测试设计），属技能资产准入与离线度量；AFB 无技能资产一等公民（sections 的 template_ref 只是提示词装载），无可编译面。『可自动检查』细则降级承载于技能资产准入 checklist（知识面），本面不注册组件（禁空转件）。"

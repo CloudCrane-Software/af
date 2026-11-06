@@ -10,4 +10,4 @@ sources: [S178, S179]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
 dsl_state: not_applicable
-na_reason: "工程资源配置建议：策略结论是「上下文文件无可测收益，预算从写文件挪到调优文件/验证器」的投入导向（S178 消融设计），属资产管理决策；AFB 的 template_ref 装载不涉及「文件是否值得写」的资源配置语义。"
+na_reason: "工程资源配置建议：策略结论是「上下文文件无可测收益，预算从写文件挪到调优文件/验证器」的投入导向（S178 消融设计），属资产管理决策；AFB 的 template_ref 装载不涉及「文件是否值得写」的资源配置语义。结论=资产管理决策（人类面），入工程资源配置注记。"

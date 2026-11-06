@@ -10,4 +10,4 @@ sources: [S076, S122]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
 dsl_state: not_applicable
-na_reason: "评测有效性方法论：策略内容是「基准污染自查 + 首错自查能力 + 多 judge 不可依赖」的评测纪律（S122 body.测试设计），约束的是实验解释而非运行图；AFB 无「评测有效性协议」语义，投影不产生有意义的图。"
+na_reason: "评测有效性方法论：策略内容是「基准污染自查 + 首错自查能力 + 多 judge 不可依赖」的评测纪律（S122 body.测试设计），约束的是实验解释而非运行图；AFB 无「评测有效性协议」语义，投影不产生有意义的图。三数同报落入实验报告模板栏位（实验面文档），AFB 面零投影。"
