@@ -41,6 +41,8 @@
 //! 判定结果、不表达校准与污染协议（`strategies/st-b-C022.yaml:13` na_reason
 //! 原文），故本能力落在执行面库模块而非新注册组件（不增 components.json 计数）。
 
+use std::cmp::Ordering;
+
 use serde::{Deserialize, Serialize};
 
 /// 三值判定（st-b-C022 的 pass/fail/undecidable）。
@@ -182,18 +184,23 @@ pub fn calibrate(votes: &[JudgeVote]) -> Option<Decision> {
     }
 }
 
-/// 污染**无感**的朴素多数（负例夹具的对照臂）：把**所有**有结论的票（含被
-/// 污染）一并计入多数，`None`（供给面失败）不计。用于证明「污染会制造方向性
-/// 假结论」——与 [`calibrate`]] 的差即污染审计的价值。
-///
-/// 同样透传 null：无一票有结论 ⇒ `None`（不伪造结论）。
+/// 污染**无感**的朴素**多数决**（负例夹具的对照臂）：把**所有**有结论的票
+/// （含被污染）一并计入，票多者胜；平局（双方均 >0）⇒ `Undecidable`；无一票
+/// 有结论 ⇒ `None`（透传 null，不伪造结论）。用于证明「污染会制造方向性假
+/// 结论」——与 [`calibrate`]（干净票 unanimity）的差即污染审计的价值：多数决
+/// 会被少数泄漏票 tipping / 淹没，unanimity 校准则拒判或翻转。
 pub fn naive_majority(votes: &[JudgeVote]) -> Option<Decision> {
     let pass = votes.iter().filter(|v| v.resolved == Some(true)).count();
     let fail = votes.iter().filter(|v| v.resolved == Some(false)).count();
-    match (pass, fail) {
-        (0, 0) => None,
-        (_, 0) => Some(Decision::Pass),
-        (0, _) => Some(Decision::Fail),
-        _ => Some(Decision::Undecidable),
+    match pass.cmp(&fail) {
+        Ordering::Greater => Some(Decision::Pass),
+        Ordering::Less => Some(Decision::Fail),
+        Ordering::Equal => {
+            if pass == 0 {
+                None
+            } else {
+                Some(Decision::Undecidable)
+            }
+        }
     }
 }

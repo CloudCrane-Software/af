@@ -73,8 +73,8 @@ fn audit_contamination_flags_leakage_marker() {
 
 #[test]
 fn audit_contamination_skips_empty_marker_and_dedupes() {
-    // 空串标样不得误命中全文本；重复标样去重。
-    let report = reliab::audit_contamination("anything", &["", "GOLD_PATCH", "GOLD_PATCH"]);
+    // 空串标样不得误命中全文本；重复标样去重（文本须真含 GOLD_PATCH 才命中）。
+    let report = reliab::audit_contamination("resolved: leaked GOLD_PATCH here", &["", "GOLD_PATCH", "GOLD_PATCH"]);
     assert_eq!(report.markers, vec!["GOLD_PATCH".to_string()]);
     // 无禁标样集 ⇒ 恒干净。
     let empty = reliab::audit_contamination("anything at all", &[]);
