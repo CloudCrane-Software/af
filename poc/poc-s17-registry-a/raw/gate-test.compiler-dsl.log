@@ -1,0 +1,632 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.10s
+     Running unittests src/lib.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/af_compiler-28a3f560aa703cae)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/af-compiler-construct.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/af_compiler_construct-bdfb8e570f3ddea2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/af-compiler-plan.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/af_compiler_plan-0b01c00dd501a0a6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/af-compiler-snapshot.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/af_compiler_snapshot-344b924b4354ac91)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/bind_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/bind_test-3c9b5a7a6491de31)
+
+running 20 tests
+test components_files_do_not_touch_graph_manifest_surface ... ok
+test registry_rejects_duplicate_refs_across_files ... ok
+test registry_rejects_endpoint_discipline_violations ... ok
+test registry_rejects_key_ref_over_128_boundary_same_as_harness ... ok
+test registry_rejects_model_route_without_endpoint ... ok
+test registry_rejects_name_containing_at_sign ... ok
+test e9001_malformed_reference_string_is_rejected ... ok
+test e9001_unregistered_reference_is_rejected ... ok
+test e9002_version_mismatch_is_rejected ... ok
+test duplicate_memory_refs_dedup_after_resolution ... ok
+test empty_registry_binds_doc_without_uses_refs ... ok
+test e9002_unversioned_ref_on_multi_version_name_is_rejected ... ok
+test duplicate_component_refs_dedup_after_resolution ... ok
+test escape_injection_point_passes_escape_spec_through ... ok
+test registry_rejects_tool_without_effect_class ... ok
+test e9003_class_mismatch_is_rejected ... ok
+test violations_are_collected_not_first_stopped ... ok
+test repo_components_registry_loads_deterministically ... ok
+test sample3_binds_nested_body_node_to_shared_route ... ok
+test sample2_binds_all_uses_refs_with_first_class_fills ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/construction_build_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/construction_build_test-5a49ab324ff6aca0)
+
+running 3 tests
+test construction_build_compilation_is_bitwise_deterministic ... ok
+test construction_input_type_requires_no_swe_fields ... ok
+test construction_build_compiles_to_submittable_plan_envelope ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/construction_teaching_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/construction_teaching_test-36d44c23026bb3f3)
+
+running 3 tests
+test task_book_embeds_protocol_teaching_and_exact_output_contract ... ok
+test output_contract_block_is_plan_derived_not_hardcoded ... ok
+test assemble_package_end_to_end_teaching_package_verifies ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/diagnostics_cli_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/diagnostics_cli_test-0b853afa76850277)
+
+running 5 tests
+test cli_diagnostics_out_without_value_exits_2 ... ok
+test cli_load_failure_writes_e0001_product ... ok
+test cli_without_flag_writes_no_product_and_keeps_exit_code ... ok
+test cli_bind_failure_writes_e9001_product ... ok
+test cli_success_path_writes_empty_product ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/diagnostics_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/diagnostics_test-f4255bfc95385e08)
+
+running 15 tests
+test empty_file_is_schema_plus_empty_array ... ok
+test enum_serialization_is_frozen ... ok
+test load_envelope_e0001_projects_to_machine_entry ... ok
+test load_shape_e1002_projects_to_machine_entry ... ok
+test stamp_source_file_fills_file_only ... ok
+test schema_key_sets_are_frozen ... ok
+test clean_validate_report_projects_to_empty_diagnostics ... ok
+test bind_e9001_projects_to_machine_entry ... ok
+test bind_e9003_projects_to_machine_entry ... ok
+test projection_is_deterministic ... ok
+test roundtrip_deserialize_matches ... ok
+test clean_bind_projects_to_empty_diagnostics ... ok
+test bind_e9002_projects_to_machine_entry ... ok
+test schema_golden_literal_is_frozen ... ok
+test validate_e2001_projects_to_machine_entry ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/golden_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/golden_test-9f902aaef47764af)
+
+running 12 tests
+test g3_golden_corpus_manifest_closed ... ok
+test sample1_projection_facts ... ok
+test g3_golden_tamper_detection ... ok
+test sample4_sample5_projection_facts ... ok
+test six_golden_samples_pass_full_validation ... ok
+test g3p2_selector_tamper_detection ... ok
+test decode_roundtrip_equals_lowered ... ok
+test g3p2_selector_golden_byte_exact ... ok
+test g3p2_selector_injection_is_load_bearing ... ok
+test six_golden_deterministic_bitwise ... ok
+test g3_golden_corpus_byte_exact ... ok
+test plan_types_cover_every_port_type_base_name ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.46s
+
+     Running tests/inline_body_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/inline_body_test-3a377c4b370469de)
+
+running 4 tests
+test sample3_subgraph_naming_and_loop_map_specs ... ok
+test sample6_nested_loops_and_cross_layer_safety_points ... ok
+test sample4_sample2_subgraph_shapes ... ok
+test inline_body_dimensional_reduction_conserves_nodes_and_edges ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/ir_schema_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/ir_schema_test-4835b189e73d25ec)
+
+running 8 tests
+test envelope_rejects_unknown_top_key ... ok
+test envelope_rejects_version_not_one ... ok
+test envelope_version_is_one ... ok
+test envelope_rejects_non_integer_version ... ok
+test envelope_rejects_missing_version ... ok
+test first_class_placeholder_values_are_empty_defaults ... ok
+test envelope_rejects_unknown_body_field_and_nested_field ... ok
+test first_class_fields_present_in_all_samples ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/lower_error_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/lower_error_test-2fd430019ee8fdfb)
+
+running 2 tests
+test empty_construct_body_is_reported_not_panicked ... ok
+test unvalidated_route_violation_is_reported_not_panicked ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/package_manifest_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/package_manifest_test-a28e92a71352e3fa)
+
+running 10 tests
+test build_manifest_fails_loud_when_package_incomplete ... ok
+test manifest_write_then_verify_roundtrip ... ok
+test verify_marks_absent_manifest_as_explicit_absent_state ... ok
+test manifest_serialization_is_deterministic ... ok
+test verify_keeps_content_tamper_precedence_over_version_mismatch ... ok
+test verify_passes_when_manifest_carries_current_compiler_version ... ok
+test verify_rejects_malformed_manifest ... ok
+test verify_rejects_compiler_version_mismatch ... ok
+test verify_rejects_manifest_missing_compiler_version_field ... ok
+test verify_rejects_tampered_task_or_plan_with_replay_contract_wording ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/plan_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/plan_test-f1c05b3327d5fd45)
+
+running 13 tests
+test builtin_passed_frombody_final_registers_boolean_type_entry ... ok
+test inline_primitive_output_ref_from_body_is_final_matches_normalized ... ok
+test from_body_port_is_final_requires_derived_type_match ... ok
+test unbound_report_refuses_plan_generation ... ok
+test plan_projects_emits_types_and_consumes_contracts ... ok
+test sop_full_v1_1_token_cap_calibrated_to_f4c_measurement ... ok
+test decode_plan_roundtrip_equals_generated ... ok
+test plan_node_exec_projects_context_sections ... ok
+test sample2_plan_shape_matches_contract_skeleton ... ok
+test plan_envelope_is_rejecting ... ok
+test plan_json_pretty_entry_matches_stepwise ... ok
+test gptswarm_plan_carries_escape_specs ... ok
+test gate_samples_ir_and_plan_deterministic_bitwise ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.22s
+
+     Running tests/registry_decl_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/registry_decl_test-1123e7a9966825c7)
+
+running 9 tests
+test decls_table_matches_gate_coverage_counts ... ok
+test decls_s17_a_table_counts ... ok
+test decls_e9001_table_counts ... ok
+test all_s17_a_declarations_resolve_with_expected_impl_ref ... ok
+test all_e9001_declarations_resolve_with_builtin_impl_ref ... ok
+test class_mismatch_against_repo_registry_is_rejected ... ok
+test repo_registry_total_is_57_after_p2l12_expansion ... ok
+test all_50_p2l12_declarations_resolve_with_expected_version_and_class ... ok
+test unversioned_referenced_names_declare_exactly_one_version ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/route_guard_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/route_guard_test-b4bbc1125403f9f3)
+
+running 4 tests
+test sample3_route_guards_mutual_exclusion ... ok
+test sample5_route_guards ... ok
+test sample2_sample6_route_guards ... ok
+test cel_digest_stable_across_compiles ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.12s
+
+     Running tests/stack_safety_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/stack_safety_test-f74f409406b5193c)
+
+running 2 tests
+test deep1001_is_rejected_by_e1054_threshold_regardless_of_build_tier ... ok
+test deep60_dsl_legal_doc_must_not_abort_compiler_in_debug_tier ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running unittests src/lib.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/af_dsl-a0a8317445b7d4fc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/branch_fixtures_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/branch_fixtures_test-7f91cfb5922fe669)
+
+running 4 tests
+test ctx_from_outside_vocab_skips_silently_and_shape_reports_e1004 ... ok
+test ctx_from_in_vocab_is_judged_not_swallowed_by_fallback ... ok
+test inline_primitive_ports_synthesize_kind_defaults ... ok
+test inline_primitive_non_boolean_synth_is_e1053 ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/cel_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/cel_test-8b51123c16d9a9c8)
+
+running 17 tests
+test operator_whitelist_locks_spec_fifteen ... ok
+test unknown_root_rejected_as_e2203 ... ok
+test brackets_inside_string_literals_do_not_count_depth ... ok
+test size_function_rejected_as_e1052 ... ok
+test method_call_rejected_as_e1052 ... ok
+test non_boolean_rejected_as_e1053 ... ok
+test judgment_order_is_parse_then_operators_then_roots_then_boolean ... ok
+test expr_bytes_over_limit_rejected_as_e1054 ... ok
+test ternary_and_negate_not_in_conservative_subset ... ok
+test has_macro_across_line_comment_is_still_rejected ... ok
+test parse_failure_and_parser_panic_both_normalized_to_e1051 ... ok
+test has_macro_rejected_as_e1052 ... ok
+test comments_are_skipped_by_lex_scan ... ok
+test every_whitelisted_operator_is_accepted ... ok
+test sixteen_legal_fixtures_pass_all_three_judgments ... ok
+test nesting_depth_over_limit_rejected_as_e1054 ... ok
+test deep_expression_parses_on_default_stack_thread ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running tests/construct_conflict_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/construct_conflict_test-29492cefe298f19b)
+
+running 2 tests
+test loop_alone_and_map_alone_still_pass ... ok
+test loop_plus_map_on_same_node_is_e2212 ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/envelope_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/envelope_test-910dc7d1ecd6f57a)
+
+running 12 tests
+test float_version_is_e0002 ... ok
+test bool_version_is_e0002 ... ok
+test missing_version_key_is_e0001 ... ok
+test negative_version_is_e0003 ... ok
+test multiple_unknown_top_keys_collect_all ... ok
+test non_mapping_root_is_e0001 ... ok
+test string_version_is_e0002 ... ok
+test unknown_top_key_is_e0004 ... ok
+test valid_envelope_proceeds_to_shape_layer ... ok
+test version_two_rejects_without_parsing_body ... ok
+test version_u64_above_i64_max_is_e0003_not_e0002 ... ok
+test yaml_syntax_error_is_e0001 ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/farm_anomalies_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/farm_anomalies_test-3e86b955884dfa9d)
+
+running 14 tests
+test b60_empty_nodes_reports_e2001_not_panic ... ok
+test al08_failures_route_into_body_rejected_as_e2204 ... ok
+test d209_blast_reports_e2205 ... ok
+test iv48_dual_same_type_output_ports_now_e2202 ... ok
+test al09_budget_scope_into_body_is_confirmed_semantics ... ok
+test entry_and_output_from_calibers_cannot_diverge_post_e1008 ... ok
+test m001_output_ref_unregistered_reports_e2205 ... ok
+test ce04_has_macro_rejected_as_e1052 ... ok
+test alias_family_dotted_ids_rejected_as_e1008 ... ok
+test alias_false_kills_now_reject_for_e1008 ... ok
+test documented_boundaries_stay_pass ... ok
+test off_table_flips_are_designed_rejections ... ok
+test cel_crashers_report_e1054_not_sigabrt ... ok
+test cel_threshold_passers_still_pass ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+     Running tests/inv1_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/inv1_test-355e1f01aa781890)
+
+running 37 tests
+test llm_node_reads_unknown_store_is_e2001_only ... ok
+test latest_k_with_zero_k_is_e2401 ... ok
+test all_context_codes_collected_in_one_report ... ok
+test arg_not_in_formals_is_e2402 ... ok
+test input_field_not_in_schema_is_e2301 ... ok
+test edge_port_not_incoming_is_e2301 ... ok
+test map_implicit_item_not_visible_at_root_is_e2402 ... ok
+test in_port_referenced_twice_is_e2304 ... ok
+test latest_k_without_args_k_is_e2401 ... ok
+test llm_node_reads_mixed_stores_lists_declared_only_in_e2303 ... ok
+test llm_node_reads_store_is_e2303 ... ok
+test non_llm_node_in_edges_without_context_is_clean ... ok
+test non_llm_node_with_context_in_port_not_sectioned_is_clean ... ok
+test quota_zero_with_policy_none_on_non_store_is_e2401_and_e2302 ... ok
+test llm_node_without_context_and_in_edges_is_e2304 ... ok
+test policy_on_template_section_is_e2401 ... ok
+test quota_zero_with_policy_none_on_store_is_legal ... ok
+test non_llm_node_reads_store_is_fine ... ok
+test retrieve_without_args_k_is_e2401 ... ok
+test quota_zero_is_e2302 ... ok
+test retrieve_without_component_is_e2401 ... ok
+test section_missing_source_field_is_e2301 ... ok
+test store_section_missing_store_name_is_e2301_and_e2401 ... ok
+test store_not_declared_is_e2301 ... ok
+test store_view_policy_on_input_section_is_e2401 ... ok
+test store_policy_unknown_is_e2401 ... ok
+test spec_inv1_fixture_triggers_exactly_e2301_e2303 ... ok
+test store_policy_missing_is_e2401 ... ok
+test summarize_without_component_is_e2401 ... ok
+test template_vars_literal_and_valid_refs_are_clean ... ok
+test template_vars_empty_ref_is_e2403 ... ok
+test template_vars_input_field_dangling_is_e2403 ... ok
+test template_vars_arg_dangling_is_e2403 ... ok
+test uncovered_in_port_is_e2304 ... ok
+test arg_resolution_walks_scope_chain_outward ... ok
+test total_quota_cap_is_configurable_and_default_off ... ok
+test six_golden_samples_pass_full_m2_validation ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/inv2_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/inv2_test-454cad788309ac1d)
+
+running 11 tests
+test multi_writer_message_still_says_not_sole ... ok
+test sole_writer_mismatch_message_says_mismatch_not_multi ... ok
+test two_writers_is_e2311 ... ok
+test sole_writer_differs_from_declared_is_e2311 ... ok
+test zero_writer_is_tolerated_in_m1 ... ok
+test spec_inv2_fixture_triggers_e2312_and_e2322 ... ok
+test nested_body_write_requires_outer_carried_too ... ok
+test uncovered_outer_store_written_in_body_is_e2211 ... ok
+test all_inv2_codes_collected_in_one_report ... ok
+test writer_declared_as_body_path_matches ... ok
+test six_golden_samples_pass_full_m1_validation ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/inv3_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/inv3_test-2056c3debba1c396)
+
+running 10 tests
+test check_consuming_other_producer_is_clean ... ok
+test task_self_loop_is_not_e2321 ... ok
+test indirect_self_verification_not_flagged_v01 ... ok
+test verifier_consuming_builtin_passed_of_other_check_is_clean ... ok
+test two_self_edges_report_two_e2321 ... ok
+test human_marked_node_self_loop_is_e2321 ... ok
+test gate_self_loop_is_e2321 ... ok
+test spec_inv3_fixture_triggers_exactly_e2321 ... ok
+test loop_body_check_self_loop_is_e2321 ... ok
+test six_golden_samples_pass_full_m3_validation ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/inv4_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/inv4_test-1a770f3382a0b282)
+
+running 12 tests
+test check_with_unit_reading_eval_input_store_is_clean ... ok
+test check_without_unit_reading_eval_input_store_is_e2331 ... ok
+test non_eval_input_store_is_freely_readable ... ok
+test dangling_writer_suppresses_e2331_noise ... ok
+test gate_with_unit_reading_eval_input_store_is_e2331 ... ok
+test two_offenders_report_two_e2331_in_path_order ... ok
+test writer_reading_own_eval_input_store_is_clean ... ok
+test plain_task_reading_eval_input_store_is_e2331 ... ok
+test section_reference_to_eval_input_store_is_e2331 ... ok
+test spec_inv4_fixture_triggers_exactly_e2331_with_e2303 ... ok
+test sample4_answers_ref_readers_stay_clean ... ok
+test six_golden_samples_pass_full_m3_validation ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/loop_guard_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/loop_guard_test-41c312577437ffa1)
+
+running 18 tests
+test safety_point_human_on_human_node_is_clean ... ok
+test safety_point_on_task_node_is_e2322 ... ok
+test safety_point_message_carries_paths ... ok
+test safety_point_check_on_check_is_clean ... ok
+test three_guards_collected_in_one_report ... ok
+test safety_point_gate_on_gate_is_clean ... ok
+test empty_safety_points_is_e2004 ... ok
+test carried_bytes_only_bound_is_clean ... ok
+test unbounded_carried_and_uncovered_are_distinct_codes ... ok
+test safety_point_kind_mismatch_is_e2322 ... ok
+test empty_safety_points_message_carries_loop_path ... ok
+test zero_max_iterations_is_e2002 ... ok
+test dangling_safety_point_stays_e2107_only ... ok
+test safety_point_human_on_plain_node_is_e2322 ... ok
+test unbounded_carried_is_e2002 ... ok
+test fully_guarded_loop_is_clean ... ok
+test two_loops_both_reported ... ok
+test zero_max_iterations_message_carries_loop_path ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/m4_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/m4_test-77bd8a568d9f4d44)
+
+running 15 tests
+test item_visible_inside_map_body_assert ... ok
+test assert_bare_inputs_value_is_not_boolean_e1053 ... ok
+test exit_when_non_boolean_is_e1053 ... ok
+test item_assert_inside_map_body_judged_with_item_root ... ok
+test assert_inputs_binding_from_incoming_edges ... ok
+test stop_when_node_id_root_not_in_global_vocabulary ... ok
+test stop_when_unknown_root_is_e2203 ... ok
+test cel_judgment_and_reference_checks_collect_together ... ok
+test resume_visible_from_human_node_route_in_same_scope ... ok
+test exit_when_body_node_root_resolves_through_scope_chain ... ok
+test exit_when_attempt_and_scope_chain_roots_pass ... ok
+test stop_when_non_boolean_is_e1053 ... ok
+test assert_unknown_root_is_e2203 ... ok
+test stop_when_valid_global_vocabulary_passes ... ok
+test exit_when_unknown_root_is_e2203 ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/parse_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/parse_test-4e4d98f94aef9652)
+
+running 41 tests
+test edge_without_from_is_e1002 ... ok
+test escape_kind_outside_seven_is_e1004 ... ok
+test body_without_nodes_is_e1002 ... ok
+test escape_without_accounting_field_is_e1002 ... ok
+test inline_object_schema_on_port_is_e1003 ... ok
+test malformed_type_expression_is_e1003 ... ok
+test from_body_with_extra_key_is_rejected ... ok
+test node_without_id_is_e1002 ... ok
+test negative_into_unsigned_is_e2002_not_e1004 ... ok
+test non_numeric_max_iterations_is_e1003 ... ok
+test non_type_port_value_is_e1003 ... ok
+test route_without_default_is_e1002 ... ok
+test safety_point_kind_evaluator_is_e1004 ... ok
+test unknown_failure_class_is_e1004 ... ok
+test unknown_budget_dimension_is_e1004 ... ok
+test unknown_field_in_human_is_e1001 ... ok
+test unknown_field_in_loop_is_e1001 ... ok
+test unknown_field_in_meta_is_e1001 ... ok
+test unknown_field_in_node_is_e1001 ... ok
+test unknown_field_in_budget_is_e1001 ... ok
+test topology_selector_parses_structurally ... ok
+test unknown_field_in_edge_is_e1001 ... ok
+test unknown_field_in_carried_is_e1001 ... ok
+test unknown_field_in_op_is_e1001 ... ok
+test nested_generic_type_expression_is_e1003 ... ok
+test unknown_field_in_section_is_e1001 ... ok
+test unknown_field_in_safety_point_is_e1001 ... ok
+test unknown_field_in_route_is_e1001 ... ok
+test escape_with_adjudicated_kind_parses ... ok
+test unknown_lifecycle_is_e1004 ... ok
+test unknown_retention_policy_is_e1004 ... ok
+test unknown_field_in_store_is_e1001 ... ok
+test human_resume_schema_shapes_are_gated_e1003 ... ok
+test unknown_field_in_uses_is_e1001 ... ok
+test unknown_field_in_topology_selector_is_e1001 ... ok
+test unknown_field_in_escape_is_e1001 ... ok
+test unknown_stop_outcome_is_e1004 ... ok
+test unknown_store_type_is_e1004 ... ok
+test non_object_schema_is_e1003 ... ok
+test nested_human_resume_schema_shapes_are_gated_e1003 ... ok
+test six_golden_samples_parse ... ok
+
+test result: ok. 41 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/refs_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/refs_test-a422f95442145376)
+
+running 48 tests
+test budget_loop_scope_requires_loop_construct ... ok
+test duplicate_node_ids_is_e2003 ... ok
+test dual_same_type_emit_ports_ambiguate_output ... ok
+test budget_cap_zero_is_e2207 ... ok
+test budget_scope_dangling_is_e2207 ... ok
+test edge_endpoint_ghost_is_e2001 ... ok
+test edge_input_port_not_consumed_is_e2201 ... ok
+test edge_output_port_missing_is_e2201 ... ok
+test edge_type_mismatch_is_e2201 ... ok
+test duplicate_store_names_is_e2003 ... ok
+test entry_ghost_is_e2001 ... ok
+test emits_unknown_type_is_e2205 ... ok
+test envelope_payload_unknown_type_is_e2205 ... ok
+test duplicate_type_names_is_e2003 ... ok
+test failure_route_dangling_is_e2204 ... ok
+test failure_route_keywords_and_nodes_are_ok ... ok
+test list_payload_unknown_type_is_e2205 ... ok
+test failure_fallback_route_dangling_is_e2204 ... ok
+test map_over_input_field_dangling_is_e2105 ... ok
+test map_over_input_field_not_array_is_e2104 ... ok
+test from_body_port_dangling_is_e2106 ... ok
+test from_body_node_dangling_is_e2106 ... ok
+test builtin_done_conflicting_declaration_is_rejected ... ok
+test explicit_builtin_passed_declaration_is_not_double_counted ... ok
+test builtin_done_port_still_feeds_edges ... ok
+test carried_unknown_store_is_e2001 ... ok
+test map_frombody_inline_primitive_is_rejected ... ok
+test builtin_passed_conflicting_declaration_is_rejected ... ok
+test explicit_builtin_done_declaration_is_not_double_counted ... ok
+test loop_args_ref_dangling_is_e2105 ... ok
+test loop_frombody_builtin_passed_still_passes ... ok
+test loop_node_builtin_done_port_feeds_edge ... ok
+test meta_input_unknown_type_is_e2205 ... ok
+test map_over_node_dangling_is_e2105 ... ok
+test map_over_port_not_list_is_e2104 ... ok
+test minimal_base_doc_validates_clean ... ok
+test builtin_port_from_body_spec_is_rejected_as_shadowed ... ok
+test output_from_ghost_is_e2001 ... ok
+test two_distinct_same_type_ports_still_reject_as_e2202 ... ok
+test output_type_not_emitted_is_e2202 ... ok
+test writes_unknown_store_is_e2001 ... ok
+test reads_unknown_store_is_e2001 ... ok
+test safety_point_dangling_is_e2107 ... ok
+test store_item_unknown_type_is_e2205 ... ok
+test same_id_in_different_scopes_is_ok ... ok
+test store_retention_unbounded_is_e2208 ... ok
+test writer_path_ghost_is_only_e2001 ... ok
+test builtin_only_terminal_is_rejected_e2202 ... ok
+
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/registry_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/registry_test-bc492fa023a5171e)
+
+running 20 tests
+test parse_rejects_at_sign_in_name_or_version ... ok
+test parse_rejects_duplicate_ref_within_manifest ... ok
+test parse_rejects_empty_graph_fields ... ok
+test parse_rejects_empty_graphs_list ... ok
+test parse_rejects_empty_package_name ... ok
+test parse_rejects_missing_source_field ... ok
+test parse_rejects_unknown_field ... ok
+test parse_valid_manifest_composes_versioned_refs ... ok
+test registry_options_only_touches_declared_graphs ... ok
+test scan_builds_sorted_ref_set_from_fixture_packages ... ok
+test scan_empty_root_yields_empty_registry_fail_closed ... ok
+test repo_packages_registry_covers_all_four_draft_refs ... ok
+test scan_cross_package_duplicate_ref_is_error ... ok
+test scan_invalid_manifest_is_error ... ok
+test scan_root_not_dir_is_error ... ok
+test scan_package_dir_without_manifest_is_error ... ok
+test scan_skips_non_package_files ... ok
+test scan_missing_root_is_error ... ok
+test repo_packages_registry_strictly_matches_draft_refs ... ok
+test injection_closes_e2001_but_default_still_rejects ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/route_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/route_test-8d3198882f2f0800)
+
+running 21 tests
+test default_exit_produces_negated_disjunction_exit_guard ... ok
+test default_exit_without_rules_is_true_guard ... ok
+test default_exit_with_exit_rules_joins_disjunction ... ok
+test duplicate_target_is_e2103_for_rule_rule_and_rule_default ... ok
+test exit_branches_produce_no_edge_and_union_guard ... ok
+test multiple_exit_rules_are_benign_and_union ... ok
+test no_rules_default_guard_is_literal_true ... ok
+test single_rule_guards_are_when_and_negated_when ... ok
+test route_without_default_is_rejected_as_e1002 ... ok
+test uncovered_out_edge_is_e2101 ... ok
+test unknown_goto_is_e2102_for_rule_and_default ... ok
+test two_rules_priority_prefixes_later_guard ... ok
+test route_when_non_boolean_is_e1053 ... ok
+test bare_passed_is_legal_on_verification_node_route ... ok
+test route_when_non_subset_function_is_e1052 ... ok
+test route_uncovered_out_edge_is_exactly_e2101 ... ok
+test route_goto_unknown_target_is_exactly_e2102 ... ok
+test route_when_unknown_root_is_e2203 ... ok
+test branch_guards_are_mutually_exclusive_and_collectively_exhaustive ... ok
+test route_duplicate_target_is_exactly_e2103 ... ok
+test six_golden_samples_pass_full_m4_validation ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/selector_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/selector_test-a2cbf77edea2d8b7)
+
+running 10 tests
+test selector_without_fallback_is_rejected_as_e1002 ... ok
+test selector_when_unknown_root_is_e2203 ... ok
+test declared_set_is_a_set ... ok
+test declared_set_membership_does_not_excuse_unversioned_form ... ok
+test unversioned_candidate_form_is_e2001 ... ok
+test undeclared_fallback_is_e2001_even_when_rules_declared ... ok
+test undeclared_rule_candidate_is_e2001_with_default_empty_registry ... ok
+test selector_when_node_id_root_is_not_in_global_vocabulary ... ok
+test declared_versioned_candidates_pass_clean ... ok
+test selector_when_non_subset_function_is_e1052 ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/strategy_library_test.rs (/data/bench/targets/s17-registry-batch-a/debug/deps/strategy_library_test-6a44fa07159cb9b3)
+
+running 1 test
+test strategy_library_entries_compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+   Doc-tests af_compiler
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests af_dsl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
