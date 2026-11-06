@@ -79,16 +79,24 @@ LLM 判官（`route.judge@1`）上线后同理用本夹具验证对齐率。
 - 本批仓面改动**仅** `tools/trace_attribution_batch.py`（新增）+ `poc/poc-s17-trace-attribution/**`（新增）；
   未改任何既有文件（故无 `.bak`——`.bak` 纪律只针对被改文件）。
 - 判据件 `ci/strategies_check.py` / `ci/criteria.yaml` / `ci/baselines/gate-inputs.sha256` 及
-  `ci/run.sh` 门、`strategies/` 三态、`af/packages/` 注册表、`crates/` 源码**零改动**（`git status` +
-  `git diff --stat` 对账，见下）。
-- 门绿（anolis 走 cargo，本机禁）：`python3 -B ci/strategies_check.py` ⇒ exit 0（四行 INFO 全绿；
-  计数 compilable=44/needs_syntax=0/not_applicable=17 与本批基线一致——本批不触及三态）。
+  `ci/run.sh` 门、`strategies/` 三态、`af/packages/` 注册表、`crates/` 源码**零改动**
+  （`git diff --stat 04b5a5ea HEAD` = 仅本批 16 个新增文件，见 §八）。
+- **门绿（anolis 走 cargo，本机永禁）**：对本分支 commit `98590624`（worktree
+  `/data/bench/wt/s17-trace-attribution-batch`，`CARGO_TARGET_DIR=/data/bench/targets/s17-trace-attribution-batch`）
+  实跑 `env -u <proxies> LC_CTYPE=C.UTF-8 python3 -B ci/strategies_check.py` ⇒ **exit 0**：
+  R0 入库对账 OK（66 件跟踪）、R5 跨树集合一致（基线 HEAD `98590624e084`，only-in-worktree=0
+  only-in-head=0 content-diff=0）、计数 total=61 / compilable=44 / not_applicable=17（与基线一致，
+  本批不触及三态）、R4 编译断言经 af-dsl 装载测试通过。证据 `raw/gate-strategies-check-anolis.log`
+  （末行 `GATE_RC=0`）。
 
 ## 八、复跑与指纹
 
-- 复跑：`bash poc/poc-s17-trace-attribution/run-readings.sh`（cd 仓根、全相对路径、零网络、只读）。
-- 分支 `feature/s17-trace-attribution-batch`（base `origin/product/main` = `04b5a5ea`）。
-- 关键读数：真实 p3-a1 分布（`readings/report-real-p3a1.json`）；对齐率 900 milli
-  （`readings/align-fixture.json`）；corpus 全量 16/6/10（`readings/report-corpus.json`）。
--  taxonomy 映射锚：`crates/af-execline/src/error.rs:87-95`（EX 码语义）、
+- 复跑读数：`bash poc/poc-s17-trace-attribution/run-readings.sh`（cd 仓根、全相对路径、零网络、只读）。
+- 分支 `feature/s17-trace-attribution-batch`（base `origin/product/main` = `04b5a5ea`）；
+  本批 commit `98590624`（父 `04b5a5ea`，`git diff --stat 04b5a5ea 98590624` = 16 文件全新增、
+  零既有文件改动）。anolis 门绿见 §七 + `raw/gate-strategies-check-anolis.log`。
+- 关键读数：真实 p3-a1 分布（`readings/report-real-p3a1.json`，3 轨迹/1 resolved/2 syntax_error）；
+  对齐率 900 milli（`readings/align-fixture.json`，labeled=10，1 分歧 fix-amb-1）；
+  corpus 全量 16/6/10（`readings/report-corpus.json`）。
+- taxonomy 映射锚：`crates/af-execline/src/error.rs:87-95`（EX 码语义）、
   `crates/af-execline/src/record.rs:213-244`（record 行形状）、`sweng.rs:680-681`（null=供给面失败）。
