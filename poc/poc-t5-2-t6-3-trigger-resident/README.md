@@ -17,8 +17,8 @@
 | a | 「三个落点：`tools/trigger-inbox.py`（收件/验签/落盘）、`tools/event-router.py` poll_triggers 消费腿（读侧）、**本目录**（契约与注册表正本）」 | `af/poc/poc-super-agent/contracts/af.trigger.v1.md:5-6`（契约在 af 仓内，其「本目录」= `poc/poc-super-agent/contracts/`，注册表正本同仓） | **af 仓内** `af/tools/`（该目录已存在，内有 `gate-item-emit.py` 等 4 件） |
 | b | 「本体 `tools/trigger-inbox.py` 的 bind 可配与拉起由主代理串行执行」＋ `WS = "/home/pan-ding/workspace/agent黑灯工厂"`（:232） | `tools/factory-keepalive.py:101-112`（工作区级文件） | **工作区级** `tools/` |
 | c | `WS = "/home/pan-ding/workspace/agent黑灯工厂"`；`INBOX_TOOL = os.path.join(WS, "tools", "trigger-inbox.py")` | `af/poc/poc-super-agent/tests/selfcheck.py:49,54` | **工作区级** `tools/`（af 仓的 PoC 自检面**跨仓**指向工作区那份） |
-| d | `trigger-inbox 起（100.64.0.8:8765，home=/home/pan-ding/workspace/agent黑灯工厂/af-state/triggers，sources=['gitea-webhook']…）` | `状态观测/trigger-inbox.log:1`（最后在役实例的自述行） | 最后在役跑的是**工作区级**那份，且**绑的是 tailnet 私网 IP 100.64.0.8（非回环）** |
-| e | 门户转发腿的转发目标写死 `http://100.64.0.8:8765/inbox/gitea-webhook`（env `AF_TRIGGER_INBOX_URL` 可覆盖） | `tools/af-jobs-portal.py:148-149` | gov → 本机 **8765 走 tailnet 私网 IP**（非回环） |
+| d | `trigger-inbox 起（<内网地址>:8765，home=/home/pan-ding/workspace/agent黑灯工厂/af-state/triggers，sources=['gitea-webhook']…）` | `状态观测/trigger-inbox.log:1`（最后在役实例的自述行） | 最后在役跑的是**工作区级**那份，且**绑的是 tailnet 私网 IP <内网地址>（非回环）** |
+| e | 门户转发腿的转发目标写死 `http://<内网地址>:8765/inbox/gitea-webhook`（env `AF_TRIGGER_INBOX_URL` 可覆盖） | `tools/af-jobs-portal.py:148-149` | gov → 本机 **8765 走 tailnet 私网 IP**（非回环） |
 | f | 现役件内容差异：工作区级那份比 PoC 原件多 3 处 `AF_TRIGGER_BIND` 改动（bind 行可配 + 两处日志/文案） | `diff poc/poc-super-agent/tools-mirror/trigger-inbox.py tools/trigger-inbox.py`（改前） | 工作区级那份是**生产接线批（2026-11-03）加过 bind 豁免**的版本 |
 
 **★ 任务书前提与盘面不符的两处（如实登记，不按前提施工）**：
@@ -100,8 +100,8 @@ curl -s http://127.0.0.1:8765/healthz
 
 ```bash
 # 与序列 A 相同，只把 ① 换成（**多一个显式确认**，缺确认直接拒起 exit 3）：
-export AF_TRIGGER_BIND=100.64.0.8
-export AF_TRIGGER_BIND_ACK=100.64.0.8      # 确认值必须与绑定地址同字面
+export AF_TRIGGER_BIND=<内网地址>
+export AF_TRIGGER_BIND_ACK=<内网地址>      # 确认值必须与绑定地址同字面
 ```
 
 **两条序列的取舍（★ **已由主代理拍板＝序列 B**——因「拉起闸 = 主代理」本就是主代理的闸；
@@ -110,7 +110,7 @@ export AF_TRIGGER_BIND_ACK=100.64.0.8      # 确认值必须与绑定地址同�
 | | 序列 A（回环） | 序列 B（tailnet 私网） |
 |---|---|---|
 | 本批纪律 | ✅ 满足「只许绑 127.0.0.1 / 禁非回环监听」字面 | ⚠️ 非回环（但**显式确认 + 可审计 + 拒起即 fail-loud**，杜绝误配即宽暴露） |
-| 现役 Fast Path | ❌ **断链**：gov 门户转发目标写死 `100.64.0.8:8765`（`tools/af-jobs-portal.py:148-149`），回环绑定 ⇒ 连接被拒 ⇒ 门户回结构化 502；本批禁反代/隧道，无本地中继可补 | ✅ 保链（2026-11-03 端到端 202 已实证；ACL 只放行 gov→pandev {2222,8765}） |
+| 现役 Fast Path | ❌ **断链**：gov 门户转发目标写死 `<内网地址>:8765`（`tools/af-jobs-portal.py:148-149`），回环绑定 ⇒ 连接被拒 ⇒ 门户回结构化 502；本批禁反代/隧道，无本地中继可补 | ✅ 保链（2026-11-03 端到端 202 已实证；ACL 只放行 gov→pandev {2222,8765}） |
 | 暴露面 | 回环，唯一面最小 | tailnet 私网单口 + headscale ACL 双闸（gov→pandev 仅 8765 一条） |
 
 ⇒ **（施工批当时口径）本批不替主代理选**：本批只把「非回环必须显式确认」做成**代码级 fail-loud 闸**
@@ -122,7 +122,7 @@ export AF_TRIGGER_BIND_ACK=100.64.0.8      # 确认值必须与绑定地址同�
 
 #### 2.2-A ★ bind 取值裁决（返修批落定，2026-11-05；主代理已裁决）
 
-**裁决＝序列 B**：`AF_TRIGGER_BIND=100.64.0.8` ＋ `AF_TRIGGER_BIND_ACK=100.64.0.8`
+**裁决＝序列 B**：`AF_TRIGGER_BIND=<内网地址>` ＋ `AF_TRIGGER_BIND_ACK=<内网地址>`
 （端口 `AF_TRIGGER_INBOX_PORT=8765`）。**拉起闸＝主代理**（本就是主代理的闸）⇒ 施工批
 只把「非回环须显式确认」做成 fail-loud 代码闸，**不替主代理选**；现由主代理拍板如下。
 
@@ -130,17 +130,17 @@ export AF_TRIGGER_BIND_ACK=100.64.0.8      # 确认值必须与绑定地址同�
 
 | # | 依据 | 出处（逐字） | 指向 |
 |---|---|---|---|
-| ① | 生产接线批的**同款终态建议**：「收件箱拉起（闸在主代理）：bind 终态建议=100.64.0.8:8765（gitea 链需要；127.0.0.1 腿已被 ACL 变更+端到端证明不必要）」 | `30-工件/janitor-20261103/prod-wiring-report.md:74` | bind 终态＝`100.64.0.8:8765` |
-| ② | 门户转发目标**写死**：`TRIGGER_INBOX_URL = os.environ.get("AF_TRIGGER_INBOX_URL", "http://100.64.0.8:8765/inbox/gitea-webhook")` | `tools/af-jobs-portal.py:148-149` | 回环绑定 ⇒ 门户转发**断链** |
+| ① | 生产接线批的**同款终态建议**：「收件箱拉起（闸在主代理）：bind 终态建议=<内网地址>:8765（gitea 链需要；127.0.0.1 腿已被 ACL 变更+端到端证明不必要）」 | `30-工件/janitor-20261103/prod-wiring-report.md:74` | bind 终态＝`<内网地址>:8765` |
+| ② | 门户转发目标**写死**：`TRIGGER_INBOX_URL = os.environ.get("AF_TRIGGER_INBOX_URL", "http://<内网地址>:8765/inbox/gitea-webhook")` | `tools/af-jobs-portal.py:148-149` | 回环绑定 ⇒ 门户转发**断链** |
 | ③ | headscale ACL：「gov(srv-1)→pandev 现仅放行 {2222, 8765}（原只有 2222；此即 …：**8765 为 af.trigger.v1 收件箱 gitea 触发链专用**）」 | `状态/网络与出口.md:96` | 8765 **单条专用**、非公网、**非** portal 当年 `0.0.0.0` 经 caddy 三公网入口那种暴露 |
-| ④ | 上一在役实例本来就是 `100.64.0.8:8765`：`trigger-inbox 起（100.64.0.8:8765，home=…，sources=['gitea-webhook']…）` | `状态观测/trigger-inbox.log:1` | 上一实例的 bind 实测值 |
+| ④ | 上一在役实例本来就是 `<内网地址>:8765`：`trigger-inbox 起（<内网地址>:8765，home=…，sources=['gitea-webhook']…）` | `状态观测/trigger-inbox.log:1` | 上一实例的 bind 实测值 |
 
 **★ 序列 A（只绑回环）不采用——理由**：
 
 1. **断链**：门户转发目标**写死私网 IP**（依据②）⇒ 只绑 `127.0.0.1` ⇒ 门户连本机被拒 ⇒
    门户回**结构化 502**（上游 `upstream_status` 502），gitea→收件箱链**断**；
 2. **无本地中继可补**：本批**禁反代/隧道**（且禁新增守护）⇒ 回环形态下**没有**任何
-   在本机把 `100.64.0.8:8765` 转接到 `127.0.0.1:8765` 的合法路径 ⇒ 「最小暴露面」换来的是
+   在本机把 `<内网地址>:8765` 转接到 `127.0.0.1:8765` 的合法路径 ⇒ 「最小暴露面」换来的是
    「链断」，**不划算**；
 3. **序列 B 的暴露面并不宽**：非回环**不是**通配——`0.0.0.0`/`::`/空仍**一律拒起 exit 3**；
    tailnet 私网单口另有**上游 ACL 双闸**（依据③：gov→pandev **仅** {2222, 8765}、非公网）
@@ -157,9 +157,9 @@ export AF_TRIGGER_BIND_ACK=100.64.0.8      # 确认值必须与绑定地址同�
 **★ 裁决的执行态实测（返修批亲读，非自述）**：主代理已于 **2026-11-04 23:57:55** 按序列 B
 起生产收件箱 —— 在役进程 `pid=1523087`、`cmd=python3 tools/trigger-inbox.py`、
 cwd=`/home/pan-ding/workspace/agent黑灯工厂`（⇒ 跑的是**工作区级在役运行位**）、
-`/proc/1523087/environ` 实读 `AF_TRIGGER_BIND=100.64.0.8` ＋ `AF_TRIGGER_BIND_ACK=100.64.0.8`
-＋ `AF_TRIGGER_INBOX_PORT=8765`；`ss -lntp` 命中 `LISTEN 100.64.0.8:8765`；
-`状态观测/trigger-inbox.log` 首行自述「绑定面确认：非回环 100.64.0.8（AF_TRIGGER_BIND_ACK
+`/proc/1523087/environ` 实读 `AF_TRIGGER_BIND=<内网地址>` ＋ `AF_TRIGGER_BIND_ACK=<内网地址>`
+＋ `AF_TRIGGER_INBOX_PORT=8765`；`ss -lntp` 命中 `LISTEN <内网地址>:8765`；
+`状态观测/trigger-inbox.log` 首行自述「绑定面确认：非回环 <内网地址>（AF_TRIGGER_BIND_ACK
 已显式确认…）」⇒ **裁决与在役态一致**。
 
 ### 2.3 为什么是 bind → secret（顺序有因）
@@ -210,7 +210,7 @@ LISTEN 0      5      127.0.0.1:18765      0.0.0.0:*    users:(("python3",pid=147
   （注：LISTEN 行第 5 列的 `0.0.0.0:*` 是**对端列**，不是绑定面；判定按本地地址列）。
 - 非回环绑定检查：`ONLY-LOOPBACK`；`0.0.0.0:<port>` 绑定计数 = **ZERO**。
 - bind 闸实测：`AF_TRIGGER_BIND=0.0.0.0` ⇒ **exit 3**（`绑定地址被拒（'0.0.0.0'）——通配/空绑定
-  一律禁起`）；非回环且无 `AF_TRIGGER_BIND_ACK` ⇒ **exit 3**（`绑定地址被拒（100.64.0.8）——
+  一律禁起`）；非回环且无 `AF_TRIGGER_BIND_ACK` ⇒ **exit 3**（`绑定地址被拒（<内网地址>）——
   非回环绑定须显式确认`）。两次都**未真正监听**（进程起即退）。
 - **停机读数**（`raw/stop-reading.txt`）：`trigger-inbox` 在役进程 **EMPTY（零进程）**；
   `8765/18765/18766` 监听行 **EMPTY**；停机返回码 `-15`（SIGTERM）。
@@ -476,7 +476,7 @@ alarms.log : ['trigger-inbox-source-silent@2026-11-04 23:39:39']
 > 2026-11-04 23:57:55 按序列 B 起在役）。
 
 1. **★ bind 取值是主代理裁决项，本批不替主代理选**：本批纪律字面要求「只许绑 127.0.0.1」，而
-   现役 Fast Path（gov 门户 → `100.64.0.8:8765`，ACL 只放行 gov→pandev 8765）需要 tailnet 私网
+   现役 Fast Path（gov 门户 → `<内网地址>:8765`，ACL 只放行 gov→pandev 8765）需要 tailnet 私网
    绑定。两条序列与后果见 §2.2；本批**不启动任何非回环监听**，只把非回环做成**显式确认+拒起
    fail-loud**（不可误配成宽暴露）。**主代理按序列 A 拉起 ⇒ gitea→收件箱链断（门户 502）；按
    序列 B 拉起 ⇒ 保链但监听面为 tailnet 私网。**
@@ -619,7 +619,7 @@ $ git diff --numstat docs/adr/README.md
 
 ### 7.5 必做④：bind 取值裁决落地（主代理已裁＝**序列 B**）
 
-- **裁决**：`AF_TRIGGER_BIND=100.64.0.8` ＋ `AF_TRIGGER_BIND_ACK=100.64.0.8`（端口 8765）。
+- **裁决**：`AF_TRIGGER_BIND=<内网地址>` ＋ `AF_TRIGGER_BIND_ACK=<内网地址>`（端口 8765）。
 - **落点**：① **ADR-015 决策 2**（含裁决、四条依据、「序列 A 不采用」理由、且声明不改 bind 闸语义）；
   ② **本证据 §2.2-A**（同内容＋**裁决的执行态实测**）。
   原「待主代理拍板」处已改为**已裁定**（§2.2 标题与「两条序列的取舍」引语均已改；原「本批不替主代理选」
@@ -630,9 +630,9 @@ $ git diff --numstat docs/adr/README.md
 - **★ 裁决与在役态一致（返修批亲读，非自述）**：主代理已于 **2026-11-04 23:57:55** 按序列 B 起生产收件箱：
   `pid=1523087`、`cmd=python3 tools/trigger-inbox.py`、`cwd=/home/pan-ding/workspace/agent黑灯工厂`
   （⇒ 跑的是**工作区级在役运行位**）、`/proc/1523087/environ` 实读
-  `AF_TRIGGER_BIND=100.64.0.8` ＋ `AF_TRIGGER_BIND_ACK=100.64.0.8` ＋ `AF_TRIGGER_INBOX_PORT=8765`
-  （**段B secret 键名在位、值不回显**）；`ss -lntp` 命中 `LISTEN 100.64.0.8:8765`；
-  `状态观测/trigger-inbox.log` 首行「绑定面确认：非回环 100.64.0.8（AF_TRIGGER_BIND_ACK 已显式确认…）」。
+  `AF_TRIGGER_BIND=<内网地址>` ＋ `AF_TRIGGER_BIND_ACK=<内网地址>` ＋ `AF_TRIGGER_INBOX_PORT=8765`
+  （**段B secret 键名在位、值不回显**）；`ss -lntp` 命中 `LISTEN <内网地址>:8765`；
+  `状态观测/trigger-inbox.log` 首行「绑定面确认：非回环 <内网地址>（AF_TRIGGER_BIND_ACK 已显式确认…）」。
 
 ### 7.6 ★不许做①：新码进 factory-watch 聚合面 + 路由侧进程态感知 ⇒ **本批不做**（只登记待办）
 
@@ -692,7 +692,7 @@ $ grep -n '"code": "trigger-inbox-down"' 状态观测/alarms.log | sed -n '18p'
 | **重出改动清单** | `git status --porcelain -uall` | **16 行**（1 `M` + 15 `??`），逐字见 `raw/gate-readings.txt` §6 ✅ |
 | **探针自跑面（自证会咬人）** | `python3 -I tools/trigger-inbox-src-parity-probe.py [--selftest]` | 真盘 rc=0（绿）／夹具不同 rc=1（红）／一致 rc=0（绿）／差一字节 rc=1／缺件 rc=1／selftest **4/4** `ALIGNED_PROBE_WORKS` ✅ |
 | **判据面零弱化** | 本批对 `crates/`/`ci/` 零 diff；探针**只增检出力**（不一致/缺件 ⇒ 红，无任何放宽分支） | ✅ |
-| **非回环监听面** | `ss -lntp` 返修批前后对拍 | 本批**零新增监听**；生产收件箱的 `100.64.0.8:8765` 是**主代理 23:57:55 起的在役实例**，非本批所起（见 §7.5） |
+| **非回环监听面** | `ss -lntp` 返修批前后对拍 | 本批**零新增监听**；生产收件箱的 `<内网地址>:8765` 是**主代理 23:57:55 起的在役实例**，非本批所起（见 §7.5） |
 | **cargo 三门** | build / test / clippy | **未跑 ＋ 理由**（见上）——如实登记 |
 
 **★ 本批未跑的门**：cargo build / test / clippy 三门（禁改 `crates/` ⇒ 禁本地重编译，产物由主线全量门

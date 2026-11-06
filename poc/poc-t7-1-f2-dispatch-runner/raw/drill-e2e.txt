@@ -262,7 +262,7 @@ $ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue 
           "present": true,
           "required": true,
           "sha256": "999ec89d5d3f",
-          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://100.64.0.3:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
           "version": "files=1388 git_head=999ec89d5d3f"
         },
         "cargo-deny": {
@@ -579,7 +579,7 @@ $ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue 
           "present": true,
           "required": true,
           "sha256": "999ec89d5d3f",
-          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://100.64.0.3:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
           "version": "files=1388 git_head=999ec89d5d3f"
         },
         "cargo-deny": {
@@ -847,7 +847,7 @@ $ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue 
           "present": true,
           "required": true,
           "sha256": "999ec89d5d3f",
-          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://100.64.0.3:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
           "version": "files=1388 git_head=999ec89d5d3f"
         },
         "cargo-deny": {
@@ -992,7 +992,7 @@ $ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue 
           "present": true,
           "required": true,
           "sha256": "999ec89d5d3f",
-          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://100.64.0.3:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
           "version": "files=1388 git_head=999ec89d5d3f"
         },
         "cargo-deny": {
@@ -1251,7 +1251,7 @@ $ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue 
           "present": true,
           "required": true,
           "sha256": "999ec89d5d3f",
-          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://100.64.0.3:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
           "version": "files=1388 git_head=999ec89d5d3f"
         },
         "cargo-deny": {

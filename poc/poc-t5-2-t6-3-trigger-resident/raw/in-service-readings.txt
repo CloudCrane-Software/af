@@ -7,7 +7,7 @@
 [2026-11-04 23:39:54] [self] keepalive 常驻启动 pid=2079410 周期 30s 看护 13 对象：watch, dash, af-execline, mes-ch, router, scheduler, status-push, emit-sidecar, self-improve-loop, quota-governor, otelcol, portal, trigger-inbox
 
 == 含 MES 的行（近 5；23:39:12/23:39:39 的 Connection refused = 本批沙箱自证进程，沙箱 MES_CH_URL 指死地址；生产 MES 表零写入）==
-[2026-10-30 04:07:13] [mes-ch] ALARM MES(http://100.64.0.2:15221) 查询探针失联（类别=timeout 码=ch-mes-timeout）：3s 超时（timed out）——不自动重启；恢复=查 mingda 负载与 tailnet 连通性；持续超时按 conn 处置；af 线 MES 落账将失败，需人工介入（1800s 内同类别不重复报）
+[2026-10-30 04:07:13] [mes-ch] ALARM MES(http://<内网地址>:15221) 查询探针失联（类别=timeout 码=ch-mes-timeout）：3s 超时（timed out）——不自动重启；恢复=查 mingda 负载与 tailnet 连通性；持续超时按 conn 处置；af 线 MES 落账将失败，需人工介入（1800s 内同类别不重复报）
 [2026-10-30 04:07:28] [mes-ch] MES 写入失败（不致命）: <urlopen error timed out>
 [2026-11-04 23:39:12] [trigger-inbox] MES 写入失败（不致命）: <urlopen error [Errno 111] Connection refused>
 [2026-11-04 23:39:39] [trigger-inbox] MES 写入失败（不致命）: <urlopen error [Errno 111] Connection refused>

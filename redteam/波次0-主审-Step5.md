@@ -153,7 +153,7 @@ $ cat /data/af-factory/env.sh
 export RUSTUP_HOME=/data/af-factory/.rustup
 export CARGO_HOME=/data/af-factory/.cargo
 export CARGO_TARGET_DIR=/data/af-factory/target
-export HTTPS_PROXY=socks5h://100.64.0.3:1080 ALL_PROXY=socks5h://100.64.0.3:1080
+export HTTPS_PROXY=socks5h://<内网地址>:1080 ALL_PROXY=socks5h://<内网地址>:1080
 $ grep -rlE "git-token|token.*=.*[A-Za-z0-9]{30,}" /data/af-factory/logs/    # 日志泄密扫描
 （无输出——目前未发现泄漏，属运气/纪律，非机制保证）
 ```
@@ -240,8 +240,8 @@ error: unexpected argument '--db-path' found   # cargo-deny 0.20.2 不存在该�
 
 **问题**：
 1. **镜像不是当前备份**：`git ls-remote origin` 显示 `refs/heads/main = 4dc1040`（fmt 提交），而本地 HEAD 审查期间已到 `751754c`（T5/T6 合流）——**本地领先 9+ 提交**（5c745d2、6bd03f7、873567b、ce475f4、5057b36、044e04a、c125885、e24bc9f、42201dc、751754c）。grok 实例的分支（task-T2/T3/T4/T56/T7）也完全不在 gitea 上（只有 main + probe 两支）。想从镜像恢复 = 回到 fmt 提交。
-2. **单点**：gitea 是 gov（100.64.0.6）单机上的单容器 `opch-gitea`，与 openBao、pg、minio、temporal-ui 等 15 容器同宿主（宿主 up 23d、load ~3）。af 的完整副本只有两处：pandev-comp 工作副本 + gov gitea；anolis 侧是 `--filter=blob:none` 稀疏克隆（无 blob，不能当备份）。
-3. **暴露面**：端点 `http://100.64.0.6:3300` 是**明文 HTTP**（tailnet WireGuard 缓解线上窃听，但 token/basic-auth 对 gov 宿主与链路上任何终端可见；若日后 Caddy 前置或 tailnet 被渗透即裸奔）；admin 凭据（admin_user/admin_pass/api_token）存在 `kv/company/agent-gitea-smoke/m0-round1`——一个名字像"冒烟测试"的密钥域（openBao.md:375 自述"smoke"），却承载生产镜像的管理员口令；anolis 的 scoped 令牌（write:repository）落在 9 个 auto-approve 实例可读的共享目录（F3）。
+2. **单点**：gitea 是 gov（<内网地址>）单机上的单容器 `opch-gitea`，与 openBao、pg、minio、temporal-ui 等 15 容器同宿主（宿主 up 23d、load ~3）。af 的完整副本只有两处：pandev-comp 工作副本 + gov gitea；anolis 侧是 `--filter=blob:none` 稀疏克隆（无 blob，不能当备份）。
+3. **暴露面**：端点 `http://<内网地址>:3300` 是**明文 HTTP**（tailnet WireGuard 缓解线上窃听，但 token/basic-auth 对 gov 宿主与链路上任何终端可见；若日后 Caddy 前置或 tailnet 被渗透即裸奔）；admin 凭据（admin_user/admin_pass/api_token）存在 `kv/company/agent-gitea-smoke/m0-round1`——一个名字像"冒烟测试"的密钥域（openBao.md:375 自述"smoke"），却承载生产镜像的管理员口令；anolis 的 scoped 令牌（write:repository）落在 9 个 auto-approve 实例可读的共享目录（F3）。
 
 **证据**：
 
@@ -253,7 +253,7 @@ b5c6f1b225c11f597b473107b7d4c99b6b2a98bc	refs/heads/probe/anolis-roundtrip
 $ git log --oneline -1     # 15:55 时点
 751754c af-workorder: T5 payload_hash→SHA-256 + T6 ed25519 变更单签名（grok i5，合流经三方合并）
 $ git remote -v
-origin	http://100.64.0.6:3300/opchadmin/af.git (fetch/push)     # 明文 HTTP；URL 内无凭据（askpass 设计 OK）
+origin	http://<内网地址>:3300/opchadmin/af.git (fetch/push)     # 明文 HTTP；URL 内无凭据（askpass 设计 OK）
 ```
 
 **复现步骤**：
@@ -365,14 +365,14 @@ $ ssh anolis 'du -sh /data/af-factory/target/; df -h /data | tail -1'
 
 ### F10（low）hk-gateway 单出口：小盒子扛全量外网
 
-**位置**：`计划/10-环境与分工.md:12,16` + `状态/机器清单.md:13` + 100.64.0.3 实测。
+**位置**：`计划/10-环境与分工.md:12,16` + `状态/机器清单.md:13` + <内网地址> 实测。
 
 **问题**：2 vCPU / 1.9G 内存 / 29G 盘的单机，是 anolis **一切**外网的唯一出口（SOCKS5 1080 + exit node）：9 个 grok 实例的模型 API、OIDC 续期（续期失败=实例集体掉线）、cargo 的 GitHub 访问、advisory-db 刷新全过它。实测 load 2.85、内存 901M/1967M、磁盘 30%、gost active。30 号文件批 4 还记着 gost.log 354M 待截断。它同时是 tailscale exit node——是整平面的单点。
 
 **证据**：
 
 ```
-$ timeout 20 ssh -o BatchMode=yes root@100.64.0.3 'uptime; free -m | head -2; df -h / | tail -1; systemctl is-active gost'
+$ timeout 20 ssh -o BatchMode=yes root@<内网地址> 'uptime; free -m | head -2; df -h / | tail -1; systemctl is-active gost'
  07:48:39 up 14 days,  4:03,  2 users,  load average: 2.85, 2.81, 2.62
                total        used        free      shared  buff/cache   available
 Mem:           1967         901         193          1066        1066        1066
@@ -380,7 +380,7 @@ Mem:           1967         901         193          1066        1066        106
 active
 ```
 
-**复现步骤**：`ssh root@100.64.0.3 'uptime; free -m | head -2; systemctl is-active gost'`（本机持有直连密钥，只读命令）。
+**复现步骤**：`ssh root@<内网地址> 'uptime; free -m | head -2; systemctl is-active gost'`（本机持有直连密钥，只读命令）。
 
 **会出什么问题**：它抖动/重启 → 9 实例同时掉线 + auth 续期失败 + 半途任务；17:20 额度到期与它的可用性叠加，今天的波次 1 产出有整体中断风险。（gov 单机同理性，见 F6，不重复计。）
 
@@ -463,4 +463,4 @@ active
 
 ---
 
-*报告完。所有命令均在 2026-10-19 15:40–16:10 于 pandev-comp（100.64.0.8）执行；anolis/hk 只读 SSH 命令均带 BatchMode。未执行任何 git commit / push，未修改 af 仓库任何文件（唯一写入为本报告）。*
+*报告完。所有命令均在 2026-10-19 15:40–16:10 于 pandev-comp（<内网地址>）执行；anolis/hk 只读 SSH 命令均带 BatchMode。未执行任何 git commit / push，未修改 af 仓库任何文件（唯一写入为本报告）。*

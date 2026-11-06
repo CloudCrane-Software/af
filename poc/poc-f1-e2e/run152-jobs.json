@@ -2,10 +2,10 @@
   "jobs": [
     {
       "id": 152,
-      "url": "http://100.64.0.6:3300/api/v1/repos/opchadmin/af/actions/jobs/152",
-      "html_url": "http://100.64.0.6:3300/opchadmin/af/actions/runs/152/jobs/152",
+      "url": "http://<内网地址>:3300/api/v1/repos/opchadmin/af/actions/jobs/152",
+      "html_url": "http://<内网地址>:3300/opchadmin/af/actions/runs/152/jobs/152",
       "run_id": 152,
-      "run_url": "http://100.64.0.6:3300/api/v1/repos/opchadmin/af/actions/runs/152",
+      "run_url": "http://<内网地址>:3300/api/v1/repos/opchadmin/af/actions/runs/152",
       "name": "f1-fast-gate",
       "labels": [
         "opch-ci"

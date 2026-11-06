@@ -51,7 +51,7 @@ $ 对上文已完整取到的分支清单就地统计（不重新 fetch）
 #
 # ★ 命令形态差异（如实登记，不含糊）：
 #   本条走 remote **别名** `github`：`git remote -v` → `github  https://github.com/Feasy898/af.git`
-#   ⇒ 与 §A 的直连 URL 是**同一个仓**；差别在仓内 `remote.github.proxy=http://100.64.0.8:7890`
+#   ⇒ 与 §A 的直连 URL 是**同一个仓**；差别在仓内 `remote.github.proxy=http://<内网地址>:7890`
 #   （仓内配置）生效 ⇒ 直连 URL 形态在本机**无 proxy ⇒ 仍超时**（下方「复跑直连 URL」条为证）。
 #   复跑直连 URL 形态（原始 §A 同款命令）：`timeout 60 git ls-remote --symref https://github.com/Feasy898/af.git HEAD`
 #   ⇒ exit=124（超时无输出，与 §A 一致）。

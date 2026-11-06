@@ -157,7 +157,7 @@
  {
   "state": "BINDGATE",
   "name": "非回环且无 AF_TRIGGER_BIND_ACK → 拒起",
-  "detail": "rc=3 out=[23:37:09] 绑定地址被拒（100.64.0.8）——非回环绑定须显式确认：AF_TRIGGER_BIND_ACK=100.64.0.8（现值 ''）；确认前拒起（fail-loud，不静默起非回环监听）"
+  "detail": "rc=3 out=[23:37:09] 绑定地址被拒（<内网地址>）——非回环绑定须显式确认：AF_TRIGGER_BIND_ACK=<内网地址>（现值 ''）；确认前拒起（fail-loud，不静默起非回环监听）"
  },
  {
   "state": "BINDGATE",

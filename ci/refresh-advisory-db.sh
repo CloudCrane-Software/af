@@ -5,7 +5,7 @@
 #    该哈希目录由 cargo-deny 按默认 URL 派生——动态发现，发现不了就报错
 set -e
 cd "$(dirname "$0")/.."
-export HTTPS_PROXY=${HTTPS_PROXY:-socks5h://100.64.0.3:1080}
+export HTTPS_PROXY=${HTTPS_PROXY:-socks5h://<内网地址>:1080}
 
 ok=""
 for i in 1 2 3; do

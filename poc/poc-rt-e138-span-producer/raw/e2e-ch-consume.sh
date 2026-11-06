@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # 端到端：真订单 → 投影器 → 现役 OTLP collector → CH → --production-check
-# 在 anolis 工作树执行；工厂真仓与 collector 在 pandev-comp（100.64.0.8）。
+# 在 anolis 工作树执行；工厂真仓与 collector 在 pandev-comp（<内网地址>）。
 # stdin heredoc 交给 ssh 转发到远端 python（避免把 heredoc 塞进 ssh 双引号）。
 set -u
 ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 EMIT="$ROOT/poc/poc-rt-e138-span-producer/raw/emit-semantic-otlp.py"
-HOST=100.64.0.8
+HOST=<内网地址>
 WS=/home/pan-ding/workspace/agent黑灯工厂
 ORD=$WS/af-state/orders/F1-swev-django-11099-glm-cp
 PROJ=$WS/tools/otel/af-otel-projector.py
@@ -22,7 +22,7 @@ run ssh -o BatchMode=yes pan-ding@$HOST "ss -lntp | grep 4318; test -f $PROJ && 
 echo "== 1. 投影 F1 经 OTLP 送入 collector（含 factory.harvest）=="
 scp -o BatchMode=yes "$EMIT" pan-ding@$HOST:/tmp/emit-semantic-otlp.py
 run ssh -o BatchMode=yes pan-ding@$HOST \
-  python3 -I /tmp/emit-semantic-otlp.py --projector "$PROJ" --endpoint http://100.64.0.8:4318 --harvest "$ORD"
+  python3 -I /tmp/emit-semantic-otlp.py --projector "$PROJ" --endpoint http://<内网地址>:4318 --harvest "$ORD"
 
 echo "== 2. 等 collector batch + CH async_insert（15s）=="
 sleep 15

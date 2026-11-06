@@ -2,7 +2,7 @@
 """gitea 只读核验（外派任务书 §二③）：default_branch / branch_protections。
 
 只 GET，不写。凭据从 ~/.git-credentials 用 urllib.parse 解析（主机名 netloc 段
-unquote 后比对 100.64.0.6:3300）；凭据只以 sha256 指纹前 12 位出现在输出里，
+unquote 后比对 <内网地址>:3300）；凭据只以 sha256 指纹前 12 位出现在输出里，
 明文零落盘、零打印。用法：python3 -I gitea_readonly_check.py [输出.json]
 """
 import hashlib
@@ -14,8 +14,8 @@ import urllib.request
 from pathlib import Path
 
 CRED_FILE = Path.home() / ".git-credentials"
-WANT_HOST, WANT_PORT = "100.64.0.6", 3300
-BASE = "http://100.64.0.6:3300/api/v1"
+WANT_HOST, WANT_PORT = "<内网地址>", 3300
+BASE = "http://<内网地址>:3300/api/v1"
 ENDPOINTS = [
     ("repo", "/repos/opchadmin/af"),
     ("branch_protections", "/repos/opchadmin/af/branch_protections"),
@@ -31,7 +31,7 @@ def find_cred():
         if not line:
             continue
         u = urllib.parse.urlsplit(line)
-        # 凭据文件把端口 URL 编码进主机段（100.64.0.6%3a3300）——unquote 后再拆 host:port
+        # 凭据文件把端口 URL 编码进主机段（<内网地址>%3a3300）——unquote 后再拆 host:port
         hostport = urllib.parse.unquote(u.hostname or "")
         host, _, port_s = hostport.rpartition(":")
         try:
@@ -46,7 +46,7 @@ def find_cred():
 def main() -> int:
     cred = find_cred()
     if not cred:
-        print("[gitea-readonly] FATAL: ~/.git-credentials 未找到 100.64.0.6:3300 条目")
+        print("[gitea-readonly] FATAL: ~/.git-credentials 未找到 <内网地址>:3300 条目")
         return 2
     # 凭据指纹：仅 sha256 前 12 位（证据可对拍、明文不出现在任何输出/落盘）
     fp = hashlib.sha256(cred.encode()).hexdigest()[:12]

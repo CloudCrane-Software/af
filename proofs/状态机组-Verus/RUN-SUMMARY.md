@@ -89,7 +89,7 @@ D-08→state.rs:59-67（逐行无自环）✓；D-09→order.rs:403-418/:404/:42
 - 安装路径（tmpfs，磁盘零新增占用；FV-0 配方）：`/dev/shm/dstate/verus-x86-linux/`
 - 下载：GitHub release `release/0.2026.10.18.7d82994`，资产 486,844,228 B（与 FV-0 报告记录逐字节
   一致）。注意：FV-0 报告 §5 的 URL 缺 `release/` tag 前缀（按该 URL 实跑得 404 "Not Found"），
-  本次以 GitHub API 实查修正；代理 http://100.64.0.8:7890 本窗口 TLS 不通（exit 35/502），改直连
+  本次以 GitHub API 实查修正；代理 http://<内网地址>:7890 本窗口 TLS 不通（exit 35/502），改直连
   + aria2c 16 连接（串行 curl 仅 ~35KB/s 不可行）。
 - 复现：
   ```

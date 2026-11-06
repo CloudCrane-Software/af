@@ -210,7 +210,7 @@ def check_supply(repo_root: Path, cargo_home: Path | None = None) -> dict:
         "sha256": db_head[:12] if db_head else "",
         "version": f"files={db_files}" + (f" git_head={db_head[:12]}" if db_head else ""),
         "required": True,
-        "supply_rule": f"ci/refresh-advisory-db.sh 刷新到 {db_dir}（代理 socks5h://100.64.0.3:1080；"
+        "supply_rule": f"ci/refresh-advisory-db.sh 刷新到 {db_dir}（代理 socks5h://<内网地址>:1080；"
                        "GitHub 不可达时沿用旧库 WARN 降级）",
     }
 

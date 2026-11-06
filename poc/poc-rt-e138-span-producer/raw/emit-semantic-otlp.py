@@ -4,7 +4,7 @@
 合规路径（不改判据件、不直写 CH）：
   订单目录 → tools/otel/af-otel-projector.py:project_order
            → OTLP/HTTP JSON POST <AF_OTEL_ENDPOINT>/v1/traces
-           → 现役 otelcol（100.64.0.8:4318）clickhouse exporter
+           → 现役 otelcol（<内网地址>:4318）clickhouse exporter
            → otel.otel_traces
 
 时间戳改写为发射时刻：投影器沿用 ledger/normal.jsonl 的历史 ts，
@@ -26,7 +26,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-DEFAULT_ENDPOINT = os.environ.get("AF_OTEL_ENDPOINT") or "http://100.64.0.8:4318"
+DEFAULT_ENDPOINT = os.environ.get("AF_OTEL_ENDPOINT") or "http://<内网地址>:4318"
 DEFAULT_PROJECTOR = os.environ.get("AF_OTEL_PROJECTOR") or os.path.expanduser(
     "~/workspace/agent黑灯工厂/tools/otel/af-otel-projector.py"
 )

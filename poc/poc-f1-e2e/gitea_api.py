@@ -3,7 +3,7 @@
 
 凭据纪律：运行时用 urllib.parse 解析 ~/.git-credentials 取 basic auth，
 凭据本身绝不写入任何文件/日志/提交（本文件不含任何秘密材料）。
-注意：~/.git-credentials 里主机名是 URL 编码的（100.64.0.6%3a3300），
+注意：~/.git-credentials 里主机名是 URL 编码的（<内网地址>%3a3300），
 按字面正则匹配会取空——必须走 urllib.parse + unquote。
 
 用法：
@@ -18,8 +18,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-GITEA_BASE = "http://100.64.0.6:3300"
-EXPECT_HOST = "100.64.0.6"
+GITEA_BASE = "http://<内网地址>:3300"
+EXPECT_HOST = "<内网地址>"
 EXPECT_PORT = 3300
 
 
@@ -33,7 +33,7 @@ def load_basic_auth():
                 continue
             u = urllib.parse.urlsplit(line)
             host_raw = u.netloc.rsplit("@", 1)[-1]  # 去掉 userinfo
-            host_unq = urllib.parse.unquote(host_raw)  # 100.64.0.6%3a3300 -> 100.64.0.6:3300
+            host_unq = urllib.parse.unquote(host_raw)  # <内网地址>%3a3300 -> <内网地址>:3300
             h = urllib.parse.urlsplit(f"{u.scheme}://{host_unq}")
             if h.hostname == EXPECT_HOST and h.port == EXPECT_PORT:
                 userinfo = u.netloc.rsplit("@", 1)[0]

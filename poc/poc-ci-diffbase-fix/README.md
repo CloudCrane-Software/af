@@ -70,7 +70,7 @@
 - `default_branch` = **`main`**（`GET /api/v1/repos/opchadmin/af` → 200；full_name opchadmin/af）；
 - `GET …/branch_protections` → 200，**count = 0**；
 - `branches/main` → 200，protected=**false**，sha f3731134；`branches/product/main` → 200，protected=**false**，sha 2542929；
-- 凭据：`~/.git-credentials` 以 `urllib.parse` 解析（主机段 `100.64.0.6%3a3300` unquote 后比对），凭据仅以指纹 `sha256(cred)[:12]=5c5df08f27c9` 出现，**明文零落盘**；
+- 凭据：`~/.git-credentials` 以 `urllib.parse` 解析（主机段 `<内网地址>%3a3300` unquote 后比对），凭据仅以指纹 `sha256(cred)[:12]=5c5df08f27c9` 出现，**明文零落盘**；
 - 脚本：`scripts/gitea_readonly_check.py`（`python3 -I` 运行，读数 `readings/gitea-readonly.json`）。
 - 登记：改 default_branch（→product/main）属 **L2 运营者签认项**、建分支保护属 **L2'' 签认项**，本批均未动。
 

@@ -53,7 +53,7 @@ use crate::tracetree::{verify_order_dir, AgentLayer, TraceTreeReport};
 pub const SCHEMA: &str = "af.otel.production.v1";
 /// 显式状态面路径（绝对或相对 cwd）。未设置 ⇒ 生产路径不落盘。
 pub const ENV_STATE_PATH: &str = "AF_OTEL_PRODUCTION_STATE";
-/// 现役 OTLP collector HTTP 口（例 `http://100.64.0.8:4318`）。未设置时
+/// 现役 OTLP collector HTTP 口（例 `http://<内网地址>:4318`）。未设置时
 /// 缺省该值；真正开关是 `AF_OTEL_EMIT_CMD`。
 pub const ENV_OTLP_ENDPOINT: &str = "AF_OTEL_ENDPOINT";
 /// 投影+OTLP 发射脚本（`poc/.../emit-semantic-otlp.py`）。未设置 ⇒ 不发网络。
@@ -424,7 +424,7 @@ pub fn publish_from_env(order_dir: &Path) {
 }
 
 /// 经既有 OTLP collector 入库。只在 `AF_OTEL_EMIT_CMD` 指向发射脚本时动作；
-/// 端点缺省 `http://100.64.0.8:4318`（与 `tools/otel/otel_emit.py` 同源）。
+/// 端点缺省 `http://<内网地址>:4318`（与 `tools/otel/otel_emit.py` 同源）。
 /// 脚本/collector 失败一律吞掉，不阻断订单。
 ///
 /// # 幂等闸（P3-A2 单根 trace）
@@ -447,7 +447,7 @@ pub fn emit_otlp_from_env(order_dir: &Path) {
     let endpoint = std::env::var(ENV_OTLP_ENDPOINT)
         .ok()
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| "http://100.64.0.8:4318".to_string());
+        .unwrap_or_else(|| "http://<内网地址>:4318".to_string());
     let invoke = || {
         std::process::Command::new("python3")
             .args(["-I", &script, "--endpoint", &endpoint, "--harvest"])

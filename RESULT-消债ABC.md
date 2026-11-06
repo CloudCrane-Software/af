@@ -59,12 +59,12 @@
 
 **设计**：幂等真值源 = CH 本身（`SELECT … FROM mes_event WHERE work_order_id=?` 按 event_id 认行），不再依赖本地 `mes-ch-shipped.jsonl` marker（**marker 退役**；F1/F2 订单目录中的旧 marker 成为死文件，重跑走读侧对账——CH 已有该 4 行则 shipped=0，见 §3 真实例）。结构性收益：跨驱补送（重试驱新跃迁）与 park 后重发双写两个补丁期孔洞同时闭合。
 
-**真实例验证**（mingda `http://100.64.0.2:15221`，凭据源=平台约定 0600 文件，零明文零打印）：
+**真实例验证**（mingda `http://<内网地址>:15221`，凭据源=平台约定 0600 文件，零明文零打印）：
 
 1. 独立只读回读 F1/F2（bench-mes 同款连接面）：各恰 4 行，event_id/kind/quantity 与交付报告逐字段一致。
 2. 真实验证单 `XZ-B23-verify-20261025`（line_id=verify-xiaozhai 自标识，冒烟档+--mes-ch auto）三驱：
    - 首驱（旧二进制，FINAL 修复前）：订单 Closed，CH 写失败 → **EX2003 fail-loud 显性上报**（exit 1，真实落账纪律实证）；
-   - 二驱（修复后重发）：replayed=true，读侧对账 already_in_ch=0 → **补差量 4 行**（rows_delivered=4，outbox=0，auth=true，回执 endpoint=100.64.0.2:15221 零凭据）；
+   - 二驱（修复后重发）：replayed=true，读侧对账 already_in_ch=0 → **补差量 4 行**（rows_delivered=4，outbox=0，auth=true，回执 endpoint=<内网地址>:15221 零凭据）；
    - 三驱：already_in_ch=4 → **shipped=0**（幂等上限形态）；独立只读回读恰 4 行 verify-xiaozhai——**三驱零双写**。
 
 ## 3. 真实例暴露的潜伏缺陷：读路径 FINAL（commit c426bdc）

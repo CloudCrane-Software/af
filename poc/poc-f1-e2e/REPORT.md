@@ -14,7 +14,7 @@
 |---|---|
 | 基点 | `origin/product/main` = `288b0d9ecd4b0ceaaf5b55faae5a2411ae48cef3`（开工 fetch 核得；PR base.sha 同值） |
 | 分支 | `poc/f1-e2e-verify` 自上述基点新建；唯一改动 = `docs/CI-BOUNDARY.md` §三 加一段说明性文字（+4 行，纯文档）；提交 `8dc06d4386533e0c29bae154fc85018880dcd860`；普通 push（`* [new branch]`，无 force） |
-| PR | **#2**（内部 id=106），`http://100.64.0.6:3300/opchadmin/af/pulls/2`，base=`product/main`，head=`poc/f1-e2e-verify`，state=open、merged=false（验证用 PR，保持 open 不合） |
+| PR | **#2**（内部 id=106），`http://<内网地址>:3300/opchadmin/af/pulls/2`，base=`product/main`，head=`poc/f1-e2e-verify`，state=open、merged=false（验证用 PR，保持 open 不合） |
 | Run | **id=151**，run_number=9，run_attempt=1，`display_title=F1 快速门 @ poc/f1-e2e-verify`，`path=f1.yml@refs/pull/2/head`，`event=pull_request`，`head_sha=8dc06d4…`（与 PR head / 本地 HEAD 一致） |
 | 结论 | `status=completed`，**`conclusion=success`** |
 | 耗时 | run created_at=`05:28:48Z` → updated_at=`05:29:42Z` ≈ **54s**（job started_at=`05:28:53Z`；job finished_at 字段 API 返回 null，以 run updated_at 计）。远快于 run148 的 5m16s：本分支代码面与主线零差异（纯文档 +4 行），持久 target 热缓存下三件步近乎只做校验 |
@@ -76,7 +76,7 @@
 
 ## 复核路径
 
-1. `curl -u <opchadmin> http://100.64.0.6:3300/api/v1/repos/opchadmin/af/actions/runs/151`
+1. `curl -u <opchadmin> http://<内网地址>:3300/api/v1/repos/opchadmin/af/actions/runs/151`
    核 `head_sha=8dc06d4…`、`conclusion=success`。
 2. 同端点 `/runs/151/jobs` 核三件步。
 3. `git fetch origin && git rev-parse origin/product/main` 核仍为 `288b0d9…`。

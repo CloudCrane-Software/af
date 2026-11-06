@@ -196,7 +196,7 @@ counts，`--skip-compile` → **exit 0**（`raw/fail-open-r3-nofloor/run.txt`）
 - clippy-baseline sha256：`a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4`。
 - 运行环境：anolis 工作树 `wt/p3-a1-strategy-dsl`；CARGO_TARGET_DIR=
   `/data/bench/targets/p3-a1-strategy-dsl`（/data 盘，独占）；
-  HTTPS_PROXY=`http://100.64.0.8:7890`（grok 通道出口，未改）。
+  HTTPS_PROXY=`http://<内网地址>:7890`（grok 通道出口，未改）。
 
 
 ### gate-clippy.gate.txt 捕获口径（2026-11-05 回补批注）

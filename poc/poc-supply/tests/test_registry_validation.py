@@ -64,7 +64,7 @@ class RegistryValidationTest(unittest.TestCase):
             "absolute_write_root_forbidden": lambda d: node(d, "pandev")["disks"][0]["write_roots"].append("/tmp"),
             "secret_nested_forbidden": lambda d: node(d, "pandev")["network"].update(api_token="secret"),
             "local_ollama_endpoint_pinned": lambda d: node(d, "pandev")["special"][0].update(
-                endpoint="http://100.64.0.7:11434"
+                endpoint="http://<内网地址>:11434"
             ),
             "sandbox_must_remain_disabled": lambda d: node(d, "pandev")["special"][1].update(enabled=True),
             "kimi_must_be_restricted": lambda d: node(d, "pandev")["special"][3].update(state="in_service"),

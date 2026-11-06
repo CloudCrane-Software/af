@@ -1,0 +1,170 @@
+# =============================================================================
+# gates.yml — af 仓 PR 验收门接线件（仓级；required check 上下文 = `gates`）
+#
+# ★ 2026-11-06 改版记录（导入员·af产品码，实测驱动）：
+#   原设计为 `uses: CloudCrane-Software/.github/.github/workflows/gates.yml@main`
+#   的可复用工作流调用面。**该 ref 不存在**——本会话实测
+#     curl -fs -o /dev/null -w '%{http_code}' \
+#       https://raw.githubusercontent.com/CloudCrane-Software/.github/main/.github/workflows/gates.yml
+#       → 404（.github 仓已存在，main=4c9e9b0f，但其 .github/workflows/ 下无 gates.yml）
+#   ⇒ 按本件原注「若推送未落地或 ref 不是 main，本 workflow 在 PR 上直接报
+#     『找不到可复用工作流』，不是门的红/绿判定」的既定预案，改为**内联同等剖面**：
+#     同一套门点、同一条判据面（不弱化、不放宽），命令逐条取自 af 仓 ci/ 正本：
+#       · cargo fmt --check --all                          ← ci/run.sh:220 step1 前半
+#       · python3 -I ci/k5-path-lint.py                    ← ci/run.sh:220 step1 后半
+#         （总计划 §2 裁决7：K5 判分链路径 lint 并入编译阶段 1）
+#       · cargo clippy --workspace --all-targets -- -D warnings
+#         ← f1.yml 同款口径；R09 明令不得降级成 ci/clippy_gate.py 基线门
+#       · cargo test -p af-dsl -p af-compiler              ← ci/run.sh:246 step3 封闭子集
+#         （裁决19：cargo test -p af-dsl -p af-compiler 实测 exit=0）
+#       · python3 -I ci/gh_workflow_check.py               ← R01-R22 判据面自检（恒跑）
+#   ★ F2 全量门（ci/run.sh 十四步管道）**仍不进 Actions**：ci/gh_workflow_check.py
+#     R11 把 ci/run.sh / cargo test --workspace / cargo deny / cosign / unshare 列进
+#     F2_COMMAND_PATTERNS，命令位一出现即红。本件严格遵守，未把 F2 塞进来；
+#     F2 继续走收件箱派单 + 独立 runner（integrator 复核制）。
+#
+# ★ 与判据面自检器（ci/gh_workflow_check.py R01-R22）的逐条对齐：
+#   R03/R04/R20  仅 pull_request + base=main；无 pull_request_target / types / paths
+#   R05          顶层 + job 级双写 contents: read
+#   R06          零 secret 引用（GITHUB_TOKEN 也不引）、零硬编码凭据
+#   R07/R17      零 action 依赖（连 actions/checkout 也不引）——checkout 走匿名
+#                git clone，形态照抄 af/.github/workflows/f1.yml
+#   R08/R09/R10  三条语义件都在命令位（行首 cargo …，非 echo/注释里的字面量）
+#   R11          F2 命令位零出现
+#   R12          timeout-minutes=45（≤45 上限，判据面不得放宽）
+#   R13          顶层 concurrency + cancel-in-progress: true
+#   R14/R18      clippy/快速测试 step 带 if: always()（一次 run 收全诊断）
+#   R15          runs-on 钉 anolis-heavy（自托管 runner label）
+#   R16          工具链供给 step（rustup + rustfmt + clippy 组件，按 rust-toolchain.toml 钉 channel）
+#   R21          无 || true / || : / ; true / set +e
+#   R22          判据面自检 step 在位且恒跑（name 不含 F1 故非强制，仍按同纪律落）
+#
+# ★ runner 面：runs-on: anolis-heavy = anolis 自托管 runner（anolis-gpu-01，
+#   repo 级注册于本仓）。本会话实测 GET /repos/CloudCrane-Software/af/actions/runners
+#   → status=online、busy=false、labels=[self-hosted, Linux, X64, anolis-heavy]。
+#   cargo 步骤按建设方案 §三剥代理 env（代理凭据永不进测试环境）——用 unset 而非
+#   `env -u …` 前缀，因为 gh_workflow_check.py 的命令位判定只认行首 cargo（env -u
+#   前缀会让 R09 判不出 clippy 语义件 ⇒ 假红）。
+#
+# ★ 构建并发（环境适配，非判据放宽）：anolis 16 vCPU / 125G，f1.yml 的
+#   CARGO_BUILD_JOBS=4 是 GitHub 托管 runner 的内存节流值；本件按 anolis 实况
+#   取 12，且 CARGO_INCREMENTAL=0（CI 无增量收益）。R12 只管 timeout-minutes，
+#   该项不在判据面内。
+# =============================================================================
+name: gates
+
+on:
+  pull_request:
+    branches:
+      - main
+
+# 权限最小化（R05）：全链只读。写面（建 Issue/commit manifest/auto-merge）走
+# 规划环的 GITHUB_TOKEN，不在本验收面。
+permissions:
+  contents: read
+
+# 并发策略（R13）：同一 PR 分支重复推送只保最新一次验收。
+concurrency:
+  group: gates-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  # 作业名恒 `gates`——分支保护 required check 以作业名粒度挂载（§五 P1）。
+  gates:
+    # 自托管 runner（anolis）：label anolis-heavy。判据内容与 f1.yml 一致，
+    # 换的是执行环境（anolis 16C 有持久盘与本地工具链，不是托管一次性 runner）。
+    runs-on: anolis-heavy
+    # 超时止损：≤45（R12，判据面不得放宽）。
+    timeout-minutes: 45
+    # job 级同样收窄到只读（顶层 + job 级双写，防将来顶层被改宽后 job 仍宽松）。
+    permissions:
+      contents: read
+    env:
+      # 构建节流（anolis 16C/125G 实况；见头注「构建并发」条）。
+      CARGO_BUILD_JOBS: "12"
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: never
+      # target 落 runner.temp（每 job 一次性，无跨 run 持久化——不赌陈旧构件）。
+      CARGO_TARGET_DIR: ${{ runner.temp }}/af-gates-target
+    steps:
+      - name: 分工声明（本件跑 PR 级验收门；F2 全量门不走 Actions）
+        run: |
+          echo "gates：fmt --check / K5 路径 lint / clippy -D warnings / af-dsl+af-compiler 快速测试 / 判据面自检"
+          echo "F2 全量门：ci/run.sh 十四步——走收件箱派单+独立 runner（integrator 复核制），R11 禁进 Actions"
+
+      - name: checkout（PR 头树；零外部 action 依赖，不用 actions/checkout）
+        env:
+          AF_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          AF_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          AF_HEAD_CLONE_URL: ${{ github.event.pull_request.head.repo.clone_url }}
+          AF_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          REF="${AF_HEAD_REF:-${GITHUB_HEAD_REF:-}}"
+          if [ -z "$REF" ]; then
+            echo "取不到 PR 头分支（事件上下文缺 pull_request.head.ref）" >&2
+            exit 1
+          fi
+          URL="${AF_HEAD_CLONE_URL:-}"
+          if [ -z "$URL" ]; then
+            URL="https://github.com/${AF_REPOSITORY}.git"
+          fi
+          git clone --depth 1 --branch "$REF" "$URL" .
+          git --no-pager log --oneline -1
+          echo "检出 PR 头树：ref=$REF url=$URL 期望 head.sha=${AF_HEAD_SHA:-未提供}"
+
+      - name: 工具链供给（按仓内钉住版供给 rustfmt/clippy 组件；已装则复用）
+        run: |
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          if ! command -v cargo >/dev/null 2>&1; then
+            echo "runner 无 rust——rustup 自举"
+            curl -sSfL https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init \
+              -o /tmp/rustup-init
+            chmod +x /tmp/rustup-init
+            /tmp/rustup-init -y --profile minimal --no-modify-path
+            export PATH="$HOME/.cargo/bin:$PATH"
+          else
+            echo "cargo 已在（复用既有供给）: $(cargo --version)"
+          fi
+          CHANNEL="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+          echo "钉住 channel: $CHANNEL"
+          rustup toolchain install "$CHANNEL" --profile minimal \
+            --component rustfmt --component clippy 2>&1 | tail -5
+          rustup default "$CHANNEL"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          cargo --version && rustc --version && cargo fmt --version
+
+      - name: fmt --check + K5 判分链路径 lint（硬门；ci/run.sh step1 原样）
+        run: |
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          # 代理凭据永不进测试环境（建设方案 §三）；用 unset 保持行首命令位。
+          unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+          export LC_CTYPE=C.UTF-8
+          cargo fmt --check --all
+          python3 -I ci/k5-path-lint.py
+
+      - name: clippy -D warnings（硬门；不得降级成基线门——R09）
+        # fmt/K5 红不遮蔽 clippy/test 判定——一次 run 收全诊断；job 结论仍任一红即红。
+        if: ${{ always() }}
+        run: |
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+          export LC_CTYPE=C.UTF-8
+          cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
+        if: ${{ always() }}
+        run: |
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          unset HTTP_PROXY HTTPS_PROXY ALL_PROXY http_proxy https_proxy all_proxy
+          export LC_CTYPE=C.UTF-8
+          cargo test -p af-dsl -p af-compiler
+
+      - name: 判据面自检（防弱化；恒跑，前序红不遮蔽本判定）
+        if: ${{ always() }}
+        run: |
+          python3 -I ci/gh_workflow_check.py

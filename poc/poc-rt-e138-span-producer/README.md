@@ -135,7 +135,7 @@ d936f313824ec0fd01be377bf95573541b07f4ca5699cdcf27501d6665b69626  crates/af-exec
 现役管线亲读：
 
 - 投影器 `tools/otel/af-otel-projector.py:284` `project_order`：四层语义树（§1.0 派生 ID + Resource 九键），selftest 6/6。
-- 发射器 `tools/otel/otel_emit.py:81` 缺省端点 `http://100.64.0.8:4318`；collector `otelcol-runtime/otelcol-config.yaml` 绑 `100.64.0.8:4317/4318`，clickhouse exporter → `otel.otel_traces`。
+- 发射器 `tools/otel/otel_emit.py:81` 缺省端点 `http://<内网地址>:4318`；collector `otelcol-runtime/otelcol-config.yaml` 绑 `<内网地址>:4317/4318`，clickhouse exporter → `otel.otel_traces`。
 - 断言器 `tools/otel/otlp-assert.py:892-905` `--production` 真库 SELECT；`:1261-1303` `--production-check` 只读状态面（死手/新鲜度，自造 green 会被咬）。
 
 本轮：新增 `poc/.../raw/emit-semantic-otlp.py`，把投影器产出编成 OTLP/HTTP JSON POST 进现役 collector（时间戳改写为发射时刻，派生 ID/键集不动）。`drive` 挂钩在 `AF_OTEL_EMIT_CMD` 指向该脚本时 fail-open 调用。`factory.harvest` 走既有 `factory_otel.harvest_report`（P1 名册项，收割守护近窗 0）。

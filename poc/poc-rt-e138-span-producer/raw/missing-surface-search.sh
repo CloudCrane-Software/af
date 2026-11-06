@@ -46,8 +46,8 @@ for line in open('/home/pan-ding/.git-credentials'):
     host = urllib.parse.unquote(p.hostname) if p.hostname else ''
     key = f"{host}:{p.port}" if p.port else host
     creds[key] = (urllib.parse.unquote(p.username), urllib.parse.unquote(p.password or ''))
-u, p = [v for k, v in creds.items() if '100.64.0.6' in k][0]
-base = 'http://100.64.0.6:3300'
+u, p = [v for k, v in creds.items() if '<内网地址>' in k][0]
+base = 'http://<内网地址>:3300'
 out = subprocess.run(['curl', '-s', '-u', f'{u}:{p}', f'{base}/api/v1/repos/search?limit=50'],
                      capture_output=True, text=True, timeout=30)
 repos = [r['full_name'] for r in json.loads(out.stdout).get('data', [])]

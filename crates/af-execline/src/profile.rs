@@ -71,7 +71,7 @@ pub fn profile(name: &str) -> Result<Profile, String> {
             },
             key_cmd: // D-20 项 6：key_cmd 抗单点——首选 bao-agent（无 escrow 明文 root-token 依赖），
                 // bao-agent 不可用（缺失/锁死/网络）时回退旧 escrow 路径，两条路都是"命令名+路径"，零明文落码。
-                "K=$(bao-agent get company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 --field api_key --reveal 2>/dev/null) && [ -n \"$K\" ] && printf '%s' \"$K\" || { RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key; }",
+                "K=$(bao-agent get company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 --field api_key --reveal 2>/dev/null) && [ -n \"$K\" ] && printf '%s' \"$K\" || { RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://<内网地址>:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key; }",
         }),
         "glm-cp-max" => Ok(Profile {
             endpoint: EndpointSpec {
@@ -87,7 +87,7 @@ pub fn profile(name: &str) -> Result<Profile, String> {
                 top_p_milli: None,
             },
             key_cmd: // 同 glm-cp：bao-agent 首选 + escrow 回退（D-20 项 6）。
-                "K=$(bao-agent get company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 --field api_key --reveal 2>/dev/null) && [ -n \"$K\" ] && printf '%s' \"$K\" || { RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://100.64.0.6:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key; }",
+                "K=$(bao-agent get company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 --field api_key --reveal 2>/dev/null) && [ -n \"$K\" ] && printf '%s' \"$K\" || { RT=$(cat ~/.local/share/openbao-escrow/.root-token); curl -sS -m 15 -H \"X-Vault-Token: $RT\" http://<内网地址>:8200/v1/kv/data/company/LLM-upstream/Zhipu/zhipu-bigmodel-CodingPlan-1 | jq -r .data.data.api_key; }",
         }),
         "step-5" => Ok(Profile {
             endpoint: EndpointSpec {

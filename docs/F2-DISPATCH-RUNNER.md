@@ -164,7 +164,7 @@ python3 -I ci/f2_runner.py handover --record <记录件> --repo <仓> \
 |---|---|---|---|
 | `cosign` | `<候选树>/bin/cosign`（**不入库**：`.gitignore` 行 2 `/bin`） | 存在 + 可执行 + sha256 + `cosign version` | **SKIP**（`environment_unavailable`）⇒ 不跑门、不计绿、回队列重试；结果件点名缺件与投放路径 |
 | `cargo-deny` | PATH（`~/.cargo/bin/cargo-deny`） | `which` + sha256 + `cargo-deny --version` | 同上 |
-| `advisory-db` | `$CARGO_HOME/advisory-dbs/advisory-db-3157b0e258782691` | 目录存在 + 文件数 + （git 仓则）HEAD sha | 同上（刷新走 `ci/refresh-advisory-db.sh`，代理 `socks5h://100.64.0.3:1080`；GitHub 不可达时沿用旧库 WARN 降级） |
+| `advisory-db` | `$CARGO_HOME/advisory-dbs/advisory-db-3157b0e258782691` | 目录存在 + 文件数 + （git 仓则）HEAD sha | 同上（刷新走 `ci/refresh-advisory-db.sh`，代理 `socks5h://<内网地址>:1080`；GitHub 不可达时沿用旧库 WARN 降级） |
 | `netns` | 内核能力 | `unshare -Urn true` 退出码 | 无非特权 user namespace ⇒ step6 断网隔离不可用 ⇒ 门必红（`ci/run.sh` 自身语义）；**本件只探测不升权，永不调用 sudo** |
 
 供给清单落 `<队列>/supply/host-supply-<task_id>.json`（含各件 sha256 前 12 位与版本号；
