@@ -155,16 +155,9 @@ impl IfaceLog {
             }
         }
         let off_interface = total - on_interface;
-        let rate_milli = if total == 0 {
-            0
-        } else {
-            (on_interface * 1000 / total) as u64
-        };
-        let fail_ratio_milli = if total == 0 {
-            0
-        } else {
-            (failed * 1000 / total) as u64
-        };
+        // clippy::manual_checked_ops 清偿（基线修批 2026-11-06）：语义恒等——total==0 时 checked_div=None→0
+        let rate_milli = (on_interface * 1000).checked_div(total).unwrap_or(0) as u64;
+        let fail_ratio_milli = (failed * 1000).checked_div(total).unwrap_or(0) as u64;
         let class = match fail_ratio_milli {
             0 => "none",
             1..=99 => "marginal",
