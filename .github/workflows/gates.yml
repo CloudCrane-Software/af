@@ -63,6 +63,14 @@
 #     ① 克隆前清空 workspace 残留（actions/checkout clean 同款语义）；
 #     ② clone 有限重试 3 次（治直连抖动）；清不净/连不上仍 fail-closed 判红。
 #
+# ★ 2026-11-06 改版记录 ④（checkout 三级兜底链，卡 factory-os#43/D-105；
+#   判据件/语义件零改动）：当夜 gov 代理上游抖（200→000→000，PR#12 gates
+#   三连红实证窗口）而 codeload.github.com 直连全程 200 ⇒ L1 直连 clone
+#   （②版原样，清残+3 次）失败→ L2 经 runner .env 代理变量 clone（清残+3 次，
+#   代理值只进 git -c http.proxy，不回显不落盘）失败→ L3 codeload tarball
+#   解包（--strip-components=1 入 workspace 根，树与 clone 等价——后续门全为
+#   文件面检查不依赖 .git，检出回显在无 .git 时改走 AF_HEAD_SHA 字段）。
+#   每级失败留 [fallback] 日志痕迹；三级皆败 fail-closed 判红。
 # ★ 专项门点选值来源：on 触发面被 R04 钉死为仅 pull_request（禁
 #   workflow_dispatch/workflow_call，两处均禁），而 pull_request 事件无 inputs
 #   上下文 ⇒ 点选值经 `github.event.inputs.special_gates` 读取、PR 上恒为空
@@ -181,6 +189,7 @@ jobs:
           AF_REPOSITORY: ${{ github.repository }}
         run: |
           set -eu
+          set -o pipefail
           REF="${AF_HEAD_REF:-${GITHUB_HEAD_REF:-}}"
           if [ -z "$REF" ]; then
             echo "取不到 PR 头分支（事件上下文缺 pull_request.head.ref）" >&2
@@ -196,8 +205,15 @@ jobs:
           #      directory."（run 42197092071 实测）；
           #   ② github.com:443 直连偶发 curl 28 超时（run 42196414373 实测，
           #      134s 连不上；同时段复测 200，属抖动）。
-          # 处置：克隆前清空 workspace（残留即清）+ clone 有限重试 3 次。
-          # 清不净/连不上 ⇒ 本 step 仍 fail-closed 判红——不吞红、不放宽。
+          #   ③ 2026-11-06 卡#43 三级兜底链：L1 直连 clone（清残+3 次重试，
+          #      ②版原样）→ L2 经代理 clone（runner .env 代理变量，清残+3 次）
+          #      → L3 codeload tarball 解包（codeload.github.com/{org}/{repo}/
+          #      tar.gz/refs/heads/{ref}，匿名公开仓合法；解包树与 clone 等价
+          #      ——后续门全为文件面检查不依赖 .git，仅检出回显改走 sha 字段）。
+          #      每级失败留日志痕迹；三级皆败 fail-closed 判红——不吞红、不放宽。
+          # 处置不变式：克隆前清空 workspace（残留即清）；代理值只进 git -c
+          # http.proxy，不回显、不落盘、不外溢出本 step。
+          VIA=""
           attempt=0
           until [ "$attempt" -ge 3 ]; do
             if [ -n "$(ls -A . 2>/dev/null)" ]; then
@@ -205,18 +221,65 @@ jobs:
               find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
             fi
             if git clone --depth 1 --branch "$REF" "$URL" .; then
+              VIA="L1-git-clone-direct"
               break
             fi
             attempt=$((attempt + 1))
             echo "clone 失败（第 $attempt/3 次）——5s 后重试" >&2
             sleep 5
           done
-          if [ "$attempt" -ge 3 ]; then
-            echo "clone 三次均失败——判红（fail-closed）" >&2
+          if [ -z "$VIA" ]; then
+            echo "[fallback] L1 github.com 直连 clone 三次均失败——转 L2 代理 clone" >&2
+            PROXY="${https_proxy:-${HTTPS_PROXY:-${http_proxy:-${HTTP_PROXY:-}}}}"
+            if [ -n "$PROXY" ]; then
+              attempt=0
+              until [ "$attempt" -ge 3 ]; do
+                if [ -n "$(ls -A . 2>/dev/null)" ]; then
+                  find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+                fi
+                if git -c http.proxy="$PROXY" clone --depth 1 --branch "$REF" "$URL" .; then
+                  VIA="L2-git-clone-proxy"
+                  break
+                fi
+                attempt=$((attempt + 1))
+                echo "[fallback] L2 代理 clone 失败（第 $attempt/3 次）——5s 后重试" >&2
+                sleep 5
+              done
+            else
+              echo "[fallback] L2 无代理变量可取（runner env 缺 http(s)_proxy）——跳过转 L3" >&2
+            fi
+          fi
+          if [ -z "$VIA" ]; then
+            echo "[fallback] L2 代理 clone 不可用/均失败——转 L3 codeload tarball" >&2
+            ORGREPO="${URL#https://github.com/}"
+            ORGREPO="${ORGREPO%.git}"
+            TARURL="https://codeload.github.com/${ORGREPO}/tar.gz/refs/heads/${REF}"
+            attempt=0
+            until [ "$attempt" -ge 3 ]; do
+              if [ -n "$(ls -A . 2>/dev/null)" ]; then
+                find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+              fi
+              # --noproxy '*'：L3 刻意直连 codeload（第三条路由），不受 L2
+              # 同源代理变量牵连——代理死时 tarball 路仍活（卡#43 实测形态）。
+              if curl -fsSL --noproxy '*' --connect-timeout 15 --max-time 300 "$TARURL" | tar -xz --strip-components=1 -C .; then
+                VIA="L3-codeload-tarball"
+                break
+              fi
+              attempt=$((attempt + 1))
+              echo "[fallback] L3 codeload tarball 失败（第 $attempt/3 次）——5s 后重试" >&2
+              sleep 5
+            done
+          fi
+          if [ -z "$VIA" ]; then
+            echo "[fallback] 三级皆失败（直连 clone/代理 clone/codeload tarball）——判红（fail-closed）" >&2
             exit 1
           fi
-          git --no-pager log --oneline -1
-          echo "检出 PR 头树：ref=$REF url=$URL 期望 head.sha=${AF_HEAD_SHA:-未提供}"
+          if [ -d .git ]; then
+            git --no-pager log --oneline -1
+          else
+            echo "（L3 tarball 检出无 .git——文件面等价，跳过 git log）"
+          fi
+          echo "检出 PR 头树：ref=$REF url=$URL 期望 head.sha=${AF_HEAD_SHA:-未提供}｜经=$VIA"
 
       - name: 工具链供给（按仓内钉住版供给 rustfmt/clippy 组件；已装则复用）
         run: |
