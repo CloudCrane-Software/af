@@ -87,8 +87,8 @@ st-b-C075 的 na_reason（`strategies/st-b-C075.yaml:13`）：训练流程的被
 | 计数钉 | 119，本卡零改动、与声明同步 | `registry_decl_test.rs:144-146`、`bind_test.rs:44-46`、`pkg_reportkit_package.rs:37-38`+`:100` |
 | 本卡新增声明 | **0 条**（训练轨未派单，depends_on 未满足——禁造空转件） | `git show --stat`（分支 diff） |
 | 登记册条目 | 0 条（空集 fail-closed，如实登记） | `af/packages/training-artifacts.json` |
-| strategies_check | 44 compilable / 17 not_applicable 不劣化（本卡零 `strategies/` 改动） | anolis 实跑，退出码与四行输出见收卷提交 |
-| anolis 门（fmt / test / strategies_check / clippy） | 退出码与结果摘要 | 收卷提交补登（anolis 实录） |
+| strategies_check | 44 compilable / 17 not_applicable **不劣化**（本卡零 `strategies/` 改动） | anolis 实跑 exit 0：`dsl_states={'compilable': 44, 'not_applicable': 17}`，R5 跨树一致（基线 HEAD `b437b263`，only-in-worktree=0 / content-diff=0） |
+| anolis 门（worktree detached `b437b263`；`CARGO_TARGET_DIR=/data/bench/targets/s17-training-artifact-registry`） | **五门全绿**：`cargo fmt --check` exit 0（零 diff）；`cargo test -p af-compiler -p af-dsl` exit 0（本接口测试 `training_artifact_registry_test` 9 passed / 0 failed）；`cargo test -j4 --workspace` exit 0（162 suites / 1632 passed / 0 failed / 9 ignored）；`cargo clippy --workspace --all-targets -j4` exit 0（本卡文件零警告；4 条存量基线警告非本卡所生） | anolis 实录：脚本 `/data/bench/s17-training-full-gates.sh`，证据落 `/data/bench/s17-training-evidence/`（首轮红读数存档 `-round1/`） |
 
 ## 七、边界与未决
 
