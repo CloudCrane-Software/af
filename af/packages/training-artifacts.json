@@ -1,0 +1,5 @@
+{
+  "schema": "af.training-artifact-registry/1",
+  "note": "训练轨（RL 搜索本体，外派训练轨、不在本仓）演化产物的 af 侧回注登记册。映射规约正本 = 同目录 training-artifact-registry.md；机器校验 = crates/af-compiler/tests/training_artifact_registry_test.rs。本册只承载「产物 → components.json 声明」映射（tool_wrapper / unit_judge 两形态闭集）；提示词/hook 形态产物走 af/packages/README.md 的提示词资产面（MANIFEST.sha256 逐件核对），不进本册。D-56 交付时点训练轨未派单（depends_on 未满足），artifacts 为空集——fail-closed：无产物即无回注，禁造空转件。",
+  "artifacts": []
+}

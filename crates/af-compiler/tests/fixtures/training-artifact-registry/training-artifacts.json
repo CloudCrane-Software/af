@@ -1,0 +1,14 @@
+{
+  "schema": "af.training-artifact-registry/1",
+  "note": "夹具登记册（配合同目录合成 components.json；非仓库正本——仓库正本 = af/packages/training-artifacts.json）。用途：让 training_artifact_registry_test.rs 的盘面对话在非空册上实跑，并覆盖合成声明上的 R5 分支（builtin 目标未注册 / 预留包路径 / 声明无 impl_ref / 缺 @crate 段）。",
+  "artifacts": [
+    {
+      "artifact": "trainkit/run-9/unit_judge/rerank_gate",
+      "kind": "unit_judge",
+      "declaration": "pkg.train.judge",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.train.judge@af-execline",
+      "evidence": "fixtures/training-artifact-registry/readings.json"
+    }
+  ]
+}
