@@ -114,6 +114,13 @@ jobs:
           if [ -z "$URL" ]; then
             URL="https://github.com/${AF_REPOSITORY}.git"
           fi
+          # 幂等 checkout（runner 环境适配，非判据放宽）：自托管 runner（anolis-heavy）
+          # 工作目录在 job 间残留——同 PR 的 f1/gates 两 job 串行共用目录，先跑者
+          # clone 留树，后跑者 `git clone … .` 即 128 假红（run 42213944569 attempt 1
+          # 与 run 42214313622 attempts 1-2 实证：`fatal: destination path '.' already
+          # exists and is not an empty directory.`，checkout 挂 ⇒ 门面从未真正执行）。
+          # clone 前清空工作目录内容；find 自身失败仍走 set -eu 红面，不吞红（R21 形态零触碰）。
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} +
           git clone --depth 1 --branch "$REF" "$URL" .
           git --no-pager log --oneline -1
           echo "检出 PR 头树：ref=$REF url=$URL 期望 head.sha=${AF_HEAD_SHA:-未提供}"

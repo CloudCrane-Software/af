@@ -115,6 +115,13 @@ jobs:
           fi
           # 公开披露镜像 ⇒ 匿名 clone 即可：本 workflow 不注入任何 token
           # （零长期凭据、零凭据落盘、零凭据进 argv）。
+          # 幂等 checkout（runner 环境适配，非判据放宽）：自托管 runner（anolis-heavy）
+          # 工作目录在 job 间残留——同 PR 的 f1/gates 两 job 串行共用目录，先跑者
+          # clone 留树，后跑者 `git clone … .` 即 128 假红（run 42213944569 attempt 1
+          # 与 run 42214313622 attempts 1-2 实证：`fatal: destination path '.' already
+          # exists and is not an empty directory.`）。clone 前清空工作目录内容；
+          # find 自身失败仍走 set -eu 红面，不吞红（R21 形态零触碰）。
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf {} +
           git clone --depth 1 --branch "$REF" "$URL" .
           git --no-pager log --oneline -1
           echo "检出 PR 头树：ref=$REF url=$URL 期望 head.sha=${AF_HEAD_SHA:-未提供}"
