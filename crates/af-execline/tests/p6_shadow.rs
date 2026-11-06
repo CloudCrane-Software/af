@@ -331,8 +331,9 @@ fn jsonl_lines(path: &Path) -> Vec<Value> {
 fn cmp_p6_frozen_fixture_provenance() {
     let expect = [
         (
+            // scrub provenance：原 pin b857383abdc4e3dfc0262c90ebb9c124ea3a44cb2b069f9175472f2f245981ad 对应披露前原件（Gitea 源仓侧保留）
             "main.rs",
-            "b857383abdc4e3dfc0262c90ebb9c124ea3a44cb2b069f9175472f2f245981ad",
+            "4e96b69f0cd0e529c6457073574e30a05b694ca5cc7bebc84df6f2e7bd6b1dae",
         ),
         (
             "swev.rs",
