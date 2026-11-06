@@ -1,0 +1,37 @@
+{
+  "components": [
+    {
+      "class": "unit",
+      "name": "pkg.train.judge",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.train.judge@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.train.wrapper",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.train.unwired@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.train.reserved",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "packages/trainkit@1/impl"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.train.bare",
+      "version": "1",
+      "effect_class": "pure"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.train.nocrate",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.train.nocrate"
+    }
+  ]
+}
