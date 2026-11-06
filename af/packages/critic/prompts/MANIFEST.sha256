@@ -1,0 +1,3 @@
+# critic prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+451cfaa9770486cc4dfb896eeb25e4e15c8a361634d744ed8c0a49bc1b2165a5  prompts/coder_system.md

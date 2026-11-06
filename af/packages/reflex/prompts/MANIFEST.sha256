@@ -1,0 +1,4 @@
+# reflex prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+d74c23749924ffa52ec91e02ad4fbcdeec46be2d0cceb92f458936fe8ab62adc  prompts/actor_system.md
+5b694f07dc12586f163bb15c554649626de0d3e2f270114fb9e6c991817af103  prompts/reflector_system.md

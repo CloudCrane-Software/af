@@ -1,0 +1,4 @@
+# serve prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+ce30ba9ce9560ab9bc5017b8ae96f2e7fd0ed1a1d656c7a79f80609f2c447966  prompts/static_docs.md
+e69903aee5c0b4c17d008426c744e6c3b34fcfe72b51d61942b33991b71563a0  prompts/system_prompt.md

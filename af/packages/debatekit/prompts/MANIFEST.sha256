@@ -1,0 +1,4 @@
+# debatekit prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+001e8f97577c97ef5353a8d814c6764efec904b8bd6ee6f6602d74ec28884dbc  prompts/judge_system.md
+82a56c0051d7f3abe5eae2c61ce2284ec0529431ef8d672ad6cd8bdb159093c4  prompts/system.md

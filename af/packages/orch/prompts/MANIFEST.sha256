@@ -1,0 +1,5 @@
+# orch prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+89ce57c000236d01ee776fc53dab583e6f8bb9e8f9270310d9d856fe0e5ce08f  prompts/fixer_system.md
+f6b047a57f80710c177d8d7b072e599fc3f29e56fc762b653a3f3490b7f929f9  prompts/lead_system.md
+114295e105ae8a68c436dbf5c5fd7b0862f5b063ddeb3b3d9bf1472ba8687294  prompts/scout_system.md

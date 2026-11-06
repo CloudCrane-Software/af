@@ -1,0 +1,5 @@
+# merge prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+4aefba8dd40ef6472b59821d54a4bbaac07ad9a9de9083a3fc802b7264a39739  prompts/attribution_system.md
+b2202b6ce2b70d9f98d016108bd26fb9290ae07ddd64bc06cc0dc1af48b1c6af  prompts/escalation_system.md
+695fa0111f0b2e928f224d6cc570351b324d69e3d8d9644e4d95d7117d14d856  prompts/resolver_system.md

@@ -1,0 +1,4 @@
+# stall prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+7dcae1b2c564369e055c80c4de963421a7b993efd148b6ce92d683254a356200  prompts/executor_system.md
+b06358f652eb64000ccec86b4d655d18c751031727d71082b0a34049e4107351  prompts/planner_system.md

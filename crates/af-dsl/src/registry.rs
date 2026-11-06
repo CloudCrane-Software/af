@@ -229,6 +229,14 @@ impl Registry {
             }
             let manifest_path = entry.join("manifest.json");
             if !manifest_path.is_file() {
+                // 提示词资产包（裁决10 template_ref 装载机制）：有 prompts/ 子目录但无
+                // manifest.json 的目录 = 纯模板供给包（装载面资产，非图清单包）。图清单与
+                // 模板/组件资产解耦——同 af-compiler ComponentRegistry 对无 components.json
+                // 包的跳过纪律；此类目录不贡献图引用，跳过不计 package_count。既无 manifest
+                // 亦无 prompts 的目录仍是命名笔误，fail-closed 拒（ManifestMissing）。
+                if entry.join("prompts").is_dir() {
+                    continue;
+                }
                 return Err(RegistryError::ManifestMissing(entry));
             }
             let m = PackageManifest::parse_file(&manifest_path)?;

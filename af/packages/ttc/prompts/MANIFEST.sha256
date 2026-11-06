@@ -1,0 +1,6 @@
+# ttc prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+88a56666b60c1238a137a117c8e3f0b11612597e6fdd9d747c92cfc17c9565af  prompts/chooser_system.md
+cd2ffb3f06f739dc86a0add6618440ebbc9335bf0430d4fa07a02759deebd053  prompts/coder_system.md
+599fa74492a767d61da37b8561e2d703f69e8218b1cf7a700faa350a4e50771f  prompts/critic_system.md
+fb2484533e5271f9c3b1fcaae97292e7a700c2b6c5db0e7a51f4be9933dfe5dc  prompts/scorer_system.md

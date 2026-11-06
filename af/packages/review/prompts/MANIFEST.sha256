@@ -1,0 +1,4 @@
+# review prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+b48b571294e523e89ed52d0e11681c0b3ca46a7c789ff63f9f3292e5e815e68e  prompts/coder_system.md
+6da940df2e516ca1183aecaa343fdb21f20daaa34be1b5287db10facfc580077  prompts/fresh_system.md

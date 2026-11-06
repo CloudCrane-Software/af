@@ -1,0 +1,8 @@
+# coder prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+b8cd1131182b9c19290f4314fee4f1ebb4d445787d7cffaa5703bd17983412f5  prompts/analyze_system.md
+6228540440c0524744fcdc3ed68c918c3e1b56bc87bd633bea9422daee6fe5c5  prompts/confined_system.md
+dc9178ff6d5b39a27721c20726dfdbe1dceda1de59daaa8bbd3bd3a716bb4c40  prompts/locate_system.md
+44bebe465f4ee7f7e0adf2a2297339bbbf72e0b06c5322a8649db48ecbf4a43a  prompts/patch_system.md
+54a97b628dc05ba543c0e69ef64eda2af5d02ff151685f349a1d3d0c8530b1b8  prompts/review_system.md
+dace30cfef548b87517b8910dc80887c4c308c01ec049fa9e25a280721d294f1  prompts/system.md
