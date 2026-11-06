@@ -156,3 +156,32 @@ env/locate/view/edit，unit 锚 `pkg.sweng.test_unit`），model_route 带与
   `bind_test.rs` / `pkg_reportkit_package.rs` 总量 119；`pkg_sweng.rs`
   `tool_impl_name` 别名落到已接线四臂。
 
+## S17 供给注册批 A（strategies 17 条 not_applicable 的三分类 · ①类 7 条，2026-11-06）
+
+设计稿 `30-工件/strategies17-供给面设计-20261106.md` §五.1–§五.7 的 ①类
+7 条（st-b-C058/C121/C098/C118/C087/C126/C105）合批施工。**8 条声明**
+（C126 一条出两件：M 记录型包装器 + S 服从度单元）：
+
+- 扩容量：unit 7 + tool 1 = **8**；终态总量 **127**（119 + 8）。全部暂驻
+  根级（无图可声明，不新建空包目录——同 P2-L12/E9001 纪律）。
+- 7 个 unit 一律锚已接线判定单元 `executor:builtin/pkg.sweng.test_unit@af-execline`
+  （`pkg.retrieval.ndcg` / `pkg.skill.pair_delta` / `pkg.review.bug_capture` /
+  `pkg.cost.efficiency` / `pkg.ab.placebo` / `pkg.iface.adherence` /
+  `pkg.ablate.matrix`）。
+- tool `pkg.iface.mcp_client@1` 是**记录型包装器**（st-b-C126 的 M 部分）：
+  新 builtin 落 `crates/af-execline/src/pkg/iface.rs`，每次调用落
+  `{interface, tool_name, args_digest, ok}`（`record.rs:234` 的 usage 只有
+  `unit_calls` 计数、无点名级序列——本件补该面），底层执行经
+  `graph_unit::wired_tool_call` 落已接线四臂、**不新增能力**；表外工具
+  `ok=false` 记账。单测 `crates/af-execline/tests/pkg_iface.rs`。
+- 模板按需：本批 7 条 snippet 新引用 14 个模板，全部落
+  `sweng/prompts/` 并同批登记进 `MANIFEST.sha256`（闭集测试
+  `pkg_sweng_package.rs::sweng_prompt_manifest_is_closed_over_files_on_disk`
+  逐件核对）——**新增引用的模板不留供给缺口**。既有 78 个 `template_ref`
+  引用中 76 个无盘文件的存量缺口（44 条 compilable 全体的执行面问题）
+  不在本批范围（设计稿 §八.4），不混批清偿。
+- fail-closed 不变：声明缺 `effect_class`/`endpoint`、类不匹配仍 E9001/E9003。
+- 测试：`registry_decl_test.rs` 增 `DECLS_S17_A` 8 名 + impl_ref 断言；
+  `bind_test.rs` / `pkg_reportkit_package.rs` 总量 127（digest 字面量钉同批
+  更新）。
+

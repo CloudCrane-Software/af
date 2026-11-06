@@ -9,5 +9,118 @@ claimed_value:
 sources: [S173, S176]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: not_applicable
-na_reason: "接口选型方法：策略内容是「按失败成本与实际接口服从（而非 token 数）选 CLI/MCP」的选型判据（S176 body.测试设计），是工具面决策规程；AFB 的 uses.tools 只做组件装订，不表达选型实验口径。"
+dsl_state: compilable
+# S17 供给注册批 A（设计稿 strategies17-供给面设计-20261106.md §五）：
+# not_applicable → compilable。原 na_reason 的三态判据被 §四 的三分类
+# 复核推翻（与 st-C007/st-C019/st-b-C001 既有 compilable 先例不符），
+# 依据见 dsl_snippet 的 intent 段；组件声明见 af/packages/components.json。
+dsl_snippet: |
+  version: 1
+  meta:
+    name: interface_adherence_cli_vs_mcp
+    graph_version: "1.0"
+    entry: cli_arm
+    input: iface_input
+    output: { ref: iface_report, from: report }
+    intent: "CLI vs MCP 投影（设计稿 §五.6）：两个显式兄弟 map 节点=CLI 臂（pkg.harness.shell@1）与 MCP 臂（pkg.iface.mcp_client@1 记录型包装器，每次调用落 {interface, tool_name, args_digest, ok}，底层走已接线工具、不新增能力）→ check pkg.iface.adherence@1 按指派接口清单算 adherence_rate_milli/off_interface_calls/failure_cost_class → 报告。记录型 builtin 是 M 件：record.rs:234 的 usage 只有 unit_calls 计数、无点名级序列。"
+  types:
+    - name: iface_input
+      schema:
+        type: object
+        required: [question, tasks, assigned_interfaces]
+        properties:
+          question: { type: string }
+          tasks: { type: array, items: { type: string } }
+          assigned_interfaces: { type: array, items: { type: string } }
+    - name: arm_result
+      schema:
+        type: object
+        required: [arm_id, task_id, resolved, tokens]
+        properties:
+          arm_id: { type: string }
+          task_id: { type: string }
+          resolved: { type: boolean }
+          tokens: { type: integer }
+    - name: adherence_result
+      schema:
+        type: object
+        required: [adherence_rate_milli, off_interface_calls, failure_cost_class]
+        properties:
+          adherence_rate_milli: { type: integer }
+          off_interface_calls: { type: integer }
+          failure_cost_class: { type: string }
+    - name: iface_report
+      schema:
+        type: object
+        required: [adherence_rate_milli, off_interface_calls, failure_cost_class, arms]
+        properties:
+          adherence_rate_milli: { type: integer }
+          off_interface_calls: { type: integer }
+          failure_cost_class: { type: string }
+          arms: { type: integer }
+  nodes:
+    - id: cli_arm
+      kind: task
+      map:
+        over: input.tasks
+        body:
+          nodes:
+            - id: runner
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.harness.shell@1] }
+              emits: { result: arm_result }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.iface_arm_system, vars: { interface: "cli" }, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          edges: []
+      emits: { cli_results: { from_body: runner.result } }
+    - id: mcp_arm
+      kind: task
+      map:
+        over: input.tasks
+        body:
+          nodes:
+            - id: runner
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.iface.mcp_client@1, pkg.repo.grep@1, pkg.harness.shell@1] }
+              emits: { result: arm_result }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.iface_arm_system, vars: { interface: "mcp" }, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          edges: []
+      emits: { mcp_results: { from_body: runner.result } }
+    - id: assess
+      kind: check
+      uses: { unit: pkg.iface.adherence@1 }
+      consumes:
+        cli_results: "list<arm_result>"
+        mcp_results: "list<arm_result>"
+      emits: { adherence: adherence_result }
+    - id: report
+      kind: task
+      uses: { model: route.cheap@1 }
+      consumes: { adherence: adherence_result }
+      emits: { report: iface_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.iface_delta_system, quota_tokens: 400 }
+          - { from: edge, port: adherence, policy: project, quota_tokens: 400 }
+  edges:
+    - { from: cli_arm, output: cli_results, to: assess, input: cli_results }
+    - { from: mcp_arm, output: mcp_results, to: assess, input: mcp_results }
+    - { from: assess, output: adherence, to: report, input: adherence }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 6000 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 6000000 }
+    failures:
+      - class: tool_error
+        route: same_node
+        feedback: error_observation
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed

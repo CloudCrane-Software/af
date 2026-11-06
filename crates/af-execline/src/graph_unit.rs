@@ -62,7 +62,7 @@ use af_compiler::ir::{BudgetDimension, SectionSpec};
 use af_compiler::{ComponentRegistry, ExecutablePlan};
 use af_harness::{AgentSpec, ContextTemplate, ToolDecl};
 use af_workorder::WorkArtifact;
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::agent::{
     AgentLaunch, AgentRunFailure, AgentRunOutcome, AgentRunner, ToolBinding, ToolFn,
@@ -255,11 +255,69 @@ impl GraphExecuteUnit {
         // A 席合流迁移：工具通道统一走主线 report-ring 的 ToolBinding/extra_tools
         // 缝（ToolFn = &Value→Result<Value,String>），根凭证自动覆盖工具名。
         let mut tools: Vec<ToolBinding> = Vec::new();
+        // S17 记录型包装器的调用序列（st-b-C126）：住本节点生命周期，模型环
+        // 结束后整表落节点证据目录（`nodes/<id>/iface-calls.json`）——点名级
+        // 调用记录不只在进程内，跑完可复核（W2-C49 同款留档纪律）。
+        let mut iface_log: Option<Arc<crate::pkg::iface::IfaceLog>> = None;
         for tool in &node.components.tools {
             let decl = sweng::tool_decl(&tool.reference, env.workdir()).ok_or_else(|| {
                 self.fail(format!("工具 {} 无模型面声明（15 件表外）", tool.reference))
             })?;
             if decl.name == "bash" {
+                continue;
+            }
+            // pkg.iface.mcp_client：记录型包装器（S17 供给注册批 A）。底层
+            // 工具名由模型在调用入参里给（`tool_name`），故此处不能按引用
+            // 静态分发——闭包持 IfaceLog，每次调用落一行
+            // `{interface, tool_name, args_digest, ok}`。
+            if sweng::tool_impl_name(sweng::name_of(&tool.reference))
+                == crate::pkg::iface::NAME_MCP_CLIENT
+            {
+                let log = Arc::new(crate::pkg::iface::IfaceLog::new());
+                let bridge = self.bridge.clone();
+                let env_handle = env.clone();
+                let sink = Arc::clone(&log);
+                iface_log = Some(log);
+                tools.push(ToolBinding {
+                    name: decl.name.clone(),
+                    handler: Arc::new(move |args: &Value| {
+                        let interface = args
+                            .get("interface")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        let underlying = args
+                            .get("tool_name")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_string();
+                        let inner = args.get("args").cloned().unwrap_or_else(|| json!({}));
+                        // 无接口标签 = 无归属，拒收且不记账（记了也无处归因）；
+                        // 缺 tool_name = 调用企图失败，先按 ok=false 记账再拒
+                        // （fail-closed：失败企图也进序列，不得从服从度分母里消失）。
+                        if interface.is_empty() {
+                            return Err(
+                                "pkg.iface.mcp_client 需要非空 interface 入参（无接口标签=无归属）"
+                                    .to_string(),
+                            );
+                        }
+                        if underlying.is_empty() {
+                            sink.record(&interface, "", &inner, false);
+                            return Err(
+                                "pkg.iface.mcp_client 需要非空 tool_name 入参（已按失败记账）"
+                                    .to_string(),
+                            );
+                        }
+                        crate::pkg::iface::mcp_client(
+                            &sink,
+                            &interface,
+                            &underlying,
+                            &bridge,
+                            &env_handle,
+                            &inner,
+                        )
+                    }),
+                });
                 continue;
             }
             let f = node_tool_fn(&tool.reference, self.bridge.clone(), env.clone()).ok_or_else(
@@ -513,6 +571,31 @@ impl GraphExecuteUnit {
             }
         };
         stage.account_node(&report);
+        // S17 记录型包装器收尾：点名级调用序列落节点证据目录
+        // （`nodes/<id>/iface-calls.json`）。写盘失败**不翻判定**（与 W2-C49
+        // 留档失败不翻判定同口径），但留档缺失必须显形——故失败即 fail-loud
+        // 上报（不静默丢弃：接口服从度读数的唯一原始面就是这份序列）。
+        if let Some(log) = &iface_log {
+            let calls = log.calls();
+            if !calls.is_empty() {
+                let file = node_dir.join("iface-calls.json");
+                let body = json!({
+                    "envelope": "v1",
+                    "from": node.node_id,
+                    "calls": calls,
+                });
+                let text = serde_json::to_string_pretty(&body).map_err(|err| {
+                    self.fail(format!("节点 {} 接口调用序列化失败: {err}", node.node_id))
+                })?;
+                std::fs::write(&file, text).map_err(|err| {
+                    self.fail(format!(
+                        "节点 {} 接口调用序列留档失败 {}: {err}",
+                        node.node_id,
+                        file.display()
+                    ))
+                })?;
+            }
+        }
         // 红队 W2-C48：task 节点收尾即取工作区 diff（keyed-declare/终态消息
         // 两路此前零取证——test_edit 记账在图臂整体不存在）；bare declare
         // 路径的 envelope 推导复用本次取证（一次捕获两用）。碰测试面 =
@@ -2363,58 +2446,91 @@ fn resolve_route_endpoint(
 /// 节点工具执行闭包（15 件 builtin 表内已接线的只读/编辑/bash 面）。
 /// A 席合流迁移：签名随主线 ToolFn 缝——参数对象直入（不再 parse 文本），
 /// 观察文本以 Ok(Value::String) 回给模型，Err = 工具失败文案。
+///
+/// `pkg.iface.mcp_client`（S17 记录型包装器）不在此建闭包——它要同时持有
+/// 调用记录表（[`crate::pkg::iface::IfaceLog`]，住 `drive_task_node`），
+/// 由该处专缝装配；底层执行仍走 [`wired_tool_call`]。
 fn node_tool_fn(
     reference: &str,
     bridge: Arc<dyn HostBridge + Send + Sync>,
     env: Arc<TbEnv>,
 ) -> Option<ToolFn> {
+    // 装载期 fail-loud：表外工具 = None（驱动面「无 v1 builtin 执行面」红）——
+    // 不得退化成「调用时才失败」的形状（E9001 起 `pkg.iface.mcp_client` 的
+    // 底层工具名是运行期入参，那层由包装器自己按 ok=false 记账）。
+    if !wired_tool_known(reference) {
+        return None;
+    }
+    // 闭包须 'static：引用串拷贝进闭包（原逐臂实现各自持有 Arc 句柄，
+    // 无引用捕获；合并到 wired_tool_call 后引用是唯一捕获面）。
+    let reference = reference.to_string();
+    Some(Arc::new(move |args: &Value| {
+        wired_tool_call(&reference, &bridge, &env, args)
+    }))
+}
+
+/// 是否已接线（`node_tool_fn` 的装载期判据；分发表 = [`sweng::tool_impl_name`]
+/// 的四个臂 + env/bash）。表外工具不得建模面执行闭包。
+pub(crate) fn wired_tool_known(reference: &str) -> bool {
+    matches!(
+        sweng::tool_impl_name(sweng::name_of(reference)),
+        "pkg.sweagent.env"
+            | "pkg.sweng.locate"
+            | "pkg.sweagent.aci.search"
+            | "pkg.sweng.view"
+            | "pkg.sweagent.aci.open"
+            | "pkg.sweng.edit"
+            | "pkg.sweagent.aci.edit"
+    )
+}
+
+/// 已接线 builtin 工具的一次真实调用（`node_tool_fn` 四臂与 S17
+/// `pkg.iface.mcp_client` 记录型包装器共用的执行缝）。
+///
+/// 分发表 = [`sweng::tool_impl_name`]（`pkg/sweng.rs:99` 同型）：别名经
+/// `tool_impl_name` 归一后按臂分发；**表外工具 = Err**（无已接线执行面，
+/// 不得静默当成功——包装器按失败记账，`adherence` 分子不虚增）。
+pub(crate) fn wired_tool_call(
+    reference: &str,
+    bridge: &Arc<dyn HostBridge + Send + Sync>,
+    env: &Arc<TbEnv>,
+    args: &Value,
+) -> Result<Value, String> {
+    let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
+    let n = |k: &str| args.get(k).and_then(Value::as_u64).map(|x| x as u32);
     match sweng::tool_impl_name(sweng::name_of(reference)) {
         "pkg.sweagent.env" => {
-            let bash = Arc::new(sweng::EnvBash::new(bridge, env));
-            Some(Arc::new(move |args: &Value| {
-                Ok(Value::String(
-                    bash.call(
-                        args.get("command").and_then(Value::as_str).unwrap_or(""),
-                        args.get("timeout_sec")
-                            .and_then(Value::as_u64)
-                            .map(|t| t as u32),
-                    ),
-                ))
-            }))
+            let bash = sweng::EnvBash::new(Arc::clone(bridge), Arc::clone(env));
+            Ok(Value::String(bash.call(
+                s("command").as_deref().unwrap_or(""),
+                n("timeout_sec"),
+            )))
         }
-        "pkg.sweng.locate" | "pkg.sweagent.aci.search" => Some(Arc::new(move |args: &Value| {
-            let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
-            let n = |k: &str| args.get(k).and_then(Value::as_u64).map(|x| x as u32);
-            Ok(Value::String(sweng::aci_search(
-                bridge.as_ref(),
-                &env,
-                s("query").or(s("pattern")).as_deref().unwrap_or(""),
-                s("path").as_deref(),
-                n("max_hits"),
-            )))
-        })),
-        "pkg.sweng.view" | "pkg.sweagent.aci.open" => Some(Arc::new(move |args: &Value| {
-            let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
-            let n = |k: &str| args.get(k).and_then(Value::as_u64).map(|x| x as u32);
-            Ok(Value::String(sweng::aci_open(
-                bridge.as_ref(),
-                &env,
-                s("path").as_deref().unwrap_or(""),
-                n("start_line").or(n("start")),
-                n("end_line").or(n("end")),
-            )))
-        })),
-        "pkg.sweng.edit" | "pkg.sweagent.aci.edit" => Some(Arc::new(move |args: &Value| {
-            let s = |k: &str| args.get(k).and_then(Value::as_str).map(str::to_string);
-            Ok(Value::String(sweng::aci_edit(
-                bridge.as_ref(),
-                &env,
-                s("path").as_deref().unwrap_or(""),
-                s("old_text").as_deref().unwrap_or(""),
-                s("new_text").as_deref().unwrap_or(""),
-            )))
-        })),
-        _ => None,
+        "pkg.sweng.locate" | "pkg.sweagent.aci.search" => Ok(Value::String(sweng::aci_search(
+            bridge.as_ref(),
+            env,
+            s("query").or(s("pattern")).as_deref().unwrap_or(""),
+            s("path").as_deref(),
+            n("max_hits"),
+        ))),
+        "pkg.sweng.view" | "pkg.sweagent.aci.open" => Ok(Value::String(sweng::aci_open(
+            bridge.as_ref(),
+            env,
+            s("path").as_deref().unwrap_or(""),
+            n("start_line").or(n("start")),
+            n("end_line").or(n("end")),
+        ))),
+        "pkg.sweng.edit" | "pkg.sweagent.aci.edit" => Ok(Value::String(sweng::aci_edit(
+            bridge.as_ref(),
+            env,
+            s("path").as_deref().unwrap_or(""),
+            s("old_text").as_deref().unwrap_or(""),
+            s("new_text").as_deref().unwrap_or(""),
+        ))),
+        other => Err(format!(
+            "工具 {reference} 无已接线执行面（tool_impl_name → {other} 表外；\
+             登记后续——不为凑数造空转件）"
+        )),
     }
 }
 

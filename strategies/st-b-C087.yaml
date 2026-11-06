@@ -9,5 +9,117 @@ claimed_value:
 sources: [S086, S097]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: not_applicable
-na_reason: "实验设计纪律：策略内容是「带反馈重试的 A/B 必须配同预算盲重采样安慰剂臂」的对照设计要求（S086 body.测试设计）；AFB 表达单次运行图，不表达多臂实验分配与等预算控制。"
+dsl_state: compilable
+# S17 供给注册批 A（设计稿 strategies17-供给面设计-20261106.md §五）：
+# not_applicable → compilable。原 na_reason 的三态判据被 §四 的三分类
+# 复核推翻（与 st-C007/st-C019/st-b-C001 既有 compilable 先例不符），
+# 依据见 dsl_snippet 的 intent 段；组件声明见 af/packages/components.json。
+dsl_snippet: |
+  version: 1
+  meta:
+    name: feedback_retry_vs_placebo_blind_resample
+    graph_version: "1.0"
+    entry: feedback_arm
+    input: ab_input
+    output: { ref: ab_report, from: report }
+    intent: "安慰剂对照投影（设计稿 §五.5）：两个显式兄弟 map 节点=带反馈自修复臂（feedback_retry，failures 路由 feedback: error_observation）与安慰剂臂（blind_resample，不喂失败输出、同 token 预算）——多臂分配与等预算控制已有 compilable 先例（st-C019 四臂 / st-b-C001 双账同额），原 na_reason「单图不表达多臂分配」与先例不符，按先例改判 ①。→ check pkg.ab.placebo@1 算 placebo_delta_pp/token_ratio_milli → 报告。"
+  types:
+    - name: ab_input
+      schema:
+        type: object
+        required: [question, tasks]
+        properties:
+          question: { type: string }
+          tasks: { type: array, items: { type: string } }
+    - name: arm_result
+      schema:
+        type: object
+        required: [arm_id, task_id, resolved, tokens]
+        properties:
+          arm_id: { type: string }
+          task_id: { type: string }
+          resolved: { type: boolean }
+          tokens: { type: integer }
+    - name: placebo_result
+      schema:
+        type: object
+        required: [placebo_delta_pp, token_ratio_milli, note]
+        properties:
+          placebo_delta_pp: { type: integer }
+          token_ratio_milli: { type: integer }
+          note: { type: string }
+    - name: ab_report
+      schema:
+        type: object
+        required: [placebo_delta_pp, token_ratio_milli, note, tasks]
+        properties:
+          placebo_delta_pp: { type: integer }
+          token_ratio_milli: { type: integer }
+          note: { type: string }
+          tasks: { type: integer }
+  nodes:
+    - id: feedback_arm
+      kind: task
+      map:
+        over: input.tasks
+        body:
+          nodes:
+            - id: runner
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.harness.shell@1, pkg.harness.edit@1] }
+              emits: { result: arm_result }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.placebo_arm_system, vars: { mode: "feedback_retry" }, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          edges: []
+      emits: { feedback_results: { from_body: runner.result } }
+    - id: blind_arm
+      kind: task
+      map:
+        over: input.tasks
+        body:
+          nodes:
+            - id: runner
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.harness.shell@1, pkg.harness.edit@1] }
+              emits: { result: arm_result }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.placebo_arm_system, vars: { mode: "blind_resample" }, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          edges: []
+      emits: { blind_results: { from_body: runner.result } }
+    - id: assess
+      kind: check
+      uses: { unit: pkg.ab.placebo@1 }
+      consumes:
+        feedback_results: "list<arm_result>"
+        blind_results: "list<arm_result>"
+      emits: { placebo: placebo_result }
+    - id: report
+      kind: task
+      uses: { model: route.cheap@1 }
+      consumes: { placebo: placebo_result }
+      emits: { report: ab_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.placebo_delta_system, quota_tokens: 400 }
+          - { from: edge, port: placebo, policy: project, quota_tokens: 400 }
+  edges:
+    - { from: feedback_arm, output: feedback_results, to: assess, input: feedback_results }
+    - { from: blind_arm, output: blind_results, to: assess, input: blind_results }
+    - { from: assess, output: placebo, to: report, input: placebo }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 6000 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 6000000 }
+    failures:
+      - class: tool_error
+        route: same_node
+        feedback: error_observation
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed

@@ -1,0 +1,741 @@
+{
+  "mode": "compile-all",
+  "registry_root": "/data/bench/s17-registry-batch-a-wt/af/packages",
+  "total": 61,
+  "compilable": 51,
+  "compilable_pass_four_stage": 51,
+  "per_entry": [
+    {
+      "id": "st-C005",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.file_external_memory@1.0+67f2c50eb1f1"
+    },
+    {
+      "id": "st-C006",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.subagent_isolation_orch@1.0+307eddbe5a35"
+    },
+    {
+      "id": "st-C007",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.harness_leverage_ab@1.0+b39107419256"
+    },
+    {
+      "id": "st-C008",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.cohesion_aware_partition@1.0+d2f3c48010a5"
+    },
+    {
+      "id": "st-C009",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.aflow_mcts_search@1.0+1a9804228131"
+    },
+    {
+      "id": "st-C010",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.stall_counter_replan@1.0+8b88610ccdab"
+    },
+    {
+      "id": "st-C012",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.multi_agent_debate@1.0+cc88fce1ddcd"
+    },
+    {
+      "id": "st-C015",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.context_rot_sweep@1.0+dfdbe7720060"
+    },
+    {
+      "id": "st-C016",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.sop_artifact_pipeline@1.0+737b342040ce"
+    },
+    {
+      "id": "st-C018",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.reflexion_episodic@1.0+c1fa17d37e8c"
+    },
+    {
+      "id": "st-C019",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.aci_arms_ablation@1.0+72832984f1a3"
+    },
+    {
+      "id": "st-C103",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.debate_vs_self_consistency@1.0+3954b68fe4dc"
+    },
+    {
+      "id": "st-C122",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.negative_only_rule_polarity@1.0+f483a87999dd"
+    },
+    {
+      "id": "st-b-C001",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.sample_vote_inverted_u@1.0+7d202693f9d5"
+    },
+    {
+      "id": "st-b-C003",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.entry_triage_gate@1.0+5e1d34746d0a"
+    },
+    {
+      "id": "st-b-C022",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C028",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.llm_summarize_compact@1.0+58c9f78b9cd1"
+    },
+    {
+      "id": "st-b-C029",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.tool_result_clearing@1.0+d088f58276cd"
+    },
+    {
+      "id": "st-b-C035",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.retrieval_agent_precision_gate@1.0+2273e176060b"
+    },
+    {
+      "id": "st-b-C036",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.lexical_anchor_graph_expand@1.0+23eece44c30e"
+    },
+    {
+      "id": "st-b-C037",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.explore_then_fix@1.0+eb923222ee8c"
+    },
+    {
+      "id": "st-b-C038",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.tool_output_intent_gate@1.0+d59f995dee45"
+    },
+    {
+      "id": "st-b-C042",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.fs_grep_memory@1.0+36d23ae00648"
+    },
+    {
+      "id": "st-b-C046",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C048",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.fresh_context_review@1.0+34cf9ae50707"
+    },
+    {
+      "id": "st-b-C054",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C055",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.caid_dag_delegation@1.0+a44cbaacac36"
+    },
+    {
+      "id": "st-b-C056",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.explicit_plan_reminder@1.0+90ef3b9b67b6"
+    },
+    {
+      "id": "st-b-C057",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.post_edit_hook_gate@1.0+d8076da0e529"
+    },
+    {
+      "id": "st-b-C058",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.tool_retrieval_ndcg_ab@1.0+9ee91bc478c4"
+    },
+    {
+      "id": "st-b-C060",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.best_of_n_critic@1.0+770f4e91498a"
+    },
+    {
+      "id": "st-b-C062",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.progressive_skill_disclosure@1.0+efa00a8df5bb"
+    },
+    {
+      "id": "st-b-C063",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C064",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.ir_first_skill_selection@1.0+d51dd03f740b"
+    },
+    {
+      "id": "st-b-C069",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.edit_embedded_lint_gate@1.0+71b8bb968d58"
+    },
+    {
+      "id": "st-b-C071",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.edit_format_routing@1.0+2f727f4340b0"
+    },
+    {
+      "id": "st-b-C073",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C075",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C077",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.critic_tool_feedback@1.0+540ac40ba1eb"
+    },
+    {
+      "id": "st-b-C078",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.codet_dual_exec_voting@1.0+08d69b323825"
+    },
+    {
+      "id": "st-b-C079",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.os_level_dual_boundary_sandbox@1.0+eeec2db2e20d"
+    },
+    {
+      "id": "st-b-C080",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C086",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.compression_four_piece@1.0+d2e76d9d1b4a"
+    },
+    {
+      "id": "st-b-C087",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.feedback_retry_vs_placebo_blind_resample@1.0+5461d05ba273"
+    },
+    {
+      "id": "st-b-C092",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.parallel_ttc_rejection_sampling@1.0+0425bee2c63c"
+    },
+    {
+      "id": "st-b-C095",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.parallel_attempts_chooser@1.0+38b93b505e1c"
+    },
+    {
+      "id": "st-b-C096",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.sample_filter_behavior_cluster@1.0+724487999600"
+    },
+    {
+      "id": "st-b-C097",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.otter_repro_filter@1.0+dedc1b0145bb"
+    },
+    {
+      "id": "st-b-C098",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.review_bug_capture_calibration@1.0+628608de5636"
+    },
+    {
+      "id": "st-b-C102",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.coder_role_task_graph@1.0+573fcbaaa072"
+    },
+    {
+      "id": "st-b-C105",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.component_ablation_matrix@1.0+8a8e6c496904"
+    },
+    {
+      "id": "st-b-C108",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C109",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.weak_explore_then_upgrade@1.0+0ba9f12e931a"
+    },
+    {
+      "id": "st-b-C111",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.per_role_model_routing@1.0+135c3bf29c9c"
+    },
+    {
+      "id": "st-b-C114",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C118",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.cost_efficiency_first_class_metric@1.0+ddcf823613df"
+    },
+    {
+      "id": "st-b-C121",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.skill_marginal_gain_paired_ab@1.0+acbcb1bbd49d"
+    },
+    {
+      "id": "st-b-C124",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.cache_friendly_layout@1.0+6f0a046dc015"
+    },
+    {
+      "id": "st-b-C125",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.merge_conflict_attribution_gate@1.0+7c247ff98fb2"
+    },
+    {
+      "id": "st-b-C126",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.interface_adherence_cli_vs_mcp@1.0+597f1b07c97a"
+    },
+    {
+      "id": "st-b-C128",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    }
+  ]
+}

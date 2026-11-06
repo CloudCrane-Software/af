@@ -135,7 +135,7 @@ fn all_50_p2l12_declarations_resolve_with_expected_version_and_class() {
 }
 
 /// 注册表总量：P2-L11 首批 7 + P2-L12 扩容 50 + G4 reportkit 6 + E9001
-/// 供给批 56 = 119 条声明。
+/// 供给批 56 + S17 供给注册批 A 8（unit 7 + tool 1）= 127 条声明。
 /// （测试名保留 P2-L12 历史口径——中立性预期红名单按名引用，不随计数演进
 /// 改名；计数同步与包落地同 commit——裁决§二。）
 #[test]
@@ -143,8 +143,9 @@ fn repo_registry_total_is_57_after_p2l12_expansion() {
     let reg = repo_registry();
     assert_eq!(
         reg.component_count(),
-        119,
-        "7（P2-L11 首批）+ 50（P2-L12 扩容）+ 6（G4 reportkit）+ 56（E9001）"
+        127,
+        "7（P2-L11 首批）+ 50（P2-L12 扩容）+ 6（G4 reportkit）+ 56（E9001）\
+         + 8（S17 供给注册批 A：unit 7 + tool 1）"
     );
 }
 
@@ -337,6 +338,76 @@ fn all_e9001_declarations_resolve_with_builtin_impl_ref() {
                 assert!(
                     impl_ref.starts_with("executor:builtin/"),
                     "{name} impl_ref 应为 builtin 锚：{impl_ref}"
+                );
+            }
+            ComponentClass::Unit => {
+                assert_eq!(
+                    impl_ref, "executor:builtin/pkg.sweng.test_unit@af-execline",
+                    "{name} unit 锚应指向 test_unit 真实现"
+                );
+            }
+            _ => panic!("{name} 意外类 {class:?}"),
+        }
+    }
+}
+
+// ---- S17 供给注册批 A（st-b-C058/C121/C098/C118/C087/C126/C105，8 名）----
+
+/// S17 供给注册批 A 的 8 条声明（unit 7 + tool 1）：
+/// - 6 个 S 类评估单元（C058 ndcg / C121 pair_delta / C098 bug_capture /
+///   C118 efficiency / C087 placebo / C105 matrix）与 C126 的 S 部分
+///   （iface.adherence）一律落已接线判定单元
+///   `executor:builtin/pkg.sweng.test_unit@af-execline`（E9001 同型锚）；
+/// - C126 的 M 部分 = 记录型包装器 `pkg.iface.mcp_client`（tool，
+///   `crates/af-execline/src/pkg/iface.rs` 新函数 + 分发表接线 + 单测）。
+const DECLS_S17_A: &[(&str, &str, ComponentClass)] = &[
+    ("pkg.iface.mcp_client", "1", ComponentClass::Tool),
+    ("pkg.retrieval.ndcg", "1", ComponentClass::Unit),
+    ("pkg.skill.pair_delta", "1", ComponentClass::Unit),
+    ("pkg.review.bug_capture", "1", ComponentClass::Unit),
+    ("pkg.cost.efficiency", "1", ComponentClass::Unit),
+    ("pkg.ab.placebo", "1", ComponentClass::Unit),
+    ("pkg.iface.adherence", "1", ComponentClass::Unit),
+    ("pkg.ablate.matrix", "1", ComponentClass::Unit),
+];
+
+#[test]
+fn decls_s17_a_table_counts() {
+    let count = |want: ComponentClass| DECLS_S17_A.iter().filter(|(_, _, c)| *c == want).count();
+    assert_eq!(count(ComponentClass::Tool), 1);
+    assert_eq!(count(ComponentClass::Unit), 7);
+    assert_eq!(DECLS_S17_A.len(), 8, "恰好 8 名");
+    let names: std::collections::BTreeSet<&str> = DECLS_S17_A.iter().map(|(n, _, _)| *n).collect();
+    assert_eq!(names.len(), 8, "名字唯一");
+}
+
+#[test]
+fn all_s17_a_declarations_resolve_with_expected_impl_ref() {
+    let reg = repo_registry();
+    for (name, version, class) in DECLS_S17_A {
+        let versions = reg
+            .versions_of(name)
+            .unwrap_or_else(|| panic!("{name} 应已注册（S17 供给注册批 A）"));
+        let decl = versions.get(*version).unwrap_or_else(|| {
+            panic!(
+                "{name}@{version} 应已声明（已声明版本：{:?}）",
+                versions.keys()
+            )
+        });
+        assert_eq!(decl.class, *class, "{name}@{version} 类应为 {class:?}");
+        let impl_ref = decl
+            .impl_ref
+            .as_deref()
+            .unwrap_or_else(|| panic!("{name} 应有 impl_ref"));
+        match class {
+            ComponentClass::Tool => {
+                assert!(
+                    decl.effect_class.is_some(),
+                    "{name}（tool）声明应带 effect_class"
+                );
+                assert_eq!(
+                    impl_ref, "executor:builtin/pkg.iface.mcp_client@af-execline",
+                    "{name} 记录型包装器 impl_ref 应锚到 af-execline 新 builtin"
                 );
             }
             ComponentClass::Unit => {

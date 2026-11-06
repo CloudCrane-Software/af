@@ -9,5 +9,136 @@ claimed_value:
 sources: [S152, S170]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
-dsl_state: not_applicable
-na_reason: "评测指标定义：策略内容是「把 $/resolved、tokens/call、昂贵失败比设为一等指标并建成本基线」的度量口径（S170 body.测试设计）；AFB 的 budgets 只约束本图执行的资源帽，不定义跨运行的成本效率报表语义。"
+dsl_state: compilable
+# S17 供给注册批 A（设计稿 strategies17-供给面设计-20261106.md §五）：
+# not_applicable → compilable。原 na_reason 的三态判据被 §四 的三分类
+# 复核推翻（与 st-C007/st-C019/st-b-C001 既有 compilable 先例不符），
+# 依据见 dsl_snippet 的 intent 段；组件声明见 af/packages/components.json。
+dsl_snippet: |
+  version: 1
+  meta:
+    name: cost_efficiency_first_class_metric
+    graph_version: "1.0"
+    entry: loader
+    input: cost_input
+    output: { ref: cost_report, from: report }
+    intent: "SWE-Effi 投影（设计稿 §五.4）：map over tasks → 每任务一个 runner（route.main@1 + harness 工具面，usage 经 recorded usage 入 task_result）→ check pkg.cost.efficiency@1 读 baselines（eval_input，Agentless/mini-swe-agent 公开成本基线，INV-4）算 cost_per_resolved_milli/tokens_per_call_mean/expensive_failure_ratio_milli/baseline_delta_milli → 报告。边界注：「把成本效率设为一等指标」的口径决策归人类，本图只闭合度量组件（不走 budgets 资源帽，走 assess 消费 recorded usage）。"
+  types:
+    - name: cost_input
+      schema:
+        type: object
+        required: [question, tasks]
+        properties:
+          question: { type: string }
+          tasks: { type: array, items: { type: string } }
+    - name: task_result
+      schema:
+        type: object
+        required: [arm_id, task_id, resolved, tokens, cents, wall_ms]
+        properties:
+          arm_id: { type: string }
+          task_id: { type: string }
+          resolved: { type: boolean }
+          tokens: { type: integer }
+          cents: { type: integer }
+          wall_ms: { type: integer }
+    - name: cost_baseline
+      schema:
+        type: object
+        required: [system, cost_per_resolved_milli]
+        properties:
+          system: { type: string }
+          cost_per_resolved_milli: { type: integer }
+    - name: efficiency_result
+      schema:
+        type: object
+        required: [cost_per_resolved_milli, tokens_per_call_mean, expensive_failure_ratio_milli, baseline_delta_milli]
+        properties:
+          cost_per_resolved_milli: { type: integer }
+          tokens_per_call_mean: { type: integer }
+          expensive_failure_ratio_milli: { type: integer }
+          baseline_delta_milli: { type: integer }
+    - name: cost_report
+      schema:
+        type: object
+        required: [cost_per_resolved_milli, baseline_delta_milli, expensive_failure_ratio_milli, tasks]
+        properties:
+          cost_per_resolved_milli: { type: integer }
+          baseline_delta_milli: { type: integer }
+          expensive_failure_ratio_milli: { type: integer }
+          tasks: { type: integer }
+  stores:
+    - name: baselines_ref
+      type: collection
+      item: cost_baseline
+      writer: loader
+      lifecycle: run
+      retention: { max_items: 64 }
+      eval_input: true
+    - name: results_board
+      type: collection
+      item: task_result
+      writer: ledger
+      lifecycle: run
+      retention: { max_items: 512 }
+  nodes:
+    - id: loader
+      kind: task
+      uses: { tool: pkg.bench.leaderboard@1 }
+      writes: [baselines_ref]
+      emits: { done: signal }
+    - id: sweep
+      kind: task
+      map:
+        over: input.tasks
+        body:
+          nodes:
+            - id: runner
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.harness.shell@1, pkg.harness.edit@1, pkg.harness.lint@1] }
+              emits: { result: task_result }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.cost_arm_system, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          edges: []
+      emits: { results: { from_body: runner.result } }
+    - id: ledger
+      kind: transform
+      consumes: { results: "list<task_result>" }
+      writes: [results_board]
+      ops:
+        - { op: project, port: results, into: results_board }
+      emits: { ledgered: "list<task_result>" }
+    - id: assess
+      kind: check
+      uses: { unit: pkg.cost.efficiency@1 }
+      reads: [baselines_ref]
+      consumes: { ledgered: "list<task_result>" }
+      emits: { efficiency: efficiency_result }
+    - id: report
+      kind: task
+      uses: { model: route.cheap@1 }
+      consumes: { efficiency: efficiency_result }
+      emits: { report: cost_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.cost_delta_system, quota_tokens: 400 }
+          - { from: edge, port: efficiency, policy: project, quota_tokens: 400 }
+  edges:
+    - { from: loader, output: done, to: sweep, input: done }
+    - { from: sweep, output: results, to: ledger, input: results }
+    - { from: ledger, output: ledgered, to: assess, input: ledgered }
+    - { from: assess, output: efficiency, to: report, input: efficiency }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 4000 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 4000000 }
+    failures:
+      - class: tool_error
+        route: same_node
+        feedback: error_observation
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed
