@@ -67,7 +67,8 @@ fn audit_contamination_clean_when_no_marker_present() {
 
 #[test]
 fn audit_contamination_flags_leakage_marker() {
-    let report = reliab::audit_contamination("resolved: reproduces GOLD_PATCH line-for-line", FORBIDDEN);
+    let report =
+        reliab::audit_contamination("resolved: reproduces GOLD_PATCH line-for-line", FORBIDDEN);
     assert!(report.contaminated());
     assert_eq!(report.markers, vec!["GOLD_PATCH".to_string()]);
 }
@@ -75,7 +76,10 @@ fn audit_contamination_flags_leakage_marker() {
 #[test]
 fn audit_contamination_skips_empty_marker_and_dedupes() {
     // 空串标样不得误命中全文本；重复标样去重（文本须真含 GOLD_PATCH 才命中）。
-    let report = reliab::audit_contamination("resolved: leaked GOLD_PATCH here", &["", "GOLD_PATCH", "GOLD_PATCH"]);
+    let report = reliab::audit_contamination(
+        "resolved: leaked GOLD_PATCH here",
+        &["", "GOLD_PATCH", "GOLD_PATCH"],
+    );
     assert_eq!(report.markers, vec!["GOLD_PATCH".to_string()]);
     // 无禁标样集 ⇒ 恒干净。
     let empty = reliab::audit_contamination("anything at all", &[]);
@@ -148,10 +152,7 @@ fn calibrate_all_supply_side_failure_transparents_none_not_undecidable() {
 fn calibrate_all_contaminated_is_undecidable_not_none() {
     // 反混淆锚②：全体有结论但全被污染 ⇒ Some(Undecidable)（判分了但不可采信），
     // **不是** None。这一格与上一格互为补，钉死 Undecidable ≠ 供给面失败。
-    let all_dirty = vec![
-        vote("a", Some(true), true),
-        vote("b", Some(false), true),
-    ];
+    let all_dirty = vec![vote("a", Some(true), true), vote("b", Some(false), true)];
     assert_eq!(reliab::calibrate(&all_dirty), Some(Decision::Undecidable));
     assert_ne!(reliab::calibrate(&all_dirty), None);
 }
@@ -167,12 +168,35 @@ fn negative_fixture_contamination_flips_false_pass_to_fail() {
     // 一条干净 fail 票被淹没。朴素多数（污染无感）= 方向性假结论 Pass；
     // 污染感知校准丢弃泄漏票 ⇒ 翻转为 Fail。
     let votes = vec![
-        reliab::judge_vote("j1", Some(true), "resolved: reproduced GOLD_PATCH exactly", FORBIDDEN),
-        reliab::judge_vote("j2", Some(true), "resolved: matches GOLD_PATCH line-for-line", FORBIDDEN),
-        reliab::judge_vote("j3", Some(false), "resolved: f2p still failing, patch incomplete", FORBIDDEN),
+        reliab::judge_vote(
+            "j1",
+            Some(true),
+            "resolved: reproduced GOLD_PATCH exactly",
+            FORBIDDEN,
+        ),
+        reliab::judge_vote(
+            "j2",
+            Some(true),
+            "resolved: matches GOLD_PATCH line-for-line",
+            FORBIDDEN,
+        ),
+        reliab::judge_vote(
+            "j3",
+            Some(false),
+            "resolved: f2p still failing, patch incomplete",
+            FORBIDDEN,
+        ),
     ];
-    assert_eq!(reliab::naive_majority(&votes), Some(Decision::Pass), "朴素多数被污染骗成假 Pass");
-    assert_eq!(reliab::calibrate(&votes), Some(Decision::Fail), "污染审计丢弃泄漏票 ⇒ 翻转为 Fail");
+    assert_eq!(
+        reliab::naive_majority(&votes),
+        Some(Decision::Pass),
+        "朴素多数被污染骗成假 Pass"
+    );
+    assert_eq!(
+        reliab::calibrate(&votes),
+        Some(Decision::Fail),
+        "污染审计丢弃泄漏票 ⇒ 翻转为 Fail"
+    );
     assert_ne!(reliab::calibrate(&votes), reliab::naive_majority(&votes));
 }
 
@@ -183,11 +207,29 @@ fn negative_fixture_contamination_downgrades_false_pass_to_undecidable() {
     // （拒判，不制造方向性假结论）。
     let votes = vec![
         reliab::judge_vote("j1", Some(true), "resolved: all f2p pass", FORBIDDEN),
-        reliab::judge_vote("j2", Some(true), "resolved: reproduces GOLD_PATCH", FORBIDDEN),
-        reliab::judge_vote("j3", Some(false), "resolved: p2p regression detected", FORBIDDEN),
+        reliab::judge_vote(
+            "j2",
+            Some(true),
+            "resolved: reproduces GOLD_PATCH",
+            FORBIDDEN,
+        ),
+        reliab::judge_vote(
+            "j3",
+            Some(false),
+            "resolved: p2p regression detected",
+            FORBIDDEN,
+        ),
     ];
-    assert_eq!(reliab::naive_majority(&votes), Some(Decision::Pass), "朴素多数被污染 tipping 成假 Pass");
-    assert_eq!(reliab::calibrate(&votes), Some(Decision::Undecidable), "干净票分歧 ⇒ 拒判 Undecidable");
+    assert_eq!(
+        reliab::naive_majority(&votes),
+        Some(Decision::Pass),
+        "朴素多数被污染 tipping 成假 Pass"
+    );
+    assert_eq!(
+        reliab::calibrate(&votes),
+        Some(Decision::Undecidable),
+        "干净票分歧 ⇒ 拒判 Undecidable"
+    );
 }
 
 // ============================================================
