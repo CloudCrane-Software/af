@@ -10,4 +10,4 @@ sources: [S147, S149]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
 dsl_state: not_applicable
-na_reason: "基准组合策略：策略内容是「公开饱和集做回归、活水集做外推」的评测集分层方法（S147 body.测试设计），属实验规划面；AFB 无基准集合管理语义。"
+na_reason: "基准组合策略：策略内容是「公开饱和集做回归、活水集做外推」的评测集分层方法（S147 body.测试设计），属实验规划面；AFB 无基准集合管理语义。基准分层清单入实验计划文档；活水刷新归实验排程面。"

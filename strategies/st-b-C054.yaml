@@ -10,4 +10,4 @@ sources: [S037, S133]
 consensus: {corpora: 1, cards: 2}
 experiment: {status: none, exp_id: "-", note: "-"}
 dsl_state: not_applicable
-na_reason: "实验场地选型方法：策略内容是「A/B 主战场选哪个基准、任务时长/token 量级多大、如何多基准交叉」的评测规划（S037 body.测试设计）；AFB 描述单次运行图，不表达基准组合与实验调度。"
+na_reason: "实验场地选型方法：策略内容是「A/B 主战场选哪个基准、任务时长/token 量级多大、如何多基准交叉」的评测规划（S037 body.测试设计）；AFB 描述单次运行图，不表达基准组合与实验调度。选型结论入实验计划文档，作为运行图外输入参数，不建组件。"
