@@ -21,12 +21,9 @@
 //! 确定性：目录条目按路径排序后处理；引用集为 BTree（同
 //! `ValidateOptions.declared_graphs` 的类型，直接注入）。
 //!
-//! 扫描规则：**目录即包候选**——根下的目录（'.' 起始的隐藏目录除外）须有
-//! `manifest.json`（缺 = 错误，抓命名笔误），**例外**：有 `prompts/` 子目录
-//! 而无 `manifest.json` 的目录 = 纯模板供给包（裁决10 template_ref 装载面），
-//! 图清单与模板资产解耦（同 af-compiler ComponentRegistry 跳过无
-//! components.json 的包），不贡献图引用、跳过不计 package_count；非目录条目
-//! （README.md、.gitkeep 等）不是包，跳过；空根合法 = 空集。
+//! 扫描规则：**目录即包候选**——根下的目录（'.' 起始的隐藏目录除外）必须
+//! 有 `manifest.json`（缺 = 错误，抓命名笔误）；非目录条目（README.md、
+//! .gitkeep 等）不是包，跳过；空根合法 = 空集。
 
 use crate::ValidateOptions;
 use serde::Deserialize;
