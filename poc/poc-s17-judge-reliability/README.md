@@ -105,12 +105,12 @@ D-57 截至本件未在正本 `计划/技术债登记.md` 登记（D-54…D-58 �
 
 ## 七、指纹
 
-- 分支 HEAD：`d4241f77`（origin/feature/s17-judge-reliability-protocol 同点）。
-- 提交链：`3dc71256`（feat 主体：reliab.rs + mod.rs + pkg_reliab.rs）→
-  `0d308d3a`（naive_majority 多数决 + 污染测试文本，anolis 跑测暴露的本侧 bug）→
-  `3564bf1d`（删冗余 use serde_json，clippy 暴露）→ `3db8ecb9`（poc 三门读数证据）→
-  `d4241f77`（补最终 head workspace test 读数）。
-- 代码交付点 = `3564bf1d`（后续 `3db8ecb9`/`d4241f77` 仅加 poc 证据，对测试计数中性）；
-  最终 head workspace test 复跑 `raw/gate-test.workspace-final.log`：1638/0/9 rc=0。
+- 分支：`feature/s17-judge-reliability-protocol`；最终 HEAD 以 `origin/feature/s17-judge-reliability-protocol`
+  tip 为准（`git rev-parse origin/feature/s17-judge-reliability-protocol`）。
+- **代码交付点 = `3564bf1d`**（reliab.rs + mod.rs + pkg_reliab.rs）；其后的提交均为
+  poc 证据 / README，对代码与测试计数零影响（`git diff origin/product/main..HEAD -- ':!poc'`
+  恒为上述 3 文件）。
+- 提交链（代码三点）：`3dc71256`（feat 主体）→ `0d308d3a`（naive_majority 多数决 +
+  污染测试文本，anolis 跑测暴露的本侧 bug）→ `3564bf1d`（删冗余 use serde_json，clippy 暴露）。
 - anolis 门跑点 worktree `/data/bench/s17-judge-reliability-protocol-wt`；
   `CARGO_TARGET_DIR=/data/bench/targets/s17-judge-reliability-protocol`。
