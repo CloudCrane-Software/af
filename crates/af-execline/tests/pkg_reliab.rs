@@ -11,7 +11,8 @@
 
 use af_execline::pkg::reliab;
 use af_execline::pkg::reliab::{Decision, JudgeVote};
-use serde_json;
+
+// serde_json 经 2018 extern prelude 直接以 `serde_json::` 可达，勿加 `use`（redundant import）。
 
 /// 禁泄漏标样（v1 工作定义：金标 patch 指纹，干净判分里绝不该出现）。
 const FORBIDDEN: &[&str] = &["GOLD_PATCH"];
