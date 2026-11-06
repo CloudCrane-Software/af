@@ -134,10 +134,12 @@ fn validate_entry(entry: &TrainingArtifact, reg: &ComponentRegistry) -> Result<(
     }
     // R5 impl_ref：声明侧必填、册值与声明逐字相等、执行面 builtin 形态、
     // builtin 目标组件名自身已注册。
-    let decl_impl = decl
-        .impl_ref
-        .as_deref()
-        .ok_or_else(|| format!("R5 声明无 impl_ref：{}@{}", entry.declaration, entry.version))?;
+    let decl_impl = decl.impl_ref.as_deref().ok_or_else(|| {
+        format!(
+            "R5 声明无 impl_ref：{}@{}",
+            entry.declaration, entry.version
+        )
+    })?;
     if entry.impl_ref != decl_impl {
         return Err(format!(
             "R5 impl_ref 与声明不一致：册 {} vs 声明 {}",
@@ -171,7 +173,8 @@ fn validate_register(file: &RegisterFile, reg: &ComponentRegistry) -> Result<(),
         if !seen.insert(entry.artifact.as_str()) {
             return Err(format!("R1 产物 id 册内重复：{}", entry.artifact));
         }
-        validate_entry(entry, reg).map_err(|e| format!("artifacts[{i}]（{}）：{e}", entry.artifact))?;
+        validate_entry(entry, reg)
+            .map_err(|e| format!("artifacts[{i}]（{}）：{e}", entry.artifact))?;
     }
     Ok(())
 }
@@ -266,6 +269,7 @@ fn mapping_rules_accept_conforming_entries() {
         artifact: "harnessadapt-rl/run-001/tool_wrapper/grep_ranker".to_string(),
         kind: ArtifactKind::ToolWrapper,
         declaration: "pkg.sweng.locate".to_string(),
+        impl_ref: "executor:builtin/pkg.sweng.locate@af-execline".to_string(),
         ..ok_fixture()
     };
     validate_entry(&tool, &reg).expect("tool 形态正例应过 R1–R6");
