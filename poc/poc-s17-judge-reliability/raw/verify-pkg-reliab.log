@@ -1,0 +1,25 @@
+   Compiling af-execline v0.1.0 (/data/bench/s17-judge-reliability-protocol-wt/crates/af-execline)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.09s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/pkg_reliab.rs (/data/bench/targets/s17-judge-reliability-protocol/debug/deps/pkg_reliab-fe08b413d08f4471)
+
+running 15 tests
+test audit_contamination_clean_when_no_marker_present ... ok
+test audit_contamination_flags_leakage_marker ... ok
+test calibrate_all_contaminated_is_undecidable_not_none ... ok
+test audit_contamination_skips_empty_marker_and_dedupes ... ok
+test calibrate_all_supply_side_failure_transparents_none_not_undecidable ... ok
+test calibrate_clean_disagreement_is_undecidable ... ok
+test calibrate_discards_contaminated_votes ... ok
+test calibrate_ignores_supply_side_failed_votes_but_keeps_clean_consensus ... ok
+test calibrate_unanimous_clean_pass_and_fail ... ok
+test decision_from_resolved_is_lossless_and_never_maps_none_to_undecidable ... ok
+test decision_three_values_and_as_str_snake_case ... ok
+test judge_vote_inlines_contamination_flag ... ok
+test naive_majority_counts_all_verdicts_and_transparents_none ... ok
+test negative_fixture_contamination_downgrades_false_pass_to_undecidable ... ok
+test negative_fixture_contamination_flips_false_pass_to_fail ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
