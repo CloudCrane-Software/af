@@ -1,0 +1,34 @@
+########## P1 gate 默认门面（在役） ##########
+[harness-gate] OK 定义面在役：模型 Qwen3-Coder-30B-A3B-Q4_K_M-local-llama.cpp / seed 20261029 / 任务集 120 题 / 每版 2 跑 / 阈值 resolve 5.0pp + token 15.0%
+[harness-gate] INFO 校准锚（S130 实录回归 v0.4.1→v0.5.0（OpenAI converter，PR #1235，+346/−8 行））：39.4%→32.5%（Δ6.9pp）必被本门捕获——阈值再放宽即红（防弱化）
+[harness-gate] INFO 读数面待首跑：harness-readings.jsonl 缺席（发布管线首跑后落账；--require-readings 下缺席即红）
+== harness_regression_gate: 全绿——定义面在役，读数面待首跑
+GATE_RC=0
+
+########## P2 gate --selftest 负例夹具 ##########
+[harness-gate] SELFTEST 负例夹具 19 枚（临时根 /tmp/harness-gate-selftest-zxl27o6x）
+[harness-gate] SELFTEST PASS  正例·定义面+读数面全绿（劣化 0.0pp）（rc=0）
+[harness-gate] SELFTEST PASS  正例·单记录（基线即当前）（rc=0）
+[harness-gate] SELFTEST PASS  负例·空回归集 fail-closed（rc=1）
+[harness-gate] SELFTEST PASS  负例·任务集计数漂移（rc=1）
+[harness-gate] SELFTEST PASS  负例·任务集摘要漂移（rc=1）
+[harness-gate] SELFTEST PASS  负例·定义缺 seed（rc=1）
+[harness-gate] SELFTEST PASS  负例·阈值弱化（实录回归拦不住）（rc=1）
+[harness-gate] SELFTEST PASS  负例·注入 resolve 劣化（实测阻断读数）（rc=1）
+[harness-gate] SELFTEST PASS  负例·注入 token/题劣化（rc=1）
+[harness-gate] SELFTEST PASS  负例·读数口径漂移（模型）（rc=1）
+[harness-gate] SELFTEST PASS  负例·回归集未全覆盖（子集跑分）（rc=1）
+[harness-gate] SELFTEST PASS  负例·读数记录不可解析（rc=1）
+[harness-gate] SELFTEST PASS  负例·release 重号（rc=1）
+[harness-gate] SELFTEST PASS  负例·空读数台账（rc=1）
+[harness-gate] SELFTEST PASS  负例·--require-readings 缺席即红（rc=1）
+[harness-gate] SELFTEST PASS  正例·读数缺席默认不拦（INFO）（rc=0）
+[harness-gate] SELFTEST PASS  校准·S130 实录回归 39.4%→32.5% 必拦（rc=1）
+[harness-gate] SELFTEST PASS  校准·窗口内波动 30.5%→28.0% 不拦（rc=0）
+[harness-gate] SELFTEST PASS  在役·真仓定义件 rc=0（rc=0）
+== harness_regression_gate: selftest 全绿——19 枚夹具全部符预期（含空回归集/注入劣化/口径漂移负例）
+SELFTEST_RC=0
+
+########## P3 gate_inputs check ##########
+gate_inputs_check: 判据正本钉对账一致: 16 件（ci/baselines/gate-inputs.sha256）
+GI_RC=0

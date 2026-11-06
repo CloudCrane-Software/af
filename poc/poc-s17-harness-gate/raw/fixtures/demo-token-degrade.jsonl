@@ -1,0 +1,2 @@
+{"release": "af-harness@baseline-sha", "model": "Qwen3-Coder-30B-A3B-Q4_K_M-local-llama.cpp", "seed": 20261029, "runs": 2, "resolved": 66, "total": 120, "tokens_per_task_k": 391.0}
+{"release": "af-harness@injected-token-sha", "model": "Qwen3-Coder-30B-A3B-Q4_K_M-local-llama.cpp", "seed": 20261029, "runs": 2, "resolved": 66, "total": 120, "tokens_per_task_k": 480.0}

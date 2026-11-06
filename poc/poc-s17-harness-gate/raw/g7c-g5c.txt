@@ -1,0 +1,7 @@
+########## G7c xcheck（--agent-md + --plan-doc 显式）##########
+XCHECK_RC=1
+########## G5c clippy 门（run.sh step2 同型：json 输出 + clippy_gate.py）##########
+cargo_clippy_rc=0
+CLIPPY GATE: FAIL —— 1 个签名出现新增警告（新增 2 条）:
+  +2 clippy::collapsible_if crates/af-execline/src/span_produce.rs（现 2 / 基线 0）
+CLIPPY_GATE_RC=1

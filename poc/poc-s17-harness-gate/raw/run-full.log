@@ -1,0 +1,2 @@
+== AF CI 管道开始 2026-11-06 10:17:14 root=/data/bench/s17-harness-regression-gate-wt
+step0 FAIL: mutations 探针清单漂移（删/改探针未走 update-registry-baseline 同批评审）
