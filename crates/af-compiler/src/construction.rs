@@ -2,7 +2,7 @@
 //! 协议教学段（锚 `af-execline/src/graph_unit.rs:24-32` 的 typed envelope
 //! 交接语义 + declare 契约面）。
 //!
-//! 背景（E1-报告缺口④）：SWE 任务靠包内专用模板（swev_system/
+//! 背景（E1-报告缺口④）：专用域任务靠包内专用模板（swev_system/
 //! swev_instance_protocol）教会 declare/TASK_COMPLETE 协议；通用建设任务
 //! 没有专用模板——E2G5 实证 40 轮帽内 agent 未交付 envelope（EX4006 违例），
 //! E2G6 到 42 轮才摸出 declare。本模块把协议教学内置进编译链：任务书
@@ -103,7 +103,7 @@ policies:
       outcome: failed
 "#;
 
-/// 建设任务规格（调用方面：非 SWE 语义，零 SWE 字段）。
+/// 建设任务规格（调用方面：非专用域语义，零专用域字段）。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstructionSpec {
     /// 任务号（容器命名回退同款语义）。
@@ -200,7 +200,7 @@ pub fn task_book(spec: &ConstructionSpec, plan: &ExecutablePlan) -> Result<Strin
     ))
 }
 
-/// 任务包 task.json（通用字段面——缺口③编译面：零 SWE 字段；registry_root
+/// 任务包 task.json（通用字段面——缺口③编译面：零专用域字段；registry_root
 /// 声明随包，D-48 不靠缺省死路径）。
 pub fn task_json(spec: &ConstructionSpec, plan: &ExecutablePlan) -> Result<Value, PlanError> {
     let mut obj = serde_json::json!({
