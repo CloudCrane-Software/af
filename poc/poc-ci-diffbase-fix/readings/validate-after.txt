@@ -1,0 +1,7 @@
+== AFTER-fix: python3 -I ci/fix_scan.py --validate (as-specified form)
+[fix-scan] FATAL: 需要 PyYAML（python3 -c 'import yaml'）
+exit=2
+
+== AFTER-fix: python3 ci/fix_scan.py --validate (substitute form)
+== fix-scan --validate: schema 通过（2 族: sat-cast, pyc-shadow；债册在册 50 号）
+exit=0

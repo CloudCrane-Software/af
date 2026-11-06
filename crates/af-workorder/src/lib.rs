@@ -1,0 +1,65 @@
+//! af-workorder —— 工单作为一等对象(PoC)。
+//!
+//! 验证的语义(对应任务五点):
+//! 1. **订单状态机 + 门控转换**:created → released → in_progress → completed → closed,
+//!    可 cancelled([`state`]);release 前置 = 已绑定产线版本 + 预算凭证已签发,
+//!    close 前置 = 存在合格终态工件;非法转换拒绝并**类型化指出缺什么**([`error::Missing`])。
+//! 2. **SLA 字段**:日历解析出的绝对截止时刻(`DateTime<Utc>`)+ 优先级([`sla`])。
+//! 3. **graph_version 不可变绑定**:私有字段 + 只读访问器,无任何 setter([`order::WorkOrder`])。
+//! 4. **变更单**:差异描述 + 排水/接力策略字段;换版 = 生成后继工单,原单封存([`change`])。
+//! 5. **多参与者决策工件**:[`decision::DecisionArtifact`],只读角色签发 approve → 拒绝。
+//! 6. **稳定身份**:[`identity::StableId`] 在创建时生成。引擎 continue-as-new 只换
+//!    `run_id`,不换 `stable_id`。分片键是 `sha256(stable_id)` 对配方层分片数取模。
+//!    老载荷缺 `stable_id` 时走拒绝式信封([`error::RejectionEnvelope`]),不补默认身份。
+//!    线格式不认识的字段也走拒绝式信封,并列出每一个字段名,不静默丢弃。
+//! 7. **graph_version 传递依赖锁**:[`graph_deps`] 把图依赖方
+//!    (evaluator/adapter/template)的**传递闭包**版本钉进域分离 SHA-256——
+//!    同图同闭包可复算,闭包内任何版本/类别变化 ⇒ digest 变(开放风险 #6 收口)。
+//!
+//! payload_hash 为 SHA-256 小写十六进制([`hash`]),跨进程确定。
+//! 变更单签名是真 ed25519([`sign`]):在本 crate 内签发与验签,不经过 af-credential。
+//! SLA 截止已接 af-calendar,不再是字符串占位。
+
+pub mod change;
+pub mod decision;
+pub mod error;
+pub mod gate_admit;
+pub mod graph_deps;
+pub mod hash;
+pub mod identity;
+pub mod order;
+pub mod sign;
+pub mod sla;
+pub mod state;
+
+pub use af_calendar::{Calendar, CalendarError};
+pub use change::{ChangeOrder, DrainStrategy, RelayStrategy, SignedChangeOrder};
+pub use decision::{
+    Decision, DecisionArtifact, DecisionAttributes, Permission, Role, Signature, TrustedActor,
+    TrustedActorRegistry, DECISION_SIGNING_DOMAIN, SIGNATURE_ALGORITHM_PLACEHOLDER,
+};
+pub use error::{
+    ChangeError, DecisionError, GateError, GraphDepsError, IdentityError, Missing,
+    OrderDecodeError, RejectionEnvelope, RejectionKind, ShardError, SignError,
+};
+pub use gate_admit::{
+    validate_required_gate_inputs, GateAdmitRejection, ProvidedGateInput, RequiredGateInput,
+};
+pub use graph_deps::{
+    dependency_closure, graph_deps_digest, ClosureMember, DepKind, DepRef, DependencyTable,
+    GraphDepsDigest, GRAPH_DEPS_DOMAIN,
+};
+pub use hash::{sha256, sha256_hex, SHA256_HEX_LEN, SHA256_LEN};
+pub use identity::{
+    decision_payload, RunContext, StableId, DECISION_PAYLOAD_DOMAIN, STABLE_ID_DOMAIN,
+};
+pub use order::{
+    decode_work_order, decode_work_order_value, migrate_legacy_artifact_digests, BudgetVoucher,
+    GraphVersion, HistoryRecord, LineBinding, WorkArtifact, WorkOrder,
+};
+pub use sign::{
+    Ed25519Keypair, Ed25519PublicKey, ED25519_PUBLIC_KEY_LEN, ED25519_SEED_LEN,
+    ED25519_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ED25519,
+};
+pub use sla::{Priority, Sla};
+pub use state::{OrderState, Transition};

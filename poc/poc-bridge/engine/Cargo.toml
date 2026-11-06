@@ -1,0 +1,12 @@
+[package]
+name = "wo-engine"
+version = "0.1.0"
+edition = "2021"
+
+# 空 workspace 表：本工程是 poc-bridge 任务内的独立 cargo 工程，不并入 AF 根 workspace。
+[workspace]
+
+[dependencies]
+af-workorder = { path = "../../../crates/af-workorder" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

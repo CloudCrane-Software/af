@@ -1,0 +1,140 @@
+{
+  "version": 1,
+  "suite": "af-ci-mutations",
+  "_doc": "mutations/ 元探针注册表（复盘 C3-2/PP1；G0-CI机制批 子代理B 草案）。本文件为 JSON 子集（合法 YAML），python3 标准库可解析。每探针=一个用例，预登记期望 exit code + 期望 stderr 子串，机械判定无裁量。完整性由 ci/baselines/mutations-registry.sha256 钉住（mutation_runner.sh check-registry），删改任一探针即漂移红；有意变更须 update-registry-baseline 同批评审提交。触发规则=diff 触及 gate_inputs glob 全量跑（should-run 判 full）、否则 nightly。",
+  "gate_inputs": ["ci/**", "proofs/**"],
+  "probes": [
+    {
+      "id": "MUT-001",
+      "description": "删门脚本必须红：删 ci/k5-path-lint.py（step1 门脚本，盘上真实文件）后 step1 门命令必须非零退出——门必须失败于删除（复盘 C3-1/C3-2 元探针两件套之一）",
+      "action": "delete",
+      "target": "ci/k5-path-lint.py",
+      "mirror_of": "step1",
+      "run": "cargo fmt --check --all && python3 ci/k5-path-lint.py",
+      "timeout_sec": 120,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": "nonzero",
+        "stderr_contains": "k5-path-lint.py",
+        "_doc_expect": "run 与 ci/run.sh:121 step1 门命令逐字同串（mirror 审计强制）；脚本缺席时 python3 报 can't open file（文件名上 stderr）→ 命令链非零 → run.sh step() 判 FAIL → OVERALL=1（run.sh:50-58 统一接线）"
+      }
+    },
+    {
+      "id": "MUT-002",
+      "description": "删探针必须红（自指防护）：从注册表删任一探针条目后，注册表完整性检查必须以 exit 1 + 「探针清单漂移」红——探针被删=计数/哈希漂移（复盘 C3-2「探针清单（数量+每探针期望值）哈希…探针被删即计数漂移红」）",
+      "action": "registry-remove-probe",
+      "args": { "remove_id": "MUT-001" },
+      "run": "bash ci/mutation_runner.sh check-registry",
+      "timeout_sec": 30,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "探针清单漂移"
+      }
+    },
+    {
+      "id": "MUT-003",
+      "description": "摘门保牌必须红·xcheck 臂（红队 2026-10-31 发现回归探针）：从 ci/run.sh 静默删除 step13b/13c 调用与 step14 machine_batch 执行调用、保留全部 echo 登记行后，xcheck 门数对账必须以 exit 1 + gates-exec-binding 红——登记在册而执行缺席（修复前该变异 xcheck 全绿复现在案；2026-10-31 修复批起门数对账数执行事实、登记行走双向绑定）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^step 13b \"",
+          "arm_wiring_check\\.py --check",
+          "^step 13c \"",
+          "budget_cast_lint\\.py --root",
+          "^machine_batch > \"\\$OUT/step14\\.log"
+        ],
+        "_doc_args": "五条正则=13b 调用行+其续行/13c 调用行+其续行/step14 执行调用行；任一零命中=正本漂移、探针源失效即红（fail-closed）"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "run.sh 缺 step14 执行事实行后 registered(14)≠executed(1..13)，gates-exec-binding 硬红；gates 基础口径过，gates-g0-erratum 自 2026-11-01 整槽连摘修复批起因 ci.steps_total 登记↔独立重算漂移同为硬红（exit 判定确定性=1 不变）"
+      }
+    },
+    {
+      "id": "MUT-004",
+      "description": "摘门保牌必须红·step12 臂（红队 2026-10-31 发现回归探针）：同 MUT-003 变异（删 step13b/13c 调用与 step14 machine_batch 执行调用、保留登记行）后，step12 计数复算必须以 exit 1 红——gates.ci_steps/ci.steps_total 执行事实槽位 14→13、gates.ci_hard 13→12、gates.ci_step13_subgates 3→1 逐键漂移（修复前该变异 step12 全绿复现在案；source 已由登记行计数改执行事实口径）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^step 13b \"",
+          "arm_wiring_check\\.py --check",
+          "^step 13c \"",
+          "budget_cast_lint\\.py --root",
+          "^machine_batch > \"\\$OUT/step14\\.log"
+        ],
+        "_doc_args": "同 MUT-003"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "四个门数键复算漂移 → step12 硬红 exit 1（infra 错为 exit 2、全绿为 0，均不满足期望=探针红）"
+      }
+    },
+    {
+      "id": "MUT-005",
+      "description": "整槽连摘必须红·xcheck 臂（红队 2026-10-31 发现回归探针，2026-11-01 修复批入册）：从 ci/run.sh 整槽摘除 step10/11/12 三对账硬门（`step N` 调用行+门脚本续行+`echo \"== stepN\"` 登记行一并删，登记行 14→11，对账机检随槽清零）后，xcheck 必须以 exit 1 + gates-g0-erratum 硬红——批未齐分支不再无条件软 PASS：numbers.json ci.steps_total 登记 14 ↔ run.sh 执行事实重算 11 漂移即红（修复前该变异 xcheck exit 0 全绿，probe4/5 复现在案；同批接线=run.sh step0 全量演练消费 should-run）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^echo \"== step10 ",
+          "^step 10 \"",
+          "step10_check\\.py",
+          "^echo \"== step11 ",
+          "^step 11 \"",
+          "step11_check\\.py",
+          "^echo \"== step12 ",
+          "^step 12 \"",
+          "step12_check\\.py"
+        ],
+        "_doc_args": "九条正则=step10/11/12 各槽的登记行+调用行+门脚本续行（整槽连摘：登记与执行一并删；每条恰命中 1 行）。任一零命中=正本漂移、探针源失效即红（fail-closed）——正本已被整槽连摘时本探针在 step0 全量演练即红（防护被关掉本身就是红）"
+      },
+      "run": "python3 -I ci/xcheck.py --run-sh ci/run.sh",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "三槽整摘后 g0_hard=[13,14]（2/5 入批未齐分支）→ ci.steps_total 登记 14 ↔ xcheck 独立重算 11 → gates-g0-erratum 硬红 exit 1（修复前该分支无条件软 PASS exit 0）"
+      }
+    },
+    {
+      "id": "MUT-006",
+      "description": "整槽连摘必须红·step12 臂（红队 2026-10-31 发现回归探针，2026-11-01 修复批入册）：同 MUT-005 变异（整槽摘除 step10/11/12 登记行+执行行）后，step12 计数复算必须以 exit 1 红——gates.ci_steps/ci.steps_total 执行事实槽位 14→11、gates.ci_hard 13→10 逐键漂移（变异删的是三对账门槽位本身，但门脚本 ci/step12_check.py 与数据正本 numbers.json 仍在场，scratch 直跑即复算）；与 MUT-005 构成整槽连摘双臂（xcheck+step12 互为跨锚，单修任一臂仍红）",
+      "action": "edit-drop-lines",
+      "target": "ci/run.sh",
+      "args": {
+        "drop_patterns": [
+          "^echo \"== step10 ",
+          "^step 10 \"",
+          "step10_check\\.py",
+          "^echo \"== step11 ",
+          "^step 11 \"",
+          "step11_check\\.py",
+          "^echo \"== step12 ",
+          "^step 12 \"",
+          "step12_check\\.py"
+        ],
+        "_doc_args": "同 MUT-005"
+      },
+      "run": "python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md",
+      "timeout_sec": 60,
+      "trigger": "on-diff",
+      "expect": {
+        "exit": 1,
+        "stderr_contains": "",
+        "_doc_expect": "门数键复算漂移（14→11/13→10）→ step12 硬红 exit 1（infra 错为 exit 2、全绿为 0，均不满足期望=探针红）"
+      }
+    }
+  ]
+}

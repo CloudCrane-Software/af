@@ -1,0 +1,225 @@
+# deliverables.yaml —— step10 承诺-交付对账机读清单（G0 逃逸加固批，2026-10-28 A 组落本仓 af-wt-g0a/g0a；合流批 af-wt-g0merge/g0merge 随各 merge commit 同批维护）
+# 运行（ci/run.sh step10）：python3 ci/step10_check.py --file $AF_ROOT/deliverables.yaml
+#   --root $AF_ROOT --window-days 7
+# 路径纪律：全部 path/evidence_path/count_command 均相对 --root（=$AF_ROOT，ci/run.sh:31 由脚本
+#   所在位置推导）解析——零硬编码他树绝对路径（总对账 §六.0 root 钉死纪律的施工侧落实）。
+# 跨机制口径（G0-CI 批总对账 §三.1 终稿）：evidence_path 指向 ci/out/ 的产物类条目由 B1/B2
+#   产出、step10 消费（step3-provenance.json / step9-failures.json 的消费形状已由合流批靶验证实，
+#   见合流报告 计划/研究组/冲刺批-20261027/g0-merge-report.md「补合流 g0b」节自检①）。B1/B2/B3
+#   三机制属 G0-B 批（g0b）——该支线曾 descope（未过复核、工作树仅草稿），返工过复核后于
+#   2026-10-28 由合流批补合流入本线。descoped 必须 ADR（复盘:102）。
+# 证据 sha 同批维护（2026-10-31 红队「摘门保牌」修复批）：ci/mutation_runner.sh（G0-M06，edit-drop-lines 动作）/
+#   ci/xcheck.py（G0-M11，执行事实口径+gates-exec-binding）/numbers.json（G0-S03，执行事实口径+两钉键+探针 4）三件同批改版，sha256 随批更新。
+# 证据 sha 同批维护（2026-11-01 红队「整槽连摘」修复批）：ci/xcheck.py（G0-M11，批未齐分支消费
+#   numbers.json ci.steps_total 硬核）/numbers.json（G0-S03，mutations.probes 探针 4→6、ci.steps_total
+#   消费注记）两件同批改版，sha256 随批更新；同批 mutations/registry.yaml +2 探针（MUT-005/006）、
+#   ci/baselines/mutations-registry.sha256 重钉 46330532b2f2…、run.sh step0 判据正本哈希钉接线（RT-E6，
+#   不占 step 槽）+gate_inputs_check.sh/gate-inputs.sha256 两新件随批入库；doc-claims.txt（G0-S02 证据
+#   自指件，DC-RUN-003 引文核位 477→494 同批更新）随批重钉。
+# 合流批生命周期（2026-10-28）：g0a 合入（G0-M01/02/03 done）；g0c 合入同批将 G0-M07/08/09
+#   改判 done 并补 sha256/git 窗口（C 批三机制+report_unit.rs 前置修复已进主线）；g0d 合入同批
+#   改判 G0-M10/11/12；g0b 补合同批改判 G0-M04/05/06——G0 批 12 机制全 done。兄弟批落地时同批
+#   改判 done 并补 sha256/git 窗口——本清单即该生命周期正本。
+# 合流批证据口径裁定（g0b 补合流）：M04/05/06 的 evidence_path 挂机制脚本本体
+#   （ci/provenance_check.sh、ci/baseline_calc.sh、ci/mutation_runner.sh，与 M01/02/03/07-12
+#   兄弟项同口径——脚本恒在场，靶向直跑与全量门均可复算），run.sh 接线用 check.grep_present 硬核；
+#   §三.1 的 ci/out 产物类条目（step3-provenance.json 每跑必产；step9-failures.json 仅
+#   ADVISORY-FAIL 时产）不作 M04/M05 的恒在证据——稳态（step9 绿）下 FAIL 件缺席即红会误报，
+#   其消费契约由 step10 的 evidence 机制承载（登记即对账、缺席/篡改即红），靶验证实见合流报告自检①。
+# 已知自指限制：本清单无法给自身记 sha256（deliverables.yaml 是证据件亦是清单件）——G0-S01 的
+#   证据改挂 schema 的强制载体 ci/step10_check.py；本文件完整性由 git 提交面 + step10 解析复算承载。
+# 证据 sha 同批维护（2026-11-02 红队终局轮 RT-E81 修复批）：ci/subgates.list（step14 子门单点名册，新增件，随批入库）+ci/step12_check.py（G0-M03，第④节名册绑定：三者一致+名册集合双向对账+接线行弱化标志硬核）+ci/xcheck.py（G0-M11，subgates-roster-binding 子门级在场断言）+ci/mutation_runner.sh（G0-M06，新增 edit-replace-lines 变异动作：同名替换/接线弱化两类逃逸形态的回归探针可机械化施加）+numbers.json（G0-S03，step14 子门钉键三臂化：gates.ci_step14_subgates 改由名册生成 + gates.ci_step14_subgates_regex 正则对照臂 + gates.ci_step14_subgates_roster 名册计数；mutations.probes 7→11）五件同批改版，sha256 随批更新；同批 mutations/registry.yaml +4 探针（MUT-008..011）、ci/baselines/mutations-registry.sha256 与 ci/baselines/gate-inputs.sha256 重钉。
+version: 1
+window_days: 7
+sources:
+  - id: S1
+    path: RESULT-G0A-对账三件套-20261028.md
+    label: G0 批 12 机制总账表（本批交付正本，§二 表逐行=本清单 source=S1 的条目）
+    count_command: grep -c '^| G0-M' RESULT-G0A-对账三件套-20261028.md
+    expect_count: 12
+  - id: S2
+    path: ci/run.sh
+    label: ci/run.sh 对三个 schema 的调用点（step10/11/12 三门挂载事实）
+    count_command: grep -c 'step1[012]_check.py' ci/run.sh
+    expect_count: 3
+items:
+  - id: G0-M01
+    title: step10 承诺-交付对账机制（ci/step10_check.py + run.sh step10 接线 + deliverables.yaml 数据）
+    owner: G0-A 批（对账三件套，af-wt-g0a/g0a）
+    status: done
+    source: S1
+    evidence_path: ci/step10_check.py
+    evidence_sha256: b483adef08ad6ac9a2ccac0d4ca556828189dadde0809bc60aa9f13b0a96e45f
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: '^step 10 '
+  - id: G0-M02
+    title: step11 自述-实现对账机制（ci/step11_check.py + run.sh step11 接线 + doc-claims.txt 数据）
+    owner: G0-A 批（对账三件套，af-wt-g0a/g0a）
+    status: done
+    source: S1
+    evidence_path: ci/step11_check.py
+    evidence_sha256: c9736f870fa3191782c8435f243ed29301a054b88fee0b4a808ce8ebf269caab
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: '^step 11 '
+  - id: G0-M03
+    title: step12 计数复算机制（ci/step12_check.py + run.sh step12 接线 + numbers.json 数据 + {{numbers.*}} 占位符）
+    owner: G0-A 批（对账三件套，af-wt-g0a/g0a）
+    status: done
+    source: S1
+    evidence_path: ci/step12_check.py
+    evidence_sha256: 06c26fd3867084871f2e77c6edfd504a3bc85417110feb43897316a9e1d25d86
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: '^step 12 '
+  - id: G0-M04
+    title: step3 pre-step provenance 门（拦 C8 共享 CARGO_TARGET_DIR 跨工作树假绿，W3-C-25 泛化）
+    owner: G0-B 批（真伪门三件套，af-wt-g0b）
+    status: done
+    source: S1
+    evidence_path: ci/provenance_check.sh
+    evidence_sha256: 2bdd5197d47c404b378c23a78f393ec61c7845d521923853d7e03ec784b0e84b
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: 'provenance_check.sh ensure'
+  - id: G0-M05
+    title: 9a/9b 基线机算 + 显式退出码（拦 C3 判据基准被人手改/死代码告警）
+    owner: G0-B 批（真伪门三件套，af-wt-g0b）
+    status: done
+    source: S1
+    evidence_path: ci/baseline_calc.sh
+    evidence_sha256: 656bf7382d176d7ac5a42ce0866b2841aaa64fdd95959d402b6d00f6a26df44b
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: 'verify-kani'
+  - id: G0-M06
+    title: mutations/ 元探针框架（拦 C3/PP1 门禁被拆绿灯依旧）
+    owner: G0-B 批（真伪门三件套，af-wt-g0b）
+    status: done
+    source: S1
+    evidence_path: ci/mutation_runner.sh
+    evidence_sha256: df0c1bc56e93d2527b76844d64d0b77f0ad4b3fb33f9faeef4863a6a75f73e1b
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: 'check-registry'
+  - id: G0-M07
+    title: fix-scan.yaml 同族横切扫描（拦 C9/PP4 修一族漏一族）
+    owner: G0-C 批（横切与对称，af-wt-g0c）
+    status: done
+    source: S1
+    evidence_path: ci/fix_scan.py
+    evidence_sha256: d86f4aa51ca495212192b709f83279161e9cd55869372b2060bc224c7bb6d84d
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: '^step 13a '
+  - id: G0-M08
+    title: ci/arm-wiring.yaml 三臂防线逐格断言（拦 C1/C6 swev/report/graph 防线不对称）
+    owner: G0-C 批（横切与对称，af-wt-g0c）
+    status: done
+    source: S1
+    evidence_path: ci/arm_wiring_check.py
+    evidence_sha256: 8c62c77909d023c54bce8f88830eac5038532959747cf761a234883066ce708a
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: '^step 13b '
+  - id: G0-M09
+    title: budget-cast-lint（拦 C11/C9 巨帽未饱和；前置先修 report_unit.rs:1112/1262）
+    owner: G0-C 批（横切与对称，af-wt-g0c）
+    status: done
+    source: S1
+    evidence_path: ci/budget_cast_lint.py
+    evidence_sha256: df3a545e60049dade41bcfd6981f9260250c76e6cbddbf2709f96cc88facbec3
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: '^step 13c '
+  - id: G0-M10
+    title: branches.yaml 分支覆盖夹具断言（拦 C4 夹具按已想到形状枚举）
+    owner: G0-D 批（覆盖与枚举，af-wt-g0d）
+    status: done
+    source: S1
+    evidence_path: ci/branches_check.py
+    evidence_sha256: 236a145aeb6950b9178d381dd9b33512e7238fa127e2906434f97a1126adc2b3
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: 'branches_check.py'
+  - id: G0-M11
+    title: 枚举跨文书一致性 ci/xcheck.py（拦 C2 名单/门数/日期只改一处；消费 numbers.json 与 AGENT.md 双边实数）
+    owner: G0-D 批（覆盖与枚举，af-wt-g0d）
+    status: done
+    source: S1
+    evidence_path: ci/xcheck.py
+    evidence_sha256: ce3f60c205ec6e8f111b4d9ba323d504e81f32a348fe56d16661d4c7749c9a82
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: 'xcheck.py'
+  - id: G0-M12
+    title: criteria.yaml 六要素判据 schema + 终验清单机生成（拦 C7/PP2/PP5 判据无生产者空过）
+    owner: G0-D 批（覆盖与枚举，af-wt-g0d）
+    status: done
+    source: S1
+    evidence_path: ci/criteria_check.py
+    evidence_sha256: 9cec68717d8430e859ba602e05f18670208bb4427940efff53eb3a43d3e1d134
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/run.sh
+      pattern: 'criteria_check.py'
+  - id: G0-S01
+    title: deliverables.yaml schema 定稿（严格子集 YAML 解析器 + check 八类 kind + open/due/closeout 生命周期）
+    owner: G0-A 批（对账三件套，af-wt-g0a/g0a）
+    status: done
+    source: S2
+    evidence_path: ci/step10_check.py
+    evidence_sha256: b483adef08ad6ac9a2ccac0d4ca556828189dadde0809bc60aa9f13b0a96e45f
+    window_kind: git
+    check:
+      kind: grep_present
+      path: ci/step10_check.py
+      pattern: 'def parse_simple_yaml'
+  - id: G0-S02
+    title: doc-claims.txt schema 定稿 + 机读清单落仓（11 列 TSV + 四形态证据 + 7d/1d/exempt 新鲜度档）
+    owner: G0-A 批（对账三件套，af-wt-g0a/g0a）
+    status: done
+    source: S2
+    evidence_path: doc-claims.txt
+    evidence_sha256: 172146a76eb296496aa5871fb3c69b21a9eab744b90a77ce5db12961d9e9c600
+    window_kind: git
+    check:
+      kind: grep_present
+      path: doc-claims.txt
+      pattern: 'claim_id'
+  - id: G0-S03
+    title: numbers.json schema 定稿 + 计数账落仓（限定名键 + source 复算 + watch 手写对值 + 占位符；step12 schema 随 g0b 补合流放宽多段域路径+串值复算）
+    owner: G0-A 批（对账三件套，af-wt-g0a/g0a）
+    status: done
+    source: S2
+    evidence_path: numbers.json
+    evidence_sha256: 33c23c63dc8ba60be479eb5ce398c61d9e194ded423d933ec473c14a827439ed
+    window_kind: git
+    check:
+      kind: grep_present
+      path: numbers.json
+      pattern: '"watch"'

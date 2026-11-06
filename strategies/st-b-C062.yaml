@@ -1,0 +1,101 @@
+id: st-b-C062
+name: "渐进披露 vs 扁平单文件：只有当支撑资源可执行时才赚"
+tier: B
+claim: "渐进披露vs扁平单文件：受控对比通过trial增4.1%，收益依赖agent真去读支撑资源"
+claimed_value:
+  metric: "pass_trial_rate"
+  direction: up
+  context: "同一批仓库任务、同一技能内容；渐进披露（入口摘要+按需展开支撑资源）vs 扁平单文件"
+sources: [S048, S050]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: progressive_skill_disclosure
+    graph_version: "1.0"
+    entry: bind_skill
+    input: job
+    output: { ref: job_result, from: used_resource }
+    intent: "渐进披露（vs 扁平单文件）：bind_skill 只装订技能入口摘要（template 段=summary.md 常驻 400 token）；execute 按需展开支撑资源（resource_catalog retrieve 段，component pkg.skill.loader@1, k=2）；used_resource 闸挂在 output 路径上（route default:exit，参照根图闸先例），断言回取路径非空且 ran==true=agent 真去读了支撑资源（S050 限定条件：收益依赖资源可执行且真被读取；executable 位为组件侧参数）。S048/S050 口径：受控对比 pass_trial_rate +4.1%。v0.1 无 skill 源——入口=template 段、资源=store retrieve 段（note 登记的理想 skills 段属后续批）"
+  types:
+    - name: job
+      schema:
+        type: object
+        required: [goal]
+        properties:
+          goal: { type: string }
+    - name: resource_doc
+      schema:
+        type: object
+        required: [path, content_ref]
+        properties:
+          path: { type: string }
+          content_ref: { type: string }
+    - name: loaded_resource
+      schema:
+        type: object
+        required: [path, ran]
+        properties:
+          path: { type: string }
+          ran: { type: boolean }
+    - name: job_result
+      schema:
+        type: object
+        required: [ok]
+        properties:
+          ok: { type: boolean }
+  stores:
+    - name: resource_catalog
+      type: collection
+      item: resource_doc
+      writer: load_catalog
+      lifecycle: run
+      retention: { max_items: 128 }
+  nodes:
+    - id: load_catalog
+      kind: transform
+      uses: { unit: pkg.skill.catalog_loader@1 }
+      writes: [resource_catalog]
+      emits: { ready: signal }
+    - id: bind_skill
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.skill.runtime@1] }
+      emits: { picked: signal }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.skill.db_migration.summary, quota_tokens: 400 }
+          - { from: input, fields: [goal], quota_tokens: 400 }
+    - id: execute
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.skill.runtime@1] }
+      consumes:
+        ready: signal
+        picked: signal
+      emits: { used: loaded_resource, result: job_result }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.skill.db_migration.summary, quota_tokens: 300 }
+          - { from: edge, port: ready, quota_tokens: 50 }
+          - { from: edge, port: picked, quota_tokens: 50 }
+          - { from: store, store: resource_catalog, policy: retrieve, component: pkg.skill.loader@1, args: { k: 2 }, quota_tokens: 1200 }
+    - id: used_resource
+      kind: gate
+      consumes: { used: loaded_resource, result: job_result }
+      assert: "inputs.used.path != '' && inputs.used.ran == true"
+      emits: { result: job_result }
+      route:
+        default: exit
+        rules: []
+  edges:
+    - { from: load_catalog, output: ready, to: execute, input: ready }
+    - { from: bind_skill, output: picked, to: execute, input: picked }
+    - { from: execute, output: used, to: used_resource, input: used }
+    - { from: execute, output: result, to: used_resource, input: result }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 350 }
+    failures:
+      - { class: gate_refused, terminal: true, outcome: failed }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

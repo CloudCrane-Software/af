@@ -1,0 +1,5 @@
+# 验证轮运行时产物（存储根/镜像层/拉回产物），证据以 *.md 报告 + verify-logs/ + 脚本为准
+verify/data*/
+verify/layers/
+verify/pullback/
+verify/compat/

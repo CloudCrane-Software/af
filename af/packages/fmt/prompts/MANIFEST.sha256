@@ -1,0 +1,5 @@
+# fmt prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+637b2e06fb15c76467b68b202c489e7a0677d80d875d454c1b8ece86092d2363  prompts/dispatch_system.md
+09eb0153b4b3bae0a3cf2ea57f350f40cb0213f7472e8843c426def3ccfe21b7  prompts/udiff_system.md
+ac254a5b00e66fb23c81215ed8e1469df9b6712049d18f37892f86558e68633b  prompts/whole_system.md

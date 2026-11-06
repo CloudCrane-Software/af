@@ -1,0 +1,13 @@
+id: st-b-C114
+name: "分层基准组合：公开饱和集做回归、活水集做外推"
+tier: B
+claim: "分层基准组合：OpenHands+Claude 3.7 Sonnet 在 Verified 43.20%、全量 SWE-bench-Live 19.25%"
+claimed_value:
+  metric: "benchmark_portfolio_validity"
+  direction: up
+  context: "对照组只在固定 Verified 快照上评测 harness 改进；实验组=饱和集回归 + 活水集外推双层"
+sources: [S147, S149]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "基准组合策略：策略内容是「公开饱和集做回归、活水集做外推」的评测集分层方法（S147 body.测试设计），属实验规划面；AFB 无基准集合管理语义。基准分层清单入实验计划文档；活水刷新归实验排程面。"

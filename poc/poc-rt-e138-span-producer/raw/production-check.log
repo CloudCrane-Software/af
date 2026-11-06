@@ -1,0 +1,5 @@
+PASS: 末次判定绿（status=green，ts=2026-11-05 07:45:02 age=40s ≤ 阈 1800s）
+rc=0
+# recheck 2026-11-05 07:55:00 CST（死手窗内复跑，未重写状态面）
+PASS: 末次判定绿（status=green，ts=2026-11-05 07:45:02 age=598s ≤ 阈 1800s）
+rc=0

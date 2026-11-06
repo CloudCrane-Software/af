@@ -1,0 +1,74 @@
+version: 1
+meta:
+  name: farm_g
+  graph_version: '1'
+  entry: a.b
+  input: T_in
+  output:
+    ref: T_out
+    from: a.b
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+stores: []
+nodes:
+- id: n0
+  kind: task
+  emits:
+    seed: T_in
+- id: a
+  kind: task
+  loop:
+    body:
+      nodes:
+      - id: b
+        kind: task
+        emits:
+          o: T_out
+        human:
+          station: st1
+          role: reviewer
+          resume:
+            schema:
+              type: object
+              properties:
+                approved:
+                  type: boolean
+      edges: []
+    max_iterations: 1
+    safety_points:
+    - node: b
+      kind: human
+- id: a.b
+  kind: task
+  emits:
+    o: T_out
+  human:
+    station: st1
+    role: reviewer
+    resume:
+      schema:
+        type: object
+        properties:
+          approved:
+            type: boolean
+edges:
+- from: n0
+  output: seed
+  to: a
+  input: go
+policies: {}

@@ -1,0 +1,6 @@
+af-trace-checkpoint v1
+trace_id: poc-rekor-trace-0001
+seq: 44
+timestamp_utc: 2026-10-19T03:31:37Z
+payload_sha256: native-cosign-chain-v2
+producer: af-poc-rekor

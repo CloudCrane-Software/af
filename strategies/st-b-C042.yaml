@@ -1,0 +1,61 @@
+id: st-b-C042
+name: "Letta Filesystem：纯文件系统 + grep 工具即记忆"
+tier: B
+claim: "Letta Filesystem：文件系统+grep 即记忆，GPT-4o mini 在 LoCoMo 74.0%，高于 Mem0 最强图变体 68.5%"
+claimed_value:
+  metric: "memory_task_accuracy"
+  direction: up
+  context: "A/B：自建记忆服务（向量/图谱）vs 纯 markdown 文件 + grep/search 工具；同模型同任务集"
+sources: [S020, S021]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: fs_grep_memory
+    graph_version: "1.0"
+    entry: recall_agent
+    input: mem_input
+    output: { ref: answer, from: recall_agent }
+    intent: "纯文件系统+grep 即记忆：memory 工具读写 document store，检索经 retrieve 策略按需回取"
+  types:
+    - name: mem_input
+      schema:
+        type: object
+        required: [question]
+        properties:
+          question: { type: string }
+    - name: answer
+      schema:
+        type: object
+        required: [text, supports]
+        properties:
+          text: { type: string }
+          supports: { type: array, items: { type: string } }
+  stores:
+    - name: memory_files
+      type: document                    # 纯文件系统形态：markdown 文件即记忆
+      writer: recall_agent              # INV-2：agent 经 memory 工具单写
+      lifecycle: persistent
+      retention: { max_bytes: 1048576 }
+  nodes:
+    - id: recall_agent
+      kind: task
+      uses:
+        model: route.main@1
+        tools: [pkg.sweng.locate, pkg.sweng.view, pkg.sweng.edit]   # 选 b：文件系统+grep 即记忆 → 已注册 locate/view/edit（不新造 pkg.mem.* 空转件）
+      writes: [memory_files]
+      emits: { answer: answer }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.mem.system, quota_tokens: 500 }
+          - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          - { from: store, store: memory_files, policy: retrieve, component: pkg.sweng.locate, args: { k: 8 }, quota_tokens: 4000 }  # 选 b：retrieve 挂已注册 locate（不留 pkg.mem.grep 空转件）
+  policies:
+    budgets:
+      - { id: token_cap, dimension: tokens_total, scope: node:recall_agent, cap: 60000 }
+      - { id: turn_cap, dimension: turns, scope: node:recall_agent, cap: 20 }
+    failures:
+      - { class: tool_error, route: same_node, feedback: error_observation }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

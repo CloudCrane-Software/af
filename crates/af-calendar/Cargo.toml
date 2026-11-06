@@ -1,0 +1,22 @@
+[package]
+name = "af-calendar"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+
+# PoC 依赖:chrono + chrono-tz(时区/日历时间,题设指定);serde(日历=运营者配置,可 JSON 加载);
+# thiserror(类型化错误)。不引 tokio/rusqlite——纯函数式时间计算,无 IO。
+[dependencies]
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = { version = "0.10", features = ["serde"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# 属性测试:SLA 单调与不越界、advance 分段一致、DST 边界两侧。
+# crates.io 最新稳定版 1.12.0(2026-10-10),只作 dev-dependency。
+proptest = "=1.12.0"
+
+[lints]
+workspace = true

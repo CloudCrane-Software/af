@@ -1,0 +1,17 @@
+[package]
+name = "af-fv0-kani"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "FV-0.2 Kani PoC：INV-2（E2311/E2312/E2211）与信封（E0001-E0004）有界穷尽验证"
+
+[dependencies]
+af-dsl = { path = "../../crates/af-dsl" }
+serde_yaml = "0.9.34"
+
+[features]
+# 受阻 harness（ICE / CBMC 病态），默认不编入；证据见 src/EVIDENCE.md。
+blocked-harnesses = []
+
+# 独立小工作区：不并入 af 主 workspace，不影响其构建。
+[workspace]

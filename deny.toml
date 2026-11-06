@@ -1,0 +1,40 @@
+# cargo deny 配置（波次 1 T9/F4 处置落地版）
+[advisories]
+version = 2
+yanked = "warn"
+# 本地 advisory-db：refresh 脚本同步 ci/advisory-db 到 cargo 默认库位（~/.cargo/advisory-dbs），
+# 检查一律 cargo deny check --offline（不碰 GitHub；db 过期时刷新脚本报警降级）
+# RUSTSEC-2026-0173: proc-macro-error2 unmaintained（biscuit-auth 6.0.0 传递依赖）。
+# 2026-10-19 复核：无安全升级路径，biscuit 在钉版观察名单；下轮换 biscuit 时复审。
+ignore = [
+  { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 经 biscuit-auth 6 传入；无安全升级路径，钉版观察（处置单 F4）" },
+  { id = "RUSTSEC-2024-0436", reason = "paste 经 cel-interpreter 0.10 传入；unmaintained 无漏洞记录，钉版观察（处置单 F4）" },
+  # RUSTSEC-2024-0449: unsafe-libyaml 0.2.11 unmaintained（链路 unsafe-libyaml ← serde_yaml 0.9.34+deprecated ← af-dsl）。
+  # D-44 后置迁移（serde_yaml→维护中 fork，专项 TDD 批；计划/技术债登记.md:53），豁免理由：unmaintained≠漏洞，本地受信输入（编排者裁决 2026-10-25）
+  { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml 经 serde_yaml 0.9.34 传入 af-dsl；D-44 后置迁移，豁免理由：unmaintained≠漏洞，本地受信输入" },
+]
+
+[licenses]
+version = 2
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Unicode-3.0",
+  "Zlib",
+  "CC0-1.0",
+  # webpki-roots（ureq 传递）：Linux 基金会 CDLA 宽松数据许可证
+  "CDLA-Permissive-2.0",
+]
+
+[bans]
+multiple-versions = "warn"
+# monorepo 内 path 依赖被 deny 视为 wildcard——内核 crate 间 path 依赖是设计形态，放行
+wildcards = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

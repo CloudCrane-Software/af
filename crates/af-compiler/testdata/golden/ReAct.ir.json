@@ -1,0 +1,880 @@
+{
+  "ir_version": 1,
+  "body": {
+    "graph": {
+      "graph_version": "1.0",
+      "name": "react_interleaved",
+      "entry": "react_loop",
+      "nodes": [
+        {
+          "id": "react_loop",
+          "kind": "task",
+          "loop_spec": {
+            "body": "react_interleaved/react_loop",
+            "max_iterations": 12,
+            "carried": [
+              {
+                "store": "beliefs",
+                "max_items": 8
+              },
+              {
+                "store": "trajectory",
+                "max_items": 128
+              }
+            ],
+            "safety_points": [
+              {
+                "node": "action_valid",
+                "kind": "gate"
+              }
+            ],
+            "exit_when": {
+              "source": "judge.verdict.done == true",
+              "roots": [
+                "judge"
+              ],
+              "digest": "ec4c2dbf54461f5a4db1bbe038e44406fb5cec0afcf0f4b5ed14997eb58b2ea5"
+            },
+            "on_exhausted": "fail"
+          },
+          "capability_refs": []
+        }
+      ],
+      "edges": [],
+      "subgraphs": {
+        "react_interleaved/react_loop": {
+          "graph_version": "1.0",
+          "entry": "registry",
+          "nodes": [
+            {
+              "id": "action_valid",
+              "kind": "gate",
+              "capability_refs": []
+            },
+            {
+              "id": "assembler",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/reactkit@1.0.0/hatches/context_assembler.py",
+                "reason": "轨迹随步数线性膨胀，论文按全量回灌 + 运行时裁剪/摘要组织上下文；静态 context 段的 latest_k/summarize 策略只能给固定上界，自适应截断/摘要需运行时组装器；本节点产出 context_bundle 注入 policy",
+                "owner": "lang-team",
+                "share_budget_pct": 4
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "beliefs",
+              "kind": "task",
+              "escape": {
+                "kind": "runtime_context_mutation",
+                "impl_ref": "packages/reactkit@1.0.0/hatches/belief_patch.py",
+                "reason": "模型可在后续 Thought 中显式改口（如『我错了…』），事实覆盖旧结论；不可变工件模型只能追加，需一个可写的断言/scratchpad 区；本节点以覆盖写方式更新 beliefs 槽（轨迹本身仍只追加，错误历史保持可见 —— 卡片④）",
+                "owner": "lang-team",
+                "share_budget_pct": 3
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "compose",
+              "kind": "task",
+              "escape": {
+                "kind": "program_synthesis",
+                "impl_ref": "packages/reactkit@1.0.0/hatches/turn_composer.py",
+                "reason": "论文的 Policy 一次调用同时产出 Thought 与 Action 两段，核心节点每端口对应一件工件，无法表达『一次生成多产物』的复合发射与再分派；本节点把原始生成文本合成为 (thought, action_text) 复合工件后再交解析器",
+                "owner": "lang-team",
+                "share_budget_pct": 5
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "env",
+              "kind": "task",
+              "escape": {
+                "kind": "env_adapter",
+                "impl_ref": "packages/reactkit@1.0.0/hatches/env_adapter.py",
+                "reason": "ALFWorld/WebShop 需环境适配器：会话状态保持、回合同步、非法动作反馈，语义远宽于无状态工具；执行后返回自然语言观察，核心侧只能承接一个已执行动作的结果端口",
+                "owner": "lang-team",
+                "share_budget_pct": 10
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "judge",
+              "kind": "task",
+              "escape": {
+                "kind": "llm_predicate",
+                "impl_ref": "packages/reactkit@1.0.0/hatches/completion_judge.py",
+                "reason": "『我认为已完成』由模型判定后需外部解析才能成为控制流信号；静态条件边只能表达 finish 动作串这一机器可见形式，语义级完成判定需 LLM 判定后回传 completion 工件；本节点同时透传待执行动作，未完成时继续走动作路径",
+                "owner": "lang-team",
+                "share_budget_pct": 8
+              },
+              "route_exit_guard": {
+                "source": "(judge.verdict.done == true)",
+                "roots": [
+                  "judge"
+                ],
+                "digest": "9370b3d7cd8f182ee77de090557929220db5f4bc807a9453dd870a2662cab7ed"
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "parse",
+              "kind": "task",
+              "escape": {
+                "kind": "free_text_parser",
+                "impl_ref": "packages/reactkit@1.0.0/hatches/action_parser.py",
+                "reason": "Action/Thought 由同一段生成文本启发式切分（非固定 slot schema），观察侧也要求把纯文本观察解析为可用记录；解析结果与运行时动作词表比对得出 matched；静态边与 typed 端口只能承载已切好的动作，启发式切分必须逃逸",
+                "owner": "lang-team",
+                "share_budget_pct": 8
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "reasoner",
+              "kind": "task",
+              "capability_refs": []
+            },
+            {
+              "id": "recovery",
+              "kind": "task",
+              "escape": {
+                "kind": "meta_loop",
+                "impl_ref": "packages/reactkit@1.0.0/hatches/recovery_policy.py",
+                "reason": "动作非法/工具失败后是重试、换查询还是回退，由运行时依据失败原因与轨迹决定，而非预定义 error route；静态 failures.route 只能给出一条固定回退路径，策略选择本身需运行时元决策",
+                "owner": "lang-team",
+                "share_budget_pct": 5
+              },
+              "capability_refs": []
+            },
+            {
+              "id": "registry",
+              "kind": "task",
+              "escape": {
+                "kind": "dynamic_tool_registry",
+                "impl_ref": "packages/reactkit@1.0.0/hatches/action_registry.py",
+                "reason": "动作词表由运行时环境决定（ALFWorld 的 look/inventory/goto/open/examine、WebShop 由页面 DOM 决定的 click 目标）；静态 uses.tools 只能声明已知动作面，故词表解析与注册逃逸；产出的 action_space 同时喂给 policy（可见动作集）与动作解析器（匹配校验）",
+                "owner": "lang-team",
+                "share_budget_pct": 5
+              },
+              "capability_refs": []
+            }
+          ],
+          "edges": [
+            {
+              "from": "action_valid",
+              "output": "action",
+              "to": "env",
+              "input": "action",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((action_valid.passed == false))",
+                "roots": [
+                  "action_valid"
+                ],
+                "digest": "560b7c5154b4c0cd98de0fb221ddea9fafd405f897e3203084f9955e87a9000c"
+              }
+            },
+            {
+              "from": "action_valid",
+              "output": "action",
+              "to": "recovery",
+              "input": "action",
+              "checkpoint": false,
+              "guard": {
+                "source": "(action_valid.passed == false)",
+                "roots": [
+                  "action_valid"
+                ],
+                "digest": "a25c3353c00acc2c2988314bc29711c0ac5ee29318553555af30a30ec35e50d3"
+              }
+            },
+            {
+              "from": "assembler",
+              "output": "context_bundle",
+              "to": "reasoner",
+              "input": "context_bundle",
+              "checkpoint": false
+            },
+            {
+              "from": "beliefs",
+              "output": "belief",
+              "to": "assembler",
+              "input": "belief",
+              "checkpoint": false
+            },
+            {
+              "from": "compose",
+              "output": "record",
+              "to": "beliefs",
+              "input": "record",
+              "checkpoint": false
+            },
+            {
+              "from": "compose",
+              "output": "record",
+              "to": "parse",
+              "input": "record",
+              "checkpoint": false
+            },
+            {
+              "from": "env",
+              "output": "observation",
+              "to": "beliefs",
+              "input": "observation",
+              "checkpoint": false
+            },
+            {
+              "from": "env",
+              "output": "observation",
+              "to": "reasoner",
+              "input": "observation",
+              "checkpoint": false
+            },
+            {
+              "from": "judge",
+              "output": "action",
+              "to": "action_valid",
+              "input": "action",
+              "checkpoint": false,
+              "guard": {
+                "source": "!((judge.verdict.done == true))",
+                "roots": [
+                  "judge"
+                ],
+                "digest": "0375962dee70cef22cd501bc53a4ba47c8a3a566d2d5e6ec4ffa56448eb1e336"
+              }
+            },
+            {
+              "from": "parse",
+              "output": "action",
+              "to": "judge",
+              "input": "action",
+              "checkpoint": false
+            },
+            {
+              "from": "parse",
+              "output": "decision",
+              "to": "judge",
+              "input": "decision",
+              "checkpoint": false
+            },
+            {
+              "from": "reasoner",
+              "output": "turn",
+              "to": "compose",
+              "input": "turn",
+              "checkpoint": false
+            },
+            {
+              "from": "recovery",
+              "output": "hint",
+              "to": "reasoner",
+              "input": "hint",
+              "checkpoint": false
+            },
+            {
+              "from": "registry",
+              "output": "action_space",
+              "to": "parse",
+              "input": "action_space",
+              "checkpoint": false
+            },
+            {
+              "from": "registry",
+              "output": "action_space",
+              "to": "reasoner",
+              "input": "action_space",
+              "checkpoint": false
+            }
+          ]
+        }
+      }
+    },
+    "interface": {
+      "input_type": "react_input",
+      "output_type": "answer",
+      "output_from": "react_loop",
+      "intent": "ReAct 单体交错循环：policy 节点出边→动作切分→环境执行→观察回灌 policy（自环）；轨迹=唯一记忆；语义终止 + 步数硬上限 + 上下文窗口三重预算；卡片⑥(b) 八项以七类逃逸词表逐条记账"
+    },
+    "types": {
+      "action_call": {
+        "properties": {
+          "args_text": {
+            "type": "string"
+          },
+          "matched": {
+            "type": "boolean"
+          },
+          "tool": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "tool",
+          "args_text",
+          "matched"
+        ],
+        "type": "object"
+      },
+      "action_space": {
+        "properties": {
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "signature": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "actions",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "answer": {
+        "properties": {
+          "final": {
+            "type": "string"
+          },
+          "supports": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "final",
+          "supports"
+        ],
+        "type": "object"
+      },
+      "belief_state": {
+        "properties": {
+          "beliefs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "beliefs"
+        ],
+        "type": "object"
+      },
+      "completion": {
+        "properties": {
+          "confidence_milli": {
+            "type": "integer"
+          },
+          "done": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "done",
+          "confidence_milli"
+        ],
+        "type": "object"
+      },
+      "context_bundle": {
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "window_items": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "text",
+          "window_items"
+        ],
+        "type": "object"
+      },
+      "decision": {
+        "properties": {
+          "answer_text": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "answer_text"
+        ],
+        "type": "object"
+      },
+      "hint": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "observation": {
+        "properties": {
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "react_input": {
+        "properties": {
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ],
+        "type": "object"
+      },
+      "turn_record": {
+        "properties": {
+          "action_text": {
+            "type": "string"
+          },
+          "thought": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "thought",
+          "action_text"
+        ],
+        "type": "object"
+      },
+      "turn_text": {
+        "properties": {
+          "raw": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "raw"
+        ],
+        "type": "object"
+      }
+    },
+    "stores": {
+      "beliefs": {
+        "name": "beliefs",
+        "kind": "collection",
+        "item": "belief_state",
+        "writer": "react_loop.beliefs",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 8
+        },
+        "eval_input": false
+      },
+      "trajectory": {
+        "name": "trajectory",
+        "kind": "message_log",
+        "writer": "react_loop.reasoner",
+        "lifecycle": "run",
+        "retention": {
+          "max_items": 128
+        },
+        "eval_input": false
+      }
+    },
+    "node_exec": {
+      "react_loop": {
+        "node_id": "react_loop",
+        "components": {},
+        "artifacts": {
+          "answer": {
+            "from_body": "judge.answer",
+            "is_final": true,
+            "provenance": null
+          }
+        }
+      },
+      "react_loop.action_valid": {
+        "node_id": "action_valid",
+        "components": {},
+        "consumes": {
+          "action": "action_call"
+        },
+        "artifacts": {
+          "action": {
+            "type": "action_call",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "assert": {
+          "source": "inputs.action.matched == true",
+          "roots": [
+            "inputs"
+          ],
+          "digest": "ee4710a63dd7d3f74ab1ebeb3bc54d946b89abdcd2be326198a0ba59ed397be3"
+        }
+      },
+      "react_loop.assembler": {
+        "node_id": "assembler",
+        "components": {},
+        "reads": [
+          "trajectory"
+        ],
+        "consumes": {
+          "belief": "belief_state"
+        },
+        "artifacts": {
+          "context_bundle": {
+            "type": "context_bundle",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "react_loop.beliefs": {
+        "node_id": "beliefs",
+        "components": {},
+        "writes": [
+          "beliefs"
+        ],
+        "consumes": {
+          "observation": "observation",
+          "record": "turn_record"
+        },
+        "artifacts": {
+          "belief": {
+            "type": "belief_state",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "react_loop.compose": {
+        "node_id": "compose",
+        "components": {},
+        "consumes": {
+          "turn": "turn_text"
+        },
+        "artifacts": {
+          "record": {
+            "type": "turn_record",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "react_loop.env": {
+        "node_id": "env",
+        "components": {},
+        "consumes": {
+          "action": "action_call"
+        },
+        "artifacts": {
+          "observation": {
+            "type": "observation",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "react_loop.judge": {
+        "node_id": "judge",
+        "components": {},
+        "consumes": {
+          "action": "action_call",
+          "decision": "decision"
+        },
+        "artifacts": {
+          "action": {
+            "type": "action_call",
+            "is_final": false,
+            "provenance": null
+          },
+          "answer": {
+            "type": "answer",
+            "is_final": false,
+            "provenance": null
+          },
+          "verdict": {
+            "type": "completion",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "react_loop.parse": {
+        "node_id": "parse",
+        "components": {},
+        "consumes": {
+          "action_space": "action_space",
+          "record": "turn_record"
+        },
+        "artifacts": {
+          "action": {
+            "type": "action_call",
+            "is_final": false,
+            "provenance": null
+          },
+          "decision": {
+            "type": "decision",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "react_loop.reasoner": {
+        "node_id": "reasoner",
+        "components": {
+          "model": "route.main@1",
+          "tools": {
+            "pkg.reactkit.hopqa_api": {
+              "effect_class": null
+            },
+            "pkg.reactkit.lookup": {
+              "effect_class": null
+            }
+          }
+        },
+        "writes": [
+          "trajectory"
+        ],
+        "consumes": {
+          "action_space": "action_space",
+          "context_bundle": "context_bundle",
+          "hint": "hint",
+          "observation": "observation"
+        },
+        "artifacts": {
+          "turn": {
+            "type": "turn_text",
+            "is_final": false,
+            "provenance": null
+          }
+        },
+        "context": [
+          {
+            "from": "template",
+            "quota_tokens": 900,
+            "template_ref": "pkg.reactkit.fewshot_react"
+          },
+          {
+            "from": "input",
+            "quota_tokens": 200,
+            "fields": [
+              "question"
+            ],
+            "policy": "project"
+          },
+          {
+            "from": "store",
+            "quota_tokens": 4000,
+            "store": "trajectory",
+            "policy": "latest_k",
+            "args": {
+              "k": 24
+            }
+          },
+          {
+            "from": "store",
+            "quota_tokens": 400,
+            "store": "beliefs",
+            "policy": "full"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 300,
+            "port": "action_space",
+            "policy": "project"
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 600,
+            "port": "observation",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 3000,
+            "port": "context_bundle",
+            "policy": "project",
+            "optional": true
+          },
+          {
+            "from": "edge",
+            "quota_tokens": 200,
+            "port": "hint",
+            "policy": "project",
+            "optional": true
+          }
+        ]
+      },
+      "react_loop.recovery": {
+        "node_id": "recovery",
+        "components": {},
+        "consumes": {
+          "action": "action_call"
+        },
+        "artifacts": {
+          "hint": {
+            "type": "hint",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      },
+      "react_loop.registry": {
+        "node_id": "registry",
+        "components": {},
+        "artifacts": {
+          "action_space": {
+            "type": "action_space",
+            "is_final": false,
+            "provenance": null
+          }
+        }
+      }
+    },
+    "policies": {
+      "budgets": [
+        {
+          "id": "cost_cap",
+          "dimension": "cents",
+          "scope": "plan",
+          "cap": 120
+        },
+        {
+          "id": "token_cap",
+          "dimension": "tokens_total",
+          "scope": "loop:react_loop",
+          "cap": 60000
+        },
+        {
+          "id": "turn_cap",
+          "dimension": "turns",
+          "scope": "loop:react_loop",
+          "cap": 12
+        }
+      ],
+      "stop": [
+        {
+          "when": {
+            "source": "last_tool.first_line in ['FINISH', 'FINAL ANSWER']",
+            "roots": [
+              "last_tool"
+            ],
+            "digest": "c18921ffcd4626537a604ae6d643f1bcf96d203db47ef6743f458fb089df54cc"
+          },
+          "outcome": "completed"
+        },
+        {
+          "when": {
+            "source": "steps.tool_free >= 2",
+            "roots": [
+              "steps"
+            ],
+            "digest": "6837f0ac7e61206172fca8887db9e3b50beb0533ae21b6546845e0400d911dfa"
+          },
+          "outcome": "failed"
+        }
+      ],
+      "failures": [
+        {
+          "class": "tool_error",
+          "route": "same_node",
+          "feedback": "error_observation"
+        },
+        {
+          "class": "gate_refused",
+          "route": "same_node",
+          "feedback": "invalid_action_observation"
+        },
+        {
+          "class": "transport_transient",
+          "retry": {
+            "max": 3,
+            "backoff_ms": 800
+          }
+        },
+        {
+          "class": "budget_exhausted",
+          "terminal": true,
+          "outcome": "failed"
+        }
+      ]
+    },
+    "escapes": {
+      "react_loop.assembler": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/reactkit@1.0.0/hatches/context_assembler.py",
+        "reason": "轨迹随步数线性膨胀，论文按全量回灌 + 运行时裁剪/摘要组织上下文；静态 context 段的 latest_k/summarize 策略只能给固定上界，自适应截断/摘要需运行时组装器；本节点产出 context_bundle 注入 policy",
+        "owner": "lang-team",
+        "share_budget_pct": 4
+      },
+      "react_loop.beliefs": {
+        "kind": "runtime_context_mutation",
+        "impl_ref": "packages/reactkit@1.0.0/hatches/belief_patch.py",
+        "reason": "模型可在后续 Thought 中显式改口（如『我错了…』），事实覆盖旧结论；不可变工件模型只能追加，需一个可写的断言/scratchpad 区；本节点以覆盖写方式更新 beliefs 槽（轨迹本身仍只追加，错误历史保持可见 —— 卡片④）",
+        "owner": "lang-team",
+        "share_budget_pct": 3
+      },
+      "react_loop.compose": {
+        "kind": "program_synthesis",
+        "impl_ref": "packages/reactkit@1.0.0/hatches/turn_composer.py",
+        "reason": "论文的 Policy 一次调用同时产出 Thought 与 Action 两段，核心节点每端口对应一件工件，无法表达『一次生成多产物』的复合发射与再分派；本节点把原始生成文本合成为 (thought, action_text) 复合工件后再交解析器",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      },
+      "react_loop.env": {
+        "kind": "env_adapter",
+        "impl_ref": "packages/reactkit@1.0.0/hatches/env_adapter.py",
+        "reason": "ALFWorld/WebShop 需环境适配器：会话状态保持、回合同步、非法动作反馈，语义远宽于无状态工具；执行后返回自然语言观察，核心侧只能承接一个已执行动作的结果端口",
+        "owner": "lang-team",
+        "share_budget_pct": 10
+      },
+      "react_loop.judge": {
+        "kind": "llm_predicate",
+        "impl_ref": "packages/reactkit@1.0.0/hatches/completion_judge.py",
+        "reason": "『我认为已完成』由模型判定后需外部解析才能成为控制流信号；静态条件边只能表达 finish 动作串这一机器可见形式，语义级完成判定需 LLM 判定后回传 completion 工件；本节点同时透传待执行动作，未完成时继续走动作路径",
+        "owner": "lang-team",
+        "share_budget_pct": 8
+      },
+      "react_loop.parse": {
+        "kind": "free_text_parser",
+        "impl_ref": "packages/reactkit@1.0.0/hatches/action_parser.py",
+        "reason": "Action/Thought 由同一段生成文本启发式切分（非固定 slot schema），观察侧也要求把纯文本观察解析为可用记录；解析结果与运行时动作词表比对得出 matched；静态边与 typed 端口只能承载已切好的动作，启发式切分必须逃逸",
+        "owner": "lang-team",
+        "share_budget_pct": 8
+      },
+      "react_loop.recovery": {
+        "kind": "meta_loop",
+        "impl_ref": "packages/reactkit@1.0.0/hatches/recovery_policy.py",
+        "reason": "动作非法/工具失败后是重试、换查询还是回退，由运行时依据失败原因与轨迹决定，而非预定义 error route；静态 failures.route 只能给出一条固定回退路径，策略选择本身需运行时元决策",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      },
+      "react_loop.registry": {
+        "kind": "dynamic_tool_registry",
+        "impl_ref": "packages/reactkit@1.0.0/hatches/action_registry.py",
+        "reason": "动作词表由运行时环境决定（ALFWorld 的 look/inventory/goto/open/examine、WebShop 由页面 DOM 决定的 click 目标）；静态 uses.tools 只能声明已知动作面，故词表解析与注册逃逸；产出的 action_space 同时喂给 policy（可见动作集）与动作解析器（匹配校验）",
+        "owner": "lang-team",
+        "share_budget_pct": 5
+      }
+    },
+    "trust": {}
+  }
+}

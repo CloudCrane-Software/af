@@ -1,0 +1,2155 @@
+{
+  "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.Config",
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.AWSSecretsManagerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "refreshInterval": {
+          "type": "string"
+        },
+        "refreshinterval": {
+          "type": "string"
+        },
+        "region": {
+          "type": "string"
+        },
+        "secretName": {
+          "type": "string"
+        },
+        "secretname": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.AccessControlConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "adminPolicy": {
+          "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.Policy"
+        },
+        "adminpolicy": {
+          "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.Policy"
+        },
+        "groups": {
+          "additionalProperties": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.Group"
+          },
+          "type": "object"
+        },
+        "metrics": {
+          "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.Metrics"
+        },
+        "repositories": {
+          "additionalProperties": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.PolicyGroup"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.AuthConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "apiKey": {
+          "type": "boolean"
+        },
+        "apikey": {
+          "type": "boolean"
+        },
+        "bearer": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.BearerConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failDelay": {
+          "type": "integer"
+        },
+        "faildelay": {
+          "type": "integer"
+        },
+        "htPasswd": {
+          "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.AuthHTPasswd"
+        },
+        "htpasswd": {
+          "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.AuthHTPasswd"
+        },
+        "ldap": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.LDAPConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mtls": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.MTLSConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "openID": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.OpenIDConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "openId": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.OpenIDConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "openid": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.OpenIDConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "secureSession": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "securesession": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sessionDriver": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "sessionKeysFile": {
+          "type": "string"
+        },
+        "sessiondriver": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "sessionkeysfile": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.AuthHTPasswd": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.BearerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "awsSecretsManager": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.AWSSecretsManagerConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "awssecretsmanager": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.AWSSecretsManagerConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cert": {
+          "type": "string"
+        },
+        "oidc": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.BearerOIDCConfig"
+          },
+          "type": "array"
+        },
+        "realm": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        },
+        "upstreamTokenEndpoint": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.UpstreamTokenEndpointConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "upstreamtokenendpoint": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.UpstreamTokenEndpointConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.BearerOIDCConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "audiences": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "certificateAuthority": {
+          "type": "string"
+        },
+        "certificateAuthorityFile": {
+          "type": "string"
+        },
+        "certificateauthority": {
+          "type": "string"
+        },
+        "certificateauthorityfile": {
+          "type": "string"
+        },
+        "claimMapping": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.CELClaimValidationAndMapping"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "claimmapping": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.CELClaimValidationAndMapping"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "skipIssuerVerification": {
+          "type": "boolean"
+        },
+        "skipissuerverification": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.CELClaimValidationAndMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        },
+        "validations": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.CELValidation"
+          },
+          "type": "array"
+        },
+        "variables": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.CELVariable"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.CELValidation": {
+      "additionalProperties": false,
+      "properties": {
+        "expression": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.CELVariable": {
+      "additionalProperties": false,
+      "properties": {
+        "expression": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.ClaimMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "groups": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.ClusterConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "hashKey": {
+          "type": "string"
+        },
+        "hashkey": {
+          "type": "string"
+        },
+        "members": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tls": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.TLSConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.Condition": {
+      "additionalProperties": false,
+      "properties": {
+        "expression": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.Config": {
+      "additionalProperties": false,
+      "properties": {
+        "binaryType": {
+          "type": "string"
+        },
+        "binarytype": {
+          "type": "string"
+        },
+        "cluster": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.ClusterConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "commit": {
+          "type": "string"
+        },
+        "distSpecVersion": {
+          "type": "string"
+        },
+        "distspecversion": {
+          "type": "string"
+        },
+        "extensions": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.ExtensionConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "goVersion": {
+          "type": "string"
+        },
+        "goversion": {
+          "type": "string"
+        },
+        "http": {
+          "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.HTTPConfig"
+        },
+        "log": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.LogConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "releaseTag": {
+          "type": "string"
+        },
+        "releasetag": {
+          "type": "string"
+        },
+        "scheduler": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.SchedulerConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "storage": {
+          "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.GlobalStorageConfig"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.GlobalStorageConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheDriver": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "cachedriver": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "commit": {
+          "type": "boolean"
+        },
+        "dedupe": {
+          "type": "boolean"
+        },
+        "fastRestart": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "fastrestart": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "gc": {
+          "type": "boolean"
+        },
+        "gcDelay": {
+          "type": "string"
+        },
+        "gcInterval": {
+          "type": "string"
+        },
+        "gcTimeWindow": {
+          "type": "string"
+        },
+        "gcdelay": {
+          "type": "string"
+        },
+        "gcinterval": {
+          "type": "string"
+        },
+        "gctimewindow": {
+          "type": "string"
+        },
+        "hydrateBlobOnRead": {
+          "type": "boolean"
+        },
+        "hydrateblobonread": {
+          "type": "boolean"
+        },
+        "maxRepos": {
+          "type": "integer"
+        },
+        "maxrepos": {
+          "type": "integer"
+        },
+        "redirectBlobURL": {
+          "type": "boolean"
+        },
+        "redirectBlobUrl": {
+          "type": "boolean"
+        },
+        "redirectbloburl": {
+          "type": "boolean"
+        },
+        "remoteCache": {
+          "type": "boolean"
+        },
+        "remotecache": {
+          "type": "boolean"
+        },
+        "retention": {
+          "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.ImageRetention"
+        },
+        "rootDirectory": {
+          "type": "string"
+        },
+        "rootdirectory": {
+          "type": "string"
+        },
+        "storageDriver": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "storagedriver": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "subPaths": {
+          "additionalProperties": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.StorageConfig"
+          },
+          "type": "object"
+        },
+        "subpaths": {
+          "additionalProperties": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.StorageConfig"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.Group": {
+      "additionalProperties": false,
+      "properties": {
+        "users": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.HTTPConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "accessControl": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.AccessControlConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "accesscontrol": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.AccessControlConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "address": {
+          "type": "string"
+        },
+        "allowOrigin": {
+          "type": "string"
+        },
+        "alloworigin": {
+          "type": "string"
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.AuthConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "compat": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "externalURL": {
+          "type": "string"
+        },
+        "externalUrl": {
+          "type": "string"
+        },
+        "externalurl": {
+          "type": "string"
+        },
+        "port": {
+          "type": "string"
+        },
+        "ratelimit": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.RatelimitConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "readTimeout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "readtimeout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "realm": {
+          "type": "string"
+        },
+        "tls": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.TLSConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "writeTimeout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "writetimeout": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.ImageRetention": {
+      "additionalProperties": false,
+      "properties": {
+        "delay": {
+          "type": "string"
+        },
+        "dryRun": {
+          "type": "boolean"
+        },
+        "dryrun": {
+          "type": "boolean"
+        },
+        "policies": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.RetentionPolicy"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.KeepTagsPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "mostRecentlyPulledCount": {
+          "type": "integer"
+        },
+        "mostRecentlyPushedCount": {
+          "type": "integer"
+        },
+        "mostrecentlypulledcount": {
+          "type": "integer"
+        },
+        "mostrecentlypushedcount": {
+          "type": "integer"
+        },
+        "patterns": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pulledWithin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pulledwithin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pushedWithin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pushedwithin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.KeepUntaggedPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "mostRecentlyPulledCount": {
+          "type": "integer"
+        },
+        "mostRecentlyPushedCount": {
+          "type": "integer"
+        },
+        "mostrecentlypulledcount": {
+          "type": "integer"
+        },
+        "mostrecentlypushedcount": {
+          "type": "integer"
+        },
+        "pulledWithin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pulledwithin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pushedWithin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pushedwithin": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.LDAPConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "baseDN": {
+          "type": "string"
+        },
+        "baseDn": {
+          "type": "string"
+        },
+        "basedn": {
+          "type": "string"
+        },
+        "caCert": {
+          "type": "string"
+        },
+        "cacert": {
+          "type": "string"
+        },
+        "credentialsFile": {
+          "type": "string"
+        },
+        "credentialsfile": {
+          "type": "string"
+        },
+        "insecure": {
+          "type": "boolean"
+        },
+        "port": {
+          "type": "integer"
+        },
+        "skipVerify": {
+          "type": "boolean"
+        },
+        "skipverify": {
+          "type": "boolean"
+        },
+        "startTLS": {
+          "type": "boolean"
+        },
+        "startTls": {
+          "type": "boolean"
+        },
+        "starttls": {
+          "type": "boolean"
+        },
+        "subtreeSearch": {
+          "type": "boolean"
+        },
+        "subtreesearch": {
+          "type": "boolean"
+        },
+        "userAttribute": {
+          "type": "string"
+        },
+        "userFilter": {
+          "type": "string"
+        },
+        "userGroupAttribute": {
+          "type": "string"
+        },
+        "userattribute": {
+          "type": "string"
+        },
+        "userfilter": {
+          "type": "string"
+        },
+        "usergroupattribute": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.LogConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "audit": {
+          "type": "string"
+        },
+        "level": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.MTLSConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "dnsSanIndex": {
+          "type": "integer"
+        },
+        "dnssanindex": {
+          "type": "integer"
+        },
+        "emailSanIndex": {
+          "type": "integer"
+        },
+        "emailsanindex": {
+          "type": "integer"
+        },
+        "identityAttributes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "identityattributes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "uriSanIndex": {
+          "type": "integer"
+        },
+        "uriSanPattern": {
+          "type": "string"
+        },
+        "urisanindex": {
+          "type": "integer"
+        },
+        "urisanpattern": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.MethodRatelimitConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string"
+        },
+        "rate": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.Metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "anonymousPolicy": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "anonymouspolicy": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "users": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.OpenIDConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "callbackAllowOrigins": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "callbackalloworigins": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "providers": {
+          "additionalProperties": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.OpenIDProviderConfig"
+          },
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.OpenIDProviderConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "authURL": {
+          "type": "string"
+        },
+        "authUrl": {
+          "type": "string"
+        },
+        "authurl": {
+          "type": "string"
+        },
+        "claimMapping": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.ClaimMapping"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "claimmapping": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.ClaimMapping"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "clientID": {
+          "type": "string"
+        },
+        "clientId": {
+          "type": "string"
+        },
+        "clientSecret": {
+          "type": "string"
+        },
+        "clientid": {
+          "type": "string"
+        },
+        "clientsecret": {
+          "type": "string"
+        },
+        "credentialsFile": {
+          "type": "string"
+        },
+        "credentialsfile": {
+          "type": "string"
+        },
+        "issuer": {
+          "type": "string"
+        },
+        "keyPath": {
+          "type": "string"
+        },
+        "keypath": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "tokenURL": {
+          "type": "string"
+        },
+        "tokenUrl": {
+          "type": "string"
+        },
+        "tokenurl": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.Policy": {
+      "additionalProperties": false,
+      "properties": {
+        "actions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "conditions": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.Condition"
+          },
+          "type": "array"
+        },
+        "groups": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "users": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.PolicyGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "anonymousPolicy": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "anonymouspolicy": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "defaultPolicy": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "defaultpolicy": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "policies": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.Policy"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.RatelimitConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "methods": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.MethodRatelimitConfig"
+          },
+          "type": "array"
+        },
+        "rate": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.RetentionPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "deleteReferrers": {
+          "type": "boolean"
+        },
+        "deleteUntagged": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "deletereferrers": {
+          "type": "boolean"
+        },
+        "deleteuntagged": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "keepTags": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.KeepTagsPolicy"
+          },
+          "type": "array"
+        },
+        "keepUntagged": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.KeepUntaggedPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keeptags": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.KeepTagsPolicy"
+          },
+          "type": "array"
+        },
+        "keepuntagged": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.KeepUntaggedPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "repositories": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.SchedulerConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "numWorkers": {
+          "type": "integer"
+        },
+        "numworkers": {
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.StorageConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "cacheDriver": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "cachedriver": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "commit": {
+          "type": "boolean"
+        },
+        "dedupe": {
+          "type": "boolean"
+        },
+        "gc": {
+          "type": "boolean"
+        },
+        "gcDelay": {
+          "type": "string"
+        },
+        "gcInterval": {
+          "type": "string"
+        },
+        "gcTimeWindow": {
+          "type": "string"
+        },
+        "gcdelay": {
+          "type": "string"
+        },
+        "gcinterval": {
+          "type": "string"
+        },
+        "gctimewindow": {
+          "type": "string"
+        },
+        "hydrateBlobOnRead": {
+          "type": "boolean"
+        },
+        "hydrateblobonread": {
+          "type": "boolean"
+        },
+        "maxRepos": {
+          "type": "integer"
+        },
+        "maxrepos": {
+          "type": "integer"
+        },
+        "redirectBlobURL": {
+          "type": "boolean"
+        },
+        "redirectBlobUrl": {
+          "type": "boolean"
+        },
+        "redirectbloburl": {
+          "type": "boolean"
+        },
+        "remoteCache": {
+          "type": "boolean"
+        },
+        "remotecache": {
+          "type": "boolean"
+        },
+        "retention": {
+          "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01api~01config.ImageRetention"
+        },
+        "rootDirectory": {
+          "type": "string"
+        },
+        "rootdirectory": {
+          "type": "string"
+        },
+        "storageDriver": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "storagedriver": {
+          "additionalProperties": {},
+          "type": "object"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.TLSConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "caCert": {
+          "type": "string"
+        },
+        "cacert": {
+          "type": "string"
+        },
+        "cert": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1api~1config.UpstreamTokenEndpointConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "allowInsecureHttp": {
+          "type": "boolean"
+        },
+        "allowinsecurehttp": {
+          "type": "boolean"
+        },
+        "realm": {
+          "type": "string"
+        },
+        "service": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.APIKeyConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.BaseConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.CVEConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "trivy": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.TrivyConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "updateInterval": {
+          "type": "string"
+        },
+        "updateinterval": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.ExtensionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "apiKey": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.APIKeyConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "apikey": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.APIKeyConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "events": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config~01events.Config"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "lint": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.LintConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "metrics": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.MetricsConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mgmt": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.MgmtConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scrub": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.ScrubConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "search": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.SearchConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sync": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config~01sync.Config"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "trust": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.ImageTrustConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ui": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.UIConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.ImageTrustConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "cosign": {
+          "type": "boolean"
+        },
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "notation": {
+          "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.LintConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "mandatoryAnnotations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mandatoryannotations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.MetricsConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "prometheus": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.PrometheusConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.MgmtConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.PrometheusConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.SBOMConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": "boolean"
+        },
+        "format": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.ScrubConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "interval": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.SearchConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "cve": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.CVEConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.TrivyConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "dbRepository": {
+          "type": "string"
+        },
+        "dbrepository": {
+          "type": "string"
+        },
+        "detectionPriority": {
+          "type": "string"
+        },
+        "detectionpriority": {
+          "type": "string"
+        },
+        "ignoreFile": {
+          "type": "string"
+        },
+        "ignorefile": {
+          "type": "string"
+        },
+        "includeDevDeps": {
+          "type": "boolean"
+        },
+        "includedevdeps": {
+          "type": "boolean"
+        },
+        "javaDBRepository": {
+          "type": "string"
+        },
+        "javaDbrepository": {
+          "type": "string"
+        },
+        "javadbrepository": {
+          "type": "string"
+        },
+        "sbom": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config.SBOMConfig"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scanRemovedPkgs": {
+          "type": "boolean"
+        },
+        "scanremovedpkgs": {
+          "type": "boolean"
+        },
+        "vulnSeveritySources": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "vulnseveritysources": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config.UIConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config~1events.Config": {
+      "additionalProperties": false,
+      "properties": {
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "sinks": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config~01events.SinkConfig"
+          },
+          "type": "array"
+        },
+        "source": {
+          "type": "string"
+        },
+        "typePrefix": {
+          "type": "string"
+        },
+        "typeprefix": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config~1events.Credentials": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "password": {
+          "type": "string"
+        },
+        "token": {
+          "type": "string"
+        },
+        "username": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config~1events.SinkConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "channel": {
+          "type": "string"
+        },
+        "headers": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "type": "object"
+        },
+        "proxy": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "timeout": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config~1events.TLSConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "caCertFile": {
+          "type": "string"
+        },
+        "cacertfile": {
+          "type": "string"
+        },
+        "certFile": {
+          "type": "string"
+        },
+        "certfile": {
+          "type": "string"
+        },
+        "keyFile": {
+          "type": "string"
+        },
+        "keyfile": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config~1sync.Config": {
+      "additionalProperties": false,
+      "properties": {
+        "credentialsFile": {
+          "type": "string"
+        },
+        "credentialsfile": {
+          "type": "string"
+        },
+        "downloadDir": {
+          "type": "string"
+        },
+        "downloaddir": {
+          "type": "string"
+        },
+        "enable": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "registries": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config~01sync.RegistryConfig"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config~1sync.Content": {
+      "additionalProperties": false,
+      "properties": {
+        "destination": {
+          "type": "string"
+        },
+        "platforms": {
+          "items": {
+            "type": "string"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
+        "prefix": {
+          "type": "string"
+        },
+        "stripPrefix": {
+          "type": "boolean"
+        },
+        "stripprefix": {
+          "type": "boolean"
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config~01sync.Tags"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config~1sync.RegistryConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "certDir": {
+          "type": "string"
+        },
+        "certdir": {
+          "type": "string"
+        },
+        "content": {
+          "items": {
+            "$ref": "#/definitions/zotregistry.dev~01zot~01v2~01pkg~01extensions~01config~01sync.Content"
+          },
+          "type": "array"
+        },
+        "credentialHelper": {
+          "type": "string"
+        },
+        "credentialhelper": {
+          "type": "string"
+        },
+        "disableHTTP2": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "disableHttp2": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "disablehttp2": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "manifestCheckInterval": {
+          "type": "string"
+        },
+        "manifestcheckinterval": {
+          "type": "string"
+        },
+        "maxIdleConnsPerHost": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxRetries": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxRetryDelay": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "maxidleconnsperhost": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxretries": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "maxretrydelay": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "oauth2CredentialHelper": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "oauth2credentialhelper": {
+          "additionalProperties": {},
+          "type": "object"
+        },
+        "onDemand": {
+          "type": "boolean"
+        },
+        "onDemandInBackground": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "ondemand": {
+          "type": "boolean"
+        },
+        "ondemandinbackground": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "onlySigned": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "onlysigned": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "platforms": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "pollInterval": {
+          "type": "string"
+        },
+        "pollinterval": {
+          "type": "string"
+        },
+        "preserveDigest": {
+          "type": "boolean"
+        },
+        "preservedigest": {
+          "type": "boolean"
+        },
+        "reqConcurrent": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reqPerSec": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "reqconcurrent": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "reqpersec": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "retryDelay": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retrydelay": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "syncLegacyCosignTags": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "syncTimeout": {
+          "type": "string"
+        },
+        "synclegacycosigntags": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "synctimeout": {
+          "type": "string"
+        },
+        "tlsVerify": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "tlsverify": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "urLs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "urls": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "zotregistry.dev~1zot~1v2~1pkg~1extensions~1config~1sync.Tags": {
+      "additionalProperties": false,
+      "properties": {
+        "excludeRegex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "excluderegex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "regex": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "semver": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    }
+  },
+  "title": "zot config schema"
+}

@@ -1,0 +1,99 @@
+# ci/fix-scan.yaml — 同族横切扫描机读清单（G0-C 施工批落地件）
+# 草案出处：计划/研究组/G0-CI机制批-实施规格-20261027/C/1-fix-scan/fix-scan.yaml（子代理 C）
+# 规格：同目录 SPEC.md；正本锚：红队复盘 §三 C9-4①（:230）+ §四 PP4 升级①（:292）+ §五 5.1 行（:316）
+# 语义：族 = 一次「按点修复」对应的同族缺陷模式全集。CI 按本清单逐族扫描；
+#       常规批 = diff 触及 trigger_globs 的族才跑（路径过滤触发）；
+#       合流 commit = 全族全量（full_scan_globs，FIXSCAN_MODE=full 由合流批注入）；
+#       修复 PR 触碰族成员必须提交扫描产物（redteam/scans/<batch>/ 带 sha256），
+#       缺产物 = 合流 blocked（执行位=合流门 check，本文件只负责产生与校验）。
+# G0-C 落地变更（相对草案）：①sat-cast 白名单按单一正本 ci/budget-cast-whitelist.json
+#   回填（SPEC 1 ⑧-6），债务号由草案占位 D-48 改顺延新号 D-50——正本 10-28 已另册
+#   D-48（locator 债）/D-49（quota-governor），占位号冲突，见 ci/debt-register.md 镜像头注；
+#   ②report_unit.rs:1112/1262 已由 G0-C 前置修复饱和化（开发计划 §2.2），不再入白名单。
+version: 1
+
+families:
+  - id: sat-cast            # 饱和 cast 族（W2-C-28 → W3-C-23 复发链）
+    description: >-
+      预算/配额字段的 u64→i64/u32 直转（`as i64|as i32|as u32`）。同族史：
+      W2-C-28 修 graph 臂（graph_unit.rs node_spend_cap 饱和）漏 report 环，
+      W3-C-23 复发于 report_unit.rs:737（已修，饱和换算）；:1112/:1262 两处
+      已由 G0-C 前置修复（2026-10-28，i64::try_from…unwrap_or(i64::MAX)），
+      余 graph_unit.rs:1068 / shadow.rs:392 两站点（红队摸排新发现，复盘未
+      记载）挂 D-50 白名单——「修一族漏一族」的族扫描结案面（复盘 C9:230）。
+    trigger_globs:          # diff 触及即本族进入本批扫描
+      - "crates/**/*.rs"
+    full_scan_globs:        # 合流全量（与 trigger 同集时仍须全量逐文件）
+      - "crates/**/*.rs"
+    scan:
+      command: python3 ci/fix_scan.py --family sat-cast
+      patterns:             # 命中 = 疑似未饱和直转（白名单除外）
+        - '(cost_cap|spend_cap_cents|budget_ledger_cents|model_calls|cents_used|tokens_input|tokens_output|tokens_cache_read|tokens_total|clock_ms|\bcap\b|\bturns\b)\s*(\([^)]*\))?\s+as\s+(i64|i32|u32)\b'
+      compliant_patterns:   # 识别为合规（不算命中）：饱和换算与钳位后转
+        - 'i64::try_from\([^)]*\)\.unwrap_or\(i64::MAX\)'
+        - 'u32::try_from\([^)]*\)\.unwrap_or\(u32::MAX\)'
+        - '\.min\((i64|u32)::MAX( as u64)?\)\s+as\s+(i64|u32)'
+    expect:
+      hits: 0               # 排除白名单后必须零命中；非零 = step 红 + 自动挂债号
+    whitelist:              # 单一正本=ci/budget-cast-whitelist.json 的回填副本
+      # （SPEC 1 ⑧-6 防两份白名单漂移；fix_scan.py --validate 逐条对账两本一致）
+      - path: crates/af-execline/src/graph_unit.rs
+        line: 1167
+        pattern: 'turns: stage.turns as u32,'
+        debt: D-50
+        reason: stage.turns:u64（graph_unit.rs:1434）直转截断进 record turns:u32（record.rs:164）；红队摸排新发现（SPEC 3 ④），v0.2 迁钳位/饱和换算后销项
+        expires: v0.2-G0
+      - path: crates/af-execline/src/shadow.rs
+        line: 392
+        pattern: 'turns: row.get("turns").and_then(Value::as_u64).map(|t| t as u32),'
+        debt: D-50
+        reason: 判分行投影 u64→u32 直转（SPEC 3 ④新发现站点）；与 graph_unit.rs:1167 同族一并治理后销项
+        expires: v0.2-G0
+    artifact: redteam/scans/<batch>/sat-cast.json   # 产物入库带 sha256；缺产物 = 合流 blocked
+
+  - id: pyc-shadow          # pyc 影子执行面族（W2-C-50 → W3-C-34；双法交叉自验）
+    description: >-
+      判分目录的 __pycache__/*.pyc 字节码影子执行面。同族史：W2-C-50 指出
+      有效 pyc 优先于被锚源文件，W3-C-34 修 report 臂（判分目录 pyc 在场即
+      EX3002，report_unit.rs:119-152）——族扫描保证 swev/graph 臂与全仓
+      工具目录不再开口；并按复盘 C10-4②（:245）双方法交叉自验：文件名枚举
+      与内容 magic 解 pyc 头两法结论必须一致（改名 .dat 规避枚举 = 双法不一致红）。
+    trigger_globs:
+      - "tools/**"          # 判分脚本所在目录（swev-judge.py 等，judge.rs:84 现产值）
+      - "crates/af-execline/src/**"   # 三臂防线代码（防线被删/弱化时重扫）
+      - "**/*.py"
+    full_scan_globs:
+      - "**/__pycache__/**"
+      - "**/*.pyc"
+      - "**/*.py"
+      - "tools/**"
+      - "crates/**"
+      - "ci/**"
+    scan:
+      command: python3 ci/fix_scan.py --family pyc-shadow
+      method_a:             # 法一：文件系统枚举（等价 find <roots> -name '*.pyc' -o -name '__pycache__' -type d，另按 meta.excludes 剪枝）
+        command: "fix_scan.py 内建枚举：*.pyc 文件名 + __pycache__ 目录名（含 meta.excludes 剪枝）"
+      method_b:             # 法二：结构化解析——逐文件读头部 4 字节 magic 识别 pyc（改名规避枚举即失口），并解 src_mtime/src_size 与同目录 .py 比对
+        command: python3 ci/pyc_header_check.py --roots <scan_roots>
+      cross_check: both_zero_or_identical_sets   # 两法结论必须一致；不一致 = 红（单方法结论不受理）
+    expect:
+      hits: 0
+    whitelist: []           # 现状零条：判分目录合法 pyc 不存在（site-packages 不在扫描根内，见 SPEC ⑧）
+    artifact: redteam/scans/<batch>/pyc-shadow.json
+
+meta:
+  families_expected:        # 在册族清单钉死（删任一族即 validate 红——SPEC 1 ⑤-4 元探针；
+    - "sat-cast"            # 同 step9 Kani harness 计数断言纪律：删减覆盖面必须留痕）
+    - "pyc-shadow"
+  scan_roots_default:       # pyc 族默认扫描根（合流时可扩展）
+    - "."
+  excludes:
+    - "target/**"
+    - "ci/out/**"
+    - ".git/**"
+  artifact_hash: sha256     # 产物落盘时同目录写 <artifact>.sha256
+  debt_pointer_rule: >-
+    白名单 debt 字段必须可解析到债务登记册在册条目（正本 计划/技术债登记.md 的仓内
+    镜像 ci/debt-register.md，SPEC 2/3 ⑧-1；接复盘 C2-6 债号指针↔债册对账）；解析
+    失败 = 本门红。新站点（expect.hits>0 的新命中）由 CI 输出 suggested_debt 编号，
+    人工登记后进白名单——未登记站点持续红。

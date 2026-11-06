@@ -1,0 +1,34 @@
+[package]
+name = "af-meter"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+# 1.0.69。与根上的 thiserror 2.0.21 主版本不同，继承 `thiserror` 会升到 2。
+thiserror = "1"
+# 单文件账本。bundled 已在 workspace.dependencies 上声明。
+rusqlite = { workspace = true }
+# 钟面日期。版本钉死在锁文件已有的 chrono 0.4.45 / chrono-tz 0.10.4
+# （af-calendar、af-workorder 已在用），不新增包。
+chrono = { version = "=0.4.45", default-features = false, features = ["std"] }
+chrono-tz = "=0.10.4"
+
+[dev-dependencies]
+af-credential = { path = "../af-credential" }
+# 属性测试（窗口守恒/预算不透支/多消费者合并可交换），=1.12.0 与其他 crate 对齐。
+proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
+# 基准(每事件记账/窗口滚转),与 af-trace/af-sampling 对齐。
+criterion = "0.8.2"
+# Bifrost 配置片段金标。1.49.0 已在锁内（af-graph、af-workorder、af-credential）。
+# 只开 json。不走 cargo-insta review，.snap 直接入库。
+insta = { version = "1.49.0", default-features = false, features = ["json"] }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "meter_paths"
+harness = false

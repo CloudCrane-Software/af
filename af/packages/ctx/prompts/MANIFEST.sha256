@@ -1,0 +1,4 @@
+# ctx prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+4359baf8787f67e405a5543ea438fd67b876e21b1fe5d7b73f06850860fe5c06  prompts/conclude_system.md
+9d6f1b8497d4b31f9ec80ea5b5ed28d74750a9e180109b81dd03eafab2ac3c17  prompts/handoff.md

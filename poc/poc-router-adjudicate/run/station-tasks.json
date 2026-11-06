@@ -1,0 +1,27 @@
+{
+ "tables": [
+  "shift_binding",
+  "station_decl",
+  "task"
+ ],
+ "shift_binding": [],
+ "station_decl": [
+  {
+   "id": 1,
+   "schema_version": 1,
+   "schema_fingerprint": "af-station/schema-1"
+  }
+ ],
+ "task": [
+  {
+   "id": "adj-wo-pocr-leg-1-1",
+   "payload_ref": "/home/pan-ding/af-dev/af/poc/poc-router-adjudicate/run/state/adjudications/wo-pocr-leg-1/adj-wo-pocr-leg-1-1.json",
+   "required_role": "steward",
+   "state": "done",
+   "claimant": "steward-1",
+   "lease_until": 1793759738078,
+   "idempotency_key": "sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a/adj-wo-pocr-leg-1-1",
+   "deadline_ms": null
+  }
+ ]
+}

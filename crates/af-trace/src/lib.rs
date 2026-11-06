@@ -1,0 +1,67 @@
+//! af-trace —— 分级背压追踪通道。
+//!
+//! 双通道语义：
+//!
+//! - **critical（移交同步、落盘确认、fail-closed）**：[`Trace::write_critical`] 把事件放进有界
+//!   critical 缓冲，`Ok` **只代表已入队，不代表已写盘或已 fsync**（持久确认点是
+//!   [`Trace::shutdown`] 返回 `Ok`）。缓冲满时立即返回 `Err(TraceError::CriticalFull)`，
+//!   事件原样退还。后台线程把事件以 JSONL 同步追加到调用方目录的 `critical.jsonl`，
+//!   每条 `sync_all`（fsync：数据与 inode 元数据）成功后才记入镜像并推进
+//!   [`Trace::critical_durable`]；新建文件的目录项由打开路径的一次目录 fsync 钉住。
+//!   写盘失败则把已接受事件留在 [`TraceError::PersistFailed`] 里退还，调用方决定重试或中止，
+//!   不计缺口（critical 轨没有 fail-open 的丢弃路径）。
+//! - **normal（异步、有损）**：[`Trace::write_normal`] 放入有界队列，由后台线程追加到
+//!   `normal.jsonl`（不逐条 fsync）。队列满或写盘失败都丢弃并 `gap_counter += 1`，不阻塞生产者。
+//! - **OTel 非关键 lane（feature `otel`，默认关）**：落盘成功的 normal 事件可按
+//!   [`TraceConfig`] 里的端点与批大小（配方层写入）导出成 OTLP span。导出失败或该 lane
+//!   队列满只把同一条 `gap_counter` 加一，不阻塞生产者，也不让 [`Trace::open`] 失败。
+//!   未开 feature、未配端点、或 exporter 建不起来时 lane 离线，只计数，不改缺口。
+//!   critical 事件（含 gap span）不进入 OTel。真实 collector 不在 `cargo test` 里。
+//! - **缺口可验证**：每次丢弃（磁盘或在线 OTel）都尝试发出 `kind="gap"` 的 critical span；
+//!   critical 也满时合并，[`Trace::shutdown`] 强制补发。不变量：
+//!   **`Σ(gap span.count) == gap_counter`**。
+//!   OTel lane 离线时（默认），`gap_counter` 仍等于磁盘丢弃数。
+//!   该计数写入 `trace.db`，与 critical 文件里的缺口合计一致；重开时对不上则启动失败。
+//!
+//! - **rekor 锚定（critical，不阻塞落盘）**：[`AnchorSettings::endpoint`] 非空时，已落盘的
+//!   critical 事件按 N 条或 T 毫秒（注入钟）封成批次，计算 RFC 6962 Merkle 根，
+//!   `POST {endpoint}/api/v2/log/entries`。回执（log index、检查点签名、纳入路径）
+//!   追加到 `critical.anchors.jsonl`。rekor 不可达时批次写入 `anchor-queue.jsonl` 待重试，
+//!   并记下 `anchor_gap` 与告警字段 `anchor_alert`。这不增加 `gap_counter`，
+//!   也不让 [`Trace::write_critical`] 等待网络。时间窗在落盘、[`Trace::poll_anchor`]
+//!   和 shutdown 时判定。[`verify_anchor`] 按回执复核 Merkle 路径。真实 rekor 不在 `cargo test` 里。
+//!
+//! [`Trace::open`] 首启只接受空库，返回 [`OpenOutcome::Created`]（建表并写入声明）。
+//! 重入返回 [`OpenOutcome::AlreadyDeclared`]，并核对 schema 版本、JSONL、critical 同步耐久性。
+//! 外来 SQLite 对象或声明缺行都拒绝，不建表、不补行。声明与已存状态不符则失败，不静默迁就。
+//!
+//! 时刻经 [`Clock`] 注入，写入事件的 `ts_ms`。测试用 [`ManualClock`]。
+//!
+//! 契约：[`Trace::shutdown`] 必须在所有生产者线程结束之后调用。
+
+mod anchor;
+mod clock;
+mod error;
+mod event;
+mod http_util;
+mod merkle;
+mod otel;
+mod rekor;
+mod sha256;
+mod store;
+mod trace;
+
+pub use anchor::{
+    anchor_queue_path, anchor_sidecar_path, anchor_status_path, read_anchor_receipts,
+    AnchorSettings,
+};
+pub use clock::{Clock, ManualClock, SystemClock};
+pub use error::TraceError;
+pub use event::{sum_gap_counts, GapInfo, Level, TraceEvent};
+pub use otel::OtelMode;
+pub use rekor::{verify_anchor, AnchorError, AnchorReceipt, RekorClient};
+pub use store::{store_path, OpenOutcome};
+pub use trace::{
+    critical_log_path, normal_log_path, read_trace_log, ConsumerHold, ShutdownReport, Trace,
+    TraceConfig, TraceSinks,
+};

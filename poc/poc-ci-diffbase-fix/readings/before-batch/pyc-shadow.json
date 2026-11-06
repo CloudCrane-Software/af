@@ -1,0 +1,25 @@
+{
+  "family": "pyc-shadow",
+  "mode": "full",
+  "batch": "2026-11-04-25429293",
+  "ts": "2026-11-04T10:00:55+00:00",
+  "git_commit": "25429293b0671460d394cb217290f5cebf024a52",
+  "scan_roots": [
+    "."
+  ],
+  "hits": [],
+  "whitelist_applied": [],
+  "method_a_summary": {
+    "method": "A-name-enumeration",
+    "count": 0,
+    "paths": []
+  },
+  "method_b_summary": {
+    "method": "B-content-magic",
+    "count": 0,
+    "paths": [],
+    "stale": [],
+    "orphan": [],
+    "scanned_files": 2266
+  }
+}

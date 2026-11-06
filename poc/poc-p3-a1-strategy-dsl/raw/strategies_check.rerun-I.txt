@@ -1,0 +1,3 @@
+===== STRATEGIES_CHECK -I =====
+[strategies] FATAL: 需要 PyYAML（python3 -c 'import yaml'）
+strategies_check_I_exit=2

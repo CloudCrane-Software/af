@@ -1,0 +1,4 @@
+# mem prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+d76c758d18b54fb81e4ef443d6d0c2f959ef5c2b945222ea4e73dd3ad91b8eca  prompts/solver_system.md
+e9d895cce6cf3b2dcd9fa7d4e46f7a005e1019addb9d9ef1664af7c38c316308  prompts/system.md

@@ -1,0 +1,805 @@
+{
+  "components": [
+    {
+      "class": "model_route",
+      "name": "route.main",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/main.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.cheap",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/cheap.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3-Flash",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.plan",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/plan.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.manager",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/manager.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.alt",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/alt.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3-Flash",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.judge",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/judge.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.reflect",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/reflect.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aflowkit.task_loader",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/aflowkit@1.0.0/tools/task_loader.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.agensh.inspect",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "packages/agensh@1.0.0/tools/inspect.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.agensh.local_edit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "packages/agensh@1.0.0/tools/local_edit.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.agensh.local_run",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/agensh@1.0.0/tools/local_run.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.agensh.publish_update",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "packages/agensh@1.0.0/tools/publish_update.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.agensh.board_append",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "packages/agensh@1.0.0/tools/board_append.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.agensh.workspace_commit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "packages/agensh@1.0.0/tools/workspace_commit.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.crewkit.kickoff_inputs",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "packages/crewkit@1.0.0/tools/kickoff_inputs.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.crewkit.tool.web_search",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/crewkit@1.0.0/tools/web_search.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.crewkit.tool.fetch",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/crewkit@1.0.0/tools/fetch.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.crewkit.tool.doc_render",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "packages/crewkit@1.0.0/tools/doc_render.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.debatekit.search",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/debatekit@1.0.0/tools/search.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.reactkit.hopqa_api",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/reactkit@1.0.0/tools/hopqa_api.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.reactkit.lookup",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/reactkit@1.0.0/tools/lookup.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.reflexkit.env_exec",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/reflexkit@1.0.0/tools/env_exec.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.reflexkit.search",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/reflexkit@1.0.0/tools/search.py"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweagent.aci.search",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.search@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweagent.aci.open",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.open@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweagent.aci.edit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweagent.aci.create",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.create@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweagent.aci.run_test",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.run_test@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweagent.aci.submit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweagent.aci.submit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.sweagent.env",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.openworld.env",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "packages/openworld@1.0.0/tools/env.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.aflowkit.evaluate",
+      "version": "1",
+      "impl_ref": "packages/aflowkit@1.0.0/units/evaluate.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.agensh.acceptance_gate",
+      "version": "1",
+      "impl_ref": "packages/agensh@1.0.0/units/acceptance_gate.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.agensh.fail_scan",
+      "version": "1",
+      "impl_ref": "packages/agensh@1.0.0/units/fail_scan.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.camelkit.social_eval",
+      "version": "1",
+      "impl_ref": "packages/camelkit@1.0.0/units/social_eval.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.crewkit.guardrail.structural",
+      "version": "1",
+      "impl_ref": "packages/crewkit@1.0.0/units/guardrail_structural.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.langgraph.verify",
+      "version": "1",
+      "impl_ref": "packages/langgraph@1.0.0/units/verify.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.reflexkit.evaluator",
+      "version": "1",
+      "impl_ref": "packages/reflexkit@1.0.0/units/evaluator.py"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.sweagent.aci_schema",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweagent.aci_schema@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.sweagent.human_gate",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweagent.human_gate@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.sweagent.swebench_eval",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweagent.swebench_eval@af-execline"
+    },
+    {
+      "class": "memory",
+      "name": "pkg.crewkit.mem.longterm",
+      "version": "1",
+      "impl_ref": "packages/crewkit@1.0.0/memory/longterm.py"
+    },
+    {
+      "class": "memory",
+      "name": "pkg.crewkit.mem.entity",
+      "version": "1",
+      "impl_ref": "packages/crewkit@1.0.0/memory/entity.py"
+    },
+    {
+      "class": "memory",
+      "name": "pkg.debatekit.belief",
+      "version": "1",
+      "impl_ref": "packages/debatekit@1.0.0/memory/belief.py"
+    },
+    {
+      "class": "model_route",
+      "name": "route.strong",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/strong.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.mid",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/mid.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3-Flash",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.weak",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/weak.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3-Flash",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.retrieval",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/retrieval.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3-Flash",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.critic",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/critic.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.scorer",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/scorer.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "model_route",
+      "name": "route.chooser",
+      "version": "1",
+      "impl_ref": "packages/factory-routes@1/model_route/chooser.py",
+      "endpoint": {
+        "protocol": "anthropic-messages",
+        "base_url": "https://open.bigmodel.cn/api/anthropic",
+        "model": "GLM-5.3",
+        "key_ref": "zhipu-coding-plan",
+        "reasoning_tier": "off",
+        "stream": false,
+        "auth": "bearer"
+      }
+    },
+    {
+      "class": "tool",
+      "name": "pkg.repo.grep",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.repo.read",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.repo.edit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.repo.test",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.ret.codegrep",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.ret.lex_anchor",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.ret.graph_expand",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.hopqa.search",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.hopqa.lookup",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.cohesion.depgraph",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.cohesion.community",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.locate@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.searchkit.corpus",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.bench.leaderboard",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.ctxrot.corpus",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.shell",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.readonly",
+      "version": "1",
+      "effect_class": "pure",
+      "impl_ref": "executor:builtin/pkg.sweng.view@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.editor",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.lint",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.aci.custom",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.harness.shell",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.harness.edit",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.harness.lint",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.skill.runtime",
+      "version": "1",
+      "effect_class": "external_once",
+      "impl_ref": "executor:builtin/pkg.sweagent.env@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.merge.strategy_v1",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.merge.strategy_v2",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.merge.compose_new",
+      "version": "1",
+      "effect_class": "persist",
+      "impl_ref": "executor:builtin/pkg.sweng.edit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.swe.checker",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.reflex.test_unit",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ci.rerun",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ci.merge_probe",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.fmt.compliance_probe",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.hooks.post_edit",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.critic.tool_suite",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.codet.dual_runner",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.otter.repro_runner",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ticket.done_probe",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.alpha.sample_filter",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.aci.ablate",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.bench.resolved",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.searchkit.assess",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ctxrot.curve",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.judge.improvement",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.review.scope_diff",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.skill.catalog_loader",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ir.indexer",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "tool",
+      "name": "pkg.iface.mcp_client",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.iface.mcp_client@af-execline",
+      "effect_class": "external_once"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.retrieval.ndcg",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.skill.pair_delta",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.review.bug_capture",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.cost.efficiency",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ab.placebo",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.iface.adherence",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    },
+    {
+      "class": "unit",
+      "name": "pkg.ablate.matrix",
+      "version": "1",
+      "impl_ref": "executor:builtin/pkg.sweng.test_unit@af-execline"
+    }
+  ]
+}

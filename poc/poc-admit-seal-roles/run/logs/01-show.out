@@ -1,0 +1,123 @@
+{
+  "order_id": "wo-asr-poc-1",
+  "stable_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50",
+  "state": "Closed",
+  "ledger": {
+    "path": "/home/pan-ding/af-dev/af/poc/poc-admit-seal-roles/run/state/orders/wo-asr-poc-1/ledger.jsonl",
+    "ops": [
+      {
+        "seq": 1,
+        "ts_ms": 1793762998681,
+        "op": "create_order",
+        "ok": true,
+        "state_after": "Created",
+        "error_kind": null,
+        "error_detail": null
+      },
+      {
+        "seq": 2,
+        "ts_ms": 1793762998685,
+        "op": "bind_line",
+        "ok": true,
+        "state_after": "Created",
+        "error_kind": null,
+        "error_detail": null
+      },
+      {
+        "seq": 3,
+        "ts_ms": 1793762998689,
+        "op": "attach_voucher",
+        "ok": true,
+        "state_after": "Created",
+        "error_kind": null,
+        "error_detail": null
+      },
+      {
+        "seq": 4,
+        "ts_ms": 1793762998692,
+        "op": "release",
+        "ok": true,
+        "state_after": "Released",
+        "error_kind": null,
+        "error_detail": null
+      },
+      {
+        "seq": 5,
+        "ts_ms": 1793762998699,
+        "op": "start",
+        "ok": true,
+        "state_after": "InProgress",
+        "error_kind": null,
+        "error_detail": null
+      },
+      {
+        "seq": 6,
+        "ts_ms": 1793762998705,
+        "op": "attach_artifact",
+        "ok": true,
+        "state_after": "InProgress",
+        "error_kind": null,
+        "error_detail": null
+      },
+      {
+        "seq": 7,
+        "ts_ms": 1793762998710,
+        "op": "complete",
+        "ok": true,
+        "state_after": "Completed",
+        "error_kind": null,
+        "error_detail": null
+      },
+      {
+        "seq": 8,
+        "ts_ms": 1793762998715,
+        "op": "close",
+        "ok": true,
+        "state_after": "Closed",
+        "error_kind": null,
+        "error_detail": null
+      }
+    ]
+  },
+  "mes": {
+    "path": "/home/pan-ding/af-dev/af/poc/poc-admit-seal-roles/run/state/orders/wo-asr-poc-1/mes-events.jsonl",
+    "events": [
+      {
+        "work_order_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50",
+        "occurred_at": 1793762998695,
+        "event_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50:release:4:680f9374e1ee274c",
+        "line_id": "stub:line-poc",
+        "station_id": "af-order-cli",
+        "kind": "release",
+        "quantity": 1
+      },
+      {
+        "work_order_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50",
+        "occurred_at": 1793762998701,
+        "event_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50:start:5:680f9374e1ee274c",
+        "line_id": "stub:line-poc",
+        "station_id": "af-order-cli",
+        "kind": "start",
+        "quantity": 1
+      },
+      {
+        "work_order_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50",
+        "occurred_at": 1793762998712,
+        "event_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50:complete:7:680f9374e1ee274c",
+        "line_id": "stub:line-poc",
+        "station_id": "af-order-cli",
+        "kind": "complete",
+        "quantity": 1
+      },
+      {
+        "work_order_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50",
+        "occurred_at": 1793762998717,
+        "event_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50:close:8:680f9374e1ee274c",
+        "line_id": "stub:line-poc",
+        "station_id": "af-order-cli",
+        "kind": "close",
+        "quantity": 1
+      }
+    ]
+  }
+}

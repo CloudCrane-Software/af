@@ -1,0 +1,11 @@
+{
+  "annotations": {
+    "made-by": "casr-poc"
+  },
+  "artifactType": "application/vnd.af.artifact.v1+json",
+  "contentDigest": "sha256:38a757a63e8a3d0937d0bd7d534b3446e7f6fb06ee480a8ebe893dc94e8e5219",
+  "contentSize": 77,
+  "created": "2026-10-19T03:10:11Z",
+  "name": "demo/hello",
+  "tag": "sp1"
+}

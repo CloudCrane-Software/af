@@ -1,0 +1,1 @@
+wv worker up build=1.0 role=wv1 deployment=verify-dep queue=verify-wv-queue

@@ -1,0 +1,41 @@
+[package]
+name = "af-order"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+description = "下单门面 CLI 骨架：submit/list/show 一命令直驱订单生命周期（复用 af-execline 驱动/账本/MES 与 af-workorder ed25519）"
+
+# ADR-002：af-order = 下单门面 CLI。判定、驱动、账本、MES、执行桩全部复用
+# af-execline；签名复用 af-workorder 的 ed25519。不新增任何外部依赖
+# （AGENT.md 硬纪律 6：默认拒绝新依赖）。
+[dependencies]
+# E1 缺口②：任务包 manifest 一致性核对的正本在 af-compiler（编译链组包侧
+# 同 crate 写入留档）——门面只做调用，不复刻第二套 hash 口径。
+af-compiler = { path = "../af-compiler" }
+af-execline = { path = "../af-execline" }
+af-workorder = { path = "../af-workorder" }
+# PoC-C 裁决环：裁决单入队/认领/完成全部走 af-station 既有队列件（enqueue
+# 幂等键 UNIQUE / claim 带守卫 UPDATE / complete 现任判定）。分层方向
+# af-order（门面）→ af-station（人工任务账本），不反向（防依赖环）。
+af-station = { path = "../af-station" }
+# PoC-A2 admit：AdmissionRequest 内嵌 DecisionArtifact/TrustedActorRegistry
+# （其公开 API 面带 chrono::DateTime<Utc>），请求解析需要 chrono serde——
+# 与 af-workorder/af-engine 同款声明（版本随 Cargo.lock 既有解析，非新引第三方）。
+chrono = { version = "0.4", features = ["serde"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# 集成测试读回 ledger / MES / 验签凭证；版本随 workspace，不另引。
+af-execline = { path = "../af-execline" }
+# E1 缺口①：编译→提交一跳干跑——测试内走 af-compiler 四段全链产出计划，
+# 验证编译产物即提交形态（workspace 内 crate，零外部依赖）。
+af-compiler = { path = "../af-compiler" }
+af-dsl = { path = "../af-dsl" }
+# 消债 B① 集成测试：--mes-ch 声明流到驱动缝的 mock CH（workspace 内 crate）。
+af-mes = { path = "../af-mes" }
+af-workorder = { path = "../af-workorder" }
+
+[lints]
+workspace = true

@@ -1,0 +1,1 @@
+artifact-content-v1: hello CAS

@@ -1,0 +1,5 @@
+$ bash ci/gate_inputs_check.sh check --root S13-R5-report-co-shrink（真脚本+沙箱根）  （cwd=S13-R5-report-co-shrink）
+exit=0
+--- stdout ---
+gate_inputs_check: 判据正本钉对账一致: 12 件（ci/baselines/gate-inputs.sha256）
+--- stderr ---

@@ -1,0 +1,605 @@
+//! SWE-bench Verified 套件——纯函数层（af-bench 吸收 P1，原样搬入）。
+//!
+//! 来源与去向（吸收方案 §1.1）：
+//! - `SwevTask`/`load_swev_tasks`/`SwevTask::prompt`/`diff_touches_tests`
+//!   ← af-bench swev.rs:16-139，函数体逐字节一致；
+//! - 两段提示词 `SWEV_SYSTEM_PROMPT`/`SWEV_INSTANCE_PROTOCOL` 与反考古模式
+//!   `ARCHAEOLOGY_PATTERNS` ← af-bench main.rs:543, 548-577，测量语义载荷
+//!   一个字节不动（方案 §1.1 行 4）。
+//!
+//! 容器 setup 已随 P2 搬入（挂 HostBridge，代理注入与资源护栏进命令构造）；
+//! capture_diff / verify / sha256_hex 已随 P3 搬入（判分单元与证据链，方案
+//! §5-P3）：capture_diff 走 bridge，eval 执行链与判分调用按 af-bench 原样
+//! （judge 子进程收敛到 [`crate::judge`]，argv 契约与指纹门见该模块）。
+//! 判分三件套（task_json/eval.log/agent.diff）由本模块以原样语义产出，
+//! 路径与字节语义不动（方案 §1.1 不变量）。
+//!
+//! 行为逐字节等价由 tests/p1_comparison.rs 对照测试钉死（#[path] 直接编译
+//! af-bench 原文件，同输入同输出），黄金值见 tests/p1_suite.rs；P2 生命周期
+//! 命令构造由 tests/p2_bridge.rs FakeBridge 断言钉死。
+
+use crate::hostbridge::HostBridge;
+use crate::judge::JudgeLocator;
+use crate::suite::tb::{self, TbEnv};
+use serde::Deserialize;
+use std::path::Path;
+use std::process::Command;
+
+#[derive(Debug, Deserialize)]
+pub struct SwevTask {
+    pub instance_id: String,
+    pub repo: String,
+    pub problem_statement: String,
+    pub image: String,
+    pub eval_script: String,
+    /// fix2 对齐后不再注入提示（审计 D4），字段保留只为数据包反序列化完整。
+    #[serde(default)]
+    #[allow(dead_code)]
+    pub hints_text: String,
+}
+
+impl SwevTask {
+    /// fix2 对齐（设计/harness-对齐审计.md D4/§6.A.5）：不再注入 hints_text——
+    /// 三个标准 harness 都只给 problem_statement，官方 hints 是面向解题者的补丁提示，
+    /// 注入属"反向虚高"（与榜单不可比）。字段保留（判分器全字段来源不动）。
+    pub fn prompt(&self) -> String {
+        format!(
+            "Repository: {}\n\nIssue description:\n{}",
+            self.repo, self.problem_statement
+        )
+    }
+}
+
+pub fn load_swev_tasks(root: &Path, names: &[String]) -> Result<Vec<SwevTask>, String> {
+    let mut out = Vec::new();
+    for name in names {
+        let path = root.join(format!("{name}.json"));
+        let text = std::fs::read_to_string(&path)
+            .map_err(|err| format!("读 {} 失败: {err}", path.display()))?;
+        let task: SwevTask = serde_json::from_str(&text)
+            .map_err(|err| format!("{} 不是 JSON: {err}", path.display()))?;
+        out.push(task);
+    }
+    Ok(out)
+}
+
+/// diff 是否碰了测试文件（评分 harness 拥有测试，模型改测试=越权，S0 实证缺陷）。
+/// 返回被碰的文件列表（空=干净）。
+pub fn diff_touches_tests(diff: &str) -> Vec<String> {
+    let mut hits = Vec::new();
+    for line in diff.lines() {
+        if let Some(rest) = line.strip_prefix("diff --git ") {
+            if let Some(path) = rest.split_whitespace().nth(1) {
+                let p = path.trim_start_matches("b/").to_lowercase();
+                let is_test = p.contains("test")
+                    || p.ends_with("conftest.py")
+                    || p.ends_with("tox.ini")
+                    || p.ends_with("pytest.ini")
+                    || p.ends_with("setup.cfg");
+                if is_test {
+                    hits.push(path.trim_start_matches("b/").to_string());
+                }
+            }
+        }
+    }
+    hits
+}
+
+/// system 只留一行角色（mini-swe-agent 实证一行 system 足以拿 74%+，字数不是变量，
+/// 纪律随任务重申才是）；全部纪律/工作流/提交协议放 instance 模板随每题重发——
+/// 一次性 system 在长对话里抗遗忘差，是 S0 D2（越权改测试）/D6（交付物缺失）的直接机制。
+/// ← af-bench main.rs:543 原样。
+pub const SWEV_SYSTEM_PROMPT: &str = "You are an autonomous software engineer that fixes issues in a real repository by issuing bash commands inside a Linux container. The repository checkout is at /testbed.";
+
+/// fix2 instance 模板：随任务 user 消息每题重发。来源：mini-swe-agent instance_template
+/// （工作流四步 + 提交三步 + 边界）+ mcode Core Judgment 两句（不悄悄扩缩任务/歧义先做
+/// 不依赖答案的部分）。测试先行引导对应 S0 D3（浅尝辄止）。
+/// ← af-bench main.rs:548-566 原样。
+pub const SWEV_INSTANCE_PROTOCOL: &str = r#"# How to work
+1. Locate the relevant code first (grep/read files) and understand the issue before changing anything.
+2. Reproduce before fixing when feasible: write or run a small reproduction and confirm it fails for the stated reason.
+3. Implement the minimal fix in repository source files only.
+4. Verify before submitting: run the repository's own tests for the affected area, or your reproduction; iterate until they pass.
+5. Do exactly what the task asks — do not silently expand, shrink or reshape it. If information is ambiguous, first complete everything that does not depend on the answer.
+
+# Hard boundaries
+- NEVER modify test files or test configuration (any path containing "test", plus conftest.py, tox.ini, pytest.ini, setup.cfg). The grading harness owns the tests; a patch touching them is rejected.
+- Do NOT edit changelogs or release notes (CHANGES.rst, docs/changes*, docs/releases*) — grading ignores documentation; editing it only burns your turn budget.
+- The container has NO usable internet access: pip install/download, curl, wget and git remotes fail. Never retry a failed download — implement the fix with what is already in the container.
+- A run that ends with no code changes is an automatic failure.
+- Every bash command runs in a fresh non-interactive shell starting in /testbed; shell state (cd, exported variables) does NOT persist between commands. Never open editors or interactive prompts; use non-interactive flags (e.g. -y, DEBIAN_FRONTEND=noninteractive). Commands may be killed by a timeout.
+
+# How to finish (the ONLY way)
+When your fix is verified:
+1. Self-check: run `git diff --stat` and inspect `git diff` restricted to the files you changed; confirm only non-test source files changed and the change is minimal and focused on the issue.
+2. Submit: run a bash command that PRINTS the token TASK_COMPLETE as its FIRST output line, e.g. `echo TASK_COMPLETE`.
+Mentioning TASK_COMPLETE in plain text does NOT finish the run — only the printed output of an executed command does. After the token prints, the run ends immediately and you cannot continue working."#;
+
+/// fix2 反考古护栏的触发模式（失败轨迹分析 §1.3 D-考古：51/145 run、单例烧 10-20 轮）。
+/// 取证据里最明确的全库考古/全盘搜索形态，避免误伤正常源码搜索。
+/// ← af-bench main.rs:570-577 原样。
+pub const ARCHAEOLOGY_PATTERNS: &[&str] = &[
+    "cat-file --batch-all-objects",
+    "git fsck",
+    "--lost-found",
+    "git log --all --grep",
+    "find / -name",
+    "find / -type",
+];
+
+/// 起容器（← af-bench swev.rs:54-99 原样；模块级 `tb_ssh()` 换 `bridge.run()`，
+/// 命令串与超时逐字节不变）。sweb.eval 镜像自带 /testbed 与全部测试资产，无需 build。
+pub fn setup(
+    bridge: &dyn HostBridge,
+    host: &str,
+    task: &SwevTask,
+    profile: &str,
+) -> Result<TbEnv, String> {
+    let container = format!(
+        "afbench-swev-{}-{profile}",
+        task.instance_id.replace("__", "-")
+    );
+    let _ = bridge.run(host, &format!("docker rm -f {container}"), 30);
+    // 出网代理按宿主区分：anolis 容器经宿主 squid（172.17.0.1:8123）；
+    // 本机（local）容器走 docker NAT 直连（本机无 8123 监听），语义同为"容器可出网"。
+    let proxy_env = if host == "local" {
+        ""
+    } else {
+        "-e HTTPS_PROXY=http://172.17.0.1:8123 \
+         -e HTTP_PROXY=http://172.17.0.1:8123 \
+         -e NO_PROXY=localhost,127.0.0.1,100.64.0.0/10"
+    };
+    // fix2 环境卫生（mini-swe-agent env 块同源）：分页器挂死与进度条/着色噪音
+    // 是 SWE 容器高频暗坑，容器级环境变量一次性根治。测量语义变更，计入 fix2。
+    // 资源护栏（2026-10-21，常量与校准注释见 tb 模块）：agent 容器 6g/512。
+    // 基建修复不改判分语义：上限远高于实测峰值（agent 期 30-90MiB）；
+    // 本代际判分在该容器内原地执行，判分负载同受此封顶。
+    let mem = tb::SWEV_AGENT_CONTAINER_MEM;
+    let pids = tb::SWEV_AGENT_CONTAINER_PIDS;
+    let script = format!(
+        "docker run -d --name {container} \
+         --memory {mem} --pids-limit {pids} \
+         {proxy_env} \
+         -e PAGER=cat -e MANPAGER=cat -e LESS=-R \
+         -e PIP_PROGRESS_BAR=off -e TQDM_DISABLE=1 -e NO_COLOR=1 \
+         {} sleep infinity",
+        task.image
+    );
+    match bridge.run(host, &script, 120) {
+        Ok((true, _)) => Ok(tb::TbEnv {
+            container,
+            task: task.instance_id.clone(),
+            host: host.into(),
+            workdir: "/testbed".into(),
+        }),
+        Ok((false, log)) => Err(format!(
+            "起容器失败: {}",
+            log.chars().take(400).collect::<String>()
+        )),
+        Err(err) => Err(err),
+    }
+}
+
+/// 取证 agent diff（完成度门禁与判分共用）：写 work_dir/agent.diff 并返回文本。
+/// （← af-bench swev.rs:102-117 原样搬入；模块级 `tb_ssh()` 换 `bridge.run()`，
+/// 命令串与超时逐字节不变——`diff' ` 后的尾随空格系源码原样。）
+pub fn capture_diff(
+    bridge: &dyn HostBridge,
+    host: &str,
+    env: &TbEnv,
+    work_dir: &Path,
+) -> Result<String, String> {
+    let diff_cmd = format!(
+        "docker exec {} bash -lc 'cd /testbed && git -c core.fileMode=false diff' ",
+        env.container
+    );
+    let agent_diff = match bridge.run(host, &diff_cmd, 60) {
+        Ok((_, text)) => text,
+        Err(err) => return Err(format!("取 diff 失败: {err}")),
+    };
+    let _ = std::fs::create_dir_all(work_dir);
+    let diff_path = work_dir.join("agent.diff");
+    if std::fs::write(&diff_path, &agent_diff).is_err() {
+        return Err("写 agent.diff 失败".into());
+    }
+    Ok(agent_diff)
+}
+
+/// 判分：指纹门 → 取证 diff → 写入 eval 脚本 → 容器内执行 → 本地官方判分。
+/// `task_json_path` 是 swev-prep 产出的原始任务包（判分器全字段来源）。
+/// 返回 (resolved, note, eval_sha256)——eval_sha256 是判分日志的字节指纹
+/// （D-20 项 2：判分可追溯；桥接/判分早期失败时为 None）。
+/// （← af-bench swev.rs:145-258 原样搬入：`tb_ssh()` 换 `bridge.run()`、judge
+/// 直造 Command 换 [`crate::judge::invoke`]（argv 契约收敛点，路径来自
+/// locator）；新增指纹门前置（方案 §3.2-2，偏差登记 RESULT-P3.md §3-1）。）
+/// eval 超时秒数（fix2 对齐，审计 D9/§6.A.8：官方 run_evaluation --timeout 默认）。
+/// verify 执行臂与判分注记（[`verdict_from_judge_row`]）共用同一常量。
+const EVAL_TIMEOUT_SEC: u32 = 1800;
+
+pub fn verify(
+    bridge: &dyn HostBridge,
+    judge: &JudgeLocator,
+    host: &str,
+    env: &TbEnv,
+    task: &SwevTask,
+    work_dir: &Path,
+    task_json_path: &Path,
+) -> (Option<bool>, String, Option<String>) {
+    // 指纹门先行（方案 §3.2-2 fail-loud 拒跑；P4 单元装载还会再加一道装载期
+    // 检查——双重防线）：判分脚本不可信即整链不启动（取证/eval/判分皆不跑），
+    // 防在不可信判分面上浪费整轮执行。
+    if let Err(err) = judge.check_fingerprint() {
+        return (None, err.to_string(), None);
+    }
+    let _agent_diff = match capture_diff(bridge, host, env, work_dir) {
+        Ok(d) => d,
+        Err(err) => return (None, err, None),
+    };
+    let diff_path = work_dir.join("agent.diff");
+    let eval_path = work_dir.join("eval.sh");
+    if std::fs::write(&eval_path, &task.eval_script).is_err() {
+        return (None, "写 eval.sh 失败".into(), None);
+    }
+    // eval 脚本经 stdin 喂给容器 bash，避免 docker cp 往返。
+    // stderr 必须并入日志：set -x 轨迹与 START/END 标记走 stderr，官方判分需要。
+    // host == "local" 时免 ssh 一跳，其余语义一致。
+    // fix2 对齐（审计 D9/§6.A.8）：eval 超时 1200 → 1800s（官方 run_evaluation
+    // --timeout 默认）。
+    // （注：此段不走 bridge.run——HostBridge 面按方案 §2.3 钉死，表达不了
+    // stdin/stdout 文件管道与外层 stderr 丢弃（外层 stderr 必须丢弃：容器内
+    // `2>&1` 已合并进日志，桥接层再并入会把 ssh 噪声写进判分日志）。语句与
+    // af-bench swev.rs:166-186 逐字对照，仅局部变量 `bridge` 更名
+    // `bridge_script` 避开本函数新增的 bridge 参数；登记 RESULT-P3.md §3-2。）
+    let run_cmd = format!("docker exec -i {} bash -s 2>&1", env.container);
+    let log_path = work_dir.join("eval.log");
+    let bridge_script = format!("timeout {EVAL_TIMEOUT_SEC} {run_cmd}");
+    let mut bridge_cmd = if host == "local" {
+        let mut cmd = Command::new("bash");
+        cmd.arg("-c").arg(&bridge_script);
+        cmd
+    } else {
+        let mut cmd = Command::new("ssh");
+        cmd.arg("-o")
+            .arg("BatchMode=yes")
+            .arg(host)
+            .arg(&bridge_script);
+        cmd
+    };
+    let status = bridge_cmd
+        .stdin(std::process::Stdio::from(
+            std::fs::File::open(&eval_path).expect("eval.sh 刚写过"),
+        ))
+        .stdout(std::process::Stdio::from(
+            std::fs::File::create(&log_path).expect("eval.log 可建"),
+        ))
+        .stderr(std::process::Stdio::null())
+        .status();
+    let mut eval_timed_out = false;
+    match status {
+        Err(err) => return (None, format!("eval 执行桥接失败: {err}"), None),
+        Ok(st) => {
+            if st.code() == Some(124) {
+                // D-20 项 4：timeout 击杀显式化——在日志末尾落标记行，
+                // 不再留无标记截断日志（判分复核据此与"截断/失败日志"灰区区分）。
+                eval_timed_out = true;
+                let marker = format!("\nEVAL_TIMEOUT_KILLED {EVAL_TIMEOUT_SEC}\n");
+                if let Ok(mut log) = std::fs::OpenOptions::new().append(true).open(&log_path) {
+                    use std::io::Write as _;
+                    let _ = log.write_all(marker.as_bytes());
+                }
+            }
+        }
+    }
+    // D-20 项 2：判分时计算日志指纹（含超时标记行——哈希的是判分器实际读到的字节）。
+    let eval_sha256 = sha256_hex(&log_path);
+    // 判分子进程调用收敛到唯一模块（方案 §3.2-1；← swev.rs:205-210 原样，
+    // 硬编码路径换 locator 字段）。
+    //
+    // L3''：judge **退避重试**加在**调用侧**——[`crate::judge::invoke`] 的签名与
+    // 语义一字未动（invoke 是契约收敛点）。缺省（配置面未开）= **同一个驱动跑 1 次**
+    // （= 基线单次调用，判分结论与注记逐字节不变 ⇒ 历史判分读数不可比的风险 = 0）。
+    let attempt = |_attempt_no: u32| {
+        judge_attempt(judge, task_json_path, &log_path, &diff_path, eval_timed_out)
+    };
+    let (resolved, note) = if judge_retry_enabled() {
+        match judge_call_with_retry(JUDGE_MAX_ATTEMPTS, &JUDGE_BACKOFF_SEC, attempt, |secs| {
+            std::thread::sleep(std::time::Duration::from_secs(secs))
+        }) {
+            JudgeCallOutcome::Terminal { resolved, note } => (resolved, note),
+            // 重试耗尽 → fix3 同款前缀（← fix3 `af-bench/src/judge.rs::run_judge`
+            // 末行 `JUDGE_ERROR: {last_err}`）。
+            JudgeCallOutcome::Exhausted { err } => (None, format!("JUDGE_ERROR: {err}")),
+        }
+    } else {
+        // 缺省路径：同一个驱动跑 1 次（不等待、不重试、不改注记）——基线逐字节等价。
+        match judge_call_with_retry(1, &[], attempt, |_| {}) {
+            JudgeCallOutcome::Terminal { resolved, note } => (resolved, note),
+            JudgeCallOutcome::Exhausted { err } => (None, err),
+        }
+    };
+    (resolved, note, eval_sha256)
+}
+
+/// judge 调用尝试的结果分类（L3''：终态 vs 瞬态失败）。
+///
+/// 分界与 fix3 `b3e1f56` 的 `crates/af-bench/src/judge.rs::run_judge` 逐条同：
+/// - **终态**（[`JudgeAttempt::Terminal`]）：判分器进程成功退出且 stdout 可解析为
+///   JSON——这是**判分结论本身**，**一律不重试**（重试终态即改判分语义）；
+/// - **瞬态失败**（[`JudgeAttempt::Transient`]）：判分器启动失败 / 非 0 退出 /
+///   输出非 JSON——供给面抖动（urllib3 Traceback、连接重置等），可重试。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JudgeAttempt {
+    /// 终态：判分结论（resolved=None 表示判分器没给出结论，仍是终态）。
+    Terminal {
+        resolved: Option<bool>,
+        note: String,
+    },
+    /// 瞬态失败：可重试（err 为末次错误原文，格式同基线注记）。
+    Transient { err: String },
+}
+
+/// 一次 judge 调用的结果（L3'' 重试驱动）。
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JudgeCallOutcome {
+    /// 拿到终态判分结论（不再重试）。
+    Terminal {
+        resolved: Option<bool>,
+        note: String,
+    },
+    /// 瞬态失败且重试耗尽（err = 末次错误原文；`JUDGE_ERROR:` 前缀由调用方按口径加）。
+    Exhausted { err: String },
+}
+
+/// L3''：judge 退避重试参数（← fix3 `b3e1f56` `crates/af-bench/src/judge.rs`
+/// 的 `JUDGE_MAX_ATTEMPTS` / `JUDGE_BACKOFF_SEC`，逐字同参）。
+///
+/// - 尝试 3 次（首次 + 2 次重试）；
+/// - 退避 5s / 15s。
+pub const JUDGE_MAX_ATTEMPTS: u32 = 3;
+pub const JUDGE_BACKOFF_SEC: [u64; 2] = [5, 15];
+/// L3''：judge 退避重试的**开关**配置面（环境变量）——**缺省关闭**。
+///
+/// 缺省关闭 = 基线单次调用（判分结论与注记逐字节不变 ⇒ 历史判分读数可比）。
+/// 显式开启（`AF_JUDGE_RETRY=1`）后的行为与 fix3 的 `run_judge` 逐条等价。
+/// 登记：本项与 fix3 的**唯一**刻意差异是 fix3 的重试为无条件开启，本代际按
+/// 「新配置项默认缺省不变」改为缺省关闭（开启后逐条等价）。
+pub const JUDGE_RETRY_ENV: &str = "AF_JUDGE_RETRY";
+
+/// 重试开关取值解析：仅 `1` / `true` / `yes` / `on`（大小写不敏感、两端空白忽略）
+/// 算开；其余（含未设置）算关——缺省即基线单次调用。
+pub fn judge_retry_enabled_from(raw: Option<&str>) -> bool {
+    matches!(
+        raw.map(str::trim).map(str::to_ascii_lowercase).as_deref(),
+        Some("1") | Some("true") | Some("yes") | Some("on")
+    )
+}
+
+/// 重试开关（读配置面 [`JUDGE_RETRY_ENV`]）。
+pub fn judge_retry_enabled() -> bool {
+    judge_retry_enabled_from(std::env::var(JUDGE_RETRY_ENV).ok().as_deref())
+}
+
+/// 单次 judge 调用（**不改** [`crate::judge::invoke`] 的签名与语义——只在其外
+/// 解读退出码/stdout），结果按终态/瞬态分类。
+///
+/// 注记文案与基线逐字一致（成功路径 `{notes}judge: {stdout}`；失败路径
+/// `judge 输出不是 JSON: …` / `judge 退出 …` / `judge 启动失败: …`），
+/// 故缺省（单次调用）路径的判分注记与基线逐字节等价。
+fn judge_attempt(
+    judge: &JudgeLocator,
+    task_json_path: &Path,
+    log_path: &Path,
+    diff_path: &Path,
+    eval_timed_out: bool,
+) -> JudgeAttempt {
+    match crate::judge::invoke(judge, task_json_path, log_path, diff_path) {
+        Ok(output) if output.status.success() => {
+            let text = String::from_utf8_lossy(&output.stdout);
+            match serde_json::from_str::<serde_json::Value>(text.trim()) {
+                Ok(row) => {
+                    // 红队 W1-C59②：判据门收口到纯函数（tests_collected=0 不得
+                    // 作为成功——含任务包判据被清空形态；口径与注记拼接序由
+                    // verdict_tests 钉死）。
+                    let (resolved, notes) = verdict_from_judge_row(&row, eval_timed_out);
+                    JudgeAttempt::Terminal {
+                        resolved,
+                        note: format!("{notes}judge: {}", text.trim()),
+                    }
+                }
+                Err(err) => JudgeAttempt::Transient {
+                    err: format!(
+                        "judge 输出不是 JSON: {err}: {}",
+                        &text[..text.len().min(200)]
+                    ),
+                },
+            }
+        }
+        Ok(output) => JudgeAttempt::Transient {
+            err: format!(
+                "judge 退出 {}: {}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+                    .chars()
+                    .take(300)
+                    .collect::<String>()
+            ),
+        },
+        Err(err) => JudgeAttempt::Transient {
+            err: format!("judge 启动失败: {err}"),
+        },
+    }
+}
+
+/// 退避重试驱动（纯函数：注入尝试函数与等待函数，便于无副作用复跑）。
+///
+/// 语义（← fix3 `b3e1f56` `crates/af-bench/src/judge.rs::run_judge` 逐条同）：
+/// - 只重试**瞬态失败**；**终态**（判分结论）第一次拿到即返回，绝不重试；
+/// - 最多 `max_attempts` 次尝试，退避表 `backoff_sec`（第 n 次失败后等
+///   `backoff_sec[n-1]` 秒；末次失败不再等）；
+/// - 重试耗尽 → [`JudgeCallOutcome::Exhausted`]（错误原文，`JUDGE_ERROR:` 前缀
+///   由调用方加）。
+///
+/// 与 fix3 的差异仅一处：fix3 的等待是硬编码 `thread::sleep`，本函数把等待
+/// 做成注入参数（生产侧传 `thread::sleep`，测试侧传记录器）——**行为语义同**。
+pub fn judge_call_with_retry<F, W>(
+    max_attempts: u32,
+    backoff_sec: &[u64],
+    mut attempt: F,
+    mut wait: W,
+) -> JudgeCallOutcome
+where
+    F: FnMut(u32) -> JudgeAttempt,
+    W: FnMut(u64),
+{
+    let mut last_err = String::new();
+    for attempt_no in 1..=max_attempts {
+        match attempt(attempt_no) {
+            JudgeAttempt::Terminal { resolved, note } => {
+                return JudgeCallOutcome::Terminal { resolved, note };
+            }
+            JudgeAttempt::Transient { err } => {
+                last_err = err;
+                if attempt_no < max_attempts {
+                    let wait_sec = backoff_sec
+                        .get((attempt_no as usize).saturating_sub(1))
+                        .copied()
+                        .unwrap_or(0);
+                    eprintln!(
+                        "[judge] 判分器第 {attempt_no}/{max_attempts} 次失败（{last_err}），{wait_sec}s 后重试"
+                    );
+                    wait(wait_sec);
+                }
+            }
+        }
+    }
+    JudgeCallOutcome::Exhausted { err: last_err }
+}
+
+/// eval.log 的 sha256 十六进制串；读不到文件时 None（D-20 项 2）。
+/// （← af-bench swev.rs:261-266 原样；私有 → pub(crate)：judge.rs 指纹门复用
+/// 同一实现，不另造哈希副本。）
+pub(crate) fn sha256_hex(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let data = std::fs::read(path).ok()?;
+    let digest = Sha256::digest(&data);
+    Some(digest.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+/// judge stdout 行 → 订单 verdict 口径与注记前缀（红队 W1-C59②收口）。
+///
+/// tests_collected=0 = 判分器没从日志收集到任何测试（含任务包判据被清空
+/// 的形态：swebench 对空清单 f2p=p2p=1 → RESOLVED_FULL，不改任何冻结指纹
+/// 即可让冻结判分链对零测试任务包返回 resolved=true）；judge 明写 0 而消费
+/// 侧不核 = 可作弊面。故：
+/// - `tests_collected == 0` 时 `resolved=true` 一律降级 `None`（不当成功，
+///   合格终态工件出不去、close 门不放行）；`resolved=false` 保持失败不翻案；
+/// - 缺 `tests_collected` 字段按不适用处理（字段在常行由指纹门钉死的判分
+///   脚本保证，老形态行不误伤）。
+///
+/// 注记拼接序（与 verify 原臂逐字一致）：超时 → log_parsed → 零测试；
+/// 调用方在其后拼 `judge: {stdout}`。D-20 项 3：judge JSON 带 log_parsed=false
+/// 时在注记如实透传（截断日志的判 false 与"真失败"不再同貌）。
+fn verdict_from_judge_row(row: &serde_json::Value, eval_timed_out: bool) -> (Option<bool>, String) {
+    let mut resolved = row.get("resolved").and_then(serde_json::Value::as_bool);
+    let zero_tests = row
+        .get("tests_collected")
+        .and_then(serde_json::Value::as_u64)
+        .is_some_and(|n| n == 0);
+    if zero_tests {
+        resolved = resolved.filter(|r| !r);
+    }
+    let parsed_note = match row.get("log_parsed") {
+        Some(serde_json::Value::Bool(false)) => "[log_parsed=false] ".to_string(),
+        _ => String::new(),
+    };
+    let zero_note = if zero_tests {
+        "[tests_collected=0 判据面可疑，不当成功] ".to_string()
+    } else {
+        String::new()
+    };
+    let timeout_note = if eval_timed_out {
+        format!("eval 超时击杀（已落标记 {EVAL_TIMEOUT_SEC}s）；")
+    } else {
+        String::new()
+    };
+    (resolved, format!("{timeout_note}{parsed_note}{zero_note}"))
+}
+
+#[cfg(test)]
+mod verdict_tests {
+    use super::*;
+
+    /// W1-C59②判据门测试基座：构造 judge stdout 行（冻结判分链的真实出参形，
+    /// 键集与 tools/swev-judge.py 输出一致）。
+    fn judge_row(
+        resolved: serde_json::Value,
+        tests_collected: serde_json::Value,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "resolved": resolved,
+            "log_parsed": true,
+            "f2p_success": 1,
+            "p2p_success": 1,
+            "tests_collected": tests_collected,
+            "swebench_version": "4.1.0"
+        })
+    }
+
+    /// 红队 W1-C59②主例：任务包判据被清空的形态（swebench 对空清单
+    /// f2p=p2p=1 → RESOLVED_FULL）下判分链返回 resolved=true——消费侧必须
+    /// 降级为 None（不当成功）并留可疑注记，零测试不得作为合格终态过 close 门。
+    #[test]
+    fn zero_tests_downgrades_resolved_true_to_not_success() {
+        let (verdict, note) = verdict_from_judge_row(
+            &judge_row(serde_json::json!(true), serde_json::json!(0)),
+            false,
+        );
+        assert_eq!(verdict, None, "tests_collected=0 时 resolved=true 不得放行");
+        assert!(note.contains("tests_collected=0"), "{note}");
+        assert!(note.contains("不当成功"), "{note}");
+    }
+
+    /// 零测试 + resolved=false：失败保持失败（门只降级成功，不翻案失败）。
+    #[test]
+    fn zero_tests_keeps_resolved_false_as_failure() {
+        let (verdict, note) = verdict_from_judge_row(
+            &judge_row(serde_json::json!(false), serde_json::json!(0)),
+            false,
+        );
+        assert_eq!(verdict, Some(false));
+        assert!(note.contains("tests_collected=0"), "{note}");
+    }
+
+    /// 正常行：resolved 原样通过，无可疑注记（门不误伤真实判据面）。
+    #[test]
+    fn normal_row_passes_resolved_through_without_suspicion_note() {
+        let (verdict, note) = verdict_from_judge_row(
+            &judge_row(serde_json::json!(true), serde_json::json!(7)),
+            false,
+        );
+        assert_eq!(verdict, Some(true));
+        assert!(!note.contains("可疑"), "{note}");
+    }
+
+    /// 缺 tests_collected 字段：不触发零测试门（字段在常行由指纹门钉死的
+    /// 判分脚本保证；缺字段按不适用处理，不改 resolved 口径）。
+    #[test]
+    fn missing_tests_collected_field_does_not_trigger_gate() {
+        let row = serde_json::json!({ "resolved": true });
+        let (verdict, note) = verdict_from_judge_row(&row, false);
+        assert_eq!(verdict, Some(true));
+        assert!(!note.contains("可疑"), "{note}");
+    }
+
+    /// 注记拼接序与 verify 原臂一致：超时 → log_parsed → 零测试。
+    #[test]
+    fn timeout_and_log_parsed_notes_are_preserved_in_order() {
+        let mut row = judge_row(serde_json::json!(true), serde_json::json!(3));
+        row["log_parsed"] = serde_json::json!(false);
+        let (verdict, note) = verdict_from_judge_row(&row, true);
+        assert_eq!(verdict, Some(true));
+        assert!(note.starts_with("eval 超时击杀"), "{note}");
+        assert!(note.contains("[log_parsed=false] "), "{note}");
+        assert!(!note.contains("不当成功"), "{note}");
+    }
+}

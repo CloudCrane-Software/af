@@ -1,0 +1,741 @@
+{
+  "mode": "compile-all",
+  "registry_root": "./af/packages",
+  "total": 61,
+  "compilable": 44,
+  "compilable_pass_four_stage": 10,
+  "per_entry": [
+    {
+      "id": "st-C005",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.file_external_memory@1.0+67f2c50eb1f1"
+    },
+    {
+      "id": "st-C006",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"explore.scout\" 引用 \"pkg.hopqa.lookup@1\"：组件 \"pkg.hopqa.lookup\" 未注册（注册表共 63 条声明）; E9001 节点 \"explore.scout\" 引用 \"pkg.hopqa.search@1\"：组件 \"pkg.hopqa.search\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-C007",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"assess\" 引用 \"pkg.bench.resolved@1\"：组件 \"pkg.bench.resolved\" 未注册（注册表共 63 条声明）; E9001 节点 \"loader\" 引用 \"pkg.bench.leaderboard@1\"：组件 \"pkg.bench.leaderboard\" 未注册（注册表共 63 条声明）; E9001 节点 \"sweep.runner\" 引用 \"pkg.harness.edit@1\"：组件 \"pkg.harnes",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-C008",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"partition\" 引用 \"pkg.cohesion.community@1\"：组件 \"pkg.cohesion.community\" 未注册（注册表共 63 条声明）; E9001 节点 \"partition\" 引用 \"pkg.cohesion.depgraph@1\"：组件 \"pkg.cohesion.depgraph\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-C009",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"loader\" 引用 \"pkg.searchkit.corpus@1\"：组件 \"pkg.searchkit.corpus\" 未注册（注册表共 63 条声明）; E9001 节点 \"search.assess\" 引用 \"pkg.searchkit.assess@1\"：组件 \"pkg.searchkit.assess\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-C010",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"drive.executor\" 引用 \"pkg.sweng.lint@1\"：组件 \"pkg.sweng.lint\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-C012",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.multi_agent_debate@1.0+cc88fce1ddcd"
+    },
+    {
+      "id": "st-C015",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"analyze\" 引用 \"pkg.ctxrot.curve@1\"：组件 \"pkg.ctxrot.curve\" 未注册（注册表共 63 条声明）; E9001 节点 \"loader\" 引用 \"pkg.ctxrot.corpus@1\"：组件 \"pkg.ctxrot.corpus\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-C016",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.sop_artifact_pipeline@1.0+737b342040ce"
+    },
+    {
+      "id": "st-C018",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"practice.assess\" 引用 \"pkg.reflex.test_unit@1\"：组件 \"pkg.reflex.test_unit\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-C019",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"assess\" 引用 \"pkg.aci.ablate@1\"：组件 \"pkg.aci.ablate\" 未注册（注册表共 63 条声明）; E9001 节点 \"custom_aci\" 引用 \"pkg.aci.custom@1\"：组件 \"pkg.aci.custom\" 未注册（注册表共 63 条声明）; E9001 节点 \"custom_aci\" 引用 \"pkg.aci.editor@1\"：组件 \"pkg.aci.editor\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-C103",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.debate_vs_self_consistency@1.0+3954b68fe4dc"
+    },
+    {
+      "id": "st-C122",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"edit\" 引用 \"pkg.fs.workdir_rw@1\"：组件 \"pkg.fs.workdir_rw\" 未注册（注册表共 63 条声明）; E9001 节点 \"edit\" 引用 \"pkg.repo.edit@1\"：组件 \"pkg.repo.edit\" 未注册（注册表共 63 条声明）; E9001 节点 \"polarity_gate\" 引用 \"pkg.review.scope_diff@1\"：组件 \"pkg.review.scope_diff\" 未注册",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C001",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"refine.admit\" 引用 \"pkg.judge.improvement@1\"：组件 \"pkg.judge.improvement\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C003",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.entry_triage_gate@1.0+5e1d34746d0a"
+    },
+    {
+      "id": "st-b-C022",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C028",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"agent_loop.solved\" 引用 \"pkg.swe.checker@1\"：组件 \"pkg.swe.checker\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C029",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"work_loop.progress\" 引用 \"pkg.ci.rerun@1\"：组件 \"pkg.ci.rerun\" 未注册（注册表共 63 条声明）; E9001 节点 \"work_loop.run_tool\" 引用 \"pkg.repo.edit@1\"：组件 \"pkg.repo.edit\" 未注册（注册表共 63 条声明）; E9001 节点 \"work_loop.run_tool\" 引用 \"pkg.repo.test@1\"：组件 \"pkg.repo.te",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C035",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"locate\" 引用 \"route.retrieval@1\"：组件 \"route.retrieval\" 未注册（注册表共 63 条声明）; E9001 节点 \"locate\" 引用 \"pkg.ret.codegrep\"：组件 \"pkg.ret.codegrep\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C036",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"locate\" 引用 \"route.retrieval@1\"：组件 \"route.retrieval\" 未注册（注册表共 63 条声明）; E9001 节点 \"locate\" 引用 \"pkg.ret.graph_expand\"：组件 \"pkg.ret.graph_expand\" 未注册（注册表共 63 条声明）; E9001 节点 \"locate\" 引用 \"pkg.ret.lex_anchor\"：组件 \"pkg.ret.lex_anchor\" 未注册（注册",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C037",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.explore_then_fix@1.0+eb923222ee8c"
+    },
+    {
+      "id": "st-b-C038",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"probe\" 引用 \"pkg.repo.grep@1\"：组件 \"pkg.repo.grep\" 未注册（注册表共 63 条声明）; E9001 节点 \"probe\" 引用 \"pkg.repo.read@1\"：组件 \"pkg.repo.read\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C042",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"recall_agent\" 引用 \"pkg.mem.grep\"：组件 \"pkg.mem.grep\" 未注册（注册表共 63 条声明）; E9001 节点 \"recall_agent\" 引用 \"pkg.mem.read\"：组件 \"pkg.mem.read\" 未注册（注册表共 63 条声明）; E9001 节点 \"recall_agent\" 引用 \"pkg.mem.write\"：组件 \"pkg.mem.write\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C046",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C048",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.fresh_context_review@1.0+34cf9ae50707"
+    },
+    {
+      "id": "st-b-C054",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C055",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.caid_dag_delegation@1.0+a44cbaacac36"
+    },
+    {
+      "id": "st-b-C056",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.explicit_plan_reminder@1.0+90ef3b9b67b6"
+    },
+    {
+      "id": "st-b-C057",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"edit_loop.post_edit\" 引用 \"pkg.hooks.post_edit@1\"：组件 \"pkg.hooks.post_edit\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C058",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C060",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"score.critic\" 引用 \"route.critic@1\"：组件 \"route.critic\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C062",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"bind_skill\" 引用 \"pkg.skill.runtime@1\"：组件 \"pkg.skill.runtime\" 未注册（注册表共 63 条声明）; E9001 节点 \"execute\" 引用 \"pkg.skill.runtime@1\"：组件 \"pkg.skill.runtime\" 未注册（注册表共 63 条声明）; E9001 节点 \"load_catalog\" 引用 \"pkg.skill.catalog_loader@1\"：组件 \"pkg.ski",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C063",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C064",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"answer\" 引用 \"pkg.skill.runtime@1\"：组件 \"pkg.skill.runtime\" 未注册（注册表共 63 条声明）; E9001 节点 \"index_skills\" 引用 \"pkg.ir.indexer@1\"：组件 \"pkg.ir.indexer\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C069",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"edit_loop.edit\" 引用 \"pkg.sweng.edit_linted\"：组件 \"pkg.sweng.edit_linted\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C071",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"edit_udiff\" 引用 \"pkg.sweng.edit_udiff\"：组件 \"pkg.sweng.edit_udiff\" 未注册（注册表共 63 条声明）; E9001 节点 \"edit_whole\" 引用 \"pkg.sweng.edit_whole\"：组件 \"pkg.sweng.edit_whole\" 未注册（注册表共 63 条声明）; E9001 节点 \"verify\" 引用 \"pkg.fmt.compliance_probe@1\"：组件 \"pk",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C073",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C075",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C077",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"fix_loop.tool_check\" 引用 \"pkg.critic.tool_suite@1\"：组件 \"pkg.critic.tool_suite\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C078",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"exec\" 引用 \"pkg.codet.dual_runner@1\"：组件 \"pkg.codet.dual_runner\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C079",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"confined_coder\" 引用 \"pkg.fs.workdir_rw@1\"：组件 \"pkg.fs.workdir_rw\" 未注册（注册表共 63 条声明）; E9001 节点 \"confined_coder\" 引用 \"pkg.net.proxy_allowlist@1\"：组件 \"pkg.net.proxy_allowlist\" 未注册（注册表共 63 条声明）; E9001 节点 \"confined_coder\" 引用 \"pkg.repo.grep@",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C080",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C086",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"solve_loop.done_check\" 引用 \"pkg.ticket.done_probe@1\"：组件 \"pkg.ticket.done_probe\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C087",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C092",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"scorer\" 引用 \"route.scorer@1\"：组件 \"route.scorer\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C095",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"chooser\" 引用 \"route.chooser@1\"：组件 \"route.chooser\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C096",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"filter\" 引用 \"pkg.alpha.sample_filter@1\"：组件 \"pkg.alpha.sample_filter\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C097",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"verify.run_repro\" 引用 \"pkg.otter.repro_runner@1\"：组件 \"pkg.otter.repro_runner\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C098",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C102",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"analyze\" 引用 \"route.strong@1\"：组件 \"route.strong\" 未注册（注册表共 63 条声明）; E9001 节点 \"patch_role\" 引用 \"route.strong@1\"：组件 \"route.strong\" 未注册（注册表共 63 条声明）; E9001 节点 \"review\" 引用 \"route.mid@1\"：组件 \"route.mid\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C105",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C108",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C109",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"explorer\" 引用 \"route.weak@1\"：组件 \"route.weak\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C111",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"coder\" 引用 \"route.strong@1\"：组件 \"route.strong\" 未注册（注册表共 63 条声明）; E9001 节点 \"locator\" 引用 \"route.mid@1\"：组件 \"route.mid\" 未注册（注册表共 63 条声明）; E9001 节点 \"orchestrator\" 引用 \"route.strong@1\"：组件 \"route.strong\" 未注册（注册表共 63 条声明）",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C114",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C118",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C121",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C124",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "pass",
+        "plan": "pass"
+      },
+      "plan_id": "plan.cache_friendly_layout@1.0+6f0a046dc015"
+    },
+    {
+      "id": "st-b-C125",
+      "dsl_state": "compilable",
+      "stages": {
+        "load": "pass",
+        "validate": "pass",
+        "lower": "pass",
+        "bind": "E9001 节点 \"resolve_batch\" 引用 \"pkg.merge.compose_new@1\"：组件 \"pkg.merge.compose_new\" 未注册（注册表共 63 条声明）; E9001 节点 \"resolve_batch\" 引用 \"pkg.merge.strategy_v1@1\"：组件 \"pkg.merge.strategy_v1\" 未注册（注册表共 63 条声明）; E9001 节点 \"resolve_batch\" 引用 \"pkg.merge.str",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C126",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    },
+    {
+      "id": "st-b-C128",
+      "dsl_state": "not_applicable",
+      "stages": {
+        "load": "non-compilable（本批只对 compilable 跑四段链）",
+        "validate": "-",
+        "lower": "-",
+        "bind": "-",
+        "plan": "-"
+      },
+      "plan_id": null
+    }
+  ]
+}

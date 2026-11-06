@@ -1,0 +1,29 @@
+[package]
+name = "af-harness"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+description = "统一 agent 执行器：四元组配置驱动的 Run 循环"
+
+[dependencies]
+af-credential = { path = "../af-credential" }
+af-effect-gateway = { path = "../af-effect-gateway" }
+af-meter = { path = "../af-meter" }
+af-stop = { path = "../af-stop" }
+af-trace = { path = "../af-trace" }
+# declare_intent / execute 的公开签名要求 WorkOrder。这是路径依赖，不是新的第三方 crate。
+af-workorder = { path = "../af-workorder" }
+# Biscuit 出现在 af-credential 的公开函数签名里，该 crate 没有再导出这个类型。
+# 与 af-sandbox 相同：直接依赖锁里已有的 6.0.0，不升版本。
+biscuit-auth = "=6.0.0"
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# 同步 HTTP。树内的 reqwest 0.13.5 只挂在 af-trace 的可选 otel feature 上，
+# 默认会带 tokio。本循环是同步的，用 ureq 2（默认特性关掉，只留 rustls 的 tls，
+# 测试打 http://127.0.0.1 的内建 stub，不读环境代理）。
+ureq = { version = "=2.12.1", default-features = false, features = ["tls"] }
+
+[lints]
+workspace = true

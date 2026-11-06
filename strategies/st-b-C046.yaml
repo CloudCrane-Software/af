@@ -1,0 +1,13 @@
+id: st-b-C046
+name: "多技能/计划资产按依赖 DAG + 阶段计划组织；技能注入可能在 1/3 任务上帮倒忙"
+tier: B
+claim: "技能注入可能帮倒忙：36.78%任务上同批Skills随配置翻转有害有益"
+claimed_value:
+  metric: "skill_injection_net_effect"
+  direction: up
+  context: "对照组=按使用顺序注入；实验组=按依赖 DAG + 阶段计划组织注入；36.78% 任务随配置翻转"
+sources: [S027, S124]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "技能资产组织与注入治理：策略中的 DAG 是「技能/计划资产之间」的依赖组织（资产图），不是 agent 运行图；AFB 的图节点是运行时执行体，无技能资产实体与注入调度语义，且簇内负面证据（36.78% 翻转）本身就是注入治理结论而非图结构。资产依赖 DAG 归知识组织（kb 面），非运行图；翻转结论作注入治理警示。"

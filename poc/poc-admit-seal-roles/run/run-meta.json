@@ -1,0 +1,13 @@
+{
+  "poc": "poc-admit-seal-roles",
+  "host": "anolis-gpu-01",
+  "date_utc": "2026-11-04T03:30:06Z",
+  "git_head": "83bb71c12e5da73076ea67ce3280e65a5713ef62",
+  "git_branch": "feature/admit-seal-decision-role",
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13)",
+  "af_order_bin": "/data/bench/af-target/debug/af-order",
+  "admit_seal_bin": "/data/bench/af-target/debug/examples/admit_seal",
+  "order_id": "wo-asr-poc-1",
+  "now": "2026-11-04T00:00:00Z",
+  "expires": "2027-01-01T00:00:00Z"
+}

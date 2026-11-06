@@ -1,0 +1,45 @@
+== 在役自刷新采纳读数（判据行④ 上在役；/tmp/factory-keepalive.log）==
+[2026-11-04 23:38:50] [self] 自身源码变更（sha 24bf1dac4d18→ed4804bad6c0）→ 自我重载（os.execv 载入新码，pid 不变=2079410）
+[2026-11-04 23:38:50] [self] 自我重载续跑（pid=2079410）——跳过双实例拒绝
+[2026-11-04 23:38:50] [self] keepalive 常驻启动 pid=2079410 周期 30s 看护 13 对象：watch, dash, af-execline, mes-ch, router, scheduler, status-push, emit-sidecar, self-improve-loop, quota-governor, otelcol, portal, trigger-inbox
+[2026-11-04 23:39:54] [self] 自身源码变更（sha ed4804bad6c0→19dbf455e2e4）→ 自我重载（os.execv 载入新码，pid 不变=2079410）
+[2026-11-04 23:39:54] [self] 自我重载续跑（pid=2079410）——跳过双实例拒绝
+[2026-11-04 23:39:54] [self] keepalive 常驻启动 pid=2079410 周期 30s 看护 13 对象：watch, dash, af-execline, mes-ch, router, scheduler, status-push, emit-sidecar, self-improve-loop, quota-governor, otelcol, portal, trigger-inbox
+
+== 含 MES 的行（近 5；23:39:12/23:39:39 的 Connection refused = 本批沙箱自证进程，沙箱 MES_CH_URL 指死地址；生产 MES 表零写入）==
+[2026-10-30 04:07:13] [mes-ch] ALARM MES(http://<内网地址>:15221) 查询探针失联（类别=timeout 码=ch-mes-timeout）：3s 超时（timed out）——不自动重启；恢复=查 mingda 负载与 tailnet 连通性；持续超时按 conn 处置；af 线 MES 落账将失败，需人工介入（1800s 内同类别不重复报）
+[2026-10-30 04:07:28] [mes-ch] MES 写入失败（不致命）: <urlopen error timed out>
+[2026-11-04 23:39:12] [trigger-inbox] MES 写入失败（不致命）: <urlopen error [Errno 111] Connection refused>
+[2026-11-04 23:39:39] [trigger-inbox] MES 写入失败（不致命）: <urlopen error [Errno 111] Connection refused>
+[2026-11-04 23:39:39] [trigger-inbox] MES 写入失败（不致命）: <urlopen error [Errno 111] Connection refused>
+
+== 生产判据文件现态（判据行④ 在役，形态A）==
+{
+ "ts": "2026-11-04 23:43:33",
+ "ts_epoch": 1793807012,
+ "tool": "factory-keepalive/trigger-inbox",
+ "status": "down",
+ "alarm_code": "trigger-inbox-down",
+ "message": "进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）——形态A（收件箱进程不在）；本形态的报警由既有 trigger-inbox-down 报警行负责，本判据行**不覆盖既有码**",
+ "process_alive": false,
+ "healthy": false,
+ "silent_s": 89588,
+ "threshold_min": 240,
+ "inbox_dir": "/home/pan-ding/workspace/agent黑灯工厂/af-state/triggers/inbox",
+ "pids": [],
+ "newest_delivery_epoch": 1793717423,
+ "process_started_epoch": null,
+ "since_epoch": 1793717423,
+ "note": "写入方=factory-keepalive 判据行④；形态A 的真实报警仍由既有 trigger-inbox-down 报警行发出（既有码/既有行零改动）"
+}
+== 生产 alarms.log 末 3 行 ==
+{"ts": "2026-11-04 23:38:52", "level": "amber", "code": "trigger-inbox-down", "message": "trigger-inbox 失联：进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）；不自动拉起（拉起闸=主代理），恢复=按裁决 bind/secret 串行拉起", "since": "2026-11-04 23:38:50"}
+{"ts": "2026-11-04 23:39:12", "level": "amber", "code": "trigger-inbox-down", "message": "trigger-inbox 失联：进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）；不自动拉起（拉起闸=主代理），恢复=按裁决 bind/secret 串行拉起", "since": "2026-11-04 23:39:12"}
+{"ts": "2026-11-04 23:39:55", "level": "amber", "code": "trigger-inbox-down", "message": "trigger-inbox 失联：进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）；不自动拉起（拉起闸=主代理），恢复=按裁决 bind/secret 串行拉起", "since": "2026-11-04 23:39:54"}
+
+== 本批未改动的既有件 mtime 对照（event-router/factory-watch/门户 均未动）==
+  tools/event-router.py  mtime=1793707228167717273  sha256=81ee63436f2bd1799a37e0a4c5547ce57758e4686234276b6ed7ced9ee0a6581
+  tools/factory-watch.py  mtime=1793784868547158303  sha256=eb07b9e5ab5882dec1a2cc7f2cfab7c60e55bb46583e6115da4339efdeaf2a2c
+  tools/af-jobs-portal.py  mtime=1793709315940829456  sha256=63898449089e3f20d9e108db2fc5f6806de0012b1d422f76aa09e092785c8d3d
+  tools/factory-keepalive.py  mtime=1793806773717860437  sha256=19dbf455e2e442ca18a7c7a4a60c7ea42e2e39d08731c87226eb2845320113e3
+  tools/trigger-inbox.py  mtime=1793806835929044792  sha256=8a1bdb69fb581eabdac80942ca1ad7c5a9cc428c696a7912be72f9a50bf1b912

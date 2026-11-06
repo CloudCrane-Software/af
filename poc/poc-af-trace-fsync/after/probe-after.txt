@@ -1,0 +1,29 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s
+     Running unittests src/lib.rs (/data/bench/targets/risk-af-trace-fsync/debug/deps/af_trace-d05182b50e1ac770)
+
+running 5 tests
+[probe] write_critical(i=0) -> Ok(seq=0)，此刻事件仅在内存队列
+[probe] write_critical(i=1) -> Ok(seq=1)，此刻事件仅在内存队列
+[probe] write_critical(i=2) -> Ok(seq=2)，此刻事件仅在内存队列
+[probe] 3 个 Ok 之后、释放消费者之前：critical.jsonl 行数 = 0
+[probe] shutdown Ok 后：critical.jsonl 行数 = 3，critical_persisted = 3
+test trace::tests::ok_means_enqueued_durable_reads_lag_until_shutdown ... ok
+test trace::tests::poc_probe_ok_means_enqueued_not_persisted ... ok
+test trace::tests::critical_persist_failure_freezes_durable_and_keeps_gap_zero ... ok
+test trace::tests::gap_counter_only_increases_across_normal_failures ... ok
+test trace::tests::critical_full_does_not_touch_gap_or_durable ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 43 filtered out; finished in 2.50s
+
+     Running tests/flood.rs (/data/bench/targets/risk-af-trace-fsync/debug/deps/flood-70677c89634bc203)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+
+   Doc-tests af_trace
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

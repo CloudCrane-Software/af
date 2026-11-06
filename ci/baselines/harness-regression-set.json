@@ -1,0 +1,53 @@
+{
+  "schema": "af.harness-regression-set/1",
+  "card": "s17-harness-regression-gate（债 D-54；设计稿 30-工件/strategies17-供给面设计-20261106.md §七.1；st-b-C108 跨面 CI 面落地）",
+  "model": "Qwen3-Coder-30B-A3B-Q4_K_M-local-llama.cpp",
+  "seed": 20261029,
+  "runs_per_release": 2,
+  "task_set": {
+    "path": "harness-regression-tasks.json",
+    "count": 120,
+    "sha256": "af217e4a988f2aa8365131cc790b3cce5cd76f68af8610436852be18643f1983"
+  },
+  "thresholds": {
+    "resolve_degradation_pp": 5.0,
+    "token_degradation_pct": 15.0
+  },
+  "baseline_policy": "first_complete_run",
+  "readings_path": "harness-readings.jsonl",
+  "calibration": {
+    "case": "v0.4.1→v0.5.0（OpenAI converter，PR #1235，+346/−8 行）",
+    "from_rate": 39.4,
+    "to_rate": 32.5,
+    "expect": "block",
+    "source": "harness策略调研/strategies.csv#line:131（S130）"
+  },
+  "window_reference": {
+    "source": "harness策略调研/strategies.csv#line:131（S130：Qwen Code CLI 35 个连续 release × 50 道分层 SWE-bench Verified × 每版两跑）",
+    "releases": 35,
+    "tasks_per_release": 50,
+    "runs_per_release": 2,
+    "resolve_rate_mean": 30.5,
+    "resolve_rate_min": 23.0,
+    "resolve_rate_max": 39.0,
+    "resolve_rate_max_release": "v0.0.14",
+    "resolve_spearman_rho": 0.208,
+    "resolve_spearman_p": 0.231,
+    "two_run_task_agreement_pct": 87.7,
+    "two_run_wilcoxon_p": "resolve 0.478 / token 0.432 / tool_calls 0.466",
+    "token_first9_k": 391,
+    "token_recent_k": 668,
+    "token_inflation_pct": 70,
+    "token_spearman_rho": 0.743,
+    "patch_rate_range": "52%–94%"
+  },
+  "provenance": [
+    "跨面判据：被防护对象是 harness 工程过程（版本回归集+发布阻断阈值），AFB policies 只约束本图执行——30-工件/strategies17-供给面设计-20261106.md §七.1",
+    "门口径原文：「每次改动都跑固定回归集（同一批大仓库任务 + 固定模型 + 固定 seed），同时报 resolved 率与 token/题两条曲线，任一劣化超过阈值即阻断发布」——harness策略调研/strategies.csv#line:131（S130）body.测试设计",
+    "模型/任务集选型：计划/50-bench实测方案.md §2.2 S1 投放（Qwen3-Coder-30B 本地 × 120 SWE-V；D1×60/D2×40/D3×20，12 仓）",
+    "任务集正本：计划/s1-swev-120.json 逐字节复制入 ci/baselines/harness-regression-tasks.json（digest 见 task_set.sha256）",
+    "seed：计划/研究组/B线核心批-20261029/experiments-v1.json EXP-1 randomization.seed=20261029（本项目既有 seed 钉先例）",
+    "阈值锚①（resolve 5.0pp）：必须捕获 S130 实录回归 v0.4.1→v0.5.0 的 Δ−6.9pp（39.4%→32.5%，论文称「没有任何现有自动化测试能捕获」）；窗口内单版跌幅 ≤5pp 视为 23.0%–39.0% 历史摆动带内的正常波动",
+    "阈值锚②（token 15%）：必须捕获 S130 实录的最新版相对 per-task 基线 +19.6% token 通胀；低于 35 版累积 +70% 的通胀量级（后者非单版事件）"
+  ]
+}

@@ -1,0 +1,211 @@
+# 返修段原始读数（v0.3-T5②/T6③ 触发件遗留清偿 · 返修批 2026-11-05）
+# 工作树：/home/pan-ding/workspace/af-wt-t5t6 ；分支：feat/t5-2-t6-3-trigger-resident
+# 未 commit、未 push；本文件为**新增**读数文件（原 raw/ 读数只增不改）
+
+## 1) ADR-015 索引行（纯插入、0 删除）
+$ git diff --numstat docs/adr/README.md
+1	0	docs/adr/README.md
+
+$ git diff --stat origin/product/main
+ docs/adr/README.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+$ git diff docs/adr/README.md
+diff --git a/docs/adr/README.md b/docs/adr/README.md
+index 2228046..e17f069 100644
+--- a/docs/adr/README.md
++++ b/docs/adr/README.md
+@@ -19,3 +19,4 @@
+ | [ADR-012](012-redteam-w2-fixes.md) | 红队修复批（W2）：判分/预算/身份面收口 + 口径勘误（补登索引行——文件 2026-10-26 已裁决在档，索引行此前漏登） | 已裁决 2026-10-26 |
+ | [ADR-013](013-af-plan-fold-in.md) | af-plan 折入 af-compiler 的正式裁决（补登）——ADR-002 crate 划分修订：规划行作废、折入追认、独立建位留 v0.2 开放议程（红队 W2-C-03） | 已裁决 2026-10-27 |
+ | [ADR-014](014-escape-threshold-policy.md) | 逃逸舱占比治理阈值口径：锚定生产图口径（1/16=6.2%，未触 ADR-001 警戒线），对齐稿口径分列作观察项（97/247=39.3%，12 条语法缺位转 v0.2 候选），30% 数值不变、恢复「警戒」语义（计划侧工作稿「ADR-012」称呼与仓内 ADR-012 无关，本 ADR 取下一个空闲号 014——013 已被 af-plan 折入占用） | 已批准 2026-10-27 编排者 |
++| [ADR-015](015-trigger-inbox-resident-contract.md) | trigger-inbox 常驻运营面契约：生产落点（af 仓 `tools/trigger-inbox.py` 版本受控正本 ＋ 工作区级 `tools/trigger-inbox.py` 在役运行位，两处逐字同源 sha256 对账）／暴露面收窄做成代码级 fail-loud 闸（通配 `0.0.0.0`/`::` 一律拒起 exit 3；非回环须 `AF_TRIGGER_BIND_ACK` 显式确认）／源断供安灯分码（形态A 既有码 `trigger-inbox-down` ＋ 形态B 新码 `trigger-inbox-source-silent`，不新建第四个守护）／存储形态＝收件侧 per-delivery 文件 ＋ 读侧 JSONL 游标（补登索引行——文件 2026-11-04 已落地在档、索引行此前漏登；bind 取值已由主代理裁为**序列 B**：`AF_TRIGGER_BIND=<内网地址>` ＋ `AF_TRIGGER_BIND_ACK=<内网地址>`，序列 A 不采用） | 已裁决 2026-11-04；bind 取值＝序列 B（主代理裁决）；拉起闸＝主代理（2026-11-04 23:57:55 已按序列 B 起在役） |
+
+## 2) 格式门（返修批亲跑）
+$ export PATH=$HOME/.cargo/bin:$PATH CARGO_BUILD_JOBS=8 LANG=C.UTF-8 CARGO_TARGET_DIR=/data/bench/targets/t5t6-trigger
+$ cargo fmt --check --all
+CARGO_FMT_EXIT=0
+
+## 3) 重出改动清单（**替换** raw/gate-readings.txt §6 的旧快照；本段＝唯一权威副本）
+$ git status --porcelain -uall
+ M docs/adr/README.md
+?? docs/adr/015-trigger-inbox-resident-contract.md
+?? poc/poc-t5-2-t6-3-trigger-resident/README.md
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/five-state-readings.json
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/gate-readings.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/in-service-readings.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/lamp-readings.json
+?? "poc/poc-t5-2-t6-3-trigger-resident/raw/patch-keepalive-\346\272\220\346\226\255\344\276\233\345\210\244\345\256\232\350\241\214.diff"
+?? "poc/poc-t5-2-t6-3-trigger-resident/raw/patch-\347\224\237\344\272\247\345\211\257\346\234\254-vs-PoC\345\216\237\344\273\266.diff"
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/probe-selfcheck.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/repair-readings.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/selfcheck-output.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/stop-reading-final.txt
+?? poc/poc-t5-2-t6-3-trigger-resident/raw/stop-reading.txt
+?? tools/trigger-inbox-src-parity-probe.py
+?? tools/trigger-inbox.py
+
+行数统计：
+16
+已跟踪修改行数：
+1
+未跟踪新增行数：
+15
+
+## 4) cargo build / test / clippy —— **未跑**（理由如实登记）
+理由：本批纪律「禁改 crates/ 下任何件」⇒ 产物由 anolis 在跑的主线全量门复验批承担；
+      本机 14G 内存 ⇒ 禁本地高并发重编译。**未跑、未以任何替代冒充**。
+
+## 5) af 仓零改动核（对 origin/product/main）
+$ git diff --numstat origin/product/main
+1	0	docs/adr/README.md
+
+$ git diff --stat origin/product/main -- crates/ ci/ Cargo.toml Cargo.lock
+(空＝crates/ci/Cargo 零 diff)
+
+$ ls crates/ | wc -l ; git ls-tree origin/product/main crates/ | wc -l
+22
+22
+
+$ sha256sum ci/clippy-baseline.txt ; git show origin/product/main:ci/clippy-baseline.txt | sha256sum
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  ci/clippy-baseline.txt
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  -
+
+$ git rev-parse HEAD origin/product/main product/main
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+
+$ git hash-object poc/poc-super-agent/{tools-mirror/trigger-inbox.py,contracts/af.trigger.v1.md,registry/trigger-registry.v1.json}
+3ad5fef7c97b1ea4f7cd3440c924506ede3e3798
+9573b21a1fb94808366ec28557af141c37f8bab8
+a5c19dd10bfe34f537dec9e0e32704fbc7e34d56
+$ git rev-parse origin/product/main:poc/poc-super-agent/...
+3ad5fef7c97b1ea4f7cd3440c924506ede3e3798
+9573b21a1fb94808366ec28557af141c37f8bab8
+a5c19dd10bfe34f537dec9e0e32704fbc7e34d56
+
+## 6) af 主树零改动核（/home/pan-ding/workspace/agent黑灯工厂/af）
+$ git status --porcelain
+?? redteam/scans/2026-11-04-e4484537/
+$ git log --oneline -1 ; git rev-parse HEAD origin/product/main product/main
+56ff52a fix(ci): 门输入钉再重钉（sat-cast 销项改了另两件判据正本）
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+
+## 7) bind 裁决在役态实测（返修批亲读；**段B secret 值不回显**）
+$ ps -o pid,ppid,lstart,etime,cmd -p 1523087
+    PID    PPID                  STARTED     ELAPSED CMD
+1523087    1943 三 11月  4 23:57:55 2026     07:17 python3 tools/trigger-inbox.py
+$ tr '\0' '\n' < /proc/1523087/environ | grep '^AF_TRIGGER' | sed -E 's/(SECRET[^=]*=).*/\1<REDACTED>/'
+AF_TRIGGER_SECRET_GITEA_WEBHOOK=<REDACTED>
+AF_TRIGGER_INBOX_PORT=8765
+AF_TRIGGER_HOME=/home/pan-ding/workspace/agent黑灯工厂/af-state/triggers
+AF_TRIGGER_BIND_ACK=<内网地址>
+AF_TRIGGER_BIND=<内网地址>
+$ ls -l /proc/1523087/cwd
+lrwxrwxrwx 1 pan-ding pan-ding 0 Nov  4 23:57 /proc/1523087/cwd -> /home/pan-ding/workspace/agent黑灯工厂
+$ ss -lntp | grep -E ':(8765|18765|18766)\b'
+LISTEN 0      5               <内网地址>:8765       0.0.0.0:*    users:(("python3",pid=1523087,fd=3)) 
+$ tail -3 /home/pan-ding/workspace/agent黑灯工厂/状态观测/trigger-inbox.log
+[23:57:56] trigger-inbox 起（<内网地址>:8765，home=/home/pan-ding/workspace/agent黑灯工厂/af-state/triggers，sources=['gitea-webhook']，body 上限 1024KiB，注册表只读；secret 未配置（该 source 一律 401，fail-closed）：无）
+[23:58:13] http <内网地址> "GET /healthz HTTP/1.1" 200 -
+[23:58:33] http <内网地址> "POST /inbox/gitea-webhook HTTP/1.1" 401 -
+
+### 7.1 P3 alarms.log 那行**仍在盘**（未删未改）
+$ grep -n '"code": "trigger-inbox-down"' /home/pan-ding/workspace/agent黑灯工厂/状态观测/alarms.log | grep '23:39:12'
+2135:{"ts": "2026-11-04 23:39:12", "level": "amber", "code": "trigger-inbox-down", "message": "trigger-inbox 失联：进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）；不自动拉起（拉起闸=主代理），恢复=按裁决 bind/secret 串行拉起", "since": "2026-11-04 23:39:12"}
+
+### 7.2 归因旁证：/tmp/factory-keepalive.log 同秒行（沙箱指纹 ＝ MES Connection refused）
+$ LC_ALL=C grep -a -n '2026-11-04 23:39' /tmp/factory-keepalive.log | sed -n '1,12p'
+4785:[2026-11-04 23:39:12] [trigger-inbox] ALARM trigger-inbox 失联：进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）——不自动拉起（拉起闸=主代理串行执行）；恢复=主代理按裁决 bind/secret 拉起
+4786:[2026-11-04 23:39:12] [trigger-inbox] MES 写入失败（不致命）: <urlopen error [Errno 111] Connection refused>
+4787:[2026-11-04 23:39:39] [trigger-inbox] MES 写入失败（不致命）: <urlopen error [Errno 111] Connection refused>
+4788:[2026-11-04 23:39:39] [trigger-inbox] ALARM trigger-inbox 失联：进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）——不自动拉起（拉起闸=主代理串行执行）；恢复=主代理按裁决 bind/secret 拉起
+4789:[2026-11-04 23:39:39] [trigger-inbox] MES 写入失败（不致命）: <urlopen error [Errno 111] Connection refused>
+4790:[2026-11-04 23:39:54] [self] 自身源码变更（sha ed4804bad6c0→19dbf455e2e4）→ 自我重载（os.execv 载入新码，pid 不变=2079410）
+4791:[2026-11-04 23:39:54] [self] 自我重载续跑（pid=2079410）——跳过双实例拒绝
+4792:[2026-11-04 23:39:54] [self] 日志单通道自检探针行（应恰出现一次）
+4793:[2026-11-04 23:39:54] [self] keepalive 常驻启动 pid=2079410 周期 30s 看护 13 对象：watch, dash, af-execline, mes-ch, router, scheduler, status-push, emit-sidecar, self-improve-loop, quota-governor, otelcol, portal, trigger-inbox
+4794:[2026-11-04 23:39:55] [trigger-inbox] ALARM trigger-inbox 失联：进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）——不自动拉起（拉起闸=主代理串行执行）；恢复=主代理按裁决 bind/secret 拉起
+4795:[2026-11-04 23:39:55] [gc-watch] 触发（/data 94%≥85%，距上次成功GC 313.9h）→ spawn apply 子进程（非阻塞；≥88% 子进程内自停手只回报）
+4796:[2026-11-04 23:39:55] [gc-watch] 拉起 pid=1482349 cmd=python3 tools/img-gc.py apply --host anolis env+=[] log=/tmp/img-gc.log
+
+### 7.3 在役 keepalive 心跳（收卷后形态A 已解除）
+$ tail -2 /tmp/factory-keepalive.log | grep 'trigger-inbox'
+
+## 8) 探针只读性 / 零监听 / 零新增守护（源码级核 + 指纹）
+$ grep -n 'open(' tools/trigger-inbox-src-parity-probe.py
+70:        with open(path, "rb") as f:          # 只读打开（'rb'），无写模式
+145:        with open(a, "w", encoding="utf-8") as f:
+147:        with open(b, "w", encoding="utf-8") as f:
+154:        with open(c, "w", encoding="utf-8") as f:
+161:        with open(a, "rb") as f:
+163:        with open(dfile, "wb") as f:
+（默认路径只 open(path,'rb')；写模式仅出现在 --selftest 内、只写探针自己 mkdtemp 建的临时目录）
+
+$ grep -nE 'socket|listen|HTTPServer|requests|urllib|http' tools/trigger-inbox-src-parity-probe.py ; echo "grep_rc=$?"
+grep_rc=1（1 ＝ 零命中）
+
+$ sha256sum tools/trigger-inbox.py tools/trigger-inbox-src-parity-probe.py docs/adr/015-trigger-inbox-resident-contract.md docs/adr/README.md poc/poc-t5-2-t6-3-trigger-resident/README.md
+8a1bdb69fb581eabdac80942ca1ad7c5a9cc428c696a7912be72f9a50bf1b912  tools/trigger-inbox.py
+ec43302ab4ed99ff9366e38337db73ff9d7b90d36f76444f06b7e35969da7f64  tools/trigger-inbox-src-parity-probe.py
+5d03b358870b67c2c3ea1dbf66fa5bc1d4c09dae203b02f7e8431f31bd49177d  docs/adr/015-trigger-inbox-resident-contract.md
+4a1c46ed80e0519a217522920a8662f6d1112da80b23e57d573a6e7a69ca9ed3  docs/adr/README.md
+0908a2a14b6e1ee1c1a036e2b0838d9a4698b9b52c0d32ca9f6026849b4ca553  poc/poc-t5-2-t6-3-trigger-resident/README.md
+57ed0ca5553b227914304532c31c72623ecb57da224b9a7b85f51008249a0767  poc/poc-t5-2-t6-3-trigger-resident/raw/probe-selfcheck.txt
+
+## 9) 非回环监听 / trigger-inbox 进程面（返修批当刻体检）
+$ pgrep -af '[t]rigger-inbox.py'
+（★ 读数注：pgrep -af 会同时命中**本条命令自身所在的 shell**（命令行文本里含 'trigger-inbox.py'）⇒ 下面那条长 bash 行是**假阳性**；**真身只有第一行** `1523087 python3 tools/trigger-inbox.py`，且它是**主代理 2026-11-04 23:57:55 起的在役实例**，**非本返修批所起**。）
+1523087 python3 tools/trigger-inbox.py
+1534016 /bin/bash -c . '/home/pan-ding/.zcode/cli/exec/shell-snapshots/snapshot-bash-1793807853547-ggj621.sh' 2>/dev/null || true . '/home/pan-ding/.zcode/cli/exec/bash-startup/sess_dwf-dwfrun-2c35fcdd-3289-4a75-9c59-6d9deddcc170-actor_5_1/embedded-search-startup-3bcdfa73ca8e35cf.sh' cd /home/pan-ding/workspace/af-wt-t5t6 OUT=poc/poc-t5-2-t6-3-trigger-resident/raw/repair-readings.txt { echo echo "## 8) 探针只读性 / 零监听 / 零新增守护（源码级核 + 指纹）" echo "\$ grep -n 'open(' tools/trigger-inbox-src-parity-probe.py" grep -n 'open(' tools/trigger-inbox-src-parity-probe.py echo "（默认路径只 open(path,'rb')；写模式仅出现在 --selftest 内、只写探针自己 mkdtemp 建的临时目录）" echo echo "\$ grep -nE 'socket|listen|HTTPServer|requests|urllib|http' tools/trigger-inbox-src-parity-probe.py ; echo \"grep_rc=\$?\"" grep -nE 'socket|listen|HTTPServer|requests|urllib|http' tools/trigger-inbox-src-parity-probe.py echo "grep_rc=$?（1 ＝ 零命中）" echo echo "\$ sha256sum tools/trigger-inbox.py tools/trigger-inbox-src-parity-probe.py docs/adr/015-trigger-inbox-resident-contract.md docs/adr/README.md poc/poc-t5-2-t6-3-trigger-resident/README.md" sha256sum tools/trigger-inbox.py tools/trigger-inbox-src-parity-probe.py docs/adr/015-trigger-inbox-resident-contract.md docs/adr/README.md poc/poc-t5-2-t6-3-trigger-resident/README.md echo echo "## 9) 非回环监听 / trigger-inbox 进程面（返修批当刻体检）" echo "\$ pgrep -af '[t]rigger-inbox.py'" pgrep -af '[t]rigger-inbox.py' echo "\$ ss -lntp（本地地址列全集）" ss -lntp 2>/dev/null | awk 'NR>1{print $4}' | sort | uniq -c echo "说明：<内网地址>:8765 ＝ **主代理 2026-11-04 23:57:55 起的在役生产收件箱**（序列 B）；" echo "      **本返修批零新增监听**（本批只跑只读 python3 探针，未起任何 socket）。" echo echo "## 10) 判据面现态（只读）" echo "\$ cat 状态观测/trigger-inbox-source-silent.json  （工作区级，只读）" cat /home/pan-ding/workspace/agent黑灯工厂/状态观测/trigger-inbox-source-silent.json echo echo "\$ 生产 inbox 投递数（只读）" ls /home/pan-ding/workspace/agent黑灯工厂/af-state/triggers/inbox/gitea-webhook/ | wc -l ls -t /home/pan-ding/workspace/agent黑灯工厂/af-state/triggers/inbox/gitea-webhook/ } >> "$OUT" 2>&1 echo "STEP4 OK"; wc -l "$OUT" __zcode_status=$? if [ "$__zcode_status" -eq 0 ]; then pwd -P > '/tmp/zcode-33a51702-f5e4-41f6-9b2e-c215d15c78d7-cwd'; fi exit "$__zcode_status"
+$ ss -lntp（本地地址列全集）
+      1 <内网地址>:2222
+      1 <内网地址>:4317
+      1 <内网地址>:4318
+      1 <内网地址>:56544
+      1 <内网地址>:7890
+      1 <内网地址>:8765
+      1 127.0.0.1:11434
+      1 127.0.0.1:18790
+      1 127.0.0.1:53
+      1 127.0.0.1:5433
+      1 127.0.0.1:631
+      1 127.0.0.1:8790
+      1 127.0.0.1:9090
+      1 127.0.0.1:9222
+      1 127.0.0.53%lo:53
+      1 127.0.0.54:53
+      1 [::1]:631
+      1 [fd7a:115c:a1e0::8]:53536
+说明：<内网地址>:8765 ＝ **主代理 2026-11-04 23:57:55 起的在役生产收件箱**（序列 B）；
+      **本返修批零新增监听**（本批只跑只读 python3 探针，未起任何 socket）。
+
+## 10) 判据面现态（只读）
+$ cat 状态观测/trigger-inbox-source-silent.json  （工作区级，只读）
+{
+ "ts": "2026-11-05 00:04:51",
+ "ts_epoch": 1793808290,
+ "tool": "factory-keepalive/trigger-inbox",
+ "status": "amber",
+ "alarm_code": "trigger-inbox-source-silent",
+ "message": "trigger-inbox 源断供：收件箱进程在（pid=[1523087] home=/home/pan-ding/workspace/agent黑灯工厂/af-state/triggers）但最新投递距今 1514min（>阈 240min）——形态B（源头无事件可路由）；恢复=事件源重投/查 webhook 出口；与『进程不在』（trigger-inbox-down）**分码**",
+ "process_alive": true,
+ "healthy": true,
+ "silent_s": 90867,
+ "threshold_min": 240,
+ "inbox_dir": "/home/pan-ding/workspace/agent黑灯工厂/af-state/triggers/inbox",
+ "pids": [
+  1523087
+ ],
+ "newest_delivery_epoch": 1793717423,
+ "process_started_epoch": 1793807875,
+ "since_epoch": 1793717423,
+ "note": "写入方=factory-keepalive 判据行④；形态A 的真实报警仍由既有 trigger-inbox-down 报警行发出（既有码/既有行零改动）"
+}
+$ 生产 inbox 投递数（只读）
+2
+82fa25d2-83d3-4097-bf8e-354a941bdb3a.json
+verify-main-20261103-1.json

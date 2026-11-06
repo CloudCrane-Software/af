@@ -1,0 +1,116 @@
+---
+source: crates/af-credential/tests/yaml_snapshots.rs
+expression: snapshot
+---
+kind: rejection_error_structure
+cases:
+  - name: attenuated_git_revoked
+    tool: git
+    namespace: line-a
+    spend_cents: 100
+    authorize_allows: false
+    denial:
+      display: "authorization failed: an allow policy matched (policy index: 0), and the following checks failed: Check n°0 in block n°1: check if request_tool($t), [\"test\"].contains($t)"
+      kind: unauthorized
+      matched_policy:
+        effect: allow
+        index: 0
+      failed_checks:
+        - site: block
+          block_id: 1
+          check_id: 0
+          rule: "check if request_tool($t), [\"test\"].contains($t)"
+      invalid_block_id: ~
+      invalid_block_rule: ~
+  - name: attenuated_spend_between_caps
+    tool: test
+    namespace: line-a
+    spend_cents: 800
+    authorize_allows: false
+    denial:
+      display: "authorization failed: an allow policy matched (policy index: 0), and the following checks failed: Check n°1 in block n°1: check if spend_cents($s), $s <= 500"
+      kind: unauthorized
+      matched_policy:
+        effect: allow
+        index: 0
+      failed_checks:
+        - site: block
+          block_id: 1
+          check_id: 1
+          rule: "check if spend_cents($s), $s <= 500"
+      invalid_block_id: ~
+      invalid_block_rule: ~
+  - name: attenuated_spend_over_both_caps
+    tool: test
+    namespace: line-a
+    spend_cents: 1200
+    authorize_allows: false
+    denial:
+      display: "authorization failed: an allow policy matched (policy index: 0), and the following checks failed: Check n°0 in block n°0: check if spend_cents($s), budget_cents($v), $s <= $v, Check n°1 in block n°1: check if spend_cents($s), $s <= 500"
+      kind: unauthorized
+      matched_policy:
+        effect: allow
+        index: 0
+      failed_checks:
+        - site: block
+          block_id: 0
+          check_id: 0
+          rule: "check if spend_cents($s), budget_cents($v), $s <= $v"
+        - site: block
+          block_id: 1
+          check_id: 1
+          rule: "check if spend_cents($s), $s <= 500"
+      invalid_block_id: ~
+      invalid_block_rule: ~
+  - name: attenuated_unknown_tool
+    tool: deploy
+    namespace: line-a
+    spend_cents: 100
+    authorize_allows: false
+    denial:
+      display: "authorization failed: no matching policy was found, and the following checks failed: Check n°0 in block n°1: check if request_tool($t), [\"test\"].contains($t)"
+      kind: no_matching_policy
+      matched_policy: ~
+      failed_checks:
+        - site: block
+          block_id: 1
+          check_id: 0
+          rule: "check if request_tool($t), [\"test\"].contains($t)"
+      invalid_block_id: ~
+      invalid_block_rule: ~
+  - name: attenuated_wrong_namespace
+    tool: test
+    namespace: line-b
+    spend_cents: 100
+    authorize_allows: false
+    denial:
+      display: "authorization failed: no matching policy was found, and the following checks failed: "
+      kind: no_matching_policy
+      matched_policy: ~
+      failed_checks: []
+      invalid_block_id: ~
+      invalid_block_rule: ~
+  - name: root_spend_over_budget
+    tool: test
+    namespace: line-a
+    spend_cents: 1200
+    authorize_allows: false
+    denial:
+      display: "authorization failed: an allow policy matched (policy index: 0), and the following checks failed: Check n°0 in block n°0: check if spend_cents($s), budget_cents($v), $s <= $v"
+      kind: unauthorized
+      matched_policy:
+        effect: allow
+        index: 0
+      failed_checks:
+        - site: block
+          block_id: 0
+          check_id: 0
+          rule: "check if spend_cents($s), budget_cents($v), $s <= $v"
+      invalid_block_id: ~
+      invalid_block_rule: ~
+  - name: attenuated_test_within_cap
+    tool: test
+    namespace: line-a
+    spend_cents: 100
+    authorize_allows: true
+    denial: ~

@@ -1,0 +1,69 @@
+---
+source: crates/af-meter/tests/bifrost.rs
+expression: fragment
+---
+{
+  "providers": {
+    "openai": {
+      "keys": [
+        {
+          "id": "subscription",
+          "name": "subscription",
+          "value": "env.AF_KEY_SUBSCRIPTION",
+          "models": [
+            "*"
+          ],
+          "weight": 2
+        },
+        {
+          "id": "api",
+          "name": "api",
+          "value": "env.AF_KEY_API",
+          "models": [
+            "*"
+          ],
+          "weight": 98
+        }
+      ]
+    }
+  },
+  "governance": {
+    "routing_rules": [
+      {
+        "id": "af-pin-subscription",
+        "name": "pin subscription",
+        "description": "header x-af-pin-key selects this key and overrides keys[].weight; target.weight is 1, not the key percent",
+        "enabled": true,
+        "cel_expression": "headers[\"x-af-pin-key\"] == \"subscription\"",
+        "targets": [
+          {
+            "provider": "openai",
+            "key_id": "subscription",
+            "weight": 1.0
+          }
+        ],
+        "fallbacks": [],
+        "scope": "global",
+        "priority": 0
+      },
+      {
+        "id": "af-pin-api",
+        "name": "pin api",
+        "description": "header x-af-pin-key selects this key and overrides keys[].weight; target.weight is 1, not the key percent",
+        "enabled": true,
+        "cel_expression": "headers[\"x-af-pin-key\"] == \"api\"",
+        "targets": [
+          {
+            "provider": "openai",
+            "key_id": "api",
+            "weight": 1.0
+          }
+        ],
+        "fallbacks": [],
+        "scope": "global",
+        "priority": 0
+      }
+    ]
+  },
+  "generated_at": 86400
+}

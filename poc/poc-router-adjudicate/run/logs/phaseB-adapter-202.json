@@ -1,0 +1,12 @@
+{
+ "status": 202,
+ "response": {
+  "status": "accepted",
+  "delivery_id": "mes-wo-pocr-leg-1-complete-1",
+  "path": "inbox/mes-execline/mes-wo-pocr-leg-1-complete-1.json",
+  "thread_key": "mes:line-poc/wo-pocr-leg-1",
+  "dedup_key": "order_complete:line-poc/wo-pocr-leg-1"
+ },
+ "payload_sha256": "405bb11e9c93d4db5df6faa056112800a6f920e19cc5e8a7e5ebe78ba4bb2373",
+ "body_bytes_len": 601
+}

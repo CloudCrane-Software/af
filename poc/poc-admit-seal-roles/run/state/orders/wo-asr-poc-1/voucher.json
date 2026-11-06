@@ -1,0 +1,13 @@
+{
+  "voucher_id": "bv-wo-asr-poc-1",
+  "order_id": "wo-asr-poc-1",
+  "stable_id": "sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50",
+  "amount": 100,
+  "line_id": "stub:line-poc",
+  "line_version": "lv-1",
+  "note": "poc-admit-seal-roles 源单",
+  "payload": "af-order/voucher/v1|12|wo-asr-poc-1|68|sid-1524d7288f281a93340d012ed784ef01506822f6926ee585f6c4b0da67cf8d50|100",
+  "algorithm": "ed25519",
+  "key_id": "e3b56e761f5ffa8124a202f03727d7b8baee0edf073d683a1da57d5483ecdf11",
+  "signature_hex": "deec82ec47a899de535d8b00ce62386e2aa7dd1130de88ffca671e30077147a2fd91f8b8e08dc4a536c02f519f7552079440a9584e4c689d42467e7f712fa80e"
+}

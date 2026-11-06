@@ -1,0 +1,26 @@
+# xcheck 对账明细（ci/xcheck.py 机生成）
+
+[PASS] gates
+       AGENT.md 主张 9 门（step1-8 硬门 + step9 FV advisory）
+       run.sh 实测 8 基础硬门 step[1, 2, 3, 4, 5, 6, 7, 8] + 1 advisory = 9 门（基础口径）
+       run.sh 另见 G0 机制批新 step[10, 11, 12, 13, 14]（step10-14 槽位；当前合计 14 step）
+[PASS] gates-exec-binding
+       登记槽 step[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]；执行事实槽 step[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]（step 助手调用行 + 执行重定向行 `> "$OUT/stepN.log"`）
+[PASS] gates-g0-erratum
+       AGENT.md 勘误行主张九门+G0 五门=14 step；run.sh 实测 G0 批 5/5 个新 step，合计 14 step
+[PASS] packages
+       README 主张十包 37 件；components.json 实测 37 件（根级 pkg.* 段）
+       README 分解 {'aflowkit': 2, 'agensh': 8, 'camelkit': 1, 'crewkit': 7, 'debatekit': 2, 'reactkit': 2, 'reflexkit': 3, 'sweagent': 10, 'langgraph': 1, 'openworld': 1}
+       实测分解 {'aflowkit': 2, 'agensh': 8, 'crewkit': 7, 'debatekit': 2, 'reactkit': 2, 'reflexkit': 3, 'sweagent': 10, 'openworld': 1, 'camelkit': 1, 'langgraph': 1}
+[PASS] redlist
+       方案 §1.3 标题主张 23 项；表体 23 行；expected-fail.txt 实测 23 行
+       条目集合差：仅文书有 []；仅名单有 []
+[PASS] obs-dates
+       README: ['2026-10-29 01:05']
+       00-总纲: ['2026-10-29 01:05']
+       组件建设状态: ['2026-10-29 01:05']
+       runbook§六-3: ['2026-10-29 01:05']
+[PASS] runsh-header
+       头注无『N 步验收管道』字样（可接受）
+[LEGACY] codepoints 码位/债号/ADR 三方对账未实现（SPEC ⑧.2 / 总对账 §六.2：正本 error.rs 码位表摸排工作量未在本批全量落地）——机制覆盖面按 3/4 组对账交卷（门数/packages/词表）；不静默缺席
+== 硬项 6/6 过；advisory 1/1 过

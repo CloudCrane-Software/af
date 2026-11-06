@@ -1,0 +1,26 @@
+########## N1 注入 resolve 劣化（55.0%→45.0%，Δ10.0pp > 5.0pp）期望 BLOCK ##########
+[harness-gate] OK 定义面在役：模型 Qwen3-Coder-30B-A3B-Q4_K_M-local-llama.cpp / seed 20261029 / 任务集 120 题 / 每版 2 跑 / 阈值 resolve 5.0pp + token 15.0%
+[harness-gate] INFO 校准锚（S130 实录回归 v0.4.1→v0.5.0（OpenAI converter，PR #1235，+346/−8 行））：39.4%→32.5%（Δ6.9pp）必被本门捕获——阈值再放宽即红（防弱化）
+[harness-gate] RED 劣化阻断：resolve rate 基线 55.0%（#1 af-harness@baseline-sha）→ 当前 45.0%（#2 af-harness@injected-regression-sha），劣化 10.0pp > 阈值 5.0pp——S130 口径「任一劣化超过阈值即阻断发布」
+== harness_regression_gate: 硬红 1 项——阻断（读数面硬红）
+N1_RC=1
+
+########## N2 注入 token/题 劣化（391K→480K，+22.7% > 15%）期望 BLOCK ##########
+[harness-gate] OK 定义面在役：模型 Qwen3-Coder-30B-A3B-Q4_K_M-local-llama.cpp / seed 20261029 / 任务集 120 题 / 每版 2 跑 / 阈值 resolve 5.0pp + token 15.0%
+[harness-gate] INFO 校准锚（S130 实录回归 v0.4.1→v0.5.0（OpenAI converter，PR #1235，+346/−8 行））：39.4%→32.5%（Δ6.9pp）必被本门捕获——阈值再放宽即红（防弱化）
+[harness-gate] RED 劣化阻断：token/题 基线 391.0K → 当前 480.0K，通胀 22.8% > 阈值 15.0%——S130 口径「两条曲线任一劣化即阻断」
+== harness_regression_gate: 硬红 1 项——阻断（读数面硬红）
+N2_RC=1
+
+########## N3 阈值内波动（55.0%→53.3%，Δ1.7pp；token +2.3%）期望 PASS ##########
+[harness-gate] OK 定义面在役：模型 Qwen3-Coder-30B-A3B-Q4_K_M-local-llama.cpp / seed 20261029 / 任务集 120 题 / 每版 2 跑 / 阈值 resolve 5.0pp + token 15.0%
+[harness-gate] INFO 校准锚（S130 实录回归 v0.4.1→v0.5.0（OpenAI converter，PR #1235，+346/−8 行））：39.4%→32.5%（Δ6.9pp）必被本门捕获——阈值再放宽即红（防弱化）
+[harness-gate] INFO 读数面：劣化 1.7pp ≤ 阈值 5.0pp（token/题通胀 2.3% ≤ 阈值 15.0%）——未触发阻断
+== harness_regression_gate: 全绿——定义面+读数面均在役，未触发劣化阈值
+N3_RC=0
+
+########## N4 空回归集 fail-closed（任务集零条目）期望 BLOCK ##########
+[harness-gate] RED task_set.count 须为 >0 整数（实 0）——零条目回归集无判据
+[harness-gate] RED 空回归集：任务集在场但零条目——回归集未定义即无判据，fail-closed 阻断
+== harness_regression_gate: 硬红 2 项——阻断（定义面硬红）
+N4_RC=1

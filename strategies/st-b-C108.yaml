@@ -1,0 +1,13 @@
+id: st-b-C108
+name: "harness 版本级回归防护：把 harness 当作需要持续回归测试的一等组件"
+tier: B
+claim: "harness 版本级回归防护：固定 LLM 只变 harness 版本，35 个 release 解决率 23.0%–39.0% 大幅波动且无趋势"
+claimed_value:
+  metric: "harness_resolved_rate_stability"
+  direction: up
+  context: "每次改动跑固定回归集（同批大仓库任务+固定模型+固定 seed），劣化超阈值即阻断发布"
+sources: [S130, S131, S175]
+consensus: {corpora: 1, cards: 3}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "harness 仓库自身的发布纪律：被评测与防护对象是 harness 工程过程（版本回归集、发布阻断阈值），不是任何一次 agent 运行图；AFB 是单次运行的蓝图 DSL，其 policies 只约束本图执行，不表达「跨版本回归门」这一 CI 面语义。"

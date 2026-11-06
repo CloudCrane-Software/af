@@ -1,0 +1,247 @@
+# branches.yaml —— 判定面分支→夹具登记（正本 v1；G0-CI 机制批 · 子代理 D）
+# 机制：红队复盘 C4 升级⑤「branches.yaml：判定面文件集每个分支 id → ≥1 正例+≥1 负例
+# 夹具 id，CI 断言无裸分支、新分支无夹具即红」（复盘 5.1 行 branches.yaml 分支覆盖断言）。
+# 判定面文件集（首版，按复盘 C4 口径「af-dsl 校验 + 编译器」）：
+#   crates/af-dsl/src/validate/*.rs、crates/af-dsl/src/shape.rs、crates/af-compiler/src/*.rs
+# 语义：本文件是「分支 id ↔ 判定行锚 ↔ 正/负夹具」的单源登记；CI 三方对账
+#   （代码判定行 ↔ 本登记 ↔ cargo test 实跑名单），裸分支/锚失效/夹具缺席即红。
+# 快速校验（yaml 库缺席时）：python3 ci/branches_check.py --text-mode
+# 版本史：v0（2026-10-27 规格批草案，10 分支/8 covered/2 缺口）→ v1（2026-10-28 施工批：
+#   两处「待补夹具」补齐——INV1-CTX-FROM-DEFAULT-SKIP 双侧、M4-INLINE-PRIM-SYNTH 负侧，
+#   夹具落 crates/af-dsl/tests/branch_fixtures_test.rs；10/10 covered、缺口 0）。
+schema: branches-v1
+scope:
+  include_globs:
+    - crates/af-dsl/src/validate/*.rs
+    - crates/af-dsl/src/shape.rs
+    - crates/af-compiler/src/*.rs
+  exclude_globs: []            # 图执行器（af-execline）判定面为第二扩容批次，见 SPEC §8
+  coverage_tool: llvm-cov      # 分支级覆盖报告（tarpaulin 备选）；nightly/diff 触发，非常跑
+  coverage_report_out: ci/out/branch-coverage.json
+rules:
+  no_bare_branch: true          # 覆盖报告里 scope 内分支未登记 → 红（nightly 面：报告在场才判）
+  new_branch_needs_fixture: true # 新登记分支缺正例或负例 → 红
+  stale_anchor_is_red: true     # 登记锚（file:line:anchor 前缀）与代码不符 → 红（防止行号漂移后静默失效）
+  min_positive: 1
+  min_negative: 1
+  pending_gap_policy:           # 现状缺口处置（如实记录，不编造）
+    allow_status_pending: true  # status=pending 允许存在
+    pending_must_carry: [gap_reason, gap_ticket]   # 缺登记与债号（接 C2 指针注册表）
+    grace_until: "2026-11-10"   # 宽限窗；窗后 pending 仍红（复盘 C4：矩阵不从判定分支导出就仍是换层皮）
+
+branches:
+  # ---- af-dsl/src/validate/inv1.rs（context 五词表 + quota 判定块）----
+  - id: INV1-CTX-FROM-TEMPLATE
+    file: crates/af-dsl/src/validate/inv1.rs
+    line: 193
+    anchor_prefix: '"template" => {'
+    semantics: context 段 from=template 分支——template_ref 缺失/为空 → E2301 ContextSourceUnresolvable
+    error_codes: [E2301]
+    fixtures:
+      positive:
+        - test: af-dsl::inv1_test::six_golden_samples_pass_full_m2_validation
+          path: crates/af-dsl/tests/inv1_test.rs
+          line: 52
+      negative:
+        - test: af-dsl::inv1_test::section_missing_source_field_is_e2301
+          path: crates/af-dsl/tests/inv1_test.rs
+          line: 141
+    status: covered
+
+  - id: INV1-CTX-FROM-DEFAULT-SKIP
+    file: crates/af-dsl/src/validate/inv1.rs
+    line: 333
+    anchor_prefix: '_ => {} // from 不在五词表'
+    semantics: from 不在五词表（template/input/arg/edge/store）时整段跳过（本臂不产码，E1004 产在 shape.rs check_vocab）；风险=新增第六词时此臂静默吞段
+    error_codes: []            # 本臂不产码（E1004 产在 shape.rs check_vocab）
+    fixtures:
+      positive:
+        - test: af-dsl::branch_fixtures_test::ctx_from_outside_vocab_skips_silently_and_shape_reports_e1004
+          path: crates/af-dsl/tests/branch_fixtures_test.rs
+          line: 55
+      negative:
+        - test: af-dsl::branch_fixtures_test::ctx_from_in_vocab_is_judged_not_swallowed_by_fallback
+          path: crates/af-dsl/tests/branch_fixtures_test.rs
+          line: 73
+    status: covered
+    closure_note: >-
+      v0 缺口（成对断言夹具缺席）于 2026-10-28 施工批补齐：正例钉「五词表外 from →
+      兜底臂跳过 + 仅 M1 E1004」，负例钉「词表内值由本臂 judged 出 E2301、不被吞」——
+      SECTION_FROMS 与 inv1 match 臂不同步（新增第六词只改一侧）即由绿转红。
+      gap_ticket 原为「待挂债号（合 C2 债号指针注册表）」——缺口已闭合，无需挂号。
+
+  - id: INV1-QUOTA-POSITIVE
+    file: crates/af-dsl/src/validate/inv1.rs
+    line: 337
+    anchor_prefix: 'if s.quota_tokens == 0 && !(s.from == "store"'
+    semantics: quota_tokens=0 仅 store 段 policy:none 豁免（记 0 合法），其余 → E2302 QuotaNotPositive
+    error_codes: [E2302]
+    fixtures:
+      positive:
+        - test: af-dsl::inv1_test::quota_zero_with_policy_none_on_store_is_legal
+          path: crates/af-dsl/tests/inv1_test.rs
+          line: 192
+      negative:
+        - test: af-dsl::inv1_test::quota_zero_is_e2302
+          path: crates/af-dsl/tests/inv1_test.rs
+          line: 177
+        - test: af-dsl::inv1_test::quota_zero_with_policy_none_on_non_store_is_e2401_and_e2302
+          path: crates/af-dsl/tests/inv1_test.rs
+          line: 200
+    status: covered
+
+  # ---- af-dsl/src/shape.rs（serde 错误稳定码分类）----
+  - id: SHAPE-SERDE-ERR-CLASSIFY
+    file: crates/af-dsl/src/shape.rs
+    line: 43
+    anchor_prefix: 'let code = if msg.starts_with("unknown field")'
+    semantics: serde 错误按信息前缀五臂归类 E1001(unknown field)/E1002(missing field)/E2002(数值域)/E1004(unknown variant|invalid value)/兜底——语料 2.3「文书逃逸主战场在验证面」的码位源头
+    error_codes: [E1001, E1002, E2002, E1004]
+    fixtures:
+      positive:
+        - test: af-dsl::parse_test::six_golden_samples_parse
+          path: crates/af-dsl/tests/parse_test.rs
+          line: 43
+      negative:
+        - test: af-dsl::parse_test::unknown_field_in_meta_is_e1001
+          path: crates/af-dsl/tests/parse_test.rs
+          line: 101
+        - test: af-dsl::parse_test::route_without_default_is_e1002
+          path: crates/af-dsl/tests/parse_test.rs
+          line: 239
+        - test: af-dsl::parse_test::unknown_store_type_is_e1004
+          path: crates/af-dsl/tests/parse_test.rs
+          line: 342
+    status: covered
+
+  # ---- af-dsl/src/validate/loop_guard.rs（fix2 受控循环守卫三查）----
+  - id: LOOP-E2002-MAX-ITER-POSITIVE
+    file: crates/af-dsl/src/validate/loop_guard.rs
+    line: 26
+    anchor_prefix: 'if decl.max_iterations == 0 {'
+    semantics: max_iterations 必须 >0，=0 → E2002 值域（与 af-graph 同族码位共享）
+    error_codes: [E2002]
+    fixtures:
+      positive:
+        - test: af-dsl::loop_guard_test::fully_guarded_loop_is_clean
+          path: crates/af-dsl/tests/loop_guard_test.rs
+          line: 234
+      negative:
+        - test: af-dsl::loop_guard_test::zero_max_iterations_is_e2002
+          path: crates/af-dsl/tests/loop_guard_test.rs
+          line: 60
+    status: covered
+
+  - id: LOOP-E2004-SAFETY-POINTS-NONEMPTY
+    file: crates/af-dsl/src/validate/loop_guard.rs
+    line: 33
+    anchor_prefix: 'if decl.safety_points.is_empty() {'
+    semantics: safety_points 空集合 → E2004（缺安全点=拒绝编译；G2a 独立验证发现的三缺口之一）
+    error_codes: [E2004]
+    fixtures:
+      positive:
+        - test: af-dsl::loop_guard_test::fully_guarded_loop_is_clean
+          path: crates/af-dsl/tests/loop_guard_test.rs
+          line: 234
+      negative:
+        - test: af-dsl::loop_guard_test::empty_safety_points_is_e2004
+          path: crates/af-dsl/tests/loop_guard_test.rs
+          line: 83
+    status: covered
+
+  - id: LOOP-E2002-CARRIED-BOUNDED
+    file: crates/af-dsl/src/validate/loop_guard.rs
+    line: 41
+    anchor_prefix: 'if c.max_items.is_none() && c.max_bytes.is_none() {'
+    semantics: carried 每项至少一个上界（max_items/max_bytes 至少其一，Some(0) 视为已声明）→ E2002；与 E2211 覆盖性互补
+    error_codes: [E2002]
+    fixtures:
+      positive:
+        - test: af-dsl::loop_guard_test::carried_bytes_only_bound_is_clean
+          path: crates/af-dsl/tests/loop_guard_test.rs
+          line: 186
+      negative:
+        - test: af-dsl::loop_guard_test::unbounded_carried_is_e2002
+          path: crates/af-dsl/tests/loop_guard_test.rs
+          line: 170
+    status: covered
+
+  # ---- af-dsl/src/validate/m4.rs（CEL 环合成：map.over / inline 端口）----
+  - id: M4-OVER-LIST-UNWRAP
+    file: crates/af-dsl/src/validate/m4.rs
+    line: 263
+    anchor_prefix: 'Some(PortType::Named(t)) => match t.0 {'
+    semantics: map.over 引用节点.端口 → emit 类型剥一层 list<> 取元素合成 item 值；非 list → Null（E2104 域在 refs 定罪，此处为判定面）
+    error_codes: [E2104]
+    fixtures:
+      positive:
+        - test: af-dsl::m4_test::item_assert_inside_map_body_judged_with_item_root
+          path: crates/af-dsl/tests/m4_test.rs
+          line: 235
+      negative:
+        - test: af-dsl::refs_test::map_over_port_not_list_is_e2104
+          path: crates/af-dsl/tests/refs_test.rs
+          line: 340
+    status: covered
+
+  - id: M4-INLINE-PRIM-SYNTH
+    file: crates/af-dsl/src/validate/m4.rs
+    line: 393
+    anchor_prefix: 'PortType::Inline(p) => match p.r#type {'
+    semantics: 内联原始型端口四臂合成（String→""/Integer→0/Boolean→true/Number→0.0，本臂不产码）——W2-C-26「内联原始型 is_final=false」同族判定面；缺臂=内联端口 CEL 合成洞
+    error_codes: []            # 合成面不产码；错形在 refs/E2105 域
+    fixtures:
+      positive:
+        - test: af-dsl::m4_test::assert_inputs_binding_from_incoming_edges
+          path: crates/af-dsl/tests/m4_test.rs
+          line: 156
+        - test: af-dsl::branch_fixtures_test::inline_primitive_ports_synthesize_kind_defaults
+          path: crates/af-dsl/tests/branch_fixtures_test.rs
+          line: 113
+      negative:
+        - test: af-dsl::branch_fixtures_test::inline_primitive_non_boolean_synth_is_e1053
+          path: crates/af-dsl/tests/branch_fixtures_test.rs
+          line: 134
+    status: covered
+    closure_note: >-
+      v0 缺口（四臂无逐臂参数化负例夹具）于 2026-10-28 施工批补齐：新增逐臂钉值正例
+      （四臂合成默认值进入 inputs 绑定、谓词可求值为布尔即放行）与逐臂钉型负例（非布尔
+      三臂裸绑定 → E1053 且点名结果型 string/int/float）。如实标注：v0 正例
+      assert_inputs_binding_from_incoming_edges 的生产者 emits answer:a（Named 臂），
+      覆盖的是 inputs 合成接线整体路径、不逐臂踩内联四臂——逐臂真踩由本次新增的
+      inline_primitive_ports_synthesize_kind_defaults 登记（nightly llvm-cov 分支报告
+      可按此核对两正例的实际踩臂面）。Boolean 臂合成值为布尔、裸绑定恰是合法谓词——
+      无 E1053 负形，由正例钉死（合成错型则正例红），如实登记不编造第四条负例
+      （见 branch_fixtures_test.rs 文件头注）。
+
+  # ---- af-compiler/src/bind.rs（引用解析→E9001/E9002/E9003）----
+  - id: BIND-REF-PARSE-UNVERSIONED
+    file: crates/af-compiler/src/bind.rs
+    line: 314
+    anchor_prefix: 'Some(_) | None if !reference.is_empty() && !reference.contains('
+    semantics: 引用串解析分支——带 @版本 / 未版本化（无 @）/ 不可解析（空段、内嵌 @）三分派，决定后续 E9001/E9002 对照路径
+    error_codes: [E9001, E9002]
+    fixtures:
+      positive:
+        - test: af-compiler::bind_test::sample2_binds_all_uses_refs_with_first_class_fills
+          path: crates/af-compiler/tests/bind_test.rs
+          line: 94
+      negative:
+        - test: af-compiler::bind_test::e9002_unversioned_ref_on_multi_version_name_is_rejected
+          path: crates/af-compiler/tests/bind_test.rs
+          line: 316
+        - test: af-compiler::bind_test::e9001_malformed_reference_string_is_rejected
+          path: crates/af-compiler/tests/bind_test.rs
+          line: 285
+    status: covered
+    adjacent_branches_note: >-
+      同判定块 bind.rs:336（版本核对 Some(v) if versions.contains_key(v)，E9002）与
+      :323（未注册 → E9001）为同 match 相邻臂，正例 sample3_binds_nested_body_node_to_shared_route
+      (bind_test.rs:178)、负例 e9002_version_mismatch_is_rejected (bind_test.rs:296) 已在盘，
+      下一扩容批次随分支级覆盖报告全量登记。
+
+# 摸排统计（v1，2026-10-28 施工批亲测）：登记 10 分支 = af-dsl 9 + af-compiler 1（相邻臂 2）；
+# covered 10 / pending 0 / pending-negative 0；正例夹具 10/10 分支在场、负例夹具 10/10 分支在场
+# （fixture 条目合计 25：正 11 + 负 14）；待补缺口 0 处（v0 两处于本批补齐，见各 closure_note）。
+# 锚核对：10/10 file:line:anchor_prefix 命中；夹具名 25/25 在 cargo test -p af-dsl -p af-compiler
+# -- --list 名单（crate::file::fn 三段解析）；fixture path:line 25/25 落在 fn 行。

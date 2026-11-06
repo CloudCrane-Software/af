@@ -1,0 +1,6 @@
+PASS reject-approver: 工件 role=Approver decision=Reject permissions=['Read', 'Approve']；注册表 role=Approver；回执 decision=Reject，11 checks，engine=0.2.0
+PASS revise-reviser: 工件 role=Reviser decision=Revise permissions=['Read', 'Revise']；注册表 role=Reviser；回执 decision=Revise，11 checks，engine=0.2.0
+PASS reject-arbiter: 工件 role=Arbiter decision=Reject permissions=['Read', 'Approve', 'Revise', 'Arbitrate']；注册表 role=Arbiter；回执 decision=Reject，11 checks，engine=0.2.0
+PASS default-approve: 工件 role=Approver decision=Approve permissions=['Read', 'Approve']；注册表 role=Approver；回执 decision=Approve，11 checks，engine=0.2.0
+PASS admissions.jsonl：4 笔，seq=[7, 8, 9, 10] 单调，decision=['Reject', 'Revise', 'Reject', 'Approve']
+VERIFY-ALL-PASS

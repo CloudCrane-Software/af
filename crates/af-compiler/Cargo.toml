@@ -1,0 +1,22 @@
+[package]
+name = "af-compiler"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+description = "AFB 编译器：四阶段管线（G2a = IR schema v1 + 确定性 lowering + 快照入口；ADR-002 crate 职责）"
+
+[dependencies]
+af-dsl = { path = "../af-dsl" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+# CEL 编译（CelRef.roots 提取）：与 af-dsl/af-graph 同一依赖（crates.io 0.10
+# 线，lock 解析 cel-interpreter 0.10.0 + cel-parser 0.10.1）。只加在本 crate
+# 自己的 manifest：根 workspace.dependencies 结构不动（承 af-dsl Cargo.toml
+# 同款注记）。
+cel-interpreter = "0.10"
+# CelRef.digest：SHA-256（提案 B §3.5-4「digest = 规范序列化后取 SHA-256」）。
+# lock 已有 0.10.9（af-bench/af-effect-gateway/af-workorder 同线），不引新版本。
+sha2 = "0.10"
+
+[lints]
+workspace = true

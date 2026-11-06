@@ -1,0 +1,131 @@
+id: st-b-C001
+name: "采样聚合与倒U停机闸：成本最低、证据最强，复杂协议须先赢同预算采样-投票否则判无增量"
+tier: B
+claim: "采样聚合与倒U停机闸：成本最低、证据最强，复杂协议须先赢同预算采样-投票否则判无增量"
+claimed_value:
+  metric: "cost_adjusted_gain"
+  direction: up
+  context: "同预算纯采样消融臂打平即判协议无增量；倒U 拐点（连续零 accepted 轮）触发停机/降级"
+sources: [MA-rank1, MA-rank8]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: sample_vote_inverted_u
+    graph_version: "1.0"
+    entry: sample
+    input: problem
+    output: { ref: best_answer, from: pick_best }
+    intent: "采样聚合+倒U停机闸：sample map 臂按 variants 独立抽 k 份候选 →tally 计票 →refine 受控改进环（admit 闸=改进验证面，exit_when attempt.passed=连续不改进即停=倒U拐点近似）→on_exhausted keep_best=降级保留当前最优（纯采样模式回退）→pick_best 终选。同预算判据=采样/改进双账同额 300/300：打平即协议无增量。跨轮零 accepted 滚动计数器与显式降级路由为 v0.1 后续批语法（note 已登记），本条以验证面+keep_best 表达可执行核。MA-rank1/rank8 口径：成本最低、证据最强，复杂协议须先赢同预算采样-投票"
+  types:
+    - name: problem
+      schema:
+        type: object
+        required: [prompt, variants]
+        properties:
+          prompt: { type: string }
+          variants: { type: array, items: { type: string } }
+    - name: candidate
+      schema:
+        type: object
+        required: [answer, draw_id]
+        properties:
+          answer: { type: string }
+          draw_id: { type: string }
+    - name: ballot
+      schema:
+        type: object
+        required: [top_count, top_share_milli]
+        properties:
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+    - name: improved_patch
+      schema:
+        type: object
+        required: [patch_ref, improved]
+        properties:
+          patch_ref: { type: string }
+          improved: { type: boolean }
+    - name: best_answer
+      schema:
+        type: object
+        required: [answer_ref]
+        properties:
+          answer_ref: { type: string }
+  nodes:
+    - id: sample
+      kind: task
+      map:
+        over: input.variants
+        body:
+          nodes:
+            - id: draw
+              kind: task
+              uses: { model: route.main@1 }
+              emits: { candidate: candidate }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sampler.system, quota_tokens: 400 }
+                  - { from: arg, name: item, quota_tokens: 200 }
+                  - { from: input, fields: [prompt], quota_tokens: 300 }
+          edges: []
+      emits: { candidates: { from_body: draw.candidate } }
+    - id: tally
+      kind: transform
+      consumes: { candidates: "list<candidate>" }
+      ops:
+        - { op: tally, port: candidates, by: answer, into: ballot_box }
+      emits: { ballot_box: ballot }
+    - id: refine
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: improve
+              kind: task
+              uses: { model: route.main@1 }
+              emits: { patch: improved_patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.refiner.system, quota_tokens: 400 }
+                  - { from: input, fields: [prompt], quota_tokens: 300 }
+                  - { from: arg, name: ballot, quota_tokens: 300 }
+            - id: admit
+              kind: gate
+              uses: { unit: pkg.judge.improvement@1 }
+              consumes:
+                patch: improved_patch
+              assert: "inputs.patch.improved == true"
+              emits: { patch: improved_patch }
+          edges:
+            - { from: improve, output: patch, to: admit, input: patch }
+        args:
+          ballot: tally.ballot_box
+        max_iterations: 6
+        safety_points:
+          - { node: admit, kind: gate }
+        exit_when: "attempt.passed == true"
+        on_exhausted: keep_best
+      emits: { patch: { from_body: admit.patch } }
+    - id: pick_best
+      kind: transform
+      consumes:
+        ballot_box: ballot
+        patch: improved_patch
+      ops:
+        - { op: select_best, port: patch, prefer: ballot_box.top_count, into: best }
+      emits: { best: best_answer }
+  edges:
+    - { from: sample, output: candidates, to: tally, input: candidates }
+    - { from: tally, output: ballot_box, to: pick_best, input: ballot_box }
+    - { from: refine, output: patch, to: pick_best, input: patch }
+  policies:
+    budgets:
+      - { id: sample_budget, dimension: cents, scope: map:sample, cap: 300 }
+      - { id: refine_budget, dimension: cents, scope: loop:refine, cap: 300 }
+    stop:
+      - { when: "budget.cents >= 600", outcome: completed }
+    failures:
+      - { class: budget_exhausted, terminal: true, outcome: completed }

@@ -1,0 +1,85 @@
+id: st-b-C079
+name: "OS 级双边界沙箱（文件系统只读边界+网络代理白名单），减少 84% 权限打断"
+tier: B
+claim: "OS 级双边界沙箱：Linux bubblewrap/macOS Seatbelt 限定工作目录可写+代理域白名单上网，权限打断减少 84%"
+claimed_value:
+  metric: "permission_prompts"
+  direction: down
+  context: "同一任务集两组：全权限提示模式（对照） vs FS+网络双边界沙箱（bubblewrap/Seatbelt + 代理域白名单）"
+sources: [S073, S074]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: os_level_dual_boundary_sandbox
+    graph_version: "1.0"
+    entry: confined_coder
+    input: change_request
+    output: { ref: change_result, from: merge_check }
+    intent: "OS 级双边界沙箱投影：v0.1 图面无 sandbox 段——confinement 经 escape env_adapter 构造绑定边界适配 impl pkg.sandbox.bwrap_seatbelt@1（bubblewrap/Seatbelt：workdir 可写+系统路径只读+代理域白名单=impl 参数面）；uses.tools 只列已注册检索工具 pkg.repo.grep@1（fs.workdir_rw / net.proxy_allowlist 属沙箱/代理能力面，escape 已记账，不进 uses.tools）；权限打断预算 0 → 图内零 human 节点。S073/S074 口径：权限打断减少 84%；对照臂=全权限提示模式，走 harness A/B 看 permission_prompts"
+  types:
+    - name: change_request
+      schema:
+        type: object
+        required: [ticket, workdir]
+        properties:
+          ticket: { type: string }
+          workdir: { type: string }
+    - name: patch_out
+      schema:
+        type: object
+        required: [diff_ref]
+        properties:
+          diff_ref: { type: string }
+    - name: change_result
+      schema:
+        type: object
+        required: [merged]
+        properties:
+          merged: { type: boolean }
+  stores:
+    - name: workspace
+      type: collection
+      item: patch_out
+      writer: confined_coder
+      lifecycle: run
+      retention: { max_items: 64 }
+  nodes:
+    - id: confined_coder
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.repo.grep@1] }  # 选 b：fs.workdir_rw / net.proxy_allowlist 属沙箱/代理能力面（escape 已记账），检索走已注册 repo.grep
+      consumes: { review: change_result }
+      writes: [workspace]
+      emits: { patch: patch_out }
+      escape:
+        kind: env_adapter
+        impl_ref: pkg.sandbox.bwrap_seatbelt@1
+        reason: "fs 可写边界=workdir+系统路径只读；net 代理域白名单上网；权限打断预算 0（84% 口径）"
+        owner: platform
+        share_budget_pct: 10
+      context:
+        sections:
+          - { from: template, template_ref: pkg.coder.confined_system, quota_tokens: 500 }
+          - { from: input, fields: [ticket, workdir], quota_tokens: 400 }
+          - { from: edge, port: review, optional: true, quota_tokens: 200 }
+    - id: merge_check
+      kind: check
+      uses: { unit: pkg.ci.merge_probe@1 }
+      consumes: { patch: patch_out }
+      emits: { merged: change_result }
+      route:
+        default: exit
+        rules:
+          - { when: "merge_check.passed == false", goto: confined_coder }
+  edges:
+    - { from: confined_coder, output: patch, to: merge_check, input: patch }
+    - { from: merge_check, output: merged, to: confined_coder, input: review }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+      - { id: confinement_prompts, dimension: tool_calls, scope: node:confined_coder, cap: 30 }
+    failures:
+      - { class: environment_failure, retry: { max: 2, backoff_ms: 5000 } }
+      - { class: unauthorized, terminal: true, outcome: failed }

@@ -1,0 +1,67 @@
+# evidence/fix-batch-gates.log —— G4 返修批终门读数（全部亲跑，2026-11-04）
+
+## 门1 改前基线（返修动手前真树实跑，原样誊录；时点树 = f3cacdb 干净检出）
+$ python3 -I ci/k5-path-lint.py
+K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+exit=0
+（同时点改前实跑：bash ci/gate_inputs_check.sh check → exit=0「12 件」；
+ python3 -I ci/clippy_gate.py ci/out/step2-clippy.jsonl → exit=0 PASS——与下方终读数同值。）
+
+## 门1 K5 判分链 lint（改后·真树）
+$ python3 -I ci/k5-path-lint.py
+K5 判分链路径 lint: PASS（4 件判分链成员逐位对锚）
+exit=0
+
+## 门2 门输入全集钉
+$ bash ci/gate_inputs_check.sh check
+gate_inputs_check: 判据正本钉对账一致: 12 件（ci/baselines/gate-inputs.sha256）
+exit=0
+
+## 门3 clippy 门对应项（既有 step2 产物，本批零 cargo，不重新生成）
+$ python3 -I ci/clippy_gate.py ci/out/step2-clippy.jsonl
+CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）
+exit=0
+
+## 门4 S13 定点复算（R5/R5b 单门读数 + 管道级表钉红；读数全录见 s13-scenarios.tsv 与 logs/S13-*）
+$ python3 -I poc/poc-g4-k5/run-s13.py   （exit=0；下表为其落盘的 s13-scenarios.tsv 原文）
+场景	改前exit	改前结论	改后exit	改后结论	管道对照exit	管道对照结论	管道攻击exit	管道攻击结论	说明
+S13-R5-report-co-shrink	1	k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/citation_unit.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）	0	K5 判分链路径 lint: PASS（3 件判分链成员逐位对锚）	0	gate_inputs_check: 判据正本钉对账一致: 12 件（ci/baselines/gate-inputs.sha256）	1	gate_inputs_check: 判据正本漂移：ci/scorechain-manifest.txt 期望 sha256=121c1d094b50… 实得 1b45bb5fbc19…——判据被改须走 update 同批评审重钉	R5：删 citation_unit.py 文件+删登记行同批（单门改后不红、防线 2→1；管道级表钉红）
+S13-R5b-swev-co-shrink	1	k5-path-lint: 判分链登记表被收缩（必需成员缺席：crates/af-execline/src/judge.rs）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）	1	k5-path-lint: swev 判分臂派生为空（生产源无声明判分脚本 sha256 锚（script_sha256）的判分门本体）——下界无法派生即红（fail-closed，不静默缩面）	0	gate_inputs_check: 判据正本钉对账一致: 12 件（ci/baselines/gate-inputs.sha256）	1	gate_inputs_check: 判据正本漂移：ci/scorechain-manifest.txt 期望 sha256=f34b3389a7a4… 实得 1b45bb5fbc19…——判据被改须走 update 同批评审重钉	R5b：删 judge.rs 文件+删登记行同批（单成员臂删空 ⇒ fail-closed 仍红；管道级表钉红）
+S13-R5bak-report-bak-coshink	1	k5-path-lint: 判分链登记表被收缩（必需成员缺席：af/packages/reportkit/units/citation_unit.py）——判分链成员脱离哈希锚保护面即红（有意移除须走裁决并同批改 REQUIRED_MEMBERS 下界清单）	0	K5 判分链路径 lint: PASS（3 件判分链成员逐位对锚）	0	gate_inputs_check: 判据正本钉对账一致: 12 件（ci/baselines/gate-inputs.sha256）	1	gate_inputs_check: 判据正本漂移：ci/scorechain-manifest.txt 期望 sha256=121c1d094b50… 实得 1b45bb5fbc19…——判据被改须走 update 同批评审重钉	复核 R5b 原形态：citation_unit.py 改名 .bak+删登记行同批（同 R5 结论）
+
+## 门5 判据面零弱化与禁改面零 diff（基线 ref = f3cacdb）
+$ git diff --name-only f3cacdb -- ci/
+ci/k5-path-lint.py
+$ git diff --name-only f3cacdb -- crates/ mutations/   （无输出=零 diff）
+exit=0（0 且无输出）
+$ git diff --name-only f3cacdb | grep -v -e "^ci/k5-path-lint.py$" -e "^poc/poc-g4-k5/" ; echo "exit=$?（1=许可面外零改动）"
+exit=1（1=许可面外零改动）
+
+## 真树零改动核验（沙箱未污染真树；.offload/ 为执行器自带、不入库）
+$ git status --porcelain
+ M ci/k5-path-lint.py
+ M poc/poc-g4-k5/README.md
+?? .offload/
+?? poc/poc-g4-k5/PENDING-ADJUDICATION.md
+?? poc/poc-g4-k5/check-noncomment-bytes.py
+?? poc/poc-g4-k5/evidence/claims-map.md
+?? poc/poc-g4-k5/evidence/fix-batch-changes.diff
+?? poc/poc-g4-k5/evidence/fix-batch-gates.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5-report-co-shrink.after.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5-report-co-shrink.before.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5-report-co-shrink.pipeline-control.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5-report-co-shrink.pipeline.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5b-swev-co-shrink.after.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5b-swev-co-shrink.before.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5b-swev-co-shrink.pipeline-control.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5b-swev-co-shrink.pipeline.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5bak-report-bak-coshink.after.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5bak-report-bak-coshink.before.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5bak-report-bak-coshink.pipeline-control.log
+?? poc/poc-g4-k5/evidence/logs/S13-R5bak-report-bak-coshink.pipeline.log
+?? poc/poc-g4-k5/evidence/noncomment-bytecheck.log
+?? poc/poc-g4-k5/evidence/s13-scenarios.tsv
+?? poc/poc-g4-k5/evidence/sandboxes/S13-R5-report-co-shrink/
+?? poc/poc-g4-k5/evidence/sandboxes/S13-R5b-swev-co-shrink/
+?? poc/poc-g4-k5/evidence/sandboxes/S13-R5bak-report-bak-coshink/
+?? poc/poc-g4-k5/run-s13.py

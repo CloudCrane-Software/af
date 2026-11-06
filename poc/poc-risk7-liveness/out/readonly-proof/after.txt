@@ -1,0 +1,12 @@
+.
+./after.txt
+./before.txt
+./demo-stdout.txt
+./home
+./home/inbox
+./home/inbox/mes-execline
+./home/inbox/mes-execline/d-1.json
+./home/liveness-anchor.json
+./home/registry.json
+./snap-out
+./snap-out/trigger-inbox-liveness.json

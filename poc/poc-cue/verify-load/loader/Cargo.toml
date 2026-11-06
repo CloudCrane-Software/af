@@ -1,0 +1,11 @@
+[package]
+name = "line-loader"
+version = "0.1.0"
+edition = "2021"
+
+# 独立工程：防止被挂进 AF workspace（AF 根 members = ["crates/*"]）
+[workspace]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

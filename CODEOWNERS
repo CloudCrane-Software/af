@@ -1,0 +1,68 @@
+# =============================================================================
+# CODEOWNERS —— af 仓判官路径锁（仓级正本；org 级禁用：会波及 platform 仓）
+#
+# 定义源：.github 仓 docs/judge-paths.md §一（af 仓段）——本件路径段从该清单
+#   逐条派生，并按 af 镜像（~/af-org-mirror，2026-11-06 HEAD d2b474e）的
+#   实际布局逐条核位；镜像内不存在的路径不写进来（不锁空路径）。
+# 纪律：判官/门/判据件一改即拒收（rt-e82/83 双案，制度-v1 §六.4）——改这些
+#   路径的 PR 被保护规则拒，无评审例外；有意变更判据走裁决 + 同批重钉
+#   （bash ci/gate_inputs_check.sh update）+ 登记依据，不走工人 PR。
+#
+# ★ 生效前提（锁住 ≠ 拦住）：须分支保护勾选「Require review from Code
+#   Owners」（01-建设方案.md §五 P1：main 要求 PR + required check `gates` +
+#   不 bypass）。缺该勾选则本件不产生任何拒绝。
+# ★ 非判官路径不锁（本件无 `* @feasy898` 全局兜底行）：判官保护只针对判官
+#   路径，产品码其余面归工人 App 自己推。这是对 CODEOWNERS.template.md
+#   「默认兜底：全仓归 @feasy898（最严口径；仓内只放必要协作者时改这行）」
+#   的有意裁剪——按本批接线口径取「只锁判官路径」。
+# =============================================================================
+
+# —— 1. 门禁脚本族（ci/ 全部门）———————————————————————————————
+# ci/ 一级目录在镜像内实存 50 件非 .bak 正本 + 19 件 .bak 历史快照：
+#   · 门脚本 34 件（26 个 *.py + 8 个 *.sh）：run.sh 十四步管道正本、
+#     gate_inputs_check.sh / provenance_check.sh / mutation_runner.sh /
+#     baseline_calc.sh / neutrality_gate.sh / refresh-advisory-db.sh /
+#     xcheck_probe.sh / clippy_gate.py / k5-path-lint.py / strategies_check.py /
+#     branches_check.py / xcheck.py / criteria_check.py / harness_regression_gate.py /
+#     fix_scan.py / fix_verify.py / arm_wiring_check.py / budget_cast_lint.py /
+#     neutrality_scan.py / gh_workflow_check.py / pyc_header_check.py /
+#     parse_scrub.py / step10_check.py / step11_check.py / step12_check.py /
+#     task_package_manifest_check.py / integrator_bind_check.py / f2_dispatch.py /
+#     f2_runner.py + 4 个 test_*.py（RT-E6 钉 / test_task_package_manifest_check /
+#     test_xcheck_subgate_census / test_fix_verify_inflight）；
+#   · 判据正本：neutrality 三件、scorechain-manifest.txt、clippy-baseline.txt、
+#     arm-wiring.yaml / branches.yaml / criteria.yaml / fix-scan.yaml /
+#     budget-cast-whitelist.json、debt-register.md、fix-verify.duty、REPORT.md；
+#   · step14 子门单点名册 ci/subgates.list；
+#   · 子目录 ci/baselines/（钉桩面 7 件非 .bak）与 ci/out/（跑测证据面）同在被
+#     /ci/ 覆盖内，不另列（ci/out 大部分已被 .gitignore 排除，锁它无代价）。
+# 依据：docs/judge-paths.md §1.1/§1.2；af/ci/gate_inputs_check.sh GATE_INPUTS。
+/ci/                                  @feasy898
+
+# —— 2. 判分链判官件（k5-path-lint 黑名单 + 派生下界）———————————————
+# 在册 4 件见 ci/scorechain-manifest.txt：judge.rs（swev 判分门本体）+ reportkit
+# citation/rubric/render 三件。report 臂下界按 k5-path-lint.py 头注「臂1」规则
+# 从仓面现算（af/packages/reportkit/ 包内全部 *.py），故整包锁而非逐个 .py 锁——
+# 包内新增 .py 自动入保护面（不登记即红，fail-closed）。
+/crates/af-execline/src/judge.rs       @feasy898
+/af/packages/reportkit/                @feasy898
+
+# —— 3. 判据正本与钉桩面（GATE_INPUTS 全集，仓内不在 ci/ 下的两件）———————
+# ci/ 下的判据正本已由 /ci/ 覆盖；此处补仓根 proofs/ 面的 9a 定理清单正本。
+/proofs/rocq-规范库-v0/                @feasy898
+
+# —— 4. 仓根对账三件套与钉住件（docs/judge-paths.md §1.4）——————————————————
+/numbers.json                          @feasy898
+/deliverables.yaml                     @feasy898
+/doc-claims.txt                        @feasy898
+/rust-toolchain.toml                   @feasy898
+
+# —— 5. 判据面（GitHub 端 PR 反馈面，docs/judge-paths.md §1.1 末行）————————
+# f1.yml：F1 快速门判据面，其末 step 恒跑 ci/gh_workflow_check.py（R01-R22 判据
+#   面自检）——谁把 PR 反馈面判据改弱，同一次 PR run 即红。
+# gates.yml：本批新增的 F2 全量门 Actions 接线面（uses: CloudCrane-Software/
+#   .github/.github/workflows/gates.yml@main）——required check `gates` 的上下文
+#   来源，同属判据面，故同锁（judge-paths.md §1.1 只点名 f1.yml；gates.yml 为
+#   同族派生，登记在此以备三处一致）。
+/.github/workflows/f1.yml              @feasy898
+/.github/workflows/gates.yml           @feasy898

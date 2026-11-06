@@ -1,0 +1,11 @@
+{
+  "annotations": {
+    "made-by": "casr-poc"
+  },
+  "artifactType": "application/vnd.af.artifact.v1+json",
+  "contentDigest": "sha256:d011e1037f87d2961a19cf2ef19f86d416ca7f501ee0122f1652097c77479700",
+  "contentSize": 104857600,
+  "created": "2026-10-19T03:12:56Z",
+  "name": "big/artifact",
+  "tag": "v1"
+}

@@ -1,0 +1,200 @@
++ set -euo pipefail
++ TASK=/home/pan-ding/workspace/临时工作区/temp2/af/poc/poc-mes
++ RES=/home/pan-ding/workspace/临时工作区/temp2/af/poc/poc-mes/results
++ UF=/home/pan-ding/ch-mes/user_files
++ CLIENT='/home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222'
++ LOCAL='/home/pan-ding/ch-mes/bin/clickhouse local --user_files_path /home/pan-ding/ch-mes/user_files --timezone Asia/Shanghai'
++ SCHEMA='seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'
++ mkdir -p /home/pan-ding/workspace/临时工作区/temp2/af/poc/poc-mes/results
++ echo '===== phase1: schema ====='
+===== phase1: schema =====
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --multiquery
++ echo OK
+OK
++ echo '===== phase2: load 1M rows into 3 models (timed) ====='
+===== phase2: load 1M rows into 3 models (timed) =====
++ COLS='seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms'
++ timed A_raw_insert 'INSERT INTO mes.events_mt (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_events.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')'
++ local label=A_raw_insert 'sql=INSERT INTO mes.events_mt (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_events.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')' t0 t1
++ t0=1792380971.931194
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query 'INSERT INTO mes.events_mt (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_events.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')'
++ t1=1792380972.462858
++ awk -v l=A_raw_insert -v a=1792380971.931194 -v b=1792380972.462858 'BEGIN{printf "LOAD\t%s\t%.3f\n", l, b-a}'
+LOAD	A_raw_insert	0.532
++ timed B_repl_insert 'INSERT INTO mes.events_repl (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_events.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')'
++ local label=B_repl_insert 'sql=INSERT INTO mes.events_repl (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_events.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')' t0 t1
++ t0=1792380972.464454
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query 'INSERT INTO mes.events_repl (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_events.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')'
++ t1=1792380973.034423
++ awk -v l=B_repl_insert -v a=1792380972.464454 -v b=1792380973.034423 'BEGIN{printf "LOAD\t%s\t%.3f\n", l, b-a}'
+LOAD	B_repl_insert	0.570
++ timed C_agg_states $'INSERT INTO mes.hourly_agg\n  SELECT line, toStartOfHour(ts) AS hour,\n    sumState(toUInt64(event_type = \'start\'))    AS starts,\n    sumState(toUInt64(event_type = \'complete\')) AS completes,\n    sumState(toUInt64(event_type = \'defect\'))   AS defects,\n    sumState(toUInt64(qty_good))   AS good_qty,\n    sumState(toUInt64(qty_defect)) AS defect_qty,\n    sumState(toUInt64(event_type = \'complete\')) AS cycle_n,\n    sumState(toUInt64(cycle_ms))   AS cycle_sum,\n    quantileState(if(event_type = \'complete\', toUInt32(cycle_ms), CAST(NULL, \'Nullable(UInt32)\'))) AS cycle_med\n  FROM file(\'mes_events.parquet\', Parquet, \'seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32\') GROUP BY line, hour'
++ local label=C_agg_states $'sql=INSERT INTO mes.hourly_agg\n  SELECT line, toStartOfHour(ts) AS hour,\n    sumState(toUInt64(event_type = \'start\'))    AS starts,\n    sumState(toUInt64(event_type = \'complete\')) AS completes,\n    sumState(toUInt64(event_type = \'defect\'))   AS defects,\n    sumState(toUInt64(qty_good))   AS good_qty,\n    sumState(toUInt64(qty_defect)) AS defect_qty,\n    sumState(toUInt64(event_type = \'complete\')) AS cycle_n,\n    sumState(toUInt64(cycle_ms))   AS cycle_sum,\n    quantileState(if(event_type = \'complete\', toUInt32(cycle_ms), CAST(NULL, \'Nullable(UInt32)\'))) AS cycle_med\n  FROM file(\'mes_events.parquet\', Parquet, \'seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32\') GROUP BY line, hour' t0 t1
++ t0=1792380973.035717
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query $'INSERT INTO mes.hourly_agg\n  SELECT line, toStartOfHour(ts) AS hour,\n    sumState(toUInt64(event_type = \'start\'))    AS starts,\n    sumState(toUInt64(event_type = \'complete\')) AS completes,\n    sumState(toUInt64(event_type = \'defect\'))   AS defects,\n    sumState(toUInt64(qty_good))   AS good_qty,\n    sumState(toUInt64(qty_defect)) AS defect_qty,\n    sumState(toUInt64(event_type = \'complete\')) AS cycle_n,\n    sumState(toUInt64(cycle_ms))   AS cycle_sum,\n    quantileState(if(event_type = \'complete\', toUInt32(cycle_ms), CAST(NULL, \'Nullable(UInt32)\'))) AS cycle_med\n  FROM file(\'mes_events.parquet\', Parquet, \'seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32\') GROUP BY line, hour'
++ t1=1792380973.191233
++ awk -v l=C_agg_states -v a=1792380973.035717 -v b=1792380973.191233 'BEGIN{printf "LOAD\t%s\t%.3f\n", l, b-a}'
+LOAD	C_agg_states	0.156
++ echo '----- load sanity -----'
+----- load sanity -----
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query $'\nSELECT \'A_events_mt\'    t, count() c, countIf(event_type=\'start\') starts, countIf(event_type=\'complete\') completes FROM mes.events_mt\nUNION ALL SELECT \'B_events_repl\', count(), countIf(event_type=\'start\'), countIf(event_type=\'complete\') FROM mes.events_repl\nUNION ALL SELECT \'C_states_rows\', count(), toUInt64(0), toUInt64(0) FROM mes.hourly_agg\nUNION ALL SELECT \'C_sumMerge_starts\', sumMerge(starts), toUInt64(0), toUInt64(0) FROM mes.hourly_agg\nUNION ALL SELECT \'A_mv_hourly_rows\', count(), toUInt64(0), toUInt64(0) FROM mes.agg_hourly\nFORMAT PrettyCompactMonoBlock'
+   ┌─t─────────────────┬───────c─┬─starts─┬─completes─┐
+1. │ C_sumMerge_starts │  400000 │      0 │         0 │
+2. │ C_states_rows     │    1670 │      0 │         0 │
+3. │ A_mv_hourly_rows  │    1670 │      0 │         0 │
+4. │ A_events_mt       │ 1000000 │ 400000 │    400000 │
+5. │ B_events_repl     │ 1000000 │ 400000 │    400000 │
+   └───────────────────┴─────────┴────────┴───────────┘
++ echo '===== phase3: storage snapshot (1M loaded) ====='
+===== phase3: storage snapshot (1M loaded) =====
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query $'SELECT table, sum(rows) AS rows, count() AS parts, formatReadableSize(sum(bytes_on_disk)) AS disk\n  FROM system.parts WHERE database=\'mes\' AND active GROUP BY table ORDER BY table FORMAT PrettyCompactMonoBlock'
+   ┌─table───────┬────rows─┬─parts─┬─disk──────┐
+1. │ agg_hourly  │    1670 │     1 │ 20.19 KiB │
+2. │ events_mt   │ 1000000 │    15 │ 14.62 MiB │
+3. │ events_repl │ 1000000 │    15 │ 13.20 MiB │
+4. │ hourly_agg  │    1670 │     1 │ 1.49 MiB  │
+   └─────────────┴─────────┴───────┴───────────┘
++ du -sh /home/pan-ding/ch-mes/data
+79M	/home/pan-ding/ch-mes/data
++ echo '===== phase4: pre-backfill bench (correctness vs plain truth + latency) ====='
+===== phase4: pre-backfill bench (correctness vs plain truth + latency) =====
++ bash /home/pan-ding/workspace/临时工作区/temp2/af/poc/poc-mes/scripts/bench_queries.sh pre
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+== latency (ms, 5 runs, client --time) ==
+pre/A/Q1 min=3.0 avg=4.0
+pre/A/Q2 min=3.0 avg=4.0
+pre/A/Q3 min=3.0 avg=3.6
+pre/B/Q1 min=46.0 avg=49.2
+pre/B/Q2 min=52.0 avg=58.4
+pre/B/Q3 min=46.0 avg=55.2
+pre/C/Q1 min=3.0 avg=4.2
+pre/C/Q2 min=3.0 avg=3.4
+pre/C/Q3 min=3.0 avg=3.6
+== checks ==
+CHECK pre A Q1 PASS md5=f43c9fab6f8981d398826db287a38d98
+CHECK pre A Q2 PASS md5=c9dbd3f211d4f3b8c8d711a80f60dab0
+CHECK pre A Q3 PASS md5=30efced23e0a88314d88474b3fd910e6
+CHECK pre B Q1 PASS md5=f43c9fab6f8981d398826db287a38d98
+CHECK pre B Q2 PASS md5=c9dbd3f211d4f3b8c8d711a80f60dab0
+CHECK pre B Q3 PASS md5=30efced23e0a88314d88474b3fd910e6
+CHECK pre C Q1 PASS md5=f43c9fab6f8981d398826db287a38d98
+CHECK pre C Q2 PASS md5=c9dbd3f211d4f3b8c8d711a80f60dab0
+CHECK pre C Q3 PASS md5=30efced23e0a88314d88474b3fd910e6
++ echo '===== phase5: late backfill 20k rows (timed) ====='
+===== phase5: late backfill 20k rows (timed) =====
++ timed A_raw_insert 'INSERT INTO mes.events_mt (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_late.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')'
++ local label=A_raw_insert 'sql=INSERT INTO mes.events_mt (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_late.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')' t0 t1
++ t0=1792380979.079253
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query 'INSERT INTO mes.events_mt (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_late.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')'
++ t1=1792380979.175682
++ awk -v l=A_raw_insert -v a=1792380979.079253 -v b=1792380979.175682 'BEGIN{printf "LOAD\t%s\t%.3f\n", l, b-a}'
+LOAD	A_raw_insert	0.096
++ timed B_repl_insert 'INSERT INTO mes.events_repl (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_late.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')'
++ local label=B_repl_insert 'sql=INSERT INTO mes.events_repl (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_late.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')' t0 t1
++ t0=1792380979.177662
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query 'INSERT INTO mes.events_repl (seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms) SELECT seq, job_id, line, station, event_type, ts, qty_good, qty_defect, defect_code, cycle_ms FROM file('\''mes_late.parquet'\'', Parquet, '\''seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32'\'')'
++ t1=1792380979.274796
++ awk -v l=B_repl_insert -v a=1792380979.177662 -v b=1792380979.274796 'BEGIN{printf "LOAD\t%s\t%.3f\n", l, b-a}'
+LOAD	B_repl_insert	0.097
++ timed C_agg_states $'INSERT INTO mes.hourly_agg\n  SELECT line, toStartOfHour(ts) AS hour,\n    sumState(toUInt64(event_type = \'start\'))    AS starts,\n    sumState(toUInt64(event_type = \'complete\')) AS completes,\n    sumState(toUInt64(event_type = \'defect\'))   AS defects,\n    sumState(toUInt64(qty_good))   AS good_qty,\n    sumState(toUInt64(qty_defect)) AS defect_qty,\n    sumState(toUInt64(event_type = \'complete\')) AS cycle_n,\n    sumState(toUInt64(cycle_ms))   AS cycle_sum,\n    quantileState(if(event_type = \'complete\', toUInt32(cycle_ms), CAST(NULL, \'Nullable(UInt32)\'))) AS cycle_med\n  FROM file(\'mes_late.parquet\', Parquet, \'seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32\') GROUP BY line, hour'
++ local label=C_agg_states $'sql=INSERT INTO mes.hourly_agg\n  SELECT line, toStartOfHour(ts) AS hour,\n    sumState(toUInt64(event_type = \'start\'))    AS starts,\n    sumState(toUInt64(event_type = \'complete\')) AS completes,\n    sumState(toUInt64(event_type = \'defect\'))   AS defects,\n    sumState(toUInt64(qty_good))   AS good_qty,\n    sumState(toUInt64(qty_defect)) AS defect_qty,\n    sumState(toUInt64(event_type = \'complete\')) AS cycle_n,\n    sumState(toUInt64(cycle_ms))   AS cycle_sum,\n    quantileState(if(event_type = \'complete\', toUInt32(cycle_ms), CAST(NULL, \'Nullable(UInt32)\'))) AS cycle_med\n  FROM file(\'mes_late.parquet\', Parquet, \'seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32\') GROUP BY line, hour' t0 t1
++ t0=1792380979.276181
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query $'INSERT INTO mes.hourly_agg\n  SELECT line, toStartOfHour(ts) AS hour,\n    sumState(toUInt64(event_type = \'start\'))    AS starts,\n    sumState(toUInt64(event_type = \'complete\')) AS completes,\n    sumState(toUInt64(event_type = \'defect\'))   AS defects,\n    sumState(toUInt64(qty_good))   AS good_qty,\n    sumState(toUInt64(qty_defect)) AS defect_qty,\n    sumState(toUInt64(event_type = \'complete\')) AS cycle_n,\n    sumState(toUInt64(cycle_ms))   AS cycle_sum,\n    quantileState(if(event_type = \'complete\', toUInt32(cycle_ms), CAST(NULL, \'Nullable(UInt32)\'))) AS cycle_med\n  FROM file(\'mes_late.parquet\', Parquet, \'seq UInt64, job_id UInt64, line LowCardinality(String), station LowCardinality(String), event_type LowCardinality(String), ts DateTime64(3), qty_good UInt32, qty_defect UInt32, defect_code LowCardinality(String), cycle_ms UInt32\') GROUP BY line, hour'
++ t1=1792380979.360873
++ awk -v l=C_agg_states -v a=1792380979.276181 -v b=1792380979.360873 'BEGIN{printf "LOAD\t%s\t%.3f\n", l, b-a}'
+LOAD	C_agg_states	0.085
++ echo '===== phase6: post-backfill bench ====='
+===== phase6: post-backfill bench =====
++ bash /home/pan-ding/workspace/临时工作区/temp2/af/poc/poc-mes/scripts/bench_queries.sh post
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+Logging trace to /home/pan-ding/ch-mes/log/local.log
+Logging errors to /home/pan-ding/ch-mes/log/local.err.log
+== latency (ms, 5 runs, client --time) ==
+post/A/Q1 min=4.0 avg=4.4
+post/A/Q2 min=3.0 avg=3.4
+post/A/Q3 min=3.0 avg=3.8
+post/B/Q1 min=106.0 avg=121.6
+post/B/Q2 min=116.0 avg=130.4
+post/B/Q3 min=105.0 avg=108.6
+post/C/Q1 min=4.0 avg=4.8
+post/C/Q2 min=4.0 avg=4.2
+post/C/Q3 min=3.0 avg=3.6
+== checks ==
+CHECK post A Q1 PASS md5=f1a582f2c0256b16336fcef9bbe0d8a7
+CHECK post A Q2 PASS md5=3e1c23b4a664265e1fa0bf3d8e69ea8f
+CHECK post A Q3 PASS md5=116eaab9fb449b0cbeb131544dd90b6d
+CHECK post B Q1 PASS md5=fef5e4c0b8a20de605dace312dffe7ba
+CHECK post B Q2 PASS md5=e37d919c8f792ff4452582d53b525bc2
+CHECK post B Q3 PASS md5=b3d00c0dd1b5a54fc2e78aa92e4af15d
+CHECK post C Q1 PASS md5=f1a582f2c0256b16336fcef9bbe0d8a7
+CHECK post C Q2 PASS md5=3e1c23b4a664265e1fa0bf3d8e69ea8f
+CHECK post C Q3 PASS md5=116eaab9fb449b0cbeb131544dd90b6d
++ echo '===== phase7: OPTIMIZE B FINAL (maintenance path) ====='
+===== phase7: OPTIMIZE B FINAL (maintenance path) =====
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query 'OPTIMIZE TABLE mes.events_repl FINAL'
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query 'SELECT '\''after_optimize'\'' phase, count() rows_total FROM mes.events_repl'
+after_optimize	1016045
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query $'SELECT table, sum(rows) AS rows, count() AS parts, formatReadableSize(sum(bytes_on_disk)) AS disk\n  FROM system.parts WHERE database=\'mes\' AND active GROUP BY table ORDER BY table FORMAT PrettyCompactMonoBlock'
+   ┌─table───────┬────rows─┬─parts─┬─disk──────┐
+1. │ agg_hourly  │    3222 │     2 │ 50.00 KiB │
+2. │ events_mt   │ 1020000 │    30 │ 14.99 MiB │
+3. │ events_repl │ 1016045 │    15 │ 13.68 MiB │
+4. │ hourly_agg  │    3222 │     2 │ 1.55 MiB  │
+   └─────────────┴─────────┴───────┴───────────┘
++ du -sh /home/pan-ding/ch-mes/data
+96M	/home/pan-ding/ch-mes/data
++ echo '--- B Q1 latency after OPTIMIZE (3 runs) ---'
+--- B Q1 latency after OPTIMIZE (3 runs) ---
++ for i in 1 2 3
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --time --query $'\nSELECT line, hour,\n    sum(starts) OVER (PARTITION BY line ORDER BY hour)\n      - sum(completes) OVER (PARTITION BY line ORDER BY hour) AS wip\n  FROM (SELECT line, toStartOfHour(ts) AS hour,\n          countIf(event_type = \'start\') AS starts,\n          countIf(event_type = \'complete\') AS completes\n        FROM mes.events_repl FINAL GROUP BY line, hour) ORDER BY line, hour' --format Null
++ tail -1
+0.125
++ for i in 1 2 3
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --time --query $'\nSELECT line, hour,\n    sum(starts) OVER (PARTITION BY line ORDER BY hour)\n      - sum(completes) OVER (PARTITION BY line ORDER BY hour) AS wip\n  FROM (SELECT line, toStartOfHour(ts) AS hour,\n          countIf(event_type = \'start\') AS starts,\n          countIf(event_type = \'complete\') AS completes\n        FROM mes.events_repl FINAL GROUP BY line, hour) ORDER BY line, hour' --format Null
++ tail -1
+0.085
++ for i in 1 2 3
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --time --query $'\nSELECT line, hour,\n    sum(starts) OVER (PARTITION BY line ORDER BY hour)\n      - sum(completes) OVER (PARTITION BY line ORDER BY hour) AS wip\n  FROM (SELECT line, toStartOfHour(ts) AS hour,\n          countIf(event_type = \'start\') AS starts,\n          countIf(event_type = \'complete\') AS completes\n        FROM mes.events_repl FINAL GROUP BY line, hour) ORDER BY line, hour' --format Null
++ tail -1
+0.086
++ echo '===== storage summary (bytes_on_disk exact) ====='
+===== storage summary (bytes_on_disk exact) =====
++ /home/pan-ding/ch-mes/bin/clickhouse client --host 127.0.0.1 --port 5222 --query $'SELECT table, sum(rows) AS rows, sum(bytes_on_disk) AS bytes\n  FROM system.parts WHERE database=\'mes\' AND active GROUP BY table ORDER BY table FORMAT TSV'
+agg_hourly	3222	51204
+events_mt	1020000	15720324
+events_repl	1016045	14348989
+hourly_agg	3222	1626069
++ echo ALL_DONE
+ALL_DONE

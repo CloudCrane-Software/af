@@ -1,0 +1,21 @@
+== G4 派生集合 vs 手写清单（基线 288b0d9 仓面）==
+
+派生集合（derive_required_members，仓面现算）:
+  + af/packages/reportkit/tools/render.py
+  + af/packages/reportkit/units/citation_unit.py
+  + af/packages/reportkit/units/rubric_unit.py
+  + crates/af-execline/src/judge.rs
+
+手写集合（基线 REQUIRED_MEMBERS，2026-11-04 摘除前）:
+  - crates/af-execline/src/judge.rs
+  - af/packages/reportkit/units/citation_unit.py
+  - af/packages/reportkit/units/rubric_unit.py
+  - af/packages/reportkit/tools/render.py
+
+派生 ⊇ 手写 : True
+差集 派生−手写（多覆盖）: ∅
+差集 手写−派生（派生不出，须登记）: ∅
+
+== 两臂分解 ==
+臂1 report（reportkit 包 *.py，排除 __pycache__/*.bak）: ['af/packages/reportkit/tools/render.py', 'af/packages/reportkit/units/citation_unit.py', 'af/packages/reportkit/units/rubric_unit.py']
+臂2 swev（生产源含 script_sha256 锚声明的门本体）: ['crates/af-execline/src/judge.rs']

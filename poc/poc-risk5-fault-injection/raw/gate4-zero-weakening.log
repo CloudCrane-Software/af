@@ -1,0 +1,14 @@
+== 门4（终版）: 判据面零弱化 ==
+-- git diff origin/product/main -- ci/ （行数应为 0）--
+0
+-- clippy-baseline.txt sha256 vs 钉 --
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  ci/clippy-baseline.txt
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  0  clippy-baseline.txt
+-- Cargo.toml/Cargo.lock diff 行数（应为 0）--
+0
+-- crates/*/Cargo.toml diff 行数（应为 0，零新增 crate）--
+0
+-- 全部改动（untracked）--
+?? .offload/
+?? crates/af-order/tests/adjudicate_fault_injection_acceptance.rs
+?? poc/poc-risk5-fault-injection/

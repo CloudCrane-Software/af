@@ -1,0 +1,140 @@
+{
+  "family": "pyc-shadow",
+  "mode": "diff",
+  "batch": "2026-10-28-e30f8ebb",
+  "ts": "2026-10-28T10:18:05+00:00",
+  "git_commit": "e30f8ebbf4baae9ccce3d9c025633a2532cad0bd",
+  "scan_roots": [
+    "."
+  ],
+  "hits": [
+    {
+      "path": "ci/__pycache__/arm_wiring_check.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/arm_wiring_check.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/branches_check.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/branches_check.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/budget_cast_lint.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/budget_cast_lint.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/clippy_gate.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/clippy_gate.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/criteria_check.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/criteria_check.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/fix_scan.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/fix_scan.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/k5-path-lint.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/k5-path-lint.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/neutrality_scan.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/neutrality_scan.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/parse_scrub.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/parse_scrub.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/pyc_header_check.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/pyc_header_check.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/step10_check.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/step10_check.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/step11_check.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/step11_check.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/step12_check.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/step12_check.cpython-314.pyc"
+    },
+    {
+      "path": "ci/__pycache__/xcheck.cpython-314.pyc",
+      "line": 0,
+      "reason": "pyc 影子执行面在场（双法一致确认）",
+      "text": "ci/__pycache__/xcheck.cpython-314.pyc"
+    }
+  ],
+  "whitelist_applied": [],
+  "method_a_summary": {
+    "method": "A-name-enumeration",
+    "count": 14,
+    "paths": [
+      "ci/__pycache__/arm_wiring_check.cpython-314.pyc",
+      "ci/__pycache__/branches_check.cpython-314.pyc",
+      "ci/__pycache__/budget_cast_lint.cpython-314.pyc",
+      "ci/__pycache__/clippy_gate.cpython-314.pyc",
+      "ci/__pycache__/criteria_check.cpython-314.pyc",
+      "ci/__pycache__/fix_scan.cpython-314.pyc",
+      "ci/__pycache__/k5-path-lint.cpython-314.pyc",
+      "ci/__pycache__/neutrality_scan.cpython-314.pyc",
+      "ci/__pycache__/parse_scrub.cpython-314.pyc",
+      "ci/__pycache__/pyc_header_check.cpython-314.pyc",
+      "ci/__pycache__/step10_check.cpython-314.pyc",
+      "ci/__pycache__/step11_check.cpython-314.pyc",
+      "ci/__pycache__/step12_check.cpython-314.pyc",
+      "ci/__pycache__/xcheck.cpython-314.pyc"
+    ]
+  },
+  "method_b_summary": {
+    "method": "B-content-magic",
+    "count": 14,
+    "paths": [
+      "ci/__pycache__/arm_wiring_check.cpython-314.pyc",
+      "ci/__pycache__/branches_check.cpython-314.pyc",
+      "ci/__pycache__/budget_cast_lint.cpython-314.pyc",
+      "ci/__pycache__/clippy_gate.cpython-314.pyc",
+      "ci/__pycache__/criteria_check.cpython-314.pyc",
+      "ci/__pycache__/fix_scan.cpython-314.pyc",
+      "ci/__pycache__/k5-path-lint.cpython-314.pyc",
+      "ci/__pycache__/neutrality_scan.cpython-314.pyc",
+      "ci/__pycache__/parse_scrub.cpython-314.pyc",
+      "ci/__pycache__/pyc_header_check.cpython-314.pyc",
+      "ci/__pycache__/step10_check.cpython-314.pyc",
+      "ci/__pycache__/step11_check.cpython-314.pyc",
+      "ci/__pycache__/step12_check.cpython-314.pyc",
+      "ci/__pycache__/xcheck.cpython-314.pyc"
+    ],
+    "stale": [],
+    "orphan": [],
+    "scanned_files": 1836
+  }
+}

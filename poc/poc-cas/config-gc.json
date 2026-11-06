@@ -1,0 +1,16 @@
+{
+  "distSpecVersion": "1.1.1",
+  "storage": {
+    "rootDirectory": "./data",
+    "gc": true,
+    "gcDelay": "1s",
+    "gcInterval": "1h"
+  },
+  "http": {
+    "address": "127.0.0.1",
+    "port": "5050"
+  },
+  "log": {
+    "level": "debug"
+  }
+}

@@ -1,0 +1,72 @@
+id: st-b-C037
+name: "把「仓库探索」拆成独立可测量、可预算的前置阶段，用低成本模型跑定位、高成本模型只负责改码"
+tier: B
+claim: "仓库探索独立成可预算阶段：低成本explorer模型跑定位、高成本模型只改码，仍保留大部分定位质量"
+claimed_value:
+  metric: "cost_per_resolved"
+  direction: down
+  context: "实验组=小模型 explorer（只读）+ 大模型 fixer；定位阶段有独立 turns/cents 预算帽"
+sources: [S015, S026, S135]
+consensus: {corpora: 1, cards: 3}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: explore_then_fix
+    graph_version: "1.0"
+    entry: explorer
+    input: fix_input
+    output: { ref: patch, from: fixer }
+    intent: "仓库探索独立成可预算前置阶段：只读 explorer（低成本模型）+ fixer（高成本模型只改码）"
+  types:
+    - name: fix_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: locate_report
+      schema:
+        type: object
+        required: [hits, confidence_milli]
+        properties:
+          hits: { type: array, items: { type: string } }
+          confidence_milli: { type: integer }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+  nodes:
+    - id: explorer
+      kind: task
+      uses: { model: route.cheap@1, tools: [pkg.sweng.locate, pkg.sweng.view] }  # 只读工具面
+      emits: { report: locate_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.explore.explorer_system, quota_tokens: 500 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+    - id: fixer
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.sweng.edit] }     # 高成本模型只负责改码
+      consumes: { report: locate_report }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.coder_system, quota_tokens: 600 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+          - { from: edge, port: report, fields: [hits, confidence_milli], policy: project, quota_tokens: 1500 }
+  edges:
+    - { from: explorer, output: report, to: fixer, input: report }
+  policies:
+    budgets:
+      - { id: explore_turns, dimension: turns, scope: node:explorer, cap: 12 }   # 探索阶段独立可预算
+      - { id: explore_cents, dimension: cents, scope: node:explorer, cap: 60 }
+      - { id: fix_cents, dimension: cents, scope: node:fixer, cap: 400 }
+      - { id: plan_cap, dimension: cents, scope: plan, cap: 460 }
+    failures:
+      - { class: tool_error, route: same_node, feedback: error_observation }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

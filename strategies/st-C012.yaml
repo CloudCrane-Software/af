@@ -1,0 +1,163 @@
+id: st-C012
+name: Multi-Agent Debate（多智能体辩论：多解生成 + 多轮互相批判 + 裁决收敛，如 Du et al）
+tier: A
+claim: Multi-Agent-Debate：N个辩手独立出解后互读同伴答案逐轮批判修订，末轮多数投票或LLM裁决收敛唯一终答
+claimed_value:
+  metric: answer_accuracy
+  direction: up
+  context: 多agent协同；Token 成本 ≈ N 代理 × K 轮 ×（提示 + 输出），「把 N−1 条同伴解塞回上下文」是主导项，故强调短消息式输出约束；一致性早停防收益趋平后空转（MC-Multi-Agent-Debate 卡⑤口径）
+sources: [MC-CAMEL, MC-Multi-Agent-Debate]
+consensus: { corpora: 2, cards: 2 }
+experiment: { status: none, exp_id: "-", note: "-" }
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: multi_agent_debate
+    graph_version: "1.0"
+    entry: rounds
+    input: debate_input
+    output: { ref: position, from: finalize }
+    intent: "N 辩手 map 并行互不可见（只读上轮黑板、不写）→ collector 匿名+加扰 shuffle+截断后单写者落黑板（防权威偏差与上下文膨胀）→ tally 计票 → 一致性门早停；多数票明确直接定案，否则集中裁决 fallback"
+  types:
+    - name: debate_input
+      schema:
+        type: object
+        required: [question, personas]
+        properties:
+          question: { type: string }
+          personas: { type: array, items: { type: string } }
+    - name: position
+      schema:
+        type: object
+        required: [persona, claim, confidence_milli]
+        properties:
+          persona: { type: string }
+          claim: { type: string }
+          confidence_milli: { type: integer }
+    - name: turn_record
+      schema:
+        type: object
+        required: [claim, confidence_milli]
+        properties:
+          claim: { type: string }
+          confidence_milli: { type: integer }
+    - name: tally_result
+      schema:
+        type: object
+        required: [answers, top_count, top_share_milli]
+        properties:
+          answers: { type: integer }
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+  stores:
+    - name: transcript
+      type: collection
+      item: turn_record
+      writer: rounds.collector
+      lifecycle: run
+      retention: { max_items: 64 }
+  nodes:
+    - id: rounds
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: debate_map
+              kind: task
+              map:
+                over: input.personas
+                body:
+                  nodes:
+                    - id: debater
+                      kind: task
+                      uses: { model: route.main@1 }
+                      emits: { position: position }
+                      context:
+                        sections:
+                          - { from: template, template_ref: pkg.debatekit.system, vars: { persona: arg.item }, quota_tokens: 400 }
+                          - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+                          - { from: store, store: transcript, policy: latest_k, args: { k: 8 }, quota_tokens: 2400 }
+                  edges: []
+              emits: { items: { from_body: debater.position } }
+            - id: collector
+              kind: transform
+              consumes: { items: "list<position>" }
+              writes: [transcript]
+              ops:
+                - { op: anonymize, port: items, drop: [persona], into: anonymous }
+                - { op: shuffle_seeded, port: anonymous, seed_ref: input.question, into: shuffled }
+                - { op: truncate, port: shuffled, max_tokens_each: 200, into: transcript }
+              emits: {}
+            - id: tally
+              kind: transform
+              consumes: { items: "list<position>" }
+              ops:
+                - { op: tally, port: items, by: claim, into: result }
+              emits: { result: tally_result }
+            - id: converge_gate
+              kind: gate
+              consumes: { result: tally_result }
+              assert: "inputs.result.top_share_milli >= 0 && inputs.result.top_share_milli <= 1000"
+          edges:
+            - { from: debate_map, output: items, to: collector, input: items }
+            - { from: debate_map, output: items, to: tally, input: items }
+            - { from: tally, output: result, to: converge_gate, input: result }
+        max_iterations: 3
+        carried:
+          - { store: transcript, max_items: 64 }
+        safety_points:
+          - { node: converge_gate, kind: gate }
+        exit_when: "tally.result.top_share_milli >= 700"
+        on_exhausted: continue
+      emits: { positions: { from_body: debate_map.items } }
+    - id: vote
+      kind: transform
+      consumes: { positions: "list<position>" }
+      ops:
+        - { op: tally, port: positions, by: claim, into: stats }
+        - { op: select_best, port: positions, by: claim, prefer: max, into: winner }
+      emits:
+        stats: tally_result
+        winner: position
+      route:
+        default: adjudicate
+        rules:
+          - { when: "vote.stats.top_count * 2 > vote.stats.answers", goto: finalize }
+    - id: adjudicate
+      kind: task
+      uses: { model: route.main@1 }
+      consumes: { winner: position }
+      emits: { winner: position }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.debatekit.judge_system, quota_tokens: 400 }
+          - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          - { from: edge, port: winner, policy: project, quota_tokens: 400 }
+          - { from: store, store: transcript, policy: full, quota_tokens: 6000 }
+    - id: finalize
+      kind: transform
+      consumes: { winner: position }
+      ops:
+        - { op: project, port: winner, into: answer }
+      emits: { answer: position }
+  edges:
+    - { from: rounds, output: positions, to: vote, input: positions }
+    - { from: vote, output: winner, to: finalize, input: winner }
+    - { from: vote, output: winner, to: adjudicate, input: winner }
+    - { from: adjudicate, output: winner, to: finalize, input: winner }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+      - { id: turns_cap, dimension: turns, scope: loop:rounds, cap: 30 }
+    failures:
+      - class: schema_invalid
+        retry: { max: 2, backoff_ms: 0 }
+        fallback_route: adjudicate
+      - class: gate_refused
+        terminal: true
+        outcome: failed
+      - class: budget_exhausted
+        route: vote
+        terminal: true
+        outcome: completed

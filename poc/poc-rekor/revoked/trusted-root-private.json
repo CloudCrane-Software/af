@@ -1,0 +1,1 @@
+{"mediaType":"application/vnd.dev.sigstore.trustedroot+json;version=0.1","tlogs":[{"baseUrl":"http://127.0.0.1:5239","hashAlgorithm":"SHA2_256","publicKey":{"rawBytes":"MCowBQYDK2VwAyEA7Peseg/ZjDpbdEYkbDvmH3A3Z8JWPOp5Uqimt/dRaQY=","keyDetails":"PKIX_ED25519","validFor":{"start":"2025-01-01T00:00:00Z"}},"logId":{"keyId":"ImgxNmDMvbpAV14nHARcfcM6SfHJWBqQnHpNaNgwYb4="}}]}

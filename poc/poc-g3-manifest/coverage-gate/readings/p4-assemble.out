@@ -1,0 +1,13 @@
+{
+  "assembled": true,
+  "manifest": {
+    "compiler_version": "0.1.0",
+    "format_version": 1,
+    "plan_id": "plan.factory_construction_build@1.0+1ee4a4eff0bb",
+    "plan_sha256": "60320ed8b4bc258a1ada1c84f67bf36d25ef5f2f6ff146cc27cdaed2b6dc20f3",
+    "task_sha256": "eb4a3cf8a7257e7372f03ac01a44af6bc18e28f6467e475295be048f51b8991e"
+  },
+  "out_dir": "/tmp/g3-probe-clone/.g3-p4/task",
+  "plan_id": "plan.factory_construction_build@1.0+1ee4a4eff0bb"
+}
+exit=0

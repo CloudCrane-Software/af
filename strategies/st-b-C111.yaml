@@ -1,0 +1,86 @@
+id: st-b-C111
+name: "按角色分配不同模型（per-role model routing）"
+tier: B
+claim: "按角色分配不同模型：o1-preview只放Orchestrator外循环与Coder，GAIA由32.33%升到38.00%"
+claimed_value:
+  metric: "task_success_rate"
+  direction: up
+  context: "三组对照：①单一模型跑全部角色；②仅计划器+编码器用强模型；③按角色三档分模型"
+sources: [S139, S158, S159]
+consensus: {corpora: 1, cards: 3}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: per_role_model_routing
+    graph_version: "1.0"
+    entry: orchestrator
+    input: role_input
+    output: { ref: patch, from: coder }
+    intent: "per-role 模型路由：规划/编码=强模型档，定位/检索=中档；档位差异经 uses.model 装订表达"
+  types:
+    - name: role_input
+      schema:
+        type: object
+        required: [task]
+        properties:
+          task: { type: string }
+    - name: plan
+      schema:
+        type: object
+        required: [steps]
+        properties:
+          steps: { type: array, items: { type: string } }
+    - name: locate_report
+      schema:
+        type: object
+        required: [hits]
+        properties:
+          hits: { type: array, items: { type: string } }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+  nodes:
+    - id: orchestrator
+      kind: task
+      uses: { model: route.strong@1 }      # 强模型只放外循环（Orchestrator）
+      emits: { plan: plan }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.roles.orchestrator_system, quota_tokens: 500 }
+          - { from: input, fields: [task], policy: project, quota_tokens: 600 }
+    - id: locator
+      kind: task
+      uses: { model: route.mid@1, tools: [pkg.sweng.locate] }   # 检索/执行=中档
+      consumes: { plan: plan }
+      emits: { report: locate_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.roles.locator_system, quota_tokens: 400 }
+          - { from: edge, port: plan, fields: [steps], policy: project, quota_tokens: 1500 }
+    - id: coder
+      kind: task
+      uses: { model: route.strong@1, tools: [pkg.sweng.edit] }  # Coder=强模型档
+      consumes: { plan: plan, report: locate_report }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.roles.coder_system, quota_tokens: 600 }
+          - { from: edge, port: plan, fields: [steps], policy: project, quota_tokens: 1500 }
+          - { from: edge, port: report, fields: [hits], policy: project, quota_tokens: 1500 }
+  edges:
+    - { from: orchestrator, output: plan, to: locator, input: plan }
+    - { from: orchestrator, output: plan, to: coder, input: plan }
+    - { from: locator, output: report, to: coder, input: report }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 800 }
+      - { id: strong_calls, dimension: model_calls, scope: plan, cap: 40 }
+    failures:
+      - { class: transport_transient, retry: { max: 3, backoff_ms: 800 } }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

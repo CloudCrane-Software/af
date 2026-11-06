@@ -1,0 +1,17 @@
+{
+  "doc_kind": "裁决单",
+  "template_id": "tpl-adjudication-v1",
+  "template_version": "1.0",
+  "adjudication_id": "adj-wo-pocr-leg-1-1",
+  "source_order_id": "wo-pocr-leg-1",
+  "source_stable_id": "sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a",
+  "subject": "对源单 wo-pocr-leg-1（stable_id=sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a，state=Closed）闭环后的裁决受理",
+  "basis": [
+    "artifact:fa-wo-pocr-leg-1:5517c44eb624f323fb65871f0714acad154246630060045f1d21bb3551a8ef52",
+    "voucher:bv-wo-pocr-leg-1:66fe7411dc257b0155480eb4a56fe90259236e33da4f5adb762b5f43807c18eb"
+  ],
+  "next_orders": [],
+  "next_orders_digest": "0c2f05bed8eb2cf58daf516c042f68e3270ed19969d5d6a57a94515d8f8d3cd3",
+  "expires_at": "2026-12-01T00:00:00Z",
+  "doc_sha256": "7f63c4f19ff68fedaa711ebba6be85b992a15fe39f7987b605f46f9f7e7bb5d0"
+}

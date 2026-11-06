@@ -1,0 +1,39 @@
+---
+source: crates/af-credential/tests/yaml_snapshots.rs
+expression: snapshot
+---
+kind: cents_issuance_payload
+vocabulary:
+  alias: Cents
+  rust_type: i64
+  unit: cents
+  tool: tool
+  namespace: namespace
+  budget_cents: budget_cents
+  request_tool: request_tool
+  request_ns: request_ns
+  spend_cents: spend_cents
+root_tools:
+  - git
+  - test
+root_namespace: line-a
+root_budget_cents: 1000
+root_wire_len: 303
+root_block_count: 1
+root_tools_in_facts:
+  - git
+  - test
+root_namespace_in_facts: line-a
+root_budget_cents_in_facts: 1000
+root_block_sources:
+  - "tool(\"git\");\ntool(\"test\");\nnamespace(\"line-a\");\nbudget_cents(1000);\ncheck if spend_cents($s), budget_cents($v), $s <= $v;\n"
+child_tools:
+  - test
+child_spend_cap_cents: 500
+child_wire_len: 515
+child_block_count: 2
+authority_block_unchanged: true
+child_budget_cents_in_facts: 1000
+child_block_sources:
+  - "tool(\"git\");\ntool(\"test\");\nnamespace(\"line-a\");\nbudget_cents(1000);\ncheck if spend_cents($s), budget_cents($v), $s <= $v;\n"
+  - "check if request_tool($t), [\"test\"].contains($t);\ncheck if spend_cents($s), $s <= 500;\n"

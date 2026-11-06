@@ -1,0 +1,155 @@
+version: 1
+meta:
+  name: debate_kv
+  graph_version: "1.0"
+  entry: rounds
+  input: debate_input
+  output: { ref: position, from: finalize }
+  intent: "N 辩手 map 并行互不可见；collector 是黑板唯一写者；多数票+裁决 fallback；一致性早停"
+
+types:
+  - name: debate_input
+    schema:
+      type: object
+      required: [question, personas]
+      properties:
+        question: { type: string }
+        personas: { type: array, items: { type: string } }
+  - name: position
+    schema:
+      type: object
+      required: [persona, claim, confidence_milli]
+      properties:
+        persona: { type: string }
+        claim: { type: string }
+        confidence_milli: { type: integer }
+  - name: turn_record
+    schema:
+      type: object
+      required: [claim, confidence_milli]
+      properties:
+        claim: { type: string }
+        confidence_milli: { type: integer }
+  - name: tally_result
+    schema:
+      type: object
+      required: [answers, top_count, top_share_milli]
+      properties:
+        answers: { type: integer }
+        top_count: { type: integer }
+        top_share_milli: { type: integer }
+
+stores:
+  - name: transcript
+    type: collection
+    item: turn_record
+    writer: rounds.collector        # INV-2：并行辩手不写黑板；汇聚节点串行写入
+    lifecycle: run
+    retention: { max_items: 64 }
+
+nodes:
+  - id: rounds
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: debate_map
+            kind: task
+            map:
+              over: input.personas            # 运行时定基数；实例间无横向边（互不可见）
+              body:
+                nodes:
+                  - id: debater
+                    kind: task
+                    uses: { model: route.main@1 }
+                    emits: { position: position }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.debatekit.system, vars: { persona: arg.item }, quota_tokens: 400 }
+                        - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+                        - { from: store, store: transcript, policy: latest_k, args: { k: 8 }, quota_tokens: 2400 }
+                edges: []
+            emits: { items: { from_body: debater.position } }   # map 的 from_body 自动包 list<>
+          - id: collector
+            kind: transform
+            writes: [transcript]
+            ops:
+              - { op: anonymize, port: items, drop: [persona], into: anonymous }
+              - { op: shuffle_seeded, port: anonymous, seed_ref: input.question, into: shuffled }
+              - { op: truncate, port: shuffled, max_tokens_each: 200, into: transcript }   # 末端落点=store
+            consumes: { items: "list<position>" }
+            emits: {}
+          - id: tally
+            kind: transform
+            ops:
+              - { op: tally, port: items, by: claim, into: result }
+            consumes: { items: "list<position>" }
+            emits: { result: tally_result }
+          - id: converge_gate
+            kind: gate                      # 安全点：聚合值合法性守卫
+            consumes: { result: tally_result }
+            assert: "inputs.result.top_share_milli >= 0 && inputs.result.top_share_milli <= 1000"
+        edges:
+          - { from: debate_map, output: items, to: collector, input: items }
+          - { from: debate_map, output: items, to: tally, input: items }
+          - { from: tally, output: result, to: converge_gate, input: result }
+      max_iterations: 3                    # K 轮上限（收益趋平 → 3 轮足够）
+      carried:
+        - { store: transcript, max_items: 64 }
+      safety_points:
+        - { node: converge_gate, kind: gate }
+      exit_when: "tally.result.top_share_milli >= 700"   # 一致性早停（预计算份额进谓词）
+      on_exhausted: continue
+    emits: { positions: { from_body: debate_map.items } }
+  - id: vote
+    kind: transform
+    ops:
+      - { op: tally, port: positions, by: claim, into: stats }
+      - { op: select_best, port: positions, by: claim, prefer: max, into: winner }
+    consumes: { positions: "list<position>" }
+    emits:
+      stats: tally_result
+      winner: position
+    route:                                # 明确多数 → 直接定案；否则集中裁决（fallback）
+      default: adjudicate
+      rules:
+        - { when: "vote.stats.top_count * 2 > vote.stats.answers", goto: finalize }
+  - id: adjudicate
+    kind: task
+    uses: { model: route.main@1 }
+    consumes: { winner: position }
+    emits: { winner: position }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.debatekit.judge_system, quota_tokens: 400 }
+        - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+        - { from: edge, port: winner, policy: project, quota_tokens: 400 }   # 多数票候选（供裁决参考）
+        - { from: store, store: transcript, policy: full, quota_tokens: 6000 }
+  - id: finalize
+    kind: transform
+    ops:
+      - { op: project, port: winner, into: answer }
+    consumes: { winner: position }
+    emits: { answer: position }
+
+edges:
+  - { from: rounds, output: positions, to: vote, input: positions }
+  - { from: vote, output: winner, to: finalize, input: winner }      # route 规则命中本边
+  - { from: vote, output: winner, to: adjudicate, input: winner }    # route default 命中本边
+  - { from: adjudicate, output: winner, to: finalize, input: winner }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+    - { id: turns_cap, dimension: turns, scope: loop:rounds, cap: 30 }
+  failures:
+    - class: schema_invalid
+      retry: { max: 2, backoff_ms: 0 }
+      fallback_route: adjudicate          # 限次重解析仍败 → 裁决器自由文本判定
+    - class: gate_refused
+      terminal: true                      # 聚合值合法性守卫失败：该轮判失败
+      outcome: failed
+    - class: budget_exhausted
+      route: vote                        # 成本超限：中止并返回当前多数
+      terminal: true
+      outcome: completed

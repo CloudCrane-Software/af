@@ -1,0 +1,50 @@
+version: 1
+meta:
+  name: inv2_demo
+  graph_version: "1.0"
+  entry: rounds
+  input: inv2_input
+  output: { ref: "list<position>", from: rounds }
+types:
+  - name: inv2_input
+    schema:
+      type: object
+      required: [personas]
+      properties: { personas: { type: array, items: { type: string } } }
+  - name: position
+    schema:
+      type: object
+      required: [claim]
+      properties: { claim: { type: string } }
+  - name: turn_record
+    schema:
+      type: object
+      required: [claim]
+      properties: { claim: { type: string } }
+stores:
+  - { name: transcript, type: collection, item: turn_record, writer: rounds.debate_map.debater,
+      lifecycle: run, retention: { max_items: 64 } }
+nodes:
+  - id: rounds
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: debate_map
+            kind: task
+            map:
+              over: input.personas
+              body:
+                nodes:
+                  - id: debater          # map 体节点
+                    kind: task
+                    uses: { model: route.main@1 }
+                    writes: [transcript]  # E2312：map 体节点写共享槽
+                    emits: { position: position }
+                edges: []
+            emits: { items: { from_body: debater.position } }
+        edges: []
+      max_iterations: 3
+      carried: [{ store: transcript, max_items: 64 }]
+      safety_points: [{ node: debate_map.debater, kind: gate }]   # E2322：debater 是 task 非验证面
+    emits: { items: { from_body: debate_map.items } }

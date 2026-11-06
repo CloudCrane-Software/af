@@ -1,0 +1,1 @@
+FAIL 零轨迹：源在场但无可解析轨迹（poc/poc-s17-trace-attribution/raw/_zero.jsonl）——fail-closed 红

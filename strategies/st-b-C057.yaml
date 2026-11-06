@@ -1,0 +1,83 @@
+id: st-b-C057
+name: "PostToolUse hooks：编辑后强制 lint/format/test 并回喂失败"
+tier: B
+claim: "PostToolUse等hooks把质量门禁确定性化：编辑后强制lint/format/test并回喂失败"
+claimed_value:
+  metric: "quality_gate_determinism"
+  direction: up
+  context: "同任务集两组：模型自主决定何时 lint/test（对照） vs 编辑后强制 hook 跑 lint/format/test 并回喂失败"
+sources: [S042, S075]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: post_edit_hook_gate
+    graph_version: "1.0"
+    entry: edit_loop
+    input: hook_input
+    output: { ref: patch, from: edit_loop }
+    intent: "PostToolUse 确定性化：编辑后强制 lint/format/test 检查单元，失败回灌编辑节点（安全点+反馈边）"
+  types:
+    - name: hook_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: hook_report
+      schema:
+        type: object
+        required: [ok, failures]
+        properties:
+          ok: { type: boolean }
+          failures: { type: array, items: { type: string } }
+  nodes:
+    - id: edit_loop
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: edit
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              consumes: { feedback: hook_report }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.hooks.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+                  - { from: edge, port: feedback, fields: [failures], policy: project, quota_tokens: 800, optional: true }
+            - id: post_edit
+              kind: check
+              uses: { unit: pkg.hooks.post_edit@1 }    # lint/format/test 三件闭包（确定性 hook）
+              consumes: { patch: patch }
+              emits: { report: hook_report }
+              route:
+                default: exit
+                rules:
+                  - { when: "post_edit.passed == false", goto: edit }
+          edges:
+            - { from: edit, output: patch, to: post_edit, input: patch }
+            - { from: post_edit, output: report, to: edit, input: feedback }
+        max_iterations: 4
+        safety_points:
+          - { node: post_edit, kind: check }    # 编辑后强制质检=安全点
+        exit_when: "attempt.passed == true"
+        on_exhausted: fail
+      emits: { patch: { from_body: edit.patch } }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+      - { id: hook_turns, dimension: turns, scope: loop:edit_loop, cap: 40 }
+    failures:
+      - { class: tool_error, route: same_node, feedback: error_observation }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

@@ -1,0 +1,16 @@
+[workspace]
+
+[package]
+name = "rust-sdk-smoke"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+temporalio-sdk = "1.1.0"
+temporalio-client = "1.1.0"
+temporalio-macros = "1.1.0"
+temporalio-common = "1.1.0"
+temporalio-workflow = "1.1"
+futures = "0.3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+anyhow = "1"

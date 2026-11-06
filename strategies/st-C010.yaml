@@ -1,0 +1,111 @@
+id: st-C010
+name: 停滞计数 + 重规划 + 重规划时全员上下文清零（stall counter 带衰减）
+tier: A
+claim: 停滞计数+重规划+全员上下文清零：无进展或循环则计数，达阈值重写计划并清空全部agent上下文
+claimed_value:
+  metric: solve_rate
+  direction: up
+  context: 多agent协同；对照组=无重规划（停滞只记日志不换计划）；实验组=带重规划，max_stalls ∈ {1,2,3,5}；同任务同 seed 比较解决率、每任务 LLM 调用数与「同一错误重复出现次数」（S157 测试设计口径）
+sources: [MC-Agensh-DeLM, S157]
+consensus: { corpora: 2, cards: 2 }
+experiment: { status: none, exp_id: "-", note: "-" }
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: stall_counter_replan
+    graph_version: "1.0"
+    entry: drive
+    input: stall_input
+    output: { ref: progress_report, from: drive }
+    intent: "停滞重规划环：executor 每轮只带计划板+任务输入的全新上下文（无跨轮对话槽=全员上下文清零的声明式对应）→ 停滞门（无进展/循环即失败）→ 失败即回 planner 重写计划板（单写者、revision 递增）；阈值计数由门禁组件内部承载（AFB 表达控制结构，计数衰减算术属组件语义）"
+  types:
+    - name: stall_input
+      schema:
+        type: object
+        required: [question, repo_root]
+        properties:
+          question: { type: string }
+          repo_root: { type: string }
+    - name: plan
+      schema:
+        type: object
+        required: [revision, steps]
+        properties:
+          revision: { type: integer }
+          steps: { type: array, items: { type: string } }
+    - name: progress_report
+      schema:
+        type: object
+        required: [advanced, done, note]
+        properties:
+          advanced: { type: boolean }
+          done: { type: boolean }
+          note: { type: string }
+  stores:
+    - name: plan_board
+      type: collection
+      item: plan
+      writer: drive.planner
+      lifecycle: run
+      retention: { max_items: 16 }
+  nodes:
+    - id: drive
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: planner
+              kind: task
+              uses: { model: route.main@1 }
+              consumes: { replan: progress_report }
+              writes: [plan_board]
+              emits: { plan: plan }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.stall.planner_system, quota_tokens: 500 }
+                  - { from: input, fields: [question, repo_root], policy: project, quota_tokens: 600 }
+                  - { from: store, store: plan_board, policy: latest_k, args: { k: 2 }, quota_tokens: 900 }
+                  - { from: edge, port: replan, fields: [note], policy: project, quota_tokens: 300, optional: true }
+            - id: executor
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.view@1, pkg.sweng.edit@1, pkg.sweng.lint@1] }
+              consumes: { plan: plan }
+              emits: { progress: progress_report }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.stall.executor_system, quota_tokens: 500 }
+                  - { from: input, fields: [question, repo_root], policy: project, quota_tokens: 600 }
+                  - { from: edge, port: plan, fields: [revision, steps], policy: project, quota_tokens: 1200 }
+            - id: stall_gate
+              kind: gate
+              consumes: { progress: progress_report }
+              assert: "inputs.progress.advanced == true"
+              emits: { progress: progress_report }
+              route:
+                default: exit
+                rules:
+                  - { when: "stall_gate.passed == false", goto: planner }
+          edges:
+            - { from: planner, output: plan, to: executor, input: plan }
+            - { from: executor, output: progress, to: stall_gate, input: progress }
+            - { from: stall_gate, output: progress, to: planner, input: replan }
+        max_iterations: 12
+        carried:
+          - { store: plan_board, max_items: 16 }
+        safety_points:
+          - { node: stall_gate, kind: gate }
+        exit_when: "executor.progress.done == true"
+        on_exhausted: fail
+      emits: { result: { from_body: stall_gate.progress } }
+  edges: []
+  policies:
+    budgets:
+      - { id: turns_cap, dimension: turns, scope: loop:drive, cap: 40 }
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 600 }
+    failures:
+      - class: gate_refused
+        route: next_iteration
+      - class: budget_exhausted
+        terminal: true
+        outcome: failed

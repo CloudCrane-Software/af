@@ -1,0 +1,5 @@
+time=2026-10-19T11:22:12.345+08:00 level=INFO msg="starting rekor-server" version="{GitVersion:v2.0.0-20261016162638-3ef36dadedc6 GitCommit:3ef36dadedc6b7ac4c13f52d606477962fcf93e9 GitTreeState:clean BuildDate:2026-10-16T16:26:38 GoVersion:go1.27.0 Compiler:gc Platform:linux/amd64 ASCIIName:true FontName: Name: Description:}"
+time=2026-10-19T11:22:12.354+08:00 level=INFO msg="Loaded signing key" "pubkey in base64 DER"="MCowBQYDK2VwAyEA7Peseg/ZjDpbdEYkbDvmH3A3Z8JWPOp5Uqimt/dRaQY="
+time=2026-10-19T11:22:12.355+08:00 level=INFO msg="starting Tessera sequencer"
+time=2026-10-19T11:22:12.356+08:00 level=INFO msg="Starting gRPC server" address=127.0.0.1:5233
+time=2026-10-19T11:22:12.356+08:00 level=ERROR msg="failed to create listener:" error="listen tcp 127.0.0.1:5233: bind: address already in use"

@@ -1,0 +1,6 @@
+== clippy 全量重 lint（touch 全部 323 .rs 后）
+cargo clippy --workspace --all-targets --message-format=json → exit 0（633 行 jsonl）
+error 级消息数: 0
+== clippy_gate.py 读数:
+CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）
+GATE-EXIT=0

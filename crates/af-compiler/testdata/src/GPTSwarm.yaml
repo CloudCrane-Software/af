@@ -1,0 +1,355 @@
+version: 1
+meta:
+  name: gptswarm_candidate_graph
+  graph_version: "1.0"
+  entry: search
+  input: swarm_input
+  output: { ref: decision, from: search }
+  intent: "GPTSwarm：agent=图（节点=零状态操作，边=信息流，边即上下文可见性的唯一来源）。本配方是「候选图模板 + 图搜索外循环」：规划→并行执行→记忆→评审→反思修订→投票汇聚→决策，外接优化器/图编辑算子/外部奖励/任意 Python 节点体/动态调度/图作为值 六项定义性机制走 L4 逃逸舱（escape.kind 七类词表记账）。"
+  topology_selector:            # 编译期语义（裁决 §二-1）：只决定编译产物采用哪个候选图，解析后计划是单一确定图，不进运行时
+    rules:
+      - { when: "input.mode == 'hard'", use: "pkg.swarmkit.graph.plan_execute_review@2.1" }
+      - { when: "input.mode == 'wide'", use: "pkg.swarmkit.graph.fanout_vote@1.4" }
+    fallback: "pkg.swarmkit.graph.react_baseline@1.0"
+
+types:
+  - name: swarm_input
+    schema:
+      type: object
+      required: [task, mode]
+      properties:
+        task: { type: string }
+        mode: { type: string }
+  - name: plan
+    schema:
+      type: object
+      required: [summary]
+      properties:
+        summary: { type: string }
+  - name: step_spec
+    schema:
+      type: object
+      required: [id, instruction]
+      properties:
+        id: { type: string }
+        instruction: { type: string }
+  - name: action_request
+    schema:
+      type: object
+      required: [tool, args]
+      properties:
+        tool: { type: string }
+        args: { type: string }
+  - name: observation
+    schema:
+      type: object
+      required: [ok, output]
+      properties:
+        ok: { type: boolean }
+        output: { type: string }
+  - name: step_result
+    schema:
+      type: object
+      required: [ok, output, score]
+      properties:
+        ok: { type: boolean }
+        output: { type: string }
+        score: { type: integer }
+  - name: verdict
+    schema:
+      type: object
+      required: [pass, issues]
+      properties:
+        pass: { type: boolean }
+        issues: { type: array, items: { type: string } }
+  - name: reward_value
+    schema:
+      type: object
+      required: [score, plateau]
+      properties:
+        score: { type: integer }
+        plateau: { type: boolean }
+  - name: graph_spec
+    schema:
+      type: object
+      required: [ref, node_count, edge_count]
+      properties:
+        ref: { type: string }
+        node_count: { type: integer }
+        edge_count: { type: integer }
+  - name: tally_result
+    schema:
+      type: object
+      required: [answers, top_count, top_share_milli]
+      properties:
+        answers: { type: integer }
+        top_count: { type: integer }
+        top_share_milli: { type: integer }
+  - name: decision
+    schema:
+      type: object
+      required: [final, confidence]
+      properties:
+        final: { type: string }
+        confidence: { type: integer }
+
+stores:
+  - name: graph_archive
+    type: collection
+    item: graph_spec
+    writer: search.graph_edit          # INV-2：候选图谱系由图编辑算子唯一登记
+    lifecycle: run
+    retention: { max_items: 64 }       # 有界：候选图谱系不无限增长
+
+nodes:
+  - id: search
+    kind: task
+    loop:                              # 搜索外循环 = 「编辑图→执行图→记奖励→更新/回退→再编辑」的外壳（卡 ④）
+      body:
+        nodes:
+          - id: planner
+            kind: task
+            uses: { model: route.main@1 }
+            consumes: { spec: graph_spec }
+            emits: { plan: "envelope<plan>", steps: "list<step_spec>" }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.swarmkit.planner_system, quota_tokens: 500 }
+                - { from: input, fields: [task], policy: project, quota_tokens: 300 }
+                - { from: edge, port: spec, policy: project, quota_tokens: 600 }   # 上轮编辑产出的新图结构
+
+          - id: dispatch
+            kind: task
+            escape:                    # L4：运行期动态并发/超时取消/异步 fan-out（卡 ⑥b-5）
+              kind: runtime_context_mutation
+              impl_ref: packages/swarmkit@1.0.0/hatches/dispatch.py
+              reason: "静态 map 只能表达静态扇出；动态 fan-out、节点级超时取消与异步调度语义在 DSL 之外（卡 ⑥b-5）"
+              owner: lang-team
+              share_budget_pct: 6
+            consumes: { steps: "list<step_spec>" }
+            emits: { worklist: "list<step_spec>" }
+
+          - id: execute_map
+            kind: task
+            consumes: { steps: "list<step_spec>" }     # 控制节点入边仅表排序（扇出基数由 over 决定）
+            map:
+              over: dispatch.worklist                  # 运行时定基数；实例间无横向边 → 并行分支互不可见
+              body:
+                nodes:
+                  - id: worker
+                    kind: task
+                    uses: { model: route.main@1 }
+                    emits: { action: action_request }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.swarmkit.worker_system, vars: { instruction: arg.item.instruction }, quota_tokens: 500 }
+                        - { from: arg, name: item, policy: project, quota_tokens: 300 }
+                  - id: tool_exec
+                    kind: task
+                    uses: { tool: pkg.swarmkit.tools@1 }     # 工具节点：参数 schema + 失败返回类型由 observation 约束
+                    consumes: { action: action_request }
+                    emits: { observation: observation }
+                  - id: py_node
+                    kind: task
+                    escape:              # L4：节点体是任意 callable（卡 ⑥b-4）
+                      kind: program_synthesis
+                      impl_ref: packages/swarmkit@1.0.0/hatches/py_node.py
+                      reason: "GPTSwarm 节点=任意 callable：DSL 只能声明结构不能声明函数体，候选图中的自定义节点体走逃逸（卡 ⑥b-4）"
+                      owner: lang-team
+                      share_budget_pct: 6
+                    consumes: { observation: observation }
+                    emits: { result: step_result }
+                edges:
+                  - { from: worker, output: action, to: tool_exec, input: action }
+                  - { from: tool_exec, output: observation, to: py_node, input: observation }
+            emits: { results: { from_body: py_node.result } }    # map 的 from_body 自动包 list<>
+
+          - id: memory
+            kind: task
+            uses: { model: route.cheap@1 }
+            consumes: { results: "list<step_result>" }
+            emits: { mem: step_result }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.swarmkit.memory_system, quota_tokens: 400 }
+                - { from: edge, port: results, policy: project, quota_tokens: 1200 }
+
+          - id: reviewer
+            kind: task
+            uses: { model: route.main@1 }
+            consumes: { plan: "envelope<plan>", results: "list<step_result>", mem: step_result, patch: step_result }
+            emits: { verdict: verdict }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.swarmkit.reviewer_system, quota_tokens: 600 }
+                - { from: input, fields: [task], policy: project, quota_tokens: 300 }
+                - { from: edge, port: plan, policy: project, quota_tokens: 400 }
+                - { from: edge, port: results, policy: project, quota_tokens: 1500 }
+                - { from: edge, port: mem, policy: project, quota_tokens: 500 }
+                - { from: edge, port: patch, policy: project, quota_tokens: 500, optional: true }
+            route:                       # 条件路由（卡 ⑥a-8）：评审不过 → 反思修订环；通过 → 投票汇聚
+              default: aggregate
+              rules:
+                - { when: "reviewer.verdict.pass == false", goto: revise }
+
+          - id: revise
+            kind: task
+            loop:
+              args: { feedback: "reviewer.verdict" }   # 隐式依赖边：reviewer → revise 体
+              body:
+                nodes:
+                  - id: regenerate
+                    kind: task
+                    uses: { model: route.main@1 }
+                    consumes: { feedback: verdict }
+                    emits: { patch: step_result }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.swarmkit.revise_system, quota_tokens: 500 }
+                        - { from: edge, port: feedback, policy: project, quota_tokens: 600 }
+                  - id: critique
+                    kind: task
+                    uses: { model: route.main@1 }
+                    consumes: { patch: step_result }
+                    emits: { opinion: verdict }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.swarmkit.critique_system, quota_tokens: 500 }
+                        - { from: edge, port: patch, policy: project, quota_tokens: 800 }
+                  - id: verdict_gate
+                    kind: gate
+                    consumes: { opinion: verdict }
+                    assert: "inputs.opinion.pass == true"
+                    emits: { opinion: verdict }
+                    route:                  # 批评不过 → 回到生成（Generate→Critique→Revise 反馈边）
+                      default: exit
+                      rules:
+                        - { when: "verdict_gate.passed == false", goto: regenerate }
+                edges:
+                  - { from: regenerate, output: patch, to: critique, input: patch }
+                  - { from: critique, output: opinion, to: verdict_gate, input: opinion }
+                  - { from: verdict_gate, output: opinion, to: regenerate, input: feedback }
+              max_iterations: 3
+              safety_points:
+                - { node: verdict_gate, kind: gate }
+              exit_when: "attempt.passed == true"
+              on_exhausted: continue
+            emits: { revision: { from_body: regenerate.patch } }
+
+          - id: aggregate
+            kind: transform
+            consumes: { results: "list<step_result>", verdict: verdict }
+            ops:
+              - { op: tally, port: results, by: output, into: stats }          # 投票：按答案一致性计数
+              - { op: select_best, port: results, by: score, prefer: max, into: best }
+            emits:
+              stats: tally_result
+              best: step_result
+
+          - id: decide
+            kind: task
+            uses: { model: route.main@1 }
+            consumes: { stats: tally_result, best: step_result }
+            emits: { decision: decision }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.swarmkit.decide_system, quota_tokens: 500 }
+                - { from: input, fields: [task], policy: project, quota_tokens: 300 }
+                - { from: edge, port: stats, policy: project, quota_tokens: 300 }
+                - { from: edge, port: best, policy: project, quota_tokens: 500 }
+
+          - id: reward
+            kind: task
+            escape:                    # L4：外部奖励/评分函数（任意回调挂载点）（卡 ⑥b-3）
+              kind: llm_predicate
+              impl_ref: packages/swarmkit@1.0.0/hatches/reward_fn.py
+              reason: "任务成功判据/测试通过率来自 DSL 之外的评测器，需任意回调挂载点（卡 ⑥b-3）"
+              owner: eval-team
+              share_budget_pct: 8
+            consumes: { decision: decision }
+            emits: { reward: reward_value }
+
+          - id: optimize
+            kind: task
+            escape:                    # L4：奖励驱动的优化控制环（卡 ⑥b-2）
+              kind: meta_loop
+              impl_ref: packages/swarmkit@1.0.0/hatches/policy_search.py
+              reason: "REINFORCE 类无梯度搜索 + 精英保留 + 回退整体在 DSL 之外，以「调用外部优化器并把结果作为子图回填」接入（卡 ⑥b-2）"
+              owner: rl-team
+              share_budget_pct: 15
+            consumes: { reward: reward_value }
+            emits: { proposal: graph_spec }
+
+          - id: graph_edit
+            kind: task
+            escape:                    # L4：运行时生成/改写图结构（卡 ⑥b-1）
+              kind: program_synthesis
+              impl_ref: packages/swarmkit@1.0.0/hatches/graph_edit.py
+              reason: "图编辑算子（增删节点/增删边/改节点依赖/替换节点实现）在运行时产出新图；静态 DSL 无法表达「产出一张新图」（卡 ⑥b-1）"
+              owner: lang-team
+              share_budget_pct: 10
+            writes: [graph_archive]
+            consumes: { proposal: graph_spec }
+            emits: { candidate: graph_spec }
+
+          - id: graph_value
+            kind: task
+            escape:                    # L4：图作为一等值（卡 ⑥b-6）
+              kind: program_synthesis
+              impl_ref: packages/swarmkit@1.0.0/hatches/graph_value.py
+              reason: "图可被嵌套、复用、作为另一张图的节点；DSL 需把「图」提升为一等值类型，否则逃逸（卡 ⑥b-6）"
+              owner: lang-team
+              share_budget_pct: 4
+            consumes: { candidate: graph_spec }
+            emits: { nested: graph_spec }
+        edges:
+          - { from: planner, output: plan, to: reviewer, input: plan }
+          - { from: planner, output: steps, to: dispatch, input: steps }
+          - { from: dispatch, output: worklist, to: execute_map, input: steps }
+          - { from: execute_map, output: results, to: memory, input: results }
+          - { from: execute_map, output: results, to: reviewer, input: results }
+          - { from: execute_map, output: results, to: aggregate, input: results }
+          - { from: memory, output: mem, to: reviewer, input: mem }
+          - { from: reviewer, output: verdict, to: revise, input: verdict }       # 控制节点入边仅表排序（反馈经 loop.args 注入体内）
+          - { from: revise, output: revision, to: reviewer, input: patch }
+          - { from: reviewer, output: verdict, to: aggregate, input: verdict }
+          - { from: aggregate, output: stats, to: decide, input: stats }
+          - { from: aggregate, output: best, to: decide, input: best }
+          - { from: decide, output: decision, to: reward, input: decision }
+          - { from: reward, output: reward, to: optimize, input: reward }
+          - { from: optimize, output: proposal, to: graph_edit, input: proposal }
+          - { from: graph_edit, output: candidate, to: graph_value, input: candidate }
+          - { from: graph_value, output: nested, to: planner, input: spec }        # 新图结构回填 → 下一轮执行
+      max_iterations: 40                    # 搜索轮次上限（卡 ④）
+      carried:
+        - { store: graph_archive, max_items: 64 }
+      safety_points:
+        - { node: "revise.verdict_gate", kind: gate }    # 跨层路径：经嵌套体解析
+      exit_when: "budget.cents_spent >= budget.cents_cap * 9 / 10"
+      on_exhausted: continue
+    emits: { decision: { from_body: decide.decision } }
+
+edges: []
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 5000 }
+    - { id: search_turns, dimension: turns, scope: loop:search, cap: 2000 }
+    - { id: decide_calls, dimension: model_calls, scope: node:search.decide, cap: 40 }
+    - { id: exec_calls, dimension: tool_calls, scope: map:search.execute_map, cap: 500 }
+  stop:
+    - { when: "steps.iterations >= 40", outcome: completed }        # 搜索轮数上限
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: completed }
+  failures:
+    - class: tool_error
+      retry: { max: 2, backoff_ms: 500 }
+      route: same_node
+      feedback: error_observation
+    - class: schema_invalid
+      retry: { max: 2, backoff_ms: 0 }
+      route: next_iteration
+    - class: gate_refused
+      route: next_iteration          # 批评不过：不改图，下一轮编辑重试
+    - class: budget_exhausted
+      terminal: true
+      outcome: completed             # 预算到顶 = 搜索收束，输出当前最优候选图的决定

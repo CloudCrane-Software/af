@@ -1,0 +1,4 @@
+# ret prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+a54457c071146666a4ceac33157e6b270290b89135307b6097c30043be76cf21  prompts/codegrep_system.md
+928624af8a308a779e13dc209c5d0591e83a50bc79f5c0719a19fa9178cc8ca5  prompts/larger_system.md

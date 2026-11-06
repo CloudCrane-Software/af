@@ -1,0 +1,63 @@
+version: 1
+meta:
+  name: farm_g
+  graph_version: '1'
+  entry: r
+  input: T_in
+  output:
+    ref: T_out
+    from: exit
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+      tags:
+        type: array
+        items:
+          type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+stores: []
+nodes:
+- id: r
+  kind: task
+  uses:
+    model: m@1
+  emits:
+    p: T_in
+  context:
+    sections:
+    - from: input
+      fields:
+      - q
+      quota_tokens: 100
+  route:
+    rules:
+    - when: steps.turns > 1
+      goto: exit
+    default: exit
+- id: t
+  kind: task
+  consumes:
+    go: T_in
+  emits:
+    fin: T_out
+- id: exit
+  kind: task
+  consumes:
+    go: T_in
+  emits:
+    fin: T_out
+edges:
+- from: r
+  output: p
+  to: exit
+  input: go
+policies: {}

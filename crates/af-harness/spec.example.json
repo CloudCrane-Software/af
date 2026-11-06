@@ -1,0 +1,53 @@
+{
+  "v": 1,
+  "body": {
+    "endpoint": {
+      "protocol": "openai-chat-completions",
+      "base_url": "https://api.moonshot.cn/v1",
+      "model": "kimi-k2",
+      "key_ref": "kimi.prod",
+      "reasoning_tier": "low",
+      "stream": false
+    },
+    "context_template": {
+      "system": "你是产线执行器。任务：{{task}}\n已有工件：{{artifacts}}",
+      "slots": ["artifacts", "task"]
+    },
+    "toolset": [
+      {
+        "name": "git",
+        "description": "只读查看仓库状态",
+        "parameters": {
+          "type": "object",
+          "properties": { "args": { "type": "string" } },
+          "required": ["args"],
+          "additionalProperties": false
+        },
+        "effect": "pure"
+      },
+      {
+        "name": "pay",
+        "description": "一次性外部付款",
+        "parameters": {
+          "type": "object",
+          "properties": { "cents": { "type": "integer" } },
+          "required": ["cents"],
+          "additionalProperties": false
+        },
+        "effect": "external_once"
+      }
+    ],
+    "policy": {
+      "max_turns": 8,
+      "stop": {
+        "completion_signals": ["DONE"],
+        "tool_free_turn_limit": 2
+      },
+      "budget_ref": {
+        "dimension": "llm.cents",
+        "per_turn": 1,
+        "unit": "cents"
+      }
+    }
+  }
+}

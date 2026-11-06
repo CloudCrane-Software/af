@@ -1,0 +1,5 @@
++ set -uxo pipefail
++ : '>>>>> Start Test Output'
+PASSED astropy/modeling/tests/test_separable.py::test_coord_matrix
+FAILED astropy/modeling/tests/test_separable.py::test_separable[compound_model6-result6]
++ : '>>>>> End Test Output'

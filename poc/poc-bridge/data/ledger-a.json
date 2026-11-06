@@ -1,0 +1,127 @@
+{
+ "vouchers": {
+  "e1-a": {
+   "voucher_id": "bv-e1-a",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e1a-normal": {
+   "voucher_id": "bv-e1a-normal",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e1a": {
+   "voucher_id": "bv-e1a",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e2a": {
+   "voucher_id": "bv-e2a",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e2a2": {
+   "voucher_id": "bv-e2a2",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e3a-old": {
+   "voucher_id": "bv-e3a-old",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e3a-mid": {
+   "voucher_id": "bv-e3a-mid",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e3a-new": {
+   "voucher_id": "bv-e3a-new",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e3a-ok": {
+   "voucher_id": "bv-e3a-ok",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  },
+  "e4a": {
+   "voucher_id": "bv-e4a",
+   "amount": 500,
+   "signed": true,
+   "attempts": 1
+  }
+ },
+ "artifacts": {
+  "e1a-normal": {
+   "artifact_id": "fa-e1a-normal",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e1a": {
+   "artifact_id": "fa-e1a",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e2a": {
+   "artifact_id": "fa-e2a",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e2a2": {
+   "artifact_id": "fa-e2a2",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e3a-old": {
+   "artifact_id": "fa-e3a-old",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e3a-ok": {
+   "artifact_id": "fa-e3a-ok",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  },
+  "e4a": {
+   "artifact_id": "fa-e4a",
+   "is_final": true,
+   "qualified": true,
+   "attempts": 1
+  }
+ },
+ "ops_log": [
+  "sign_voucher order=e1-a attempt=1",
+  "sign_voucher order=e1a-normal attempt=1",
+  "forge_artifact order=e1a-normal attempt=1 t=11:14:11",
+  "sign_voucher order=e1a attempt=1",
+  "forge_artifact order=e1a attempt=1 t=11:15:34",
+  "sign_voucher order=e2a attempt=1",
+  "forge_artifact order=e2a attempt=1 t=11:18:07",
+  "sign_voucher order=e2a2 attempt=1",
+  "forge_artifact order=e2a2 attempt=1 t=11:19:30",
+  "sign_voucher order=e3a-old attempt=1",
+  "forge_artifact order=e3a-old attempt=1 t=11:23:28",
+  "sign_voucher order=e3a-mid attempt=1",
+  "sign_voucher order=e3a-new attempt=1",
+  "sign_voucher order=e3a-ok attempt=1",
+  "forge_artifact order=e3a-ok attempt=1 t=11:24:15",
+  "sign_voucher order=e4a attempt=1",
+  "forge_artifact order=e4a attempt=1 t=11:31:25"
+ ]
+}

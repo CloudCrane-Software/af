@@ -1,0 +1,485 @@
+version: 1
+
+meta:
+  name: agentsh_delm_harness
+  graph_version: "1.0"
+  entry: boot
+  input: harness_input
+  output: { ref: delivery, from: finalize }
+  intent: >-
+    Agensh（无中心编排者，1→1024 自组织 worker 池）+ DeLM（共享上下文 𝒞 + 任务队列 𝒯 取代主 agent）双目标合一。
+    拓扑：boot（阶梯激活，逃逸）→ intake（原始任务入队，无分解）→ workers（map 扇出，同构 worker 池）→
+    每个 worker 内 cycle（受控循环承载五步合作循环：gather→claim→act→verify→fail_scan→session→merge，
+    verify/fail_scan 不过则 route 回 act）→ 根级单写者汇聚（queue_publish/board_publish/workspace_publish）
+    → fail_watch（全局 fail 开放语义，逃逸）→ submit_gate → finalize。
+    无中心规划者、无 plan-closure 步；共享上下文/队列/工作区均为「根级单写者 + worker 只读」。
+
+types:
+  - name: harness_input
+    schema:
+      type: object
+      required: [goal, acceptance]
+      properties:
+        goal: { type: string }            # 原始任务目标（验证判据回读此字段，不经子任务摘要）
+        acceptance: { type: string }      # 子任务的验收判据原文
+        reference_behavior: { type: string }   # 参考行为/既有软件描述
+  - name: worker_id
+    schema:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+  - name: brief
+    schema:
+      type: object
+      required: [goal, acceptance, scope_hint]
+      properties:
+        goal: { type: string }
+        acceptance: { type: string }
+        scope_hint: { type: string }
+  - name: board_entry
+    schema:
+      type: object
+      required: [entry_type, body, author]
+      properties:
+        entry_type: { type: string }      # OBSERVED | FACT | FAIL | CLAIM | PATCH_SUMMARY
+        body: { type: string, maxLength: 300 }   # 100/300 分档见 notes「语法不确定点 4」
+        author: { type: string }
+        scope: { type: string }
+        evidence: { type: string }
+        detail_ref: { type: string }      # 长文入 detail，经 board_unfold 展开
+  - name: queue_entry
+    schema:
+      type: object
+      required: [subject, detail, status, owner]
+      properties:
+        subject: { type: string }
+        detail: { type: string }
+        status: { type: string }          # open | claimed | done
+        owner: { type: string }
+        scope: { type: string }
+  - name: progress_report
+    schema:
+      type: object
+      required: [body, rationale, evidence]
+      properties:
+        body: { type: string, maxLength: 300 }   # PATCH_SUMMARY 载体（变更内容）
+        rationale: { type: string }               # 背后想法
+        evidence: { type: string }                # 验证证据
+        changed_paths: { type: array, items: { type: string } }
+  - name: workspace_artifact
+    schema:
+      type: object
+      required: [path, content_ref]
+      properties:
+        path: { type: string }
+        content_ref: { type: string }
+  - name: verify_report
+    schema:
+      type: object
+      required: [passed, findings]
+      properties:
+        passed: { type: boolean }
+        findings: { type: string }
+  - name: peer_message
+    schema:
+      type: object
+      required: [channel, author, body]
+      properties:
+        channel: { type: string }
+        author: { type: string }
+        body: { type: string }
+  - name: nudge_note
+    schema:
+      type: object
+      required: [kind, body]
+      properties:
+        kind: { type: string }            # idle_nudge | budget_t45 | budget_t5
+        body: { type: string }
+  - name: commit_receipt
+    schema:
+      type: object
+      required: [branch, pr, status]
+      properties:
+        branch: { type: string }
+        pr: { type: string }
+        status: { type: string }          # merged | conflict | rejected
+  - name: delivery
+    schema:
+      type: object
+      required: [summary, evidence]
+      properties:
+        summary: { type: string }
+        evidence: { type: string }
+        artifact_paths: { type: array, items: { type: string } }
+
+stores:
+  - name: board            # 共享上下文 𝒞：append-only 类型化条目（全员可读，写侧单写者化）
+    type: message_log
+    item: board_entry
+    writer: board_publish
+    lifecycle: run
+    retention: { max_items: 2000 }       # board_read 截断至最新 2000 条
+  - name: task_queue       # 【D】任务队列 𝒯：条目含 status/owner，状态全员可见
+    type: collection
+    item: queue_entry
+    writer: queue_publish
+    lifecycle: run
+    retention: { max_items: 256 }
+  - name: workspace        # 共享 workspace（proposed/ongoing/completed 三态工件）
+    type: collection
+    item: workspace_artifact
+    writer: workspace_publish
+    lifecycle: persistent
+    retention: { max_items: 4096 }
+
+nodes:
+  # ---------- 根级：启动与入队 ----------
+  - id: boot
+    kind: task
+    escape:                              # L4：阶梯激活调度（首小时 1/30s，此后 1/3s）+ worker ID 分配
+      kind: env_adapter
+      impl_ref: packages/agensh@1.0.0/hatches/activation_roster.py
+      reason: "激活节奏与 worker 名单是运行时基础设施编排（map 无激活日程字段），静态 DSL 无落点"
+      owner: harness-team
+      share_budget_pct: 3
+    emits: { roster: "list<worker_id>" }
+
+  - id: intake
+    kind: task
+    uses: { model: route.cheap@1 }
+    consumes: { roster: "list<worker_id>" }
+    emits: { seed: "list<queue_entry>" }   # 原始任务入队（issue #1 语义）；不做任务分解——无中心规划者
+    context:
+      sections:
+        - { from: template, template_ref: pkg.agensh.intake_prompt, quota_tokens: 400 }
+        - { from: input, fields: [goal, acceptance], policy: project, quota_tokens: 1200 }
+        - { from: edge, port: roster, policy: project, quota_tokens: 800 }
+
+  # ---------- 根级：worker 池（map 扇出） ----------
+  - id: workers
+    kind: task
+    consumes: { roster: "list<worker_id>" }
+    map:
+      over: boot.roster            # 运行时定基数；实例间无横向边（互不可见的局部工作区）
+      max_fanout: 1024
+      body:
+        nodes:
+          - id: slot
+            kind: transform
+            consumes: { item: worker_id }     # map 隐式入边：item = 激活名单元素
+            emits: { who: worker_id }
+            ops:
+              - { op: project, port: item, into: who }
+          - id: cycle
+            kind: task
+            loop:
+              args: { worker_id: slot.who }   # 隐式依赖边：slot → cycle
+              body:
+                nodes:
+                  # ---- 第 1 步 gather：上下文装配（板读/消息/催工三条注入） ----
+                  - id: board_read
+                    kind: task
+                    escape:                    # L4：board_read/board_grep/board_unfold + 【D】增量游标
+                      kind: runtime_context_mutation
+                      impl_ref: packages/agensh@1.0.0/hatches/board_reader.py
+                      reason: "全史布尔检索、按条目展开与【D】按 agent 记忆的增量游标是运行时读位置；latest_k 仅为近似"
+                      owner: harness-team
+                      share_budget_pct: 4
+                    emits: { findings: "list<board_entry>" }
+                  - id: msg_pump
+                    kind: task
+                    escape:                    # L4：消息投递双轨（频道批量 / 私信 mid-turn）
+                      kind: runtime_context_mutation
+                      impl_ref: packages/agensh@1.0.0/hatches/message_pump.py
+                      reason: "频道消息每轮首投、私信每次工具调用后 mid-turn 注入，按运行时事件改写 worker 上下文"
+                      owner: harness-team
+                      share_budget_pct: 3
+                    consumes: { findings: "list<board_entry>" }
+                    emits: { findings: "list<board_entry>", peer_msg: peer_message }
+                  - id: guard_pump
+                    kind: task
+                    escape:                    # L4：idle 10 分钟催工 prompt + T−45/T−5 提醒注入
+                      kind: runtime_context_mutation
+                      impl_ref: packages/agensh@1.0.0/hatches/idle_guard.py
+                      reason: "停滞催工与临近预算提醒都是按运行时事件注入的提示，静态声明式无落点"
+                      owner: harness-team
+                      share_budget_pct: 2
+                    consumes: { findings: "list<board_entry>", peer_msg: peer_message }
+                    emits: { findings: "list<board_entry>", peer_msg: peer_message, nudge: nudge_note }
+                  - id: gather
+                    kind: task
+                    uses: { model: route.main@1 }
+                    consumes:
+                      findings: "list<board_entry>"
+                      peer_msg: peer_message
+                      nudge: nudge_note
+                    emits: { brief: brief }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.agensh.worker_protocol, vars: { worker_id: arg.worker_id }, quota_tokens: 900 }
+                        - { from: input, fields: [goal, acceptance], policy: project, quota_tokens: 1200 }
+                        - { from: store, store: board, policy: latest_k, args: { k: 2000 }, quota_tokens: 4000 }
+                        - { from: store, store: workspace, policy: latest_k, args: { k: 64 }, quota_tokens: 1500 }
+                        - { from: store, store: task_queue, policy: latest_k, args: { k: 32 }, quota_tokens: 1000 }
+                        - { from: store, store: board, policy: retrieve, component: pkg.agensh.board_grep@1, args: { k: 32 }, quota_tokens: 800 }
+                        - { from: edge, port: findings, fields: [entry_type, body, author], policy: project, quota_tokens: 3000 }
+                        - { from: edge, port: peer_msg, policy: project, quota_tokens: 800 }
+                        - { from: edge, port: nudge, policy: project, quota_tokens: 100, optional: true }
+                    route:                        # T−45min（预算 7/8）：停止派新特性，转入收束子图
+                      default: claim
+                      rules:
+                        - { when: "budget.clock_ms_spent >= budget.clock_ms_cap * 7 / 8", goto: wrap }
+
+                  # ---- 第 2 步 claim：认领子任务 ----
+                  - id: claim
+                    kind: task
+                    escape:                      # L4：first-claim-wins 原子认领 + apply 守卫式复制
+                      kind: env_adapter
+                      impl_ref: packages/agensh@1.0.0/hatches/atomic_claim.py
+                      reason: "CAS 式条件写入是有副作用原语；CEL 保守子集零副作用，gate 只能判定不能抢注"
+                      owner: harness-team
+                      share_budget_pct: 4
+                    consumes: { brief: brief }
+                    emits: { lease: queue_entry, conflict: queue_entry }
+                  - id: lease_guard
+                    kind: gate                   # 认领判定（原子性在 claim 逃逸内，gate 只判定状态）
+                    consumes: { lease: queue_entry, conflict: queue_entry }
+                    assert: "inputs.lease.status == 'claimed'"
+                    emits: { lease: queue_entry, conflict: queue_entry }
+                    route:                        # 未抢到（已被他人认领）→ 同伴协商
+                      default: act
+                      rules:
+                        - { when: "lease_guard.passed == false", goto: negotiate }
+                  - id: negotiate
+                    kind: task
+                    escape:                      # L4：CLAIM 冲突的同伴协商裁决（语义级，非谓词可写）
+                      kind: llm_predicate
+                      impl_ref: packages/agensh@1.0.0/hatches/claim_negotiation.py
+                      reason: "谁做/怎么分叉是同伴协商后的语义裁决，保守 CEL 子集无法表达"
+                      owner: harness-team
+                      share_budget_pct: 3
+                    consumes: { conflict: queue_entry }
+                    emits: { resolution: queue_entry }
+
+                  # ---- 第 3 步 act：本地用工具干活 ----
+                  - id: act
+                    kind: task
+                    uses:
+                      model: route.main@1
+                      tools: [pkg.agensh.local_edit, pkg.agensh.local_run, pkg.agensh.inspect]
+                    consumes:
+                      lease: queue_entry
+                      resolution: queue_entry
+                      feedback: verify_report
+                    emits: { patch: progress_report }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.agensh.action_protocol, vars: { worker_id: arg.worker_id }, quota_tokens: 700 }
+                        - { from: input, fields: [goal], policy: project, quota_tokens: 600 }
+                        - { from: store, store: workspace, policy: latest_k, args: { k: 32 }, quota_tokens: 1200 }
+                        - { from: edge, port: lease, policy: project, quota_tokens: 400, optional: true }
+                        - { from: edge, port: resolution, policy: project, quota_tokens: 400, optional: true }
+                        - { from: edge, port: feedback, fields: [findings], policy: project, quota_tokens: 600, optional: true }
+
+                  # ---- 第 4 步 verify：对照验收判据（判据取自原始任务） ----
+                  - id: verify
+                    kind: check
+                    uses: { unit: pkg.agensh.acceptance_gate@1 }
+                    consumes: { patch: progress_report }
+                    emits: { report: verify_report, patch: progress_report }
+                    context:
+                      sections:
+                        - { from: input, fields: [acceptance], policy: project, quota_tokens: 600 }
+                        - { from: store, store: board, policy: latest_k, args: { k: 200 }, quota_tokens: 1200 }
+                    route:                        # 不过 → 打回 act 修正（QA 回环）
+                      default: fail_scan
+                      rules:
+                        - { when: "verify.passed == false", goto: act }
+                  - id: fail_scan
+                    kind: check
+                    uses: { unit: pkg.agensh.fail_scan@1 }
+                    consumes: { patch: progress_report }
+                    emits: { report: verify_report, patch: progress_report }
+                    context:
+                      sections:
+                        - { from: store, store: board, policy: retrieve, component: pkg.agensh.fail_index@1, args: { k: 64 }, quota_tokens: 1200 }
+                    route:                        # 存在未解 fail → 打回 act
+                      default: session
+                      rules:
+                        - { when: "fail_scan.passed == false", goto: act }
+
+                  # ---- 第 5 步 merge progress：并入 workspace + 发布更新 ----
+                  - id: session
+                    kind: task
+                    escape:                      # L4：外部有状态会话（分支/PR 状态、DM 历史、路由器恢复）
+                      kind: env_adapter
+                      impl_ref: packages/agensh@1.0.0/hatches/workspace_session.py
+                      reason: "跨执行的有状态服务契约（合并冲突检测、会话恢复）无静态表达位"
+                      owner: harness-team
+                      share_budget_pct: 5
+                    consumes: { patch: progress_report }
+                    emits: { commit: commit_receipt, patch: progress_report }
+                  - id: merge
+                    kind: task
+                    uses:
+                      model: route.cheap@1
+                      tools: [pkg.agensh.publish_update]
+                    consumes: { commit: commit_receipt, patch: progress_report }
+                    emits: { entry: board_entry, delivery: delivery }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.agensh.merge_prompt, vars: { worker_id: arg.worker_id }, quota_tokens: 500 }
+                        - { from: edge, port: commit, policy: project, quota_tokens: 400 }
+                        - { from: edge, port: patch, policy: project, quota_tokens: 600 }
+
+                  # ---- 收束子图（预算临近）：合并就绪工作 ----
+                  - id: wrap
+                    kind: task
+                    uses: { model: route.cheap@1 }
+                    consumes: { brief: brief }
+                    emits: { patch: progress_report }
+                    context:
+                      sections:
+                        - { from: template, template_ref: pkg.agensh.wrapup_prompt, vars: { worker_id: arg.worker_id }, quota_tokens: 400 }
+                        - { from: input, fields: [goal], policy: project, quota_tokens: 400 }
+                        - { from: edge, port: brief, policy: project, quota_tokens: 1200 }
+                edges:
+                  - { from: board_read, output: findings, to: msg_pump, input: findings }
+                  - { from: msg_pump, output: findings, to: guard_pump, input: findings }
+                  - { from: msg_pump, output: peer_msg, to: guard_pump, input: peer_msg }
+                  - { from: guard_pump, output: findings, to: gather, input: findings }
+                  - { from: guard_pump, output: peer_msg, to: gather, input: peer_msg }
+                  - { from: guard_pump, output: nudge, to: gather, input: nudge }
+                  - { from: gather, output: brief, to: claim, input: brief }
+                  - { from: gather, output: brief, to: wrap, input: brief }
+                  - { from: claim, output: lease, to: lease_guard, input: lease }
+                  - { from: claim, output: conflict, to: lease_guard, input: conflict }
+                  - { from: lease_guard, output: lease, to: act, input: lease }
+                  - { from: lease_guard, output: conflict, to: negotiate, input: conflict }
+                  - { from: negotiate, output: resolution, to: act, input: resolution }
+                  - { from: act, output: patch, to: verify, input: patch }
+                  - { from: verify, output: report, to: act, input: feedback }
+                  - { from: verify, output: patch, to: fail_scan, input: patch }
+                  - { from: fail_scan, output: report, to: act, input: feedback }
+                  - { from: fail_scan, output: patch, to: session, input: patch }
+                  - { from: wrap, output: patch, to: session, input: patch }
+                  - { from: session, output: commit, to: merge, input: commit }
+                  - { from: session, output: patch, to: merge, input: patch }
+              max_iterations: 24
+              carried: []                       # 体内不写任何体外声明的 store（INV-2 ③ 无需登记）
+              safety_points:
+                - { node: lease_guard, kind: gate }
+                - { node: verify, kind: check }
+                - { node: fail_scan, kind: check }
+              exit_when: "attempt.passed == true"   # 独立提交判据（ReadyToSubmit 近似）：证据覆盖需求才提交
+              on_exhausted: continue               # 本人收工后由下一个仍在运行的 agent 接管
+            emits:
+              claims: { from_body: claim.lease }
+              entries: { from_body: merge.entry }
+              deliveries: { from_body: merge.delivery }
+        edges: []
+    emits:
+      claims: { from_body: cycle.claims }
+      entries: { from_body: cycle.entries }
+      deliveries: { from_body: cycle.deliveries }
+
+  # ---------- 根级：单写者汇聚（INV-2 多写者拆槽的落地） ----------
+  - id: queue_publish
+    kind: transform
+    consumes: { seed: "list<queue_entry>", claims: "list<queue_entry>" }
+    writes: [task_queue]
+    ops:
+      - { op: merge, ports: [seed, claims], into: task_queue }
+    emits: {}
+
+  - id: board_publish
+    kind: task
+    uses: { tool: pkg.agensh.board_append@1 }
+    consumes: { entries: "list<board_entry>" }
+    writes: [board]
+    emits: {}
+
+  - id: workspace_publish
+    kind: task
+    uses: { tool: pkg.agensh.workspace_commit@1 }
+    consumes: { deliveries: "list<delivery>" }
+    writes: [workspace]
+    emits: {}
+
+  # ---------- 根级：全局 fail 开放语义 + 交付门禁 ----------
+  - id: fail_watch
+    kind: task
+    escape:                          # L4：fail 条目全局开放生命周期（跨实例条件联动）
+      kind: llm_predicate
+      impl_ref: packages/agensh@1.0.0/hatches/fail_lifecycle.py
+      reason: "fail 保持 open 直到被新条目或修复子任务处理，是跨实例条件联动，静态边不可达"
+      owner: harness-team
+      share_budget_pct: 3
+    consumes: { entries: "list<board_entry>" }
+    emits: { open_fails: "list<board_entry>" }
+
+  - id: best
+    kind: transform
+    consumes: { deliveries: "list<delivery>" }
+    ops:
+      - { op: select_best, port: deliveries, by: evidence, prefer: max, into: chosen }
+    emits: { chosen: delivery }
+
+  - id: submit_gate
+    kind: gate
+    consumes: { chosen: delivery, open_fails: "list<board_entry>" }
+    assert: "inputs.chosen.evidence != ''"
+    emits: { chosen: delivery }
+
+  - id: finalize
+    kind: transform
+    consumes: { chosen: delivery }
+    ops:
+      - { op: project, port: chosen, into: answer }
+    emits: { answer: delivery }
+
+edges:
+  - { from: boot, output: roster, to: intake, input: roster }
+  - { from: boot, output: roster, to: workers, input: roster }
+  - { from: intake, output: seed, to: queue_publish, input: seed }
+  - { from: workers, output: claims, to: queue_publish, input: claims }
+  - { from: workers, output: entries, to: board_publish, input: entries }
+  - { from: workers, output: entries, to: fail_watch, input: entries }
+  - { from: workers, output: deliveries, to: workspace_publish, input: deliveries }
+  - { from: workers, output: deliveries, to: best, input: deliveries }
+  - { from: fail_watch, output: open_fails, to: submit_gate, input: open_fails }
+  - { from: best, output: chosen, to: submit_gate, input: chosen }
+  - { from: submit_gate, output: chosen, to: finalize, input: chosen }
+
+policies:
+  budgets:
+    - { id: wall_clock, dimension: clock_ms, scope: plan, cap: 21600000 }     # 6h 墙钟预算，T 到点全体终止
+    - { id: org_tokens, dimension: tokens_total, scope: plan, cap: 60000000 }
+    - { id: org_cost, dimension: cents, scope: plan, cap: 2000 }
+    - { id: org_tool_calls, dimension: tool_calls, scope: plan, cap: 20000 }
+    - { id: worker_turns, dimension: turns, scope: loop:workers.cycle, cap: 200 }
+    - { id: worker_model_calls, dimension: model_calls, scope: node:workers.cycle.act, cap: 60 }
+  stop:
+    - { when: "budget.clock_ms_spent >= budget.clock_ms_cap", outcome: failed }      # T+6h 全员强制终止
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: failed }
+  failures:
+    - class: tool_error               # 合并冲突（Git 检测文本冲突）→ 重试回路
+      route: same_node
+      feedback: conflict_resolution
+      retry: { max: 3, backoff_ms: 2000 }
+    - class: gate_refused             # 验收不过 / 未解 fail → 下一轮修正
+      route: next_iteration
+      feedback: verify_feedback
+    - class: schema_invalid
+      route: same_node
+      feedback: format_reminder
+      retry: { max: 2, backoff_ms: 0 }
+    - class: environment_failure
+      retry: { max: 3, backoff_ms: 5000 }
+    - class: timeout                  # 停滞/等待超时 → 催工后重试
+      route: same_node
+      feedback: idle_hint
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

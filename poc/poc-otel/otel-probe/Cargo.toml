@@ -1,0 +1,15 @@
+[package]
+name = "otel-probe"
+version = "0.1.0"
+edition = "2021"
+
+# 空 workspace 表：脱离 AF 根 workspace，独立构建
+[workspace]
+
+[dependencies]
+opentelemetry = "0.33.1"
+opentelemetry_sdk = "0.33.1"
+opentelemetry-otlp = { version = "0.33.1", features = ["grpc-tonic", "http-proto", "reqwest-blocking-client"] }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+futures-executor = "0.3"

@@ -1,0 +1,91 @@
+[07:03:03.817] WF run wid=kill-a1 run=01a15141 replaying=False
+[07:03:03.817] WF schedule tag=step1 replaying=False wid=kill-a1
+[07:03:03.832] ACT started tag=step1 attempt=1 worker=w1 pid=3843421 activity_id=1 workflow_id=kill-a1
+[07:03:05.834] ACT completed tag=step1 attempt=1 worker=w1 pid=3843421
+[07:03:05.840] WF schedule tag=step2 replaying=False wid=kill-a1
+[07:03:05.844] ACT started tag=step2 attempt=1 worker=w1 pid=3843421 activity_id=2 workflow_id=kill-a1
+[07:03:08.380] OPS kill -9 worker w1 pid=3843421
+[07:03:13.421] OPS restart worker w1b
+[07:03:14.145] ACT started tag=step2 attempt=2 worker=w1b pid=3844487 activity_id=2 workflow_id=kill-a1
+[07:03:24.160] ACT completed tag=step2 attempt=2 worker=w1b pid=3844487
+[07:03:24.200] WF run wid=kill-a1 run=01a15141 replaying=True
+[07:03:24.200] WF schedule tag=step1 replaying=True wid=kill-a1
+[07:03:24.204] WF schedule tag=step2 replaying=True wid=kill-a1
+[07:03:24.206] WF done wid=kill-a1 replaying=False
+[07:06:15.294] WF run wid=kill-a2 run=01a15144 replaying=False
+[07:06:15.302] WF schedule tag=step1 replaying=False wid=kill-a2
+[07:06:15.307] ACT started tag=step1 attempt=1 worker=w1b pid=3844487 activity_id=1 workflow_id=kill-a2
+[07:06:17.309] ACT completed tag=step1 attempt=1 worker=w1b pid=3844487
+[07:06:17.315] WF schedule tag=step2 replaying=False wid=kill-a2
+[07:06:17.318] ACT started tag=step2 attempt=1 worker=w1b pid=3844487 activity_id=2 workflow_id=kill-a2
+[07:06:27.422] ACT completed tag=step2 attempt=1 worker=w1b pid=3844487
+[07:06:27.446] WF done wid=kill-a2 replaying=False
+[07:06:39.735] OPS kill -9 worker w1b pid=3844487 (victim, stays dead)
+[07:07:18.985] WF run wid=kill-a2b run=01a15145 replaying=False
+[07:07:18.985] WF schedule tag=step1 replaying=False wid=kill-a2b
+[07:07:18.997] ACT started tag=step1 attempt=1 worker=w2a pid=3850278 activity_id=1 workflow_id=kill-a2b
+[07:07:21.003] ACT completed tag=step1 attempt=1 worker=w2a pid=3850278
+[07:07:21.031] WF schedule tag=step2 replaying=False wid=kill-a2b
+[07:07:21.046] ACT started tag=step2 attempt=1 worker=w2a pid=3850278 activity_id=2 workflow_id=kill-a2b
+[07:07:23.680] OPS kill -9 victim worker= pid= (will stay dead; w2a/w1a remain)
+[07:07:33.062] ACT completed tag=step2 attempt=1 worker=w2a pid=3850278
+[07:07:33.068] WF done wid=kill-a2b replaying=False
+[07:07:33.126] OPS A2b done
+[07:07:56.095] WF run wid=kill-a2c run=01a15145 replaying=False
+[07:07:56.097] WF schedule tag=step1 replaying=False wid=kill-a2c
+[07:07:56.117] ACT started tag=step1 attempt=1 worker=w1a pid=3850514 activity_id=1 workflow_id=kill-a2c
+[07:07:58.123] ACT completed tag=step1 attempt=1 worker=w1a pid=3850514
+[07:07:58.133] WF schedule tag=step2 replaying=False wid=kill-a2c
+[07:07:58.137] ACT started tag=step2 attempt=1 worker=w1a pid=3850514 activity_id=2 workflow_id=kill-a2c
+[07:08:00.780] OPS kill -9 victim worker=w1a pid=3850514 (stays dead; other standing worker takes over)
+[07:08:03.160] ACT started tag=step2 attempt=2 worker=w2a pid=3850278 activity_id=2 workflow_id=kill-a2c
+[07:08:17.186] ACT completed tag=step2 attempt=2 worker=w2a pid=3850278
+[07:08:17.192] WF run wid=kill-a2c run=01a15145 replaying=True
+[07:08:17.192] WF schedule tag=step1 replaying=True wid=kill-a2c
+[07:08:17.193] WF schedule tag=step2 replaying=True wid=kill-a2c
+[07:08:17.194] WF done wid=kill-a2c replaying=False
+[07:08:17.254] OPS A2c done
+[07:09:52.395] WF run wid=kill-a3 run=01a15147 replaying=False
+[07:09:52.395] WF schedule tag=step1 replaying=False wid=kill-a3
+[07:09:52.409] ACT started tag=step1 attempt=1 worker=w3a pid=3858668 activity_id=1 workflow_id=kill-a3
+[07:09:54.411] ACT completed tag=step1 attempt=1 worker=w3a pid=3858668
+[07:09:54.422] WF gap-sleep enter seconds=4.0 replaying=False wid=kill-a3
+[07:09:56.180] OPS kill -9 worker w3a pid=3858668 during inter-activity timer gap
+[07:09:57.528] OPS restart worker w3b
+[07:10:08.445] WF run wid=kill-a3 run=01a15147 replaying=True
+[07:10:08.446] WF schedule tag=step1 replaying=True wid=kill-a3
+[07:10:08.450] WF gap-sleep enter seconds=4.0 replaying=True wid=kill-a3
+[07:10:08.451] WF schedule tag=step2 replaying=False wid=kill-a3
+[07:10:08.460] ACT started tag=step2 attempt=1 worker=w3b pid=3858954 activity_id=2 workflow_id=kill-a3
+[07:10:16.479] ACT completed tag=step2 attempt=1 worker=w3b pid=3858954
+[07:10:16.509] WF done wid=kill-a3 replaying=False
+[07:11:42.753] WF run wid=kill-a4 run=01a15149 replaying=False
+[07:11:42.753] WF schedule tag=step1 replaying=False wid=kill-a4
+[07:11:42.771] ACT started tag=step1 attempt=1 worker=w4a pid=3862587 activity_id=1 workflow_id=kill-a4
+[07:11:44.773] ACT completed tag=step1 attempt=1 worker=w4a pid=3862587
+[07:11:44.802] WF schedule tag=step2 replaying=False wid=kill-a4
+[07:11:44.815] ACT started tag=step2 attempt=1 worker=w4a pid=3862587 activity_id=2 workflow_id=kill-a4
+[07:11:47.492] OPS kill -9 worker w4a pid=3862587 (stays dead; NO heartbeat)
+[07:11:51.247] OPS join worker w4b EARLY (before StartToClose fires ~t=27)
+[07:12:10.815] ACT started tag=step2 attempt=2 worker=w4b pid=3862963 activity_id=2 workflow_id=kill-a4
+[07:12:35.841] ACT completed tag=step2 attempt=2 worker=w4b pid=3862963
+[07:12:37.328] ACT started tag=step2 attempt=3 worker=w4b pid=3862963 activity_id=2 workflow_id=kill-a4
+[07:13:02.356] ACT completed tag=step2 attempt=3 worker=w4b pid=3862963
+[07:13:04.584] ACT started tag=step2 attempt=4 worker=w4b pid=3862963 activity_id=2 workflow_id=kill-a4
+[07:13:16.753] OPS A4 done
+[07:13:29.610] ACT completed tag=step2 attempt=4 worker=w4b pid=3862963
+[07:13:32.976] ACT started tag=step2 attempt=5 worker=w4b pid=3862963 activity_id=2 workflow_id=kill-a4
+[07:13:58.001] ACT completed tag=step2 attempt=5 worker=w4b pid=3862963
+[07:14:03.049] ACT started tag=step2 attempt=6 worker=w4b pid=3862963 activity_id=2 workflow_id=kill-a4
+[07:14:28.075] ACT completed tag=step2 attempt=6 worker=w4b pid=3862963
+[07:14:35.634] ACT started tag=step2 attempt=7 worker=w4b pid=3862963 activity_id=2 workflow_id=kill-a4
+[07:15:00.661] ACT completed tag=step2 attempt=7 worker=w4b pid=3862963
+[07:15:12.046] ACT started tag=step2 attempt=8 worker=w4b pid=3862963 activity_id=2 workflow_id=kill-a4
+[07:15:37.071] ACT completed tag=step2 attempt=8 worker=w4b pid=3862963
+[07:15:54.137] ACT started tag=step2 attempt=9 worker=w4b pid=3862963 activity_id=2 workflow_id=kill-a4
+[07:16:19.170] ACT completed tag=step2 attempt=9 worker=w4b pid=3862963
+[07:16:44.782] ACT started tag=step2 attempt=10 worker=w4b pid=3862963 activity_id=2 workflow_id=kill-a4
+[07:17:09.808] ACT completed tag=step2 attempt=10 worker=w4b pid=3862963
+[07:17:09.825] WF run wid=kill-a4 run=01a15149 replaying=True
+[07:17:09.826] WF schedule tag=step1 replaying=True wid=kill-a4
+[07:17:09.837] WF schedule tag=step2 replaying=True wid=kill-a4

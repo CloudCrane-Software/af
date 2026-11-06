@@ -1,0 +1,94 @@
+id: st-b-C078
+name: "CodeT 双执行一致性：自生成测试对并行候选做双重投票选优"
+tier: B
+claim: "CodeT 双执行一致性：自生成测试对并行候选双重投票选优，HumanEval pass@1 65.8%（+18.8 点）"
+claimed_value:
+  metric: "pass@1"
+  direction: up
+  context: "对照组=只用 majority voting 或 LLM-as-judge 选 patch；实验组=自生成测试双执行投票"
+sources: [S072, S099]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: codet_dual_exec_voting
+    graph_version: "1.0"
+    entry: candidates
+    input: codet_input
+    output: { ref: exec_result, from: vote }
+    intent: "并行候选 + 自生成测试双执行一致性投票选优：执行结果双投票，select_best 取最高通过率"
+  types:
+    - name: codet_input
+      schema:
+        type: object
+        required: [issue, attempt_ids]
+        properties:
+          issue: { type: string }
+          attempt_ids: { type: array, items: { type: integer } }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: exec_result
+      schema:
+        type: object
+        required: [ref, diff_ref, pass_milli, vote]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+          pass_milli: { type: integer }
+          vote: { type: string }
+    - name: tally_result
+      schema:
+        type: object
+        required: [answers, top_count, top_share_milli]
+        properties:
+          answers: { type: integer }
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+  nodes:
+    - id: candidates
+      kind: task
+      map:
+        over: input.attempt_ids
+        max_fanout: 4
+        body:
+          nodes:
+            - id: coder
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit] }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.ttc.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+      emits: { patches: { from_body: coder.patch } }
+    - id: exec
+      kind: check
+      uses: { unit: pkg.codet.dual_runner@1 }    # 自生成测试双执行（每个候选跑两次）
+      consumes: { patches: "list<patch>" }
+      emits: { results: "list<exec_result>" }
+    - id: vote
+      kind: transform
+      consumes: { results: "list<exec_result>" }
+      ops:
+        - { op: tally, port: results, by: vote, into: stats }          # 双执行一致性投票
+        - { op: select_best, port: results, by: pass_milli, prefer: max, into: winner }
+      emits:
+        stats: tally_result
+        winner: exec_result
+  edges:
+    - { from: candidates, output: patches, to: exec, input: patches }
+    - { from: exec, output: results, to: vote, input: results }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 700 }
+      - { id: fanout_cap, dimension: model_calls, scope: map:candidates, cap: 40 }
+    failures:
+      - { class: schema_invalid, retry: { max: 2, backoff_ms: 0 } }
+      - { class: budget_exhausted, terminal: true, outcome: completed }

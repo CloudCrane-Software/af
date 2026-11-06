@@ -1,0 +1,64 @@
+# 探针自证原始读数（v0.3-T5②/T6③ 触发件返修批 2026-11-05）
+# 探针本体：af 仓 tools/trigger-inbox-src-parity-probe.py（只读 sha256 对账，零写/零网络/零监听）
+# 命令前缀统一：python3 -I <probe>   （-I 隔离模式）
+
+## 0) 探针本体 sha256
+ec43302ab4ed99ff9366e38337db73ff9d7b90d36f76444f06b7e35969da7f64  tools/trigger-inbox-src-parity-probe.py
+
+## 1) 真盘 GREEN 用例（默认路径：af 仓正本 vs 工作区在役运行位）
+$ python3 -I tools/trigger-inbox-src-parity-probe.py
+[GREEN] trigger-inbox 两处同源对账通过：sha256 相等
+  A(af 仓正本)    = /home/pan-ding/workspace/af-wt-t5t6/tools/trigger-inbox.py  sha256=8a1bdb69fb581eabdac80942ca1ad7c5a9cc428c696a7912be72f9a50bf1b912
+  B(工作区在役位) = /home/pan-ding/workspace/agent黑灯工厂/tools/trigger-inbox.py  sha256=8a1bdb69fb581eabdac80942ca1ad7c5a9cc428c696a7912be72f9a50bf1b912
+VERDICT=ALIGNED sha_a=8a1bdb69fb581eabdac80942ca1ad7c5a9cc428c696a7912be72f9a50bf1b912 sha_b=8a1bdb69fb581eabdac80942ca1ad7c5a9cc428c696a7912be72f9a50bf1b912 a=/home/pan-ding/workspace/af-wt-t5t6/tools/trigger-inbox.py b=/home/pan-ding/workspace/agent黑灯工厂/tools/trigger-inbox.py
+EXIT=0
+
+## 2) 探针自证 --selftest（夹具四例，全部以子进程跑本体）
+$ python3 -I tools/trigger-inbox-src-parity-probe.py --selftest
+== trigger-inbox-src-parity-probe --selftest（判别力自证）==
+[PASS] 两处内容不同 ⇒ 必须红（实测 rc=1）
+[PASS] 两处内容相同 ⇒ 必须绿（实测 rc=0）
+[PASS] 差一个字节 ⇒ 必须红（实测 rc=1）
+[PASS] 缺件 ⇒ 必须红（不可证不猜绿）（实测 rc=1）
+SELFTEST_VERDICT=ALIGNED_PROBE_WORKS
+EXIT=0
+
+## 3) 手工夹具 RED 用例：两处内容不同（探针必须红 ⇒ 报两处各自 sha256）
+$ FIXTURE_DIR=/tmp/t5t6-parity-fixture-TI5yCT
+$ python3 -I tools/trigger-inbox-src-parity-probe.py --a $FX/upstream.py --b $FX/drifted.py
+[FAIL] trigger-inbox 两处同源对账红：两处内容不一致（sha256 不等）⇒ 漂移：改一处忘另一处
+  A(af 仓正本)    = /tmp/t5t6-parity-fixture-TI5yCT/upstream.py  sha256=866047d1fa6a1befc7aa8f515925848b730acc32d2bdc3e24206bbb064b8a6e0
+  B(工作区在役位) = /tmp/t5t6-parity-fixture-TI5yCT/drifted.py  sha256=c96d24d1ea383a0e4bd9654c0e93b1e083bd3d382154fbcadb37df2e41f58e55
+  处置：以 af 仓正本为上游，把工作区在役运行位同步成同一份字节（改 af 仓 ⇒ 同步工作区；改工作区 ⇒ 回收进 af 仓）。
+VERDICT=DRIFT FAIL sha_a=866047d1fa6a1befc7aa8f515925848b730acc32d2bdc3e24206bbb064b8a6e0 sha_b=c96d24d1ea383a0e4bd9654c0e93b1e083bd3d382154fbcadb37df2e41f58e55 a=/tmp/t5t6-parity-fixture-TI5yCT/upstream.py b=/tmp/t5t6-parity-fixture-TI5yCT/drifted.py
+EXIT=1
+
+## 4) 手工夹具 GREEN 用例：两处内容一致（不同文件名）
+$ python3 -I tools/trigger-inbox-src-parity-probe.py --a $FX/upstream.py --b $FX/same-copy.py
+[GREEN] trigger-inbox 两处同源对账通过：sha256 相等
+  A(af 仓正本)    = /tmp/t5t6-parity-fixture-TI5yCT/upstream.py  sha256=866047d1fa6a1befc7aa8f515925848b730acc32d2bdc3e24206bbb064b8a6e0
+  B(工作区在役位) = /tmp/t5t6-parity-fixture-TI5yCT/same-copy.py  sha256=866047d1fa6a1befc7aa8f515925848b730acc32d2bdc3e24206bbb064b8a6e0
+VERDICT=ALIGNED sha_a=866047d1fa6a1befc7aa8f515925848b730acc32d2bdc3e24206bbb064b8a6e0 sha_b=866047d1fa6a1befc7aa8f515925848b730acc32d2bdc3e24206bbb064b8a6e0 a=/tmp/t5t6-parity-fixture-TI5yCT/upstream.py b=/tmp/t5t6-parity-fixture-TI5yCT/same-copy.py
+EXIT=0
+
+## 5) 手工夹具 RED 用例：缺件（对账不可证 ⇒ 按红处置，不猜绿）
+$ python3 -I tools/trigger-inbox-src-parity-probe.py --a $FX/upstream.py --b $FX/nope.py
+[FAIL] trigger-inbox 两处同源对账红：缺件/不可读 ⇒ 对账不可证 ⇒ 按红处置
+  A(af 仓正本)    = /tmp/t5t6-parity-fixture-TI5yCT/upstream.py  sha256=866047d1fa6a1befc7aa8f515925848b730acc32d2bdc3e24206bbb064b8a6e0
+  B(工作区在役位) = /tmp/t5t6-parity-fixture-TI5yCT/nope.py  <不可读: FileNotFoundError: [Errno 2] No such file or directory: '/tmp/t5t6-parity-fixture-TI5yCT/nope.py'>
+  处置：以 af 仓正本为上游，把工作区在役运行位同步成同一份字节（改 af 仓 ⇒ 同步工作区；改工作区 ⇒ 回收进 af 仓）。
+VERDICT=UNPROVABLE FAIL sha_a=866047d1fa6a1befc7aa8f515925848b730acc32d2bdc3e24206bbb064b8a6e0 sha_b=MISSING a=/tmp/t5t6-parity-fixture-TI5yCT/upstream.py b=/tmp/t5t6-parity-fixture-TI5yCT/nope.py
+EXIT=1
+
+## 6) 真盘 RED 用例：af 仓正本 vs 工作区 .bak（2026-11-03 旧版，含无闸 AF_TRIGGER_BIND）
+$ python3 -I tools/trigger-inbox-src-parity-probe.py --a tools/trigger-inbox.py --b /home/pan-ding/workspace/agent黑灯工厂/tools/trigger-inbox.py.20261104-pre-触发常驻批-暴露面收窄.bak
+[FAIL] trigger-inbox 两处同源对账红：两处内容不一致（sha256 不等）⇒ 漂移：改一处忘另一处
+  A(af 仓正本)    = tools/trigger-inbox.py  sha256=8a1bdb69fb581eabdac80942ca1ad7c5a9cc428c696a7912be72f9a50bf1b912
+  B(工作区在役位) = /home/pan-ding/workspace/agent黑灯工厂/tools/trigger-inbox.py.20261104-pre-触发常驻批-暴露面收窄.bak  sha256=58f0afee218f38d5eb2c4a488bc47bb4a72698e7fc7921c111e1ce59431ea3a5
+  处置：以 af 仓正本为上游，把工作区在役运行位同步成同一份字节（改 af 仓 ⇒ 同步工作区；改工作区 ⇒ 回收进 af 仓）。
+VERDICT=DRIFT FAIL sha_a=8a1bdb69fb581eabdac80942ca1ad7c5a9cc428c696a7912be72f9a50bf1b912 sha_b=58f0afee218f38d5eb2c4a488bc47bb4a72698e7fc7921c111e1ce59431ea3a5 a=tools/trigger-inbox.py b=/home/pan-ding/workspace/agent黑灯工厂/tools/trigger-inbox.py.20261104-pre-触发常驻批-暴露面收窄.bak
+EXIT=1
+
+## 7) 夹具清理（探针只在自己建的临时目录里造夹具，测完即清 ⇒ 不碰任何审计面）
+$ rm -rf /tmp/t5t6-parity-fixture-TI5yCT
+FIXTURE_REMOVED=/tmp/t5t6-parity-fixture-TI5yCT

@@ -1,0 +1,66 @@
+   Compiling af-calendar v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-calendar)
+   Compiling af-credential v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-credential)
+   Compiling af-dsl v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-dsl)
+   Compiling af-meter v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-meter)
+   Compiling af-trace v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-trace)
+   Compiling af-stop v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-stop)
+   Compiling af-mes v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-mes)
+   Compiling af-eval v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-eval)
+   Compiling af-workorder v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-workorder)
+   Compiling af-station v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-station)
+   Compiling af-compiler v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-compiler)
+   Compiling af-effect-gateway v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-effect-gateway)
+   Compiling af-harness v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-harness)
+   Compiling af-execline v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-execline)
+   Compiling af-order v0.1.0 (/home/pan-ding/af-dev/af/wt/risk5-faultinject/crates/af-order)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.14s
+warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1
+note: to see what the problems were, use the option `--future-incompat-report`, or run `cargo report future-incompatibilities --id 1`
+     Running tests/adjudicate_fault_injection_acceptance.rs (/data/bench/targets/risk5-faultinject/debug/deps/adjudicate_fault_injection_acceptance-bca70390cb7629dd)
+
+running 8 tests
+[A3/首走] err = 状态机无此边: 源单 wo-acc-a3 已终态（Closed），状态机无 abort 边；拒绝结论以 receipt 留档，不改单
+[A3/注入后] receipts = 1，cancel 行 = 0，task(adj-1) = Claimed
+[A3/补偿①reconcile] err = 状态机无此边: 源单 wo-acc-a3 已终态（Closed），状态机无 abort 边；拒绝结论以 receipt 留档，不改单
+[A3/补偿②抢先重试] err = 状态机无此边: 源单 wo-acc-a3 已终态（Closed），状态机无 abort 边；拒绝结论以 receipt 留档，不改单
+[A3/补偿②后] receipts = 2，journal(adj-1) = ["prepared"]，journal(adj-2) = ["prepared"]
+[A3/补偿③重放] err = 状态机无此边: 源单 wo-acc-a3 已终态（Closed），状态机无 abort 边；拒绝结论以 receipt 留档，不改单
+test acc_a3_reject_on_closed_source_is_nonconvergent ... ok
+[注入] wo-acc-a5 adj-wo-acc-a5-1 停机于 CommittedWritten：task=adj-wo-acc-a5-1 receipt(seq=1 key=sid-d37da056db86e5b92937730fde778c4ddecbc9a46e6a15a99e2131b673720a6b/admit/1/10c6e6b1e83041006c353d8fb9ac19f970c11206e1a5e60bb1ee45538abefc47)
+[A5/补偿①后] receipts = 1，task(adj-2) = Queued，journal(adj-2) = []
+[A5/补偿②后] receipts = 2（seq 集合 = [1, 2]）
+test acc_a5_recovery_retry_spawns_pending_round_on_second_call ... ok
+[A8/注入] err = 裁决环 af-order 面失败: OR2106: DecisionArtifact 四层校验失败: Decision: 决策权限不足:决策 Approve 需要 Approve,实际持有 [Read, Revise]
+[A8/注入后] receipts = 0，journal(adj-1) = ["prepared"]
+[A8/补偿①reconcile] [ReconcileReport { source_order_id: "wo-acc-a8", adjudication_id: "adj-wo-acc-a8-1", status: PreparedResidue { detail: "prepared 意图在账（seq=1 回执键 sid-e16f1c9cf56b29e11c99cdc3b79b69a93c673ee9902e48e61f5f9125833b439d/admit/1/29914393eff653941a12be08c5f31618de3d71c9b9f2d57556b342dd4247e489）、受理回执缺席——admit 未提交或被拒；无回执即无已提交事实，留检待后续认领按首走重试" } }]
+test acc_a8_admit_rejection_leaves_residue_then_first_walk_converges ... ok
+[注入] wo-acc-a1 adj-wo-acc-a1-1 停机于 ReviseMaterialized(1)：task=adj-wo-acc-a1-1 receipt(seq=1 key=sid-e5e78bd8cf469e06a6a6bfedc745d1e534f17bcb626c55cbf71b856fa1629aaa/admit/1/8c68884c6adb7bfe09c5f7467beb1591900c7327b6492e45d0da73f4fa9194b5)
+[A1/注入后] journal = ["prepared"]
+[A1/注入后] rw1 create_order 行 = 1，rw2 账本在否 = false，receipts = 1
+[A1/补偿①reconcile] [ReconcileReport { source_order_id: "wo-acc-a1", adjudication_id: "adj-wo-acc-a1-1", status: LeaseHeld { task_id: "adj-wo-acc-a1-1", claimant: "steward-1", lease_until: 1767225601000 } }]
+[A1/补偿②reconcile再跑] [ReconcileReport { source_order_id: "wo-acc-a1", adjudication_id: "adj-wo-acc-a1-1", status: LeaseHeld { task_id: "adj-wo-acc-a1-1", claimant: "steward-1", lease_until: 1767225601000 } }]
+[A1/补偿后] journal = ["prepared", "committed", "completed"]，receipts = 1
+test acc_a1_partial_rework_settlement_converges ... ok
+[注入] wo-acc-a6 adj-wo-acc-a6-1 停机于 Admitted：task=adj-wo-acc-a6-1 receipt(seq=1 key=sid-0ad13edd72c3ec9cd6c53fafb28e14c5392d6969a71c8630844716fad1757212/admit/1/90c04d2ae7a97b7418247f1cfb941eb6d134e1894e42f13ce5dbe79d5d75b4b9)
+[A6/注入后reconcile] [ReconcileReport { source_order_id: "wo-acc-a6", adjudication_id: "adj-wo-acc-a6-1", status: PreparedResidue { detail: "receipt 在账但队列任务 adj-wo-acc-a6-1 缺位（lease 库与意图账漂移）——留检" } }]
+[A6/留检细节] receipt 在账但队列任务 adj-wo-acc-a6-1 缺位（lease 库与意图账漂移）——留检
+[A6/补偿后再reconcile] [ReconcileReport { source_order_id: "wo-acc-a6", adjudication_id: "adj-wo-acc-a6-1", status: PreparedResidue { detail: "receipt 在账但队列任务 adj-wo-acc-a6-1 缺位（lease 库与意图账漂移）——留检" } }, ReconcileReport { source_order_id: "wo-acc-a6", adjudication_id: "adj-wo-acc-a6-2", status: Converged }]
+test acc_a6_lease_db_drift_leaves_permanent_residue ... ok
+[注入] wo-acc-a7 adj-wo-acc-a7-1 停机于 CommittedWritten：task=adj-wo-acc-a7-1 receipt(seq=1 key=sid-346b0f45530489cf6c3646d84135e719a0e3090c1c38aa142b5db57b6c0b55a3/admit/1/79d26760c3275af6ce6157104d115cf1095ffb70a926d5dae23f5554ed693be2)
+[A7/注入后] journal = ["prepared", "committed"]，receipts = 0
+[A7/补偿①reconcile] [ReconcileReport { source_order_id: "wo-acc-a7", adjudication_id: "adj-wo-acc-a7-1", status: PreparedResidue { detail: "prepared 意图在账（seq=1 回执键 sid-346b0f45530489cf6c3646d84135e719a0e3090c1c38aa142b5db57b6c0b55a3/admit/1/79d26760c3275af6ce6157104d115cf1095ffb70a926d5dae23f5554ed693be2）、受理回执缺席——admit 未提交或被拒；无回执即无已提交事实，留检待后续认领按首走重试" } }]
+[A7/补偿②重放] err = 裁决环队列语义失败: 意图账称裁决单 adj-wo-acc-a7-1 已过提交点（回执键 sid-346b0f45530489cf6c3646d84135e719a0e3090c1c38aa142b5db57b6c0b55a3/admit/1/79d26760c3275af6ce6157104d115cf1095ffb70a926d5dae23f5554ed693be2），受理账中无此回执——跨库账面漂移，拒绝重放，留检
+test acc_a7_admissions_ledger_drift_fails_loud_and_hangs ... ok
+[注入] wo-acc-a2 adj-wo-acc-a2-1 停机于 AbortApplied：task=adj-wo-acc-a2-1 receipt(seq=1 key=sid-132d331b4405163873af2f94dbc6e158813023603f39e368b392d319a110b2dd/admit/1/1f8611641e1a1d50766124f38b9123c282c66573f3b859de436fe2018b0455a7)
+[A2/注入后] journal = ["prepared"]
+[A2/补偿①reconcile] [ReconcileReport { source_order_id: "wo-acc-a2", adjudication_id: "adj-wo-acc-a2-1", status: LeaseHeld { task_id: "adj-wo-acc-a2-1", claimant: "steward-1", lease_until: 1767225601000 } }]
+[A2/补偿②reconcile再跑] [ReconcileReport { source_order_id: "wo-acc-a2", adjudication_id: "adj-wo-acc-a2-1", status: LeaseHeld { task_id: "adj-wo-acc-a2-1", claimant: "steward-1", lease_until: 1767225601000 } }]
+[A2/补偿后] journal = ["prepared", "committed", "completed"]，cancel 行 = 1，receipts = 1
+test acc_a2_mid_abort_converges ... ok
+[注入] wo-acc-a4-b-healthy adj-wo-acc-a4-b-healthy-1 停机于 TaskCompleted：task=adj-wo-acc-a4-b-healthy-1 receipt(seq=1 key=sid-b8c998d455a0d6a7aaa4a3b46a367c9de2cd6504357ec5b5ee8207e15082e814/admit/1/d216b295c95450dbdd537c95c539e968619734d75274075db07c5ae04074285a)
+[A4/补偿reconcile] err = 状态机无此边: 源单 wo-acc-a4-a-poison 已终态（Closed），状态机无 abort 边；拒绝结论以 receipt 留档，不改单
+[A4/补偿后] 健康账 journal = ["prepared", "committed"]（无 completed ⇒ 收敛被阻断）
+test acc_a4_poisoned_journal_blocks_whole_reconcile_scan ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.80s
+

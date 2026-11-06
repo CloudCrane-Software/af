@@ -1,0 +1,182 @@
+[
+ {
+  "state": "RUNNING",
+  "name": "隔离实例 pid/工具",
+  "detail": "pid=1475664 tool=/home/pan-ding/workspace/af-wt-t5t6/tools/trigger-inbox.py home=/tmp/t5t6-verify/sandbox/home port=18765"
+ },
+ {
+  "state": "EXPOSE",
+  "name": "ss -lntp 命中行（逐字）",
+  "detail": "LISTEN 0      5                127.0.0.1:18765      0.0.0.0:*    users:((\"python3\",pid=1475664,fd=3)) "
+ },
+ {
+  "state": "EXPOSE",
+  "name": "ss 本地地址列（绑定面）",
+  "detail": "['127.0.0.1:18765']"
+ },
+ {
+  "state": "EXPOSE",
+  "name": "0.0.0.0:<port> 绑定检查（本地地址列）",
+  "detail": "ZERO 0.0.0.0 binds"
+ },
+ {
+  "state": "EXPOSE",
+  "name": "非回环绑定检查（本地地址列）",
+  "detail": "ONLY-LOOPBACK"
+ },
+ {
+  "state": "STATE6",
+  "name": "合法投递 → 202 accepted",
+  "detail": "code=202 body={'status': 'accepted', 'delivery_id': 't5t6-valid-0001', 'path': 'inbox/gitea-webhook/t5t6-valid-0001.json', 'thread_key': 'git:opchadmin/af@0123456789ab', 'dedup_key': 'push:opchadmin/af:0123456789abcdef0123456789abcdef01234567'}"
+ },
+ {
+  "state": "STATE5",
+  "name": "重复 delivery → 200 duplicate",
+  "detail": "code=200 body={'status': 'duplicate', 'delivery_id': 't5t6-valid-0001', 'path': 'inbox/gitea-webhook/t5t6-valid-0001.json'}"
+ },
+ {
+  "state": "IDEMP",
+  "name": "重复投递后盘面文件 sha256 不变",
+  "detail": "2b618d0b3fa56171ee1f072bbfd48eaeff823c64de9e312314f94a32649cb682 -> 2b618d0b3fa56171ee1f072bbfd48eaeff823c64de9e312314f94a32649cb682 SAME"
+ },
+ {
+  "state": "IDEMP",
+  "name": "重复投递后盘面文件 mtime 不变",
+  "detail": "1793806627859150008 -> 1793806627859150008 SAME"
+ },
+ {
+  "state": "STATE1",
+  "name": "体积 > 1MiB → 413",
+  "detail": "code=413 body={'error': 'payload_too_large', 'limit_bytes': 1048576}"
+ },
+ {
+  "state": "STATE2",
+  "name": "未知 source → 422",
+  "detail": "code=422 body={'error': 'unknown_source', 'detail': 'source 不在注册表: no-such-source'}"
+ },
+ {
+  "state": "STATE3a",
+  "name": "坏签名 → 401",
+  "detail": "code=401 body={'error': 'bad_signature', 'key_id': 'pocd-webhook-key-1'}"
+ },
+ {
+  "state": "STATE3b",
+  "name": "缺签名头 → 401",
+  "detail": "code=401 body={'error': 'bad_signature', 'key_id': 'pocd-webhook-key-1'}"
+ },
+ {
+  "state": "STATE3c",
+  "name": "错密钥签名 → 401",
+  "detail": "code=401 body={'error': 'bad_signature', 'key_id': 'pocd-webhook-key-1'}"
+ },
+ {
+  "state": "STATE4",
+  "name": "坏消息[非 JSON] → 422",
+  "detail": "code=422 body={'error': 'bad_message', 'detail': 'body 不是合法 UTF-8 JSON'}"
+ },
+ {
+  "state": "STATE4",
+  "name": "坏消息[顶层非对象] → 422",
+  "detail": "code=422 body={'error': 'bad_message', 'detail': 'body 顶层必须是 JSON 对象'}"
+ },
+ {
+  "state": "STATE4",
+  "name": "坏消息[缺 event 字段] → 422",
+  "detail": "code=422 body={'error': 'bad_message', 'detail': 'event_type 不在白名单: None', 'allowed': ['push', 'pull_request']}"
+ },
+ {
+  "state": "STATE4",
+  "name": "坏消息[event 类型不在白名单] → 422",
+  "detail": "code=422 body={'error': 'bad_message', 'detail': \"event_type 不在白名单: 'release'\", 'allowed': ['push', 'pull_request']}"
+ },
+ {
+  "state": "STATE4",
+  "name": "坏消息[delivery_id 非法] → 422",
+  "detail": "code=422 body={'error': 'bad_message', 'detail': 'delivery_id 缺失或非法（^[A-Za-z0-9._-]{1,128}$）'}"
+ },
+ {
+  "state": "STATE4",
+  "name": "坏消息[delivery_id 缺失] → 422",
+  "detail": "code=422 body={'error': 'bad_message', 'detail': 'delivery_id 缺失或非法（^[A-Za-z0-9._-]{1,128}$）'}"
+ },
+ {
+  "state": "CONC",
+  "name": "同 delivery 8 并发 → 落盘恰一次",
+  "detail": "202×1 200×7 其余=[200, 202]"
+ },
+ {
+  "state": "CONC",
+  "name": "并发后 inbox 文件数（该 delivery 只应有 1 个 .json）",
+  "detail": "['t5t6-concurrent-1.json']"
+ },
+ {
+  "state": "ATOMIC",
+  "name": "落盘后 .tmp 残留数（应为 0）",
+  "detail": "0"
+ },
+ {
+  "state": "ATOMIC",
+  "name": "落盘信封七字段齐备",
+  "detail": "{'contract': 'af.trigger.v1', 'event_id': 'gitea-webhook-t5t6-concurrent-1', 'thread_key': 'git:opchadmin/af@aaaaaaaaaaaa', 'payload_ref': 'inbox/gitea-webhook/t5t6-concurrent-1.json', 'payload_sha256': 'fd92381900529284dc3f271dc983cb38f7747eeb899530f32c6667db25231226', 'dedup_key': 'push:opchadmin/af:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'source': 'gitea-webhook', 'received_at': '2026-11-04T"
+ },
+ {
+  "state": "ATOMIC",
+  "name": "只增不删：inbox 文件清单",
+  "detail": "['/inbox/gitea-webhook/t5t6-concurrent-1.json', '/inbox/gitea-webhook/t5t6-valid-0001.json']"
+ },
+ {
+  "state": "HEALTHZ",
+  "name": "有 secret 时 /healthz",
+  "detail": "code=200 body={'status': 'ok', 'contract': 'af.trigger.v1', 'sources': ['gitea-webhook'], 'secrets_missing': [], 'home': '/tmp/t5t6-verify/sandbox/home', 'bind': '127.0.0.1', 'port': 18765}"
+ },
+ {
+  "state": "FAILCLOSED",
+  "name": "secret 未配置 → /healthz 503 not_ready",
+  "detail": "code=503 body={'status': 'not_ready', 'contract': 'af.trigger.v1', 'sources': ['gitea-webhook'], 'secrets_missing': ['gitea-webhook'], 'home': '/tmp/t5t6-verify/sandbox/home', 'bind': '127.0.0.1', 'port': 18766}"
+ },
+ {
+  "state": "FAILCLOSED",
+  "name": "secret 未配置 + 空密钥 HMAC 签名 → 401（不降级空密钥）",
+  "detail": "code=401 body={'error': 'secret_not_configured', 'key_id': 'pocd-webhook-key-1', 'detail': '源 gitea-webhook 的 secret 未配置（AF_TRIGGER_SECRET_GITEA_WEBHOOK）——fail-closed 拒绝验签，不降级空密钥'}"
+ },
+ {
+  "state": "FAILCLOSED",
+  "name": "secret 未配置 + 真签名 → 401（fail-closed）",
+  "detail": "code=401 body={'error': 'secret_not_configured', 'key_id': 'pocd-webhook-key-1', 'detail': '源 gitea-webhook 的 secret 未配置（AF_TRIGGER_SECRET_GITEA_WEBHOOK）——fail-closed 拒绝验签，不降级空密钥'}"
+ },
+ {
+  "state": "FAILCLOSED",
+  "name": "fail-closed 期间 inbox 落盘数不变（零落盘）",
+  "detail": "2 -> 2"
+ },
+ {
+  "state": "BINDGATE",
+  "name": "AF_TRIGGER_BIND=0.0.0.0 → 拒起",
+  "detail": "rc=3 out=[23:37:09] 绑定地址被拒（'0.0.0.0'）——通配/空绑定一律禁起（最小暴露面纪律，无豁免通道）；请给回环地址或经裁决的非回环地址"
+ },
+ {
+  "state": "BINDGATE",
+  "name": "非回环且无 AF_TRIGGER_BIND_ACK → 拒起",
+  "detail": "rc=3 out=[23:37:09] 绑定地址被拒（<内网地址>）——非回环绑定须显式确认：AF_TRIGGER_BIND_ACK=<内网地址>（现值 ''）；确认前拒起（fail-loud，不静默起非回环监听）"
+ },
+ {
+  "state": "BINDGATE",
+  "name": "非回环 + 确认的放行路径",
+  "detail": "见启动契约；本批不启动任何非回环监听（纪律）"
+ },
+ {
+  "state": "STOP",
+  "name": "停机后 ss 残留监听行（应为空）",
+  "detail": "EMPTY（无残留监听）"
+ },
+ {
+  "state": "STOP",
+  "name": "停机后 pgrep -af 'python3.*trigger-inbox.py'（应为空）",
+  "detail": "['1475649 /bin/bash -c . \\'/home/pan-ding/.zcode/cli/exec/shell-snapshots/snapshot-bash-1793806280000-fobxxq.sh\\' 2>/dev/null || true . \\'/home/pan-ding/.zcode/cli/exec/bash-startup/sess_dwf-dwfrun-d2bb3591-89f8-49f2-8245-3258fbecbc7c-actor_5_1/embedded-search-startup-3bcdfa73ca8e35cf.sh\\' cd /tmp/t5t6-verify && rm -rf sandbox && python3 five_state_matrix.py /home/pan-ding/workspace/af-wt-t5t6/too"
+ },
+ {
+  "state": "STOP",
+  "name": "停机返回码",
+  "detail": "instance1=-15 instance2=-15"
+ }
+]

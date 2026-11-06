@@ -1,0 +1,94 @@
+# 读数 10（返修批新增）：门读数 + 零改动核（返修批实跑，逐条给原始输出）
+# 日期：2026-11-05 · G1 返修批
+# 工作树：/home/pan-ding/workspace/af-wt-g1github（分支 feat/g1-github-pr-surface，未 commit、未 push）
+$ cargo fmt --check --all
+exit=0
+  （cargo cargo 1.99.1 (5f94df478 2026-08-27) / rustc rustc 1.99.1 (58cf8f9c3 2026-10-13)；不产生 target 目录）
+$ ls -d target
+ls: cannot access 'target': No such file or directory
+
+$ python3 -I ci/gh_workflow_check.py
+[OK]   R01 面在场：1 件 workflow（f1.yml）
+[OK]   R02 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 解析成功
+[OK]   R02 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 双解析交叉核对一致
+[OK]   R03 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 无 pull_request_target（生效面）
+[OK]   R04 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 触发面=仅 pull_request，base 分支约束=['main']
+[OK]   R05 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 顶层 permissions 只读
+[OK]   R06 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 凭据面干净（无硬编码凭据、无其它 secret）
+[OK]   R07 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 零 action 依赖
+[OK]   R08 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: fmt --check 在位
+[OK]   R09 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: clippy -D warnings 在位
+[OK]   R10 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: af-dsl+af-compiler 快速测试在位
+[OK]   R16 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: 工具链供给在位（rustup + rustfmt + clippy 组件）
+[OK]   R12 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml job[f1-fast-gate]: timeout-minutes=45
+[OK]   R13 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml: concurrency 在位（同分支只保最新）
+[OK]   R15 /home/pan-ding/workspace/af-wt-g1github/.github/workflows/f1.yml job[f1-fast-gate]: runs-on 在位
+SUMMARY: files=1 rules=22 fail=0 failed_rules=-
+exit=0
+
+$ python3 -I ci/gh_workflow_check.py --selftest   （尾行）
+V23 exit=1 expected_rule=R10 hit=yes | 整块删掉快速测试（af-dsl + af-compiler）语义 step（语义件缺失 = 判据弱化）
+SELFTEST SUMMARY: variants=23 unexpected=0
+exit=0
+
+# ── af 仓零改动核 ────────────────────────────────────────────────────────────
+$ git status --porcelain -uall
+ M docs/CI-BOUNDARY.md
+?? .github/workflows/f1.yml
+?? ci/gh_workflow_check.py
+?? poc/poc-g1-github-pr-surface/README.md
+?? poc/poc-g1-github-pr-surface/probe-p01-p09.py
+?? poc/poc-g1-github-pr-surface/readings/00-github-branch-probe.txt
+?? poc/poc-g1-github-pr-surface/readings/01-checker-positive.txt
+?? poc/poc-g1-github-pr-surface/readings/02-selftest-variants.txt
+?? poc/poc-g1-github-pr-surface/readings/03-zero-change-and-fmt.txt
+?? poc/poc-g1-github-pr-surface/readings/04-gitea-f1-anchors.txt
+?? poc/poc-g1-github-pr-surface/readings/05-inflight-registration.txt
+?? poc/poc-g1-github-pr-surface/readings/05b-fixverify-full-output.txt
+?? poc/poc-g1-github-pr-surface/readings/06-artifacts-and-fingerprints.txt
+?? poc/poc-g1-github-pr-surface/readings/07-fix-failopen-closed.txt
+?? poc/poc-g1-github-pr-surface/readings/08-fix-selftest-23-variants.txt
+?? poc/poc-g1-github-pr-surface/readings/09-fix-probe-p01-p14.txt
+?? poc/poc-g1-github-pr-surface/readings/10-fix-gates-and-zero-change.txt
+$ git diff --stat origin/product/main
+ docs/CI-BOUNDARY.md | 112 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 112 insertions(+)
+$ git diff --numstat docs/CI-BOUNDARY.md   （纯插入、0 删除）
+112	0	docs/CI-BOUNDARY.md
+$ git diff --name-only origin/product/main -- crates/   （空 = crates 零 diff）
+$ git diff --name-only origin/product/main -- .gitea/   （空 = .gitea 零 diff）
+$ git diff --name-only origin/product/main -- ci/   （空 = ci 既有件零 diff）
+$ git status --porcelain -- ci/   （只有新增件）
+?? ci/gh_workflow_check.py
+$ ls crates/ | wc -l   （crate 数 22 → 22）
+22
+$ sha256sum ci/clippy-baseline.txt   （工作树面）
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  ci/clippy-baseline.txt
+$ git show origin/product/main:ci/clippy-baseline.txt | sha256sum   （基线面）
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  -
+$ sha256sum .gitea/workflows/f1.yml   （工作树面）
+4002392f221aff4aa125d0d1df95600ba83e6190065422cc65ad5cac886292d2  .gitea/workflows/f1.yml
+$ git show origin/product/main:.gitea/workflows/f1.yml | sha256sum   （基线面）
+4002392f221aff4aa125d0d1df95600ba83e6190065422cc65ad5cac886292d2  -
+$ git rev-parse HEAD product/main origin/product/main   （三者同值 = product/main 指针未动）
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+56ff52a57c022983d74d994fd4e1c63e98f45235
+
+# ── 层 ② 生效前提核（复核员实测口径，本返修批复跑）────────────────────────────
+$ git ls-tree phase2 ci/ | grep -c gh_workflow
+0
+$ git ls-tree origin/product/main ci/ | grep -c gh_workflow
+0
+$ git ls-tree product/main ci/ | grep -c gh_workflow
+0
+  （三个基线 ref 均为 0 ⇒ 本检查器本体尚未入任何基线 ref ⇒ 层 ② 机制③ 覆盖不到本体）
+
+# ── ★ 未跑的门（如实登记「未跑 + 理由」；禁假绿）──────────────────────────────
+#   cargo build  ：**未跑** —— 禁改 crates/ ⇒ 无 Rust 改动可验；且任务书明令本机 14G 内存
+#                  不为此跑重编译。结论由 anolis 主线全量门复验批承担。
+#   cargo test   ：**未跑** —— 同上。
+#   cargo clippy ：**未跑** —— 同上。
+#   GitHub 侧实跑：**未跑** —— GitHub 通道 blocked（镜像终扫 verdict=blocked、无可发布物）
+#                  ⇒ 本 workflow 在 GitHub 侧尚不存在，PR 上真跑无从发生。
+#   镜像披露终扫：**未跑** —— 本批禁碰镜像披露面（tools/mirror-disclose.sh 与任何 allowlist/denylist）。

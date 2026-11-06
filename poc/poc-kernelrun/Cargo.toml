@@ -1,0 +1,27 @@
+[package]
+name = "poc-kernelrun"
+version = "0.1.0"
+edition = "2021"
+
+# 空 [workspace]：本工程是独立 workspace 根，不挂进 AF workspace
+# （AF 根 members = ["crates/*"] 本就不含 poc/*，此表防止任何向上的 workspace 解析）。
+[workspace]
+
+[dependencies]
+# 11 个内核 crate，全部 path 依赖，不改 AF 任何文件。
+af-calendar = { path = "../../crates/af-calendar" }
+af-credential = { path = "../../crates/af-credential" }
+af-effect-gateway = { path = "../../crates/af-effect-gateway" }
+af-graph = { path = "../../crates/af-graph" }
+af-meter = { path = "../../crates/af-meter" }
+af-release-gate = { path = "../../crates/af-release-gate" }
+af-sampling = { path = "../../crates/af-sampling" }
+af-station = { path = "../../crates/af-station" }
+af-stop = { path = "../../crates/af-stop" }
+af-trace = { path = "../../crates/af-trace" }
+af-workorder = { path = "../../crates/af-workorder" }
+
+# bin 自身需要的最小第三方库（版本对齐 AF/Cargo.lock 已验证的组合）。
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"

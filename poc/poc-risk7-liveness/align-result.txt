@@ -1,0 +1,62 @@
+[extract] _trigger_liveness_andon 自 diff 镜像逐字提取，sha256=b821014c34a1df8a68af95bd2d4ceee3b43fc592b7db4eb2addcce64c835cc46
+[extract] 首行: def _trigger_liveness_andon(reg, st):
+
+场景                                    字段                    PoC-D                       Rust                        结果
+s1-recent-delivery                      status                  green                         green                         PASS
+s1-recent-delivery                      alarm_code              trigger-inbox-live            trigger-inbox-live            PASS
+s1-recent-delivery                      threshold_min           240                           240                           PASS
+s1-recent-delivery                      since_epoch             1700003600                    1700003600                    PASS
+s1-recent-delivery                      newest_delivery_age_s   120                           120                           PASS
+s1-recent-delivery                      silent_s(浮点)            120.0                         120.0                         PASS
+s1-recent-delivery                      message                 收件箱活性正常（最新投递 2min 前，阈 240min） 收件箱活性正常（最新投递 2min 前，阈 240min） PASS
+s1-recent-delivery                      anchor_source           newest_delivery               newest_delivery               PASS
+s1-recent-delivery                      快照tool(设计差)             event-router/trigger-leg      af-order/router-liveness      DIFF(设计)
+s1-recent-delivery                      快照ts_epoch              1700003720                    1700003720                    PASS
+s1-recent-delivery                      快照ts                    2023-11-15 07:15:20           2023-11-15 07:15:20           PASS
+s2-just-started                         status                  green                         green                         PASS
+s2-just-started                         alarm_code              trigger-inbox-live            trigger-inbox-live            PASS
+s2-just-started                         threshold_min           240                           240                           PASS
+s2-just-started                         since_epoch             1700000000                    1700000000                    PASS
+s2-just-started                         newest_delivery_age_s   0                             0                             PASS
+s2-just-started                         silent_s(浮点)            0.0                           0.0                           PASS
+s2-just-started                         message                 收件箱活性正常（最新投递 0min 前，阈 240min） 收件箱活性正常（最新投递 0min 前，阈 240min） PASS
+s2-just-started                         anchor_source           first_run_anchor              first_run_anchor              PASS
+s2-just-started                         快照tool(设计差)             event-router/trigger-leg      af-order/router-liveness      DIFF(设计)
+s2-just-started                         快照ts_epoch              1700000000                    1700000000                    PASS
+s2-just-started                         快照ts                    2023-11-15 06:13:20           2023-11-15 06:13:20           PASS
+s3-stale-anchor                         status                  amber                         amber                         PASS
+s3-stale-anchor                         alarm_code              trigger-inbox-silent          trigger-inbox-silent          PASS
+s3-stale-anchor                         threshold_min           240                           240                           PASS
+s3-stale-anchor                         since_epoch             1700000000                    1700000000                    PASS
+s3-stale-anchor                         newest_delivery_age_s   15060                         15060                         PASS
+s3-stale-anchor                         silent_s(浮点)            15060.0                       15060.0                       PASS
+s3-stale-anchor                         message                 Trigger 收件箱静默 4.2h（>阈 240min）——Fast Path 断供：无事件可路由；恢复=事件源重投/检查 webhook 出口Trigger 收件箱静默 4.2h（>阈 240min）——Fast Path 断供：无事件可路由；恢复=事件源重投/检查 webhook 出口PASS
+s3-stale-anchor                         anchor_source           first_run_anchor              first_run_anchor              PASS
+s3-stale-anchor                         快照tool(设计差)             event-router/trigger-leg      af-order/router-liveness      DIFF(设计)
+s3-stale-anchor                         快照ts_epoch              1700015060                    1700015060                    PASS
+s3-stale-anchor                         快照ts                    2023-11-15 10:24:20           2023-11-15 10:24:20           PASS
+s4a-missing-liveness-fallback-240       status                  green                         green                         PASS
+s4a-missing-liveness-fallback-240       alarm_code              trigger-inbox-live            trigger-inbox-live            PASS
+s4a-missing-liveness-fallback-240       threshold_min           240                           240                           PASS
+s4a-missing-liveness-fallback-240       since_epoch             1700000000                    1700000000                    PASS
+s4a-missing-liveness-fallback-240       newest_delivery_age_s   14340                         14340                         PASS
+s4a-missing-liveness-fallback-240       silent_s(浮点)            14340.0                       14340.0                       PASS
+s4a-missing-liveness-fallback-240       message                 收件箱活性正常（最新投递 239min 前，阈 240min）收件箱活性正常（最新投递 239min 前，阈 240min）PASS
+s4a-missing-liveness-fallback-240       anchor_source           first_run_anchor              first_run_anchor              PASS
+s4a-missing-liveness-fallback-240       快照tool(设计差)             event-router/trigger-leg      af-order/router-liveness      DIFF(设计)
+s4a-missing-liveness-fallback-240       快照ts_epoch              1700014340                    1700014340                    PASS
+s4a-missing-liveness-fallback-240       快照ts                    2023-11-15 10:12:20           2023-11-15 10:12:20           PASS
+s4b-zero-threshold-immediate-amber      status                  amber                         amber                         PASS
+s4b-zero-threshold-immediate-amber      alarm_code              trigger-inbox-silent          trigger-inbox-silent          PASS
+s4b-zero-threshold-immediate-amber      threshold_min           0                             0                             PASS
+s4b-zero-threshold-immediate-amber      since_epoch             1700000000                    1700000000                    PASS
+s4b-zero-threshold-immediate-amber      newest_delivery_age_s   2                             2                             PASS
+s4b-zero-threshold-immediate-amber      silent_s(浮点)            2.0                           2.0                           PASS
+s4b-zero-threshold-immediate-amber      message                 Trigger 收件箱静默 0.0h（>阈 0min）——Fast Path 断供：无事件可路由；恢复=事件源重投/检查 webhook 出口Trigger 收件箱静默 0.0h（>阈 0min）——Fast Path 断供：无事件可路由；恢复=事件源重投/检查 webhook 出口PASS
+s4b-zero-threshold-immediate-amber      anchor_source           first_run_anchor              first_run_anchor              PASS
+s4b-zero-threshold-immediate-amber      快照tool(设计差)             event-router/trigger-leg      af-order/router-liveness      DIFF(设计)
+s4b-zero-threshold-immediate-amber      快照ts_epoch              1700000002                    1700000002                    PASS
+s4b-zero-threshold-immediate-amber      快照ts                    2023-11-15 06:13:22           2023-11-15 06:13:22           PASS
+
+对拍结论: 判据字段 50 项全部逐字一致；快照 tool 字段 5 项为登记的设计差（两腿各自署名）。✅ 对齐
+[fixtures] 留档 /home/pan-ding/af-dev/af/wt/risk7-liveness/poc/poc-risk7-liveness/out/fixtures-j95bs9jc

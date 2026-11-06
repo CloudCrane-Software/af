@@ -1,0 +1,101 @@
+════ 门 1：cargo fmt --check --all ════
+工作树：/home/pan-ding/workspace/af-wt-t7-2
+exit=0  （期望 0；本批不改 Rust ⇒ 这门必绿）
+
+════ 门 2：本批新增面自跑门（复核器自证）════
+[夹具] 门跑完 exit=0；SUMMARY=/tmp/t7-2-fixture-gz6oi7ei/gate-out/SUMMARY.txt
+[夹具] emit exit=0 {"base_sha": "f920628e9261a5fcd7a80f819f6dda2e994a04e9", "record": "/tmp/t7-2-fixture-gz6oi7ei/record.json", "record_sha256": "3686a8f3d8d8227031e9037cee6cf716067fa9c50ae7b8594b5f7b3f44649158", "result": "RECORD-WRITTEN", "source_sha": "85c4dcfeaba5789ceba0f0ce942e8d7358de93b2", "suite_digest": "b9e2ff4a6f3e565e8b8636952b1848cd0e2a49e56046d677f8c129bfa994de49", "suite_members": 3, "tested_tree": "d71a142c11b8326777dd108bc43b03df55cfc77e", "verdict": "pass"} 
+[自证] OK  baseline-normal              exit=0 reason_code=OK
+[自证] OK  base_sha-改一位                 exit=1 reason_code=BIND-MISMATCH
+[自证] OK  source_sha-改一位               exit=1 reason_code=BIND-MISMATCH
+[自证] OK  suite_digest-改一位             exit=1 reason_code=BIND-MISMATCH
+[自证] OK  tested_tree-换另一棵树            exit=1 reason_code=BIND-MISMATCH
+[自证] OK  verdict-"fail"               exit=1 reason_code=VERDICT-NOT-PASS
+[自证] OK  verdict-"PASS"（大小写）          exit=1 reason_code=VERDICT-NOT-PASS
+[自证] OK  verdict-空串                   exit=1 reason_code=VERDICT-NOT-PASS
+[自证] OK  base_sha-空串                  exit=1 reason_code=KEY-EMPTY
+[自证] OK  base_sha-缺字段                 exit=1 reason_code=KEY-MISSING
+[自证] OK  source_sha-空串                exit=1 reason_code=KEY-EMPTY
+[自证] OK  source_sha-缺字段               exit=1 reason_code=KEY-MISSING
+[自证] OK  tested_tree-空串               exit=1 reason_code=KEY-EMPTY
+[自证] OK  tested_tree-缺字段              exit=1 reason_code=KEY-MISSING
+[自证] OK  suite_digest-空串              exit=1 reason_code=KEY-EMPTY
+[自证] OK  suite_digest-缺字段             exit=1 reason_code=KEY-MISSING
+[自证] OK  门摘要-抹掉（门不可跑）                 exit=1 reason_code=GATE-SUMMARY-ABSENT
+[自证] OK  门摘要-被改（不自证）                  exit=1 reason_code=GATE-SUMMARY-DIGEST
+[自证] OK  门退出码-非零                      exit=1 reason_code=GATE-EXIT-NONZERO
+[自证] OK  记录件-缺席              exit=1
+
+[自证] 结论：SELFTEST-GREEN；读数落盘 /home/pan-ding/workspace/af-wt-t7-2/poc/poc-t7-2-integrator/raw/selftest-readings.json
+selftest exit=0  （期望 0：正常记录件绿 + 削弱变体逐个红）
+
+-- 门 2b：复核器在真实 af 仓（真实远端 origin）上的读数 --
+   [2b-1] actual：对真实远端分支 feature/poc-e-codeadapter 自算实测侧
+{
+  "base_head": "56ff52a57c022983d74d994fd4e1c63e98f45235",
+  "base_ref": "origin/product/main",
+  "base_sha": "f14e79e1123fdcd8fd8b0781fd52298b9c6daaa9",
+  "branch": "feature/poc-e-codeadapter",
+  "merge_mode": "merge-commit",
+  "merge_tree": "13883f0d1e295dda08078e8ec5fbc1a6e4ecb029",
+  "merge_tree_equals_source_tree": false,
+  "note": "实测侧自算读数（无记录侧 ⇒ 不构成复核结论）",
+  "remote": "origin",
+  "source_origin": "origin refs/heads/feature/poc-e-codeadapter 的远端头",
+  "source_sha": "f14e79e1123fdcd8fd8b0781fd52298b9c6daaa9",
+  "suite_digest": "80e7578c9d6f83db1b81b219c8459ca9d12523640b6b838504dea8b91cf0dee3",
+  "suite_digest_of_source_tree": "400ac09f58b33c49b907b750d3dcdc09ff7717bf6dc4f389c3226dcf9cdbb6e6",
+  "suite_members": 44,
+  "suite_members_of_source_tree": 42,
+  "tested_tree": "3516c675b2eb6f22787ed03b3a74a911ba1debef"
+}
+   [2b-2] verify：真实仓上**无记录件**场景（历史合流无记录面 ⇒ 必须拒绝，不是跳过）
+{
+  "checks": [],
+  "detail": "记录件缺席: /tmp/t7-2-no-such-record.json",
+  "note": "fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。",
+  "reason_code": "RECORD-ABSENT",
+  "record": "/tmp/t7-2-no-such-record.json",
+  "result": "REJECT"
+}
+   [2b-2] exit=1  （期望非 0 / RECORD-ABSENT）
+
+════ 门 3：af 主仓零改动核 ════
+-- git status --porcelain（主仓）--
+?? redteam/scans/2026-11-04-e4484537/
+   ↑ 期望：只有开工前既存的 untracked（redteam/scans/2026-11-04-e4484537/）
+-- HEAD --
+   主仓 HEAD = 56ff52a57c022983d74d994fd4e1c63e98f45235  （开工时读数 56ff52a57c022983d74d994fd4e1c63e98f45235）
+-- refs --
+   主仓本地分支数 = 94（开工时 93 ⇒ 只多本批这一条 = 94 ✓ 其余 93 条未动）
+   本批新建分支   = refs/heads/feat/t7-2-integrator-bind-check → 56ff52a57c022983d74d994fd4e1c63e98f45235（= origin/product/main 56ff52a，未 commit）
+   product/main    = 56ff52a57c022983d74d994fd4e1c63e98f45235  （禁改：与开工时同值）
+   main（对照线）  = f37311348842465c087cc2562e954812d46295e1  （只读归档线，未动）
+   远端 product/main = 56ff52a57c022983d74d994fd4e1c63e98f45235（禁 push：与本地同值 = 未推任何东西）
+-- PoC-E 参考件 blob 逐字未动 --
+   origin/product/main 的 blob = ebc01dac0da81f9755990c1caa7207dc3ac7f929
+   主仓工作树的 blob           = ebc01dac0da81f9755990c1caa7207dc3ac7f929
+   ⇒ 逐字未动 ✓
+
+════ 门 4：判据面零弱化 ════
+-- ci/ 下相对 origin/product/main 的 diff（只应多出本批新增件）--
+-- ci/run.sh 是否被改（改了就可能是新增 step 编号）--
+   ↑ 空 = 未改（未新增 step 编号）
+-- ci/clippy-baseline.txt sha256 --
+   origin/product/main 版 = a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4
+   本工作树版             = a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4
+   ⇒ 未变 ✓
+-- crates/ 相对 origin/product/main 的 diff --
+   ↑ 空 = crates/ 零改动
+   crate 数：origin = 22 / 本工作树 = 22（同一提交 ⇒ 同一数）
+   新增 crate 检查：0 条差异
+-- 本工作树新增的未跟踪文件（本批新增面）--
+?? ci/integrator_bind_check.py
+?? docs/INTEGRATOR-SOP.md
+?? poc/poc-t7-2-integrator/
+
+════ 门 5（未跑项，如实登记）════
+· cargo build / cargo test / cargo clippy：**未跑**。
+  理由：本批硬约束禁改 crates/ ⇒ 这三项的产物由主线全量门复验批承担（anolis 在跑，
+  tip 56ff52a）；且本机 14G 内存禁高并发编译，不在本地跑重编译。
+  ⇒ 不写成「已跑」；本批新增面（Python）由门 2 自跑门覆盖。

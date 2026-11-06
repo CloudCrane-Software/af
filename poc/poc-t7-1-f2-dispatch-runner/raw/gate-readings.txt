@@ -1,0 +1,59 @@
+F2 批门读数（原始）  时间=2026-11-05 00:39:49
+工作树=/home/pan-ding/workspace/af-wt-t7-1-f2  分支=feat/t7-1-f2-dispatch-runner  HEAD=56ff52a57c022983d74d994fd4e1c63e98f45235
+任务书基线 origin/product/main(任务书签发时)=56ff52a；读数时 origin/product/main 已前移到 f48960116a6005cd37eadbc013263d5f38487825（上游合流，非本批所为）
+
+=== 门一：cargo fmt --check --all ===
+exit=0
+target 目录：无（未产生）
+
+=== 门四：F1 面零改动核（.gitea/）===
+$ git diff --name-only origin/product/main -- .gitea/
+exit=0 （空=零改动）
+$ git diff --name-only 56ff52a -- .gitea/
+exit=0 （空=零改动）
+
+=== 门五①：零弱化核 — vs 任务书基线 56ff52a（本分支 HEAD）===
+$ git diff --stat 56ff52a
+exit=0 （空=跟踪文件零改动）
+$ git status --porcelain（未跟踪=本批新增件）
+?? ci/f2_dispatch.py
+?? ci/f2_runner.py
+?? docs/F2-DISPATCH-RUNNER.md
+?? poc/poc-t7-1-f2-dispatch-runner/
+
+=== 门五①续：vs 读数时 origin/product/main=f48960116a6005cd37eadbc013263d5f38487825 ===
+$ git diff --stat origin/product/main | tail -2
+ tools/trigger-inbox.py                             |  383 -----
+ 51 files changed, 10740 deletions(-)
+↑ 差额来自上游在读数期间前移（T5②/T6③/G1/T7② 已合主线），非本批改动
+
+=== 门五②：crates/ 零 diff ===
+$ git diff --name-only 56ff52a -- crates/
+exit=0 （空）
+$ git diff --name-only origin/product/main -- crates/
+exit=0 （空）
+
+=== 门五③：Cargo.toml/Cargo.lock 零 diff ===
+exit=0 （空）
+
+=== 门五④：ci/ 既有件零 diff（跟踪面）===
+exit=0 （空）
+本批在 ci/ 下**新增**（未跟踪）：
+?? ci/f2_dispatch.py
+?? ci/f2_runner.py
+
+=== 门五⑤：crate 数 22→22 ===
+基线树 crates/ 件数=22；工作树 crates/ 件数=22
+
+=== 门二：cargo build/test/clippy 三门 ⇒ 未跑（本批禁改 crates/，且严禁本机重编译 14G 内存）===
+未跑（理由见 README §五.3 第 1 条）
+
+=== 附加（证明本批新增件不把既有门读红；非任务书要求门）===
+$ bash ci/gate_inputs_check.sh check --root .
+gate_inputs_check: 判据正本钉对账一致: 12 件（ci/baselines/gate-inputs.sha256）
+exit=0
+$ python3 -I ci/step12_check.py --file numbers.json --repo . --docs-root . --docs README.md --docs docs/VERSIONS.md
+step12 计数复算: keys=18 watch=1 docs=2 红=0
+step12 PASS: 全部限定名键复算一致、占位符可解析、手写计数对值、step14 子门名册绑定三者一致、三对账门槽位下限在场
+exit=0
+（xcheck 已跑并 exit 0，但它会改写跟踪件 ci/out/xcheck-report.txt ⇒ 已 git checkout -- 复原）

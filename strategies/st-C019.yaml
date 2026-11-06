@@ -1,0 +1,101 @@
+id: st-C019
+name: ACI：为 agent 定制接口而非照搬人类接口/裸 shell（SWE-agent）
+tier: A
+claim: 为agent定制ACI而非照搬人类接口：SWE-agent相对shell-only提升64%，消融逐项量化
+claimed_value:
+  metric: resolved_rate
+  direction: up
+  context: 工具与接口；同模型同任务集设四臂：shell-only（仅 bash）/ shell+少量定制只读工具 / SWE-agent 式完整 ACI / 自研 ACI，消融逐项量化（S060 测试设计口径）
+sources: [MC-SWE-agent, S060, S064]
+consensus: { corpora: 2, cards: 3 }
+experiment: { status: none, exp_id: "-", note: "-" }
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: aci_arms_ablation
+    graph_version: "1.0"
+    entry: shell_only
+    input: aci_input
+    output: { ref: aci_report, from: assess }
+    intent: "四臂消融=四个显式兄弟节点（uses.tools 逐臂加件：裸 shell → +只读 → +编辑器/lint → +自研定制件），同模型同任务集；末口统一外部评估器逐项量化，编辑面 lint 门禁内嵌在工具件侧"
+  types:
+    - name: aci_input
+      schema:
+        type: object
+        required: [question, repo_root]
+        properties:
+          question: { type: string }
+          repo_root: { type: string }
+    - name: patch
+      schema:
+        type: object
+        required: [arm_id, diff_ref]
+        properties:
+          arm_id: { type: string }
+          diff_ref: { type: string }
+    - name: aci_report
+      schema:
+        type: object
+        required: [best_arm, resolved_rates, ablation_notes]
+        properties:
+          best_arm: { type: string }
+          resolved_rates: { type: string }
+          ablation_notes: { type: string }
+  nodes:
+    - id: shell_only
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.aci.shell@1] }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.aci.shell_only_system, quota_tokens: 400 }
+          - { from: input, fields: [question, repo_root], policy: project, quota_tokens: 600 }
+    - id: shell_readonly
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.aci.shell@1, pkg.aci.readonly@1] }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.aci.readonly_system, quota_tokens: 400 }
+          - { from: input, fields: [question, repo_root], policy: project, quota_tokens: 600 }
+    - id: full_aci
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.aci.shell@1, pkg.aci.readonly@1, pkg.aci.editor@1, pkg.aci.lint@1] }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.aci.full_system, quota_tokens: 400 }
+          - { from: input, fields: [question, repo_root], policy: project, quota_tokens: 600 }
+    - id: custom_aci
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.aci.shell@1, pkg.aci.readonly@1, pkg.aci.editor@1, pkg.aci.lint@1, pkg.aci.custom@1] }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.aci.custom_system, quota_tokens: 400 }
+          - { from: input, fields: [question, repo_root], policy: project, quota_tokens: 600 }
+    - id: assess
+      kind: check
+      uses: { unit: pkg.aci.ablate@1 }
+      consumes:
+        arm_a: patch
+        arm_b: patch
+        arm_c: patch
+        arm_d: patch
+      emits: { report: aci_report }
+  edges:
+    - { from: shell_only, output: patch, to: assess, input: arm_a }
+    - { from: shell_readonly, output: patch, to: assess, input: arm_b }
+    - { from: full_aci, output: patch, to: assess, input: arm_c }
+    - { from: custom_aci, output: patch, to: assess, input: arm_d }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 800 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 2000000 }
+    failures:
+      - class: schema_invalid
+        retry: { max: 2, backoff_ms: 0 }
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed

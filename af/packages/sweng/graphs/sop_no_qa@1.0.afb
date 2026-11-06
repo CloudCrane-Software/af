@@ -1,0 +1,102 @@
+version: 1
+meta:
+  name: sweng_sop_no_qa
+  graph_version: "1.0"
+  entry: planner
+  input: swe_task_input
+  output: { ref: "list<code_file>", from: coder }
+  intent: "软件工程包多 agent SOP 无 QA 变体：sop_full 去评审员/测试员环节——计划员→工程师两节点链，产物=变更文件清单；评审/测试环节的补位属铺单批档位面，不在本图"
+
+types:
+  - name: swe_task_input
+    schema:
+      type: object
+      required: [repo, instance_id, problem_statement]
+      properties:
+        repo: { type: string }
+        instance_id: { type: string }
+        problem_statement: { type: string }
+        image: { type: string }
+  - name: plan_step
+    schema:
+      type: object
+      required: [id, action, target]
+      properties:
+        id: { type: string }
+        action: { type: string }
+        target: { type: string }
+        depends_on: { type: array, items: { type: string } }
+  - name: task_plan
+    schema:
+      type: object
+      required: [instance_id, steps]
+      properties:
+        instance_id: { type: string }
+        steps: { type: array, items: { type: plan_step } }
+  - name: code_file
+    schema:
+      type: object
+      required: [path, content_ref]
+      properties:
+        path: { type: string }
+        content_ref: { type: string }
+
+stores:
+  - name: workspace               # 工作区文件系统：coder 唯一写者（INV-2 单写者）
+    type: collection
+    item: code_file
+    writer: coder
+    lifecycle: run
+    retention: { max_items: 256 }
+
+nodes:
+  - id: planner                   # 计划员：问题陈述 → 有序任务计划（与 sop_full 同面）
+    kind: task
+    uses: { model: route.plan@1 }
+    emits: { plan: task_plan }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.planner_system@1, quota_tokens: 500 }
+        - { from: input, fields: [repo, instance_id, problem_statement], policy: project, quota_tokens: 1500 }
+
+  - id: coder                     # 工程师：按计划改码（sweng 工具面）；迭代环在节点运行时内
+    kind: task
+    uses:
+      model: route.main@1
+      tools: [pkg.sweng.locate@1, pkg.sweng.view@1, pkg.sweng.edit@1]
+    writes: [workspace]
+    consumes: { plan: task_plan }
+    emits: { files: "list<code_file>" }
+    context:
+      sections:
+        - { from: template, template_ref: pkg.sweng.engineer_system@1, quota_tokens: 600 }
+        - { from: input, fields: [problem_statement], policy: project, quota_tokens: 1000 }
+        - { from: edge, port: plan, policy: project, quota_tokens: 1800 }
+
+edges:
+  - { from: planner, output: plan, to: coder, input: plan, checkpoint: true }
+
+policies:
+  budgets:
+    - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+    - { id: token_cap, dimension: tokens_total, scope: plan, cap: 300000 }
+    - { id: coder_turns, dimension: turns, scope: node:coder, cap: 60 }
+  stop:
+    - { when: "steps.turns >= 70", outcome: failed }
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: schema_invalid
+      route: same_node
+      feedback: format_reminder
+      retry: { max: 2, backoff_ms: 0 }
+    - class: tool_error
+      route: same_node
+      feedback: error_observation
+    - class: environment_failure
+      terminal: true
+      outcome: failed
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

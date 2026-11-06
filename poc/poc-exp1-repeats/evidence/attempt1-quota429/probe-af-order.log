@@ -1,0 +1,1 @@
+af-order: EX3001: 执行单元失败: 起草失败: reader 节点失败（http_retries=5）: 端点 HTTP 429: [HTTP 层退避重试 5 次后仍失败] {"type":"error","error":{"type":"rate_limit_error","code":"1310","message":"[1310][您已达到每周/每月使用上限，您的限额将在 2026-11-06 14:16:36 重置。][202611060101050f7bb50b60c74b86]"},"request_id":"202611060101050f7bb50b60c74b86"}

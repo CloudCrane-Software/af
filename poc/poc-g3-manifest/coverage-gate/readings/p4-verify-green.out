@@ -1,0 +1,2 @@
+task_package_manifest_check: 任务包盘面核对一致：/tmp/g3-probe-clone/.g3-p4/task（组包产物 ['package_manifest.json', 'plan.json', 'task.json'] 双向逐位）
+exit=0

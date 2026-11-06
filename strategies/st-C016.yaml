@@ -1,0 +1,165 @@
+id: st-C016
+name: SOP 固化流水线：用结构化产物（PRD/系统设计/API 文档）替代自由对话交接
+tier: A
+claim: SOP固化流水线：角色间以结构化产物交接替代对话切断误差累积；HumanEval 85.9% pass@1
+claimed_value:
+  metric: pass_at_1
+  direction: up
+  context: 多agent协同；同一批真实仓库任务 A/B：对照组 agent 间自由对话传递上下文，实验组强制经结构化 artifact（schema 校验的 JSON/文档）交接，比通过率、返工次数与 token 成本（S137 测试设计口径）
+sources: [MC-MetaGPT, S137]
+consensus: { corpora: 2, cards: 2 }
+experiment: { status: none, exp_id: "-", note: "-" }
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: sop_artifact_pipeline
+    graph_version: "1.0"
+    entry: pm
+    input: requirement_input
+    output: { ref: qa_report, from: build }
+    intent: "SOP 流水线：角色间只经信封化工件交接（PRD→设计→任务板→代码快照），每交接都是 schema 校验的类型化端口；QA 回环=受控循环；误差累积被工件边界切断"
+  types:
+    - name: requirement_input
+      schema:
+        type: object
+        required: [requirement]
+        properties: { requirement: { type: string } }
+    - name: prd
+      schema:
+        type: object
+        required: [vision, features]
+        properties:
+          vision: { type: string }
+          features: { type: array, items: { type: string } }
+    - name: design
+      schema:
+        type: object
+        required: [modules, interfaces]
+        properties:
+          modules: { type: array, items: { type: string } }
+          interfaces: { type: array, items: { type: string } }
+    - name: task_item
+      schema:
+        type: object
+        required: [id, instruction, target]
+        properties:
+          id: { type: string }
+          instruction: { type: string }
+          target: { type: string }
+    - name: code_file
+      schema:
+        type: object
+        required: [path, content_ref]
+        properties:
+          path: { type: string }
+          content_ref: { type: string }
+    - name: qa_report
+      schema:
+        type: object
+        required: [pass, failures]
+        properties:
+          pass: { type: boolean }
+          failures: { type: array, items: { type: string } }
+  stores:
+    - name: tasks_board
+      type: collection
+      item: task_item
+      writer: planner
+      lifecycle: run
+      retention: { max_items: 128 }
+    - name: repo
+      type: collection
+      item: code_file
+      writer: build.apply
+      lifecycle: run
+      retention: { max_items: 256 }
+  nodes:
+    - id: pm
+      kind: task
+      uses: { model: route.main@1 }
+      emits: { prd: "envelope<prd>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.pm_system, quota_tokens: 500 }
+          - { from: input, fields: [requirement], policy: project, quota_tokens: 600 }
+    - id: architect
+      kind: task
+      uses: { model: route.main@1 }
+      consumes: { prd: "envelope<prd>" }
+      emits: { design: "envelope<design>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.architect_system, quota_tokens: 500 }
+          - { from: edge, port: prd, fields: [vision, features], policy: project, quota_tokens: 2000 }
+    - id: planner
+      kind: task
+      uses: { model: route.cheap@1 }
+      consumes: { prd: "envelope<prd>", design: "envelope<design>" }
+      writes: [tasks_board]
+      emits: { tasks: "list<task_item>" }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.planner_system, quota_tokens: 400 }
+          - { from: edge, port: prd, fields: [vision, features], policy: project, quota_tokens: 1500 }
+          - { from: edge, port: design, fields: [modules, interfaces], policy: project, quota_tokens: 1500 }
+    - id: build
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: engineer
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.locate@1, pkg.sweng.view@1, pkg.sweng.edit@1] }
+              consumes: { feedback: qa_report }
+              emits: { files: "list<code_file>" }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.engineer_system, quota_tokens: 600 }
+                  - { from: store, store: tasks_board, policy: full, quota_tokens: 1800 }
+                  - { from: edge, port: feedback, fields: [failures], policy: project, quota_tokens: 800, optional: true }
+            - id: apply
+              kind: transform
+              consumes: { files: "list<code_file>" }
+              writes: [repo]
+              ops:
+                - { op: merge, ports: [files], into: snapshot }
+              emits: { snapshot: "list<code_file>" }
+            - id: qa
+              kind: check
+              uses: { unit: pkg.sweng.test_unit@1 }
+              consumes: { snapshot: "list<code_file>" }
+              emits: { report: qa_report }
+              route:
+                default: exit
+                rules:
+                  - { when: "qa.passed == false", goto: engineer }
+          edges:
+            - { from: engineer, output: files, to: apply, input: files }
+            - { from: apply, output: snapshot, to: qa, input: snapshot }
+            - { from: qa, output: report, to: engineer, input: feedback }
+        max_iterations: 3
+        carried:
+          - { store: repo, max_items: 256 }
+        safety_points:
+          - { node: qa, kind: check }
+        exit_when: "attempt.passed == true"
+        on_exhausted: fail
+      emits: { report: { from_body: qa.report } }
+  edges:
+    - { from: pm, output: prd, to: architect, input: prd }
+    - { from: pm, output: prd, to: planner, input: prd }
+    - { from: architect, output: design, to: planner, input: design }
+    - { from: planner, output: tasks, to: build, input: tasks }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 600 }
+      - { id: fix_turns, dimension: turns, scope: loop:build, cap: 60 }
+    failures:
+      - class: schema_invalid
+        route: same_node
+        feedback: format_reminder
+        retry: { max: 2, backoff_ms: 0 }
+      - class: budget_exhausted
+        terminal: true
+        outcome: failed

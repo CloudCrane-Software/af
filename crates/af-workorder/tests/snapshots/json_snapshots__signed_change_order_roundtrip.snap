@@ -1,0 +1,27 @@
+---
+source: crates/af-workorder/tests/json_snapshots.rs
+expression: restored
+---
+{
+  "order": {
+    "change_id": "ch-1",
+    "work_order_id": "wo-1",
+    "from_graph_version": "g-3",
+    "to_graph_version": "g-4",
+    "diff_summary": "节点 N12 的判定阈值 0.8 → 0.9",
+    "diff_paths": [
+      "graph/N12"
+    ],
+    "drain": {
+      "DrainWithCap": {
+        "max_inflight": 5
+      }
+    },
+    "relay": {
+      "WarmHandover": {
+        "overlap_budget": 120
+      }
+    }
+  },
+  "signature": "[signature]"
+}

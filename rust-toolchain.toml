@@ -1,0 +1,4 @@
+# 波次 1 T9：工具链钉住（fuzz/miri 显式 +nightly 调用，CI 声明用）
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]

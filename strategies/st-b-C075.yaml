@@ -1,0 +1,13 @@
+id: st-b-C075
+name: "训练期联合演化 harness 工具与 hooks（HarnessAdapt-RL）"
+tier: B
+claim: "训练期联合演化 harness 工具与 hooks：9B 基座比 GRPO 高 9.8/12.6/6.4 个百分点"
+claimed_value:
+  metric: "rl_trained_resolved_rate"
+  direction: up
+  context: "离线流程：固定一批大仓库 issue 作为「工具演化集」，联合演化工具与 hooks 再评测"
+sources: [S069, S121]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "训练期方法：策略内容是「RL 训练中联合演化 harness 工具面与 hooks」的训练流程（S069 body.测试设计），被演进对象是训练过程中的工具/hook 参数；AFB 是运行时蓝图，其 uses/组件装订只能引用演化产物，不表达演化搜索本身。"

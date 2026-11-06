@@ -1,0 +1,5 @@
+$ python3 -I ci/k5-path-lint.py  （cwd=S13-R5b-swev-co-shrink）
+exit=1
+--- stdout ---
+--- stderr ---
+k5-path-lint: swev 判分臂派生为空（生产源无声明判分脚本 sha256 锚（script_sha256）的判分门本体）——下界无法派生即红（fail-closed，不静默缩面）

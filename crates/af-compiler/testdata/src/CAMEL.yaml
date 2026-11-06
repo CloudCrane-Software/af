@@ -1,0 +1,244 @@
+version: 1
+meta:
+  name: camel_roleplay
+  graph_version: "1.0"
+  entry: inception
+  input: camel_input
+  output: { ref: dialogue_outcome, from: dialogue }
+  intent: "CAMEL 两段式：Inception 元提示一次性生成双角色人设（角色名+Profile+Chat Example）与改写任务提示（任务+助手角色+用户角色）→ 用户方先发的交替对话受控环（每轮=用户发言+助手应答+消息格式门+语义完成判定）→ 轮次/token 上限强制截断；人设自由文本切分与『任务已达成』语义判定走 L4 逃逸舱"
+
+types:
+  - name: camel_input
+    schema:
+      type: object
+      required: [task_description]
+      properties:
+        task_description: { type: string }
+  - name: inception_draft
+    schema:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+  - name: role_description
+    schema:
+      type: object
+      required: [role_name, profile, chat_example]
+      properties:
+        role_name: { type: string }
+        profile: { type: string }
+        chat_example: { type: string }
+  - name: task_prompt
+    schema:
+      type: object
+      required: [task, assistant_role, user_role]
+      properties:
+        task: { type: string }
+        assistant_role: { type: string }
+        user_role: { type: string }
+  - name: chat_message
+    schema:
+      type: object
+      required: [speaker, content, turn]
+      properties:
+        speaker: { type: string }
+        content: { type: string }
+        turn: { type: integer }
+  - name: dialogue_outcome
+    schema:
+      type: object
+      required: [completed, reason, final_message]
+      properties:
+        completed: { type: boolean }
+        reason: { type: string }
+        final_message: { type: string }
+  - name: social_scores
+    schema:
+      type: object
+      required: [cooperation_milli, efficiency_milli, extensibility_milli]
+      properties:
+        cooperation_milli: { type: integer }
+        efficiency_milli: { type: integer }
+        extensibility_milli: { type: integer }
+
+stores:
+  # 三个「只读静态工件」槽：Inception 产物解析后落库，注入双方节点（卡片③-4 状态归属）
+  - name: assistant_role
+    type: collection
+    item: role_description
+    writer: role_parser        # INV-2：唯一写者 = 解析节点（人设一经生成会话内不变）
+    lifecycle: run
+    retention: { max_items: 1 }
+  - name: user_role
+    type: collection
+    item: role_description
+    writer: role_parser
+    lifecycle: run
+    retention: { max_items: 1 }
+  - name: rewritten_task
+    type: collection
+    item: task_prompt
+    writer: role_parser
+    lifecycle: run
+    retention: { max_items: 1 }
+  # 两个对话历史槽：双方各写各的（卡片③-3 各自一份同源 history）
+  - name: user_history
+    type: message_log
+    writer: dialogue.user_agent
+    lifecycle: run
+    retention: { max_items: 64 }
+  - name: assistant_history
+    type: message_log
+    writer: dialogue.assistant_agent
+    lifecycle: run
+    retention: { max_items: 64 }
+  # 评估面产物（卡片⑤ 社会性分析三维度）
+  - name: eval_scores
+    type: collection
+    item: social_scores
+    writer: social_eval
+    lifecycle: run
+    retention: { max_items: 8 }
+
+nodes:
+  - id: inception
+    kind: task
+    uses: { model: route.main@1 }
+    emits: { draft: inception_draft }
+    context:
+      sections:
+        # ⑥a-3：Inception Prompt = 图前一次性提示生成节点（离线生成阶段）
+        - { from: template, template_ref: pkg.camelkit.inception_prompt, quota_tokens: 700 }
+        - { from: input, fields: [task_description], policy: project, quota_tokens: 400 }
+
+  - id: role_parser
+    kind: task
+    escape:
+      kind: free_text_parser
+      impl_ref: packages/camelkit@1.0.0/hatches/role_parser.py
+      reason: "Inception 产出的是自由文本：需切分为 role_name/profile/chat_example 三个字段并组装三段式任务提示（任务+助手角色+用户角色）；自由文本切分无声明式对应物（卡片⑥b-1，含多轮 Chat Example 卡片⑥b-5）"
+      owner: lang-team
+      share_budget_pct: 10
+    consumes: { draft: inception_draft }
+    writes: [assistant_role, user_role, rewritten_task]   # 三个 emits 端口一一落入同名语义的槽
+    emits:
+      assistant_role: role_description
+      user_role: role_description
+      rewritten_task: task_prompt
+
+  - id: dialogue
+    kind: task
+    consumes: { rewritten_task: task_prompt }
+    loop:
+      body:
+        nodes:
+          - id: user_agent
+            kind: task
+            uses: { model: route.main@1 }
+            writes: [user_history]              # 用户方只写自己的历史槽（INV-2 单写者）
+            emits: { message: chat_message }
+            context:
+              sections:
+                # ⑥a-2/⑥a-5：人设槽 + few-shot 示例槽（角色名/Profile/Chat Example 常驻 system 面）
+                - { from: template, template_ref: pkg.camelkit.user_system, quota_tokens: 500 }
+                - { from: template, template_ref: pkg.camelkit.user_example, quota_tokens: 600 }
+                - { from: store, store: user_role, policy: full, quota_tokens: 900 }
+                # ⑥a-4：改写后的任务提示 = 全局任务上下文，注入双方节点
+                - { from: store, store: rewritten_task, policy: full, quota_tokens: 500 }
+                - { from: input, fields: [task_description], policy: project, quota_tokens: 300 }
+                # ⑥a-6：对话历史逐轮自动注入；两段 message_log 由内建规则按 step 序交错
+                - { from: store, store: user_history, policy: latest_k, args: { k: 12 }, quota_tokens: 3000 }
+                - { from: store, store: assistant_history, policy: latest_k, args: { k: 12 }, quota_tokens: 3000 }
+          - id: assistant_agent
+            kind: task
+            uses: { model: route.main@1 }
+            writes: [assistant_history]          # 助手方只写自己的历史槽
+            consumes: { incoming: chat_message }
+            emits: { message: chat_message }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.camelkit.assistant_system, quota_tokens: 500 }
+                - { from: template, template_ref: pkg.camelkit.assistant_example, quota_tokens: 600 }
+                - { from: store, store: assistant_role, policy: full, quota_tokens: 900 }
+                - { from: store, store: rewritten_task, policy: full, quota_tokens: 500 }
+                - { from: input, fields: [task_description], policy: project, quota_tokens: 300 }
+                - { from: store, store: user_history, policy: latest_k, args: { k: 12 }, quota_tokens: 3000 }
+                - { from: store, store: assistant_history, policy: latest_k, args: { k: 12 }, quota_tokens: 3000 }
+                # 对方最新一条消息的 typed handoff（该入边端口恰被一段 section 引用）
+                - { from: edge, port: incoming, fields: [speaker, content], policy: project, quota_tokens: 800 }
+          - id: format_gate
+            kind: gate
+            consumes: { message: chat_message }
+            emits: { message: chat_message }
+            # 格式先验的强制点：角色描述带来的期望格式由门校验（每轮必须过 → 安全点）
+            assert: "inputs.message.speaker == 'assistant' && inputs.message.content != ''"
+          - id: completion_judge
+            kind: task
+            escape:
+              kind: llm_predicate
+              impl_ref: packages/camelkit@1.0.0/hatches/completion_judge.py
+              reason: "'任务已达成' 是 LLM 语义判断而非字段匹配：需评估器对整段对话给出完成判定（卡片⑥b-2）；论文中该判定由用户代理自行做出，此处外置为独立评估器以满足 INV-3 生成器-验证器分离"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { answer: chat_message }
+            reads: [rewritten_task, user_history, assistant_history]
+            emits: { outcome: dialogue_outcome }
+          - id: outcome_gate
+            kind: gate
+            consumes: { outcome: dialogue_outcome }
+            emits: { outcome: dialogue_outcome }
+            assert: "inputs.outcome.reason != ''"
+        edges:
+          # ⑥a-1/⑥a-7：固定双节点拓扑 + 交替消息边；体入口 = 用户方（用户方先发）
+          - { from: user_agent, output: message, to: assistant_agent, input: incoming }
+          - { from: assistant_agent, output: message, to: format_gate, input: message }
+          - { from: format_gate, output: message, to: completion_judge, input: answer }
+          - { from: completion_judge, output: outcome, to: outcome_gate, input: outcome }
+      max_iterations: 12                    # 最大轮数上限（论文轮次预算）
+      carried:
+        - { store: user_history, max_items: 64 }        # E2211：体内写、体外声明的槽全部登记
+        - { store: assistant_history, max_items: 64 }
+      safety_points:
+        - { node: format_gate, kind: gate }
+        - { node: outcome_gate, kind: gate }
+      # ⑥a-8：语义完成判定 = 环出口（真则收束）
+      exit_when: "completion_judge.outcome.completed == true"
+      on_exhausted: fail                     # 卡片④-2：预算停=强制截断，无降级方案
+    emits: { outcome: { from_body: outcome_gate.outcome } }
+
+  - id: social_eval
+    kind: check
+    uses: { unit: pkg.camelkit.social_eval@1 }
+    consumes: { outcome: dialogue_outcome }
+    reads: [user_history, assistant_history]
+    writes: [eval_scores]
+    emits: { scores: social_scores }
+
+edges:
+  - { from: inception, output: draft, to: role_parser, input: draft }
+  - { from: role_parser, output: rewritten_task, to: dialogue, input: rewritten_task }   # 顺序边：人设生成完毕才开谈
+  - { from: dialogue, output: outcome, to: social_eval, input: outcome }
+
+policies:
+  budgets:
+    - { id: round_turns, dimension: turns, scope: loop:dialogue, cap: 36 }            # 每轮 3 次调用（用户/助手/判定）
+    - { id: round_calls, dimension: model_calls, scope: loop:dialogue, cap: 40 }
+    - { id: user_msg_tokens, dimension: tokens_out, scope: node:dialogue.user_agent, cap: 2000 }      # 单次回复 max_tokens
+    - { id: assistant_msg_tokens, dimension: tokens_out, scope: node:dialogue.assistant_agent, cap: 2000 }
+    - { id: plan_tokens, dimension: tokens_total, scope: plan, cap: 600000 }
+    - { id: plan_cost, dimension: cents, scope: plan, cap: 600 }
+  stop:
+    - { when: "steps.iterations >= 12", outcome: failed }                              # 总轮数上限 → 强制截断
+    - { when: "budget.tokens_total_spent >= budget.tokens_total_cap * 9 / 10", outcome: failed }
+  failures:
+    - class: transport_transient
+      retry: { max: 3, backoff_ms: 800 }
+    - class: schema_invalid                        # 人设/消息不合 schema：重解析并重问
+      retry: { max: 2, backoff_ms: 0 }
+      route: next_iteration
+      feedback: format_reminder
+    - class: gate_refused                          # 格式门/判定门不通过：下一轮重来
+      route: next_iteration
+    - class: budget_exhausted
+      terminal: true
+      outcome: failed

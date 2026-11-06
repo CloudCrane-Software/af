@@ -1,0 +1,37 @@
+version: 1
+meta:
+  name: probe
+  graph_version: '1'
+  entry: n1
+  input: T_in
+  output:
+    ref: Ghost
+    from: n1
+types:
+- name: T_in
+  schema:
+    type: object
+    properties:
+      q:
+        type: string
+- name: T_out
+  schema:
+    type: object
+    properties:
+      r:
+        type: string
+nodes:
+- id: n1
+  kind: task
+  uses:
+    model: m@1
+  emits:
+    out: T_out
+  context:
+    sections:
+    - from: input
+      fields:
+      - q
+      quota_tokens: 10
+edges: []
+policies: {}

@@ -1,0 +1,4 @@
+== 门1（终版）: cargo fmt --check --all ==
+exit=0
+
+留痕：首跑红块全部位于本次新增文件（import 折行 :36 / fn seed 签名折行 :207 / walk 函数折行 :291，当时行号），仅对该新文件 rustfmt 归零；全仓库其余文件全程零触碰（git status 佐证）

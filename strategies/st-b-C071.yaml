@@ -1,0 +1,98 @@
+id: st-b-C071
+name: "编辑格式作为一等实验变量：按模型路由（diff/whole/udiff）+ unified diff 三件套 + …"
+tier: B
+claim: "编辑格式按模型路由：同一模型只换格式可差近2倍，格式合规率可作选型先导指标"
+claimed_value:
+  metric: "edit_format_compliance_rate"
+  direction: up
+  context: "对每个待用模型在同一批真实仓库任务上跑 whole/diff(search-replace)/udiff 三档；格式合规率先导、与通过率非一一对应"
+sources: [S065, S128]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: edit_format_routing
+    graph_version: "1.0"
+    entry: dispatch
+    input: fmt_input
+    output: { ref: verdict, from: verify }
+    intent: "编辑格式按模型路由：udiff/whole 两种编辑工具面经 route 分派；格式合规率先导指标（选型先导）"
+  types:
+    - name: fmt_input
+      schema:
+        type: object
+        required: [issue, prefer_udiff]
+        properties:
+          issue: { type: string }
+          prefer_udiff: { type: boolean }
+    - name: fmt_decision
+      schema:
+        type: object
+        required: [format]
+        properties:
+          format: { type: string }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+    - name: verdict
+      schema:
+        type: object
+        required: [passed, format_compliance_milli]
+        properties:
+          passed: { type: boolean }
+          format_compliance_milli: { type: integer }
+  nodes:
+    - id: dispatch
+      kind: task
+      uses: { model: route.cheap@1 }
+      emits: { decision: fmt_decision }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.fmt.dispatch_system, quota_tokens: 300 }
+          - { from: input, fields: [issue, prefer_udiff], policy: project, quota_tokens: 600 }
+      route:                              # 格式档位判据由 harness 按模型族注入 input.prefer_udiff
+        default: edit_whole
+        rules:
+          - { when: "dispatch.decision.format == 'udiff'", goto: edit_udiff }
+    - id: edit_udiff
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.sweng.edit_udiff] }   # unified diff 三件套工具面
+      consumes: { decision: fmt_decision }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.fmt.udiff_system, quota_tokens: 400 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+          - { from: edge, port: decision, fields: [format], policy: project, quota_tokens: 200 }
+    - id: edit_whole
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.sweng.edit_whole] }   # whole-file 编辑工具面
+      consumes: { decision: fmt_decision }
+      emits: { patch: patch }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.fmt.whole_system, quota_tokens: 400 }
+          - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+          - { from: edge, port: decision, fields: [format], policy: project, quota_tokens: 200 }
+    - id: verify
+      kind: check
+      uses: { unit: pkg.fmt.compliance_probe@1 }   # 格式合规率先导指标
+      consumes: { patch: patch }
+      emits: { verdict: verdict }
+  edges:
+    - { from: dispatch, output: decision, to: edit_udiff, input: decision }
+    - { from: dispatch, output: decision, to: edit_whole, input: decision }
+    - { from: edit_udiff, output: patch, to: verify, input: patch }
+    - { from: edit_whole, output: patch, to: verify, input: patch }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 500 }
+    failures:
+      - { class: schema_invalid, route: same_node, feedback: format_reminder }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

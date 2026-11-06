@@ -1,0 +1,159 @@
+#!/usr/bin/env python3
+# =============================================================================
+# N2 核心领域词扫描器（仓内化正本）——《G4-任务中立性机器检查方案.md》§2.2
+#
+# 范围：crates/af-dsl/src/**/*.rs + crates/af-compiler/src/**/*.rs（含 src/bin/
+#       ——CLI 入口属核心；不含 tests/、testdata/、docs/——测试语料以对齐稿为
+#       名是设计使然；af-execline 等执行面 crate 不在范围——方案 §2.2 边界）。
+# 词表：ci/neutrality-wordlist.txt（黑名单+白名单合册正本；本脚本只消费不定义）。
+# 算法：\b(词1|词2|…)\\b IGNORECASE，长词在前防前缀吞并；词边界保证
+#       ErrorCode/BindReport/reactive/searchkit 不误伤。
+# 豁免：白名单条目级（文件:行 + 同词出现次数），不做文件级豁免（开放问题 6）。
+# 输出：逐命中 相对路径:行号: [词] 行文前 100 字符（豁免项标 [白名单]）+ 末行计数。
+# 退出码：0=白名单外命中 0（S1 绿）；1=白名单外命中 ≥1（R6 门红——铁律是零，
+#         无「容忍 N 条」软阈值）；2=词表/配置损坏。
+# =============================================================================
+import pathlib
+import re
+import sys
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+WORDLIST = REPO_ROOT / "ci" / "neutrality-wordlist.txt"
+SCAN_ROOTS = ["crates/af-dsl/src", "crates/af-compiler/src"]
+
+
+def load_wordlist(path):
+    """解析黑名单+白名单合册。返回 (blacklist_words, whitelist{(relpath,line,word): count})。"""
+    blacklist, whitelist = [], {}
+    in_whitelist_section = False
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.rstrip("\n")
+        if "====" in line:  # 段标记（可带 # 前缀）：黑名单段/白名单段切换
+            in_whitelist_section = "白名单" in line
+            continue
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        cols = [c.strip() for c in line.split("\t")]
+        if not in_whitelist_section:
+            # 词 <TAB> 来源 <TAB> 处置 <TAB> 理由
+            if len(cols) < 3 or not cols[0]:
+                sys.exit(f"neutrality_scan: 黑名单段行格式损坏：{raw!r}")
+            if not cols[2].startswith("黑名单"):
+                sys.exit(f"neutrality_scan: 黑名单段处置列非法：{raw!r}")
+            blacklist.append(cols[0].lower())
+        else:
+            # 词 <TAB> 处置 <TAB> 命中位置 <TAB> 次数 <TAB> 出处 <TAB> 理由 <TAB> 日期
+            if len(cols) < 4 or cols[1] != "白名单":
+                sys.exit(f"neutrality_scan: 白名单段行格式损坏：{raw!r}")
+            loc, count = cols[2], cols[3]
+            m = re.fullmatch(r"(.+):(\d+)", loc)
+            if not m:
+                sys.exit(f"neutrality_scan: 白名单命中位置非法（须 文件:行）：{raw!r}")
+            key = (m.group(1), int(m.group(2)), cols[0].lower())
+            whitelist[key] = whitelist.get(key, 0) + int(count)
+    if not blacklist:
+        sys.exit("neutrality_scan: 词表黑名单段为空")
+    dup = {w for w in blacklist if blacklist.count(w) > 1}
+    if dup:
+        sys.exit(f"neutrality_scan: 黑名单重复词：{sorted(dup)}")
+    return blacklist, whitelist
+
+
+def self_test() -> int:
+    """中文语境对抗自检（红队 W1-C60）：ASCII 词边界口径下，中文注释里与
+    汉字相邻的领域词必须命中（旧 \\b 口径对 CJK 邻接结构性失明），ASCII
+    复合标识符不误伤。独立可跑：python3 ci/neutrality_scan.py --self-test"""
+    blacklist, _ = load_wordlist(WORDLIST)
+    ordered = sorted(blacklist, key=len, reverse=True)
+    pattern = re.compile(
+        r"(?<![A-Za-z])(" + "|".join(re.escape(w) for w in ordered) + r")(?![A-Za-z])",
+        re.IGNORECASE,
+    )
+    probe = "本模块实现git仓库的patch提取与diff比对，详见commit记录"
+    hits = {w.lower() for w in pattern.findall(probe)}
+    expect = {"git", "patch", "diff", "commit"}
+    assert hits == expect, f"中文语境领域词须全命中：{hits} != {expect}"
+    for ident in ["ErrorCode", "BindReport", "digit", "repository", "commitment"]:
+        found = pattern.findall(ident)
+        assert not found, f"ASCII 复合标识符不误伤：{ident!r} 命中 {found}"
+    # 包段词形一致性回归（红队 W3-C35）：黑名单词必须能命中其理由列自认
+    # 覆盖的包段——G4 收尾批曾把 pkg.reflexkit.* 段词误书 reflectkit（多一
+    # t），pattern.findall('pkg.reflexkit.*') 恒空、六个注册组件扫描覆盖率
+    # 为 0 而门照绿。钉死：reflexkit 在表且对实际注册段名可命中。
+    assert "reflexkit" in blacklist, "黑名单须含 reflexkit（pkg.reflexkit.* 实际段名；reflectkit 为 W3-C35 勘误的词形错位）"
+    seg_hits = pattern.findall("pkg.reflexkit.search")
+    assert seg_hits == ["reflexkit"], f"包段词必须命中实际注册段：pkg.reflexkit.search → {seg_hits}"
+    print("self-test PASS：中文语境 4 词全命中 / ASCII 复合标识符 5 例零误伤 / 包段词形 reflexkit 命中 pkg.reflexkit.search")
+    return 0
+
+
+def main():
+    if "--self-test" in sys.argv[1:]:
+        sys.exit(self_test())
+    blacklist, whitelist = load_wordlist(WORDLIST)
+    # 长词在前防前缀吞并（词边界下双保险）。边界口径（红队 W1-C60）：
+    # ASCII 词边界 (?<![A-Za-z]) 词 (?![A-Za-z])——Python \b 的 \w 含 CJK，
+    # 领域词与汉字相邻时（中文注释里「执行git仓库的patch提取」）\b 不成立，
+    # 此前 R6 零容忍门对中文技术注释结构性失明（与方案 §2.3 声明的
+    # grep -rniE 基线口径背离）；ASCII 边界 = 词不与 ASCII 字母相连即命中
+    #（前缀/后缀数字或 CJK 均算独立词；ErrorCode/BindReport 等 ASCII 复合
+    # 标识符不误伤——与旧 \b 同一面，只是把 CJK 邻接面补上）。
+    ordered = sorted(blacklist, key=len, reverse=True)
+    pattern = re.compile(
+        r"(?<![A-Za-z])(" + "|".join(re.escape(w) for w in ordered) + r")(?![A-Za-z])",
+        re.IGNORECASE,
+    )
+
+    hits = []  # (relpath, lineno, word, linetext)
+    for root in SCAN_ROOTS:
+        base = REPO_ROOT / root
+        if not base.is_dir():
+            sys.exit(f"neutrality_scan: 扫描根不存在：{root}")
+        for path in sorted(base.rglob("*.rs")):
+            rel = str(path.relative_to(REPO_ROOT))
+            for lineno, text in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), 1
+            ):
+                for m in pattern.finditer(text):
+                    hits.append((rel, lineno, m.group(1).lower(), text.strip()[:100]))
+
+    # 计数对账：白名单按 (文件,行,词) 容纳次数；超出部分即白名单外命中
+    grouped = {}
+    for rel, lineno, word, text in hits:
+        grouped.setdefault((rel, lineno, word), []).append(text)
+    allowed = dict(whitelist)
+    violations, exempt_used, exempt_stale = [], 0, []
+    for key in sorted(grouped):
+        texts = grouped[key]
+        cap = allowed.get(key, 0)
+        for i, text in enumerate(texts):
+            if i < cap:
+                print(f"{key[0]}:{key[1]}: [白名单] [{key[2]}] {text}")
+                exempt_used += 1
+            else:
+                violations.append((key[0], key[1], key[2], text))
+    for key in sorted(set(allowed) - set(grouped)):
+        exempt_stale.append(key)
+
+    for rel, lineno, word, text in violations:
+        print(f"{rel}:{lineno}: [词] {word} {text}")
+    print(
+        f"\n扫描词表：黑名单 {len(blacklist)} 词；命中 {len(hits)} 处"
+        f"（白名单豁免 {exempt_used} / 白名单外 {len(violations)}）；"
+        f"失效白名单条目 {len(exempt_stale)}"
+    )
+    if exempt_stale:
+        for rel, lineno, word in exempt_stale:
+            print(f"  白名单条目已无对应命中（漂移，须更新词表）：{rel}:{lineno} [{word}]")
+    if violations:
+        print("S1=FAIL：白名单外命中 ≥1（R6 门红——处置：改代码去领域词（首选）或白名单登记附理由）")
+        sys.exit(1)
+    if exempt_stale:
+        print("S1=FAIL：白名单条目漂移（命中消失未除名）——更新词表并登记理由")
+        sys.exit(1)
+    print("S1=PASS：白名单外命中数 = 0")
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

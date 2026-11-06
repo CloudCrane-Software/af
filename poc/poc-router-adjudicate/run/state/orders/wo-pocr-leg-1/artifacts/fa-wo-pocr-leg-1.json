@@ -1,0 +1,11 @@
+{
+  "unit_id": "stub-unit",
+  "order_id": "wo-pocr-leg-1",
+  "stable_id": "sid-38f431a4a9cbbfa3fd98227d430dc255b9fa48a91b187575521a5e897dbdad4a",
+  "line_id": "stub:line-poc",
+  "artifact": {
+    "artifact_id": "fa-wo-pocr-leg-1",
+    "is_final": true,
+    "qualified": true
+  }
+}

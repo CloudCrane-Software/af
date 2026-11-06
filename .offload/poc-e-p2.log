@@ -1,0 +1,39 @@
+先对齐基线：fetch `origin/product/main`，再读 P2 两处源码和现有测试，按「先红后绿」施工。工作树在 detached HEAD。接着对齐 `origin/product/main` 并读适配器源码与既有测试。源码定位到两处缺陷。接着读 `api`、`cmd_run` 和既有 12 例测试，确认夹具写法。基线已对齐。先建分支，再用探针钉住修前红因，再落夹具。P2-1 修前已钉死：`127.0.0.1:1` 裸抛 `urllib.error.URLError`（Errno 111）。先落两例夹具，跑红读数。红读数已钉：12 passed / 2 failed。P2-1 裸 `URLError(111)`，P2-2 红因被 `PA10` 替换。开始下修。两件 P2 已修完，夹具先红后绿，分支已推。
+
+## 修法
+
+**P2-1** `poc/poc-e-codeadapter/codeadapter.py:390-391`  
+`GiteaClient.api` 在既有 `HTTPError` 之后增捕 `urllib.error.URLError`，把 `error.reason` 包进 `AdapterError`（PA11 族）。连接失败仍 fail-closed：合入不落、订单不 Closed。
+
+**P2-2** `poc/poc-e-codeadapter/codeadapter.py:601-625`  
+`cmd_run` 的 `finally` 里 `lease(... return ...)` 包 `try/except`。有在飞异常时保留原红因（PA14 优先），归还失败只记 WARN 到 `ledger.jsonl`（`kind=warn`/`level=WARN`）和 `e2e.json`（`lease_return_warn`）。无在飞异常时归还失败仍抛。
+
+## 先红后绿
+
+| 件 | 修前（红） | 修后（绿） |
+|---|---|---|
+| P2-1 `127.0.0.1:1` | 裸 `urllib.error.URLError(ConnectionRefusedError(111, 'Connection refused'))` | `PA11 gitea API GET /version -> URLError: [Errno 111] Connection refused`（`__cause__` 仍是 URLError） |
+| P2-2 门红+归还失败 | 红因被替换为 `PA10 命令失败 exit=1: injected lease return failure` | 红因=`PA14`；ledger/e2e 落 WARN（`preserved_error` 含 PA14） |
+
+pytest 修前：`2 failed, 12 passed`  
+pytest 修后：`14 passed in 1.29s`（既有 12 例全在 + 新增 `test_gitea_api_urlerror_wrapped_as_pa11` / `test_lease_return_failure_preserves_pa14`）
+
+`python3 -I tests/test_codeadapter.py` → `14/14 passed`
+
+## 分支 + HEAD
+
+- 基线：`origin/product/main` = `d6d230d`
+- 分支：`feature/poc-e-adapter-p2`（已 push，未碰 `product/main`）
+- HEAD：`06f693d3c97747a5708be84d861dc62e3487f43b`  
+  `fix(poc-e): 适配器 P2——URLError 包 PA11 + finally 归还失败保原红因`
+- changelog-draft：仓内 `30-工件/changelog-draft-poc-e-p2.md` + 工厂同名各一份
+- 无 Rust 改动，fmt 免
+
+## 边界
+
+- HTTP 4xx/5xx 仍走原 `HTTPError` → PA11（HTTP 码）路径
+- 连接拒绝/URLError 只改分类学，不合入、不 Closed
+- `kind=warn` 不参与 Closed 判定；门红仍是 Failed
+- 归还失败且无在飞异常：WARN 落盘后原样抛出
+- 本批两件 P2 收口，无新遗留
+Finishing session…

@@ -1,0 +1,4 @@
+2026/10/19 02:25:49 retrying read tcp [240e:314:a330:8e00:7bb5:f75e:daf9:5da6]:35026->[2600:1f18:2148:bc01:13ac:6f23:f20b:1e42]:443: read: connection reset by peer
+2026/10/19 02:25:50 retrying read tcp [240e:314:a330:8e00:7bb5:f75e:daf9:5da6]:35042->[2600:1f18:2148:bc01:13ac:6f23:f20b:1e42]:443: read: connection reset by peer
+2026/10/19 02:25:53 retrying read tcp [240e:314:a330:8e00:7bb5:f75e:daf9:5da6]:53062->[2600:1f18:2148:bc02:9344:abec:4a5c:ae61]:443: read: connection reset by peer
+Error: Get "https://index.docker.io/v2/": read tcp [240e:314:a330:8e00:7bb5:f75e:daf9:5da6]:53062->[2600:1f18:2148:bc02:9344:abec:4a5c:ae61]:443: read: connection reset by peer

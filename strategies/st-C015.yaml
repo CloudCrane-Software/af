@@ -1,0 +1,134 @@
+id: st-C015
+name: Context rot：按有效（而非标称）上下文设预算（含编码任务预填充复现）
+tier: A
+claim: Context rot 按有效上下文设预算：输入越长性能越不可靠且非均匀，各任务均随输入变长衰减
+claimed_value:
+  metric: pass_rate
+  direction: up
+  context: 上下文管理；复刻 boolean.ai 协议：固定任务集，按 0/25%/50% 注入历史或预填充（相关/无关两种），画通过率-预填充长度曲线找拐点，预算按拐点处的有效上下文而非标称窗口设定（S005 测试设计口径）
+sources: [MC-MemGPT, S005, S008, S034]
+consensus: { corpora: 2, cards: 4 }
+experiment: { status: none, exp_id: "-", note: "-" }
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: context_rot_sweep
+    graph_version: "1.0"
+    entry: sweep
+    input: rot_input
+    output: { ref: rot_report, from: analyze }
+    intent: "预填充扫描：map 跑 0/25%/50% 预填充档（每档 solver 的上下文档配额=标称预算，注入量=有效上下文扰动）→ 记分板落账 → 评估器按档汇总通过率曲线与拐点；预算按拐点有效上下文回填 policies.budgets"
+  types:
+    - name: rot_input
+      schema:
+        type: object
+        required: [question, levels]
+        properties:
+          question: { type: string }
+          levels:
+            type: array
+            items:
+              type: object
+              required: [level_pct, prefill_ref]
+              properties:
+                level_pct: { type: integer }
+                prefill_ref: { type: string }
+    - name: prefill_level
+      schema:
+        type: object
+        required: [level_pct, prefill_ref]
+        properties:
+          level_pct: { type: integer }
+          prefill_ref: { type: string }
+    - name: trial_result
+      schema:
+        type: object
+        required: [level_pct, passed, effective_tokens]
+        properties:
+          level_pct: { type: integer }
+          passed: { type: boolean }
+          effective_tokens: { type: integer }
+    - name: tally_result
+      schema:
+        type: object
+        required: [answers, top_count, top_share_milli]
+        properties:
+          answers: { type: integer }
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+    - name: rot_report
+      schema:
+        type: object
+        required: [knee_pct, trials, degraded]
+        properties:
+          knee_pct: { type: integer }
+          trials: { type: integer }
+          degraded: { type: boolean }
+  stores:
+    - name: trials_board
+      type: collection
+      item: trial_result
+      writer: ledger
+      lifecycle: run
+      retention: { max_items: 256 }
+    - name: prefill_corpus
+      type: collection
+      item: prefill_level
+      writer: loader
+      lifecycle: run
+      retention: { max_items: 64 }
+  nodes:
+    - id: loader
+      kind: task
+      uses: { tool: pkg.ctxrot.corpus@1 }
+      writes: [prefill_corpus]
+      emits: { done: signal }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.ctxrot.loader_system, quota_tokens: 300 }
+    - id: sweep
+      kind: task
+      map:
+        over: input.levels
+        body:
+          nodes:
+            - id: solver
+              kind: task
+              uses: { model: route.main@1 }
+              emits: { trial: trial_result }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.ctxrot.solver_system, quota_tokens: 500 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 200 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 4000 }
+          edges: []
+      emits: { trials: { from_body: solver.trial } }
+    - id: ledger
+      kind: transform
+      consumes: { trials: "list<trial_result>" }
+      writes: [trials_board]
+      ops:
+        - { op: project, port: trials, into: trials_board }
+        - { op: project, port: trials, into: ledgered }
+      emits: { ledgered: "list<trial_result>" }
+    - id: analyze
+      kind: check
+      uses: { unit: pkg.ctxrot.curve@1 }
+      reads: [prefill_corpus, trials_board]
+      consumes: { ledgered: "list<trial_result>" }
+      emits: { summary: rot_report }
+  edges:
+    - { from: loader, output: done, to: sweep, input: done }
+    - { from: sweep, output: trials, to: ledger, input: trials }
+    - { from: ledger, output: ledgered, to: analyze, input: ledgered }
+  policies:
+    budgets:
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 2000000 }
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 900 }
+    failures:
+      - class: schema_invalid
+        retry: { max: 2, backoff_ms: 0 }
+      - class: budget_exhausted
+        terminal: true
+        outcome: failed

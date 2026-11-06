@@ -1,0 +1,59 @@
+# 共 57 生产写入点（(file, fn) 计）
+crates/af-bench/src/main.rs	run_injec	[1139, 1141, 1185]	-
+crates/af-bench/src/main.rs	run_swev	[657, 659, 780]	-
+crates/af-bench/src/main.rs	run_tb	[938, 940, 1017]	-
+crates/af-bench/src/swev.rs	capture_diff	[111, 113]	-
+crates/af-bench/src/swev.rs	verify	[158, 183, 196]	-
+crates/af-compiler/src/construction.rs	assemble_construction_package	[228, 233, 236]	plan.json,task.json
+crates/af-compiler/src/diagnostics.rs	write_to	[141]	-
+crates/af-compiler/src/package.rs	write_package_manifest	[156]	package_manifest.json
+crates/af-credential/src/root.rs	acquire	[1469]	-
+crates/af-credential/src/root.rs	move_staged	[854]	-
+crates/af-credential/src/root.rs	open_inner	[257]	-
+crates/af-credential/src/root.rs	rename_aside	[907]	-
+crates/af-credential/src/root.rs	write_atomic	[1381, 1390]	-
+crates/af-credential/src/root.rs	write_ready	[661]	-
+crates/af-eval/src/gate.rs	persist	[590, 592]	-
+crates/af-execline/src/driver.rs	execute	[437]	-
+crates/af-execline/src/driver.rs	load_or_create_instance	[231]	-
+crates/af-execline/src/driver.rs	open_with_sink	[267]	-
+crates/af-execline/src/engine.rs	write_trust_anchor	[199, 204]	-
+crates/af-execline/src/exec.rs	execute	[163, 181]	-
+crates/af-execline/src/gate_unit.rs	persist_gate_order_metrics	[704]	-
+crates/af-execline/src/graph_unit.rs	commit	[1648]	-
+crates/af-execline/src/graph_unit.rs	drive_all	[979, 982]	-
+crates/af-execline/src/graph_unit.rs	drive_check_node	[689, 809]	-
+crates/af-execline/src/graph_unit.rs	drive_task_node	[405]	-
+crates/af-execline/src/graph_unit.rs	persist_declaration_artifacts	[1881]	-
+crates/af-execline/src/judge.rs	invoke	[191]	-
+crates/af-execline/src/ledger.rs	append	[192, 194]	-
+crates/af-execline/src/mes.rs	append_event	[113, 115]	-
+crates/af-execline/src/pkg/sweng.rs	publish_task_finished	[599, 603]	-
+crates/af-execline/src/pkg/sweng.rs	test_unit	[810, 811, 812]	test-evidence.json,test.log
+crates/af-execline/src/record.rs	open	[70]	-
+crates/af-execline/src/record.rs	open_append	[95]	-
+crates/af-execline/src/suite/report_unit.rs	draft_fn_real_ring	[1042, 1254, 1256, 1316, 1404]	ring,ring/sources_ledger.json
+crates/af-execline/src/suite/report_unit.rs	drive_all	[1659, 1672, 1704, 1719, 1765]	paper.json,report.json,report.md,verify.log
+crates/af-execline/src/suite/report_unit.rs	write_snapshot	[229, 231]	-
+crates/af-execline/src/suite/swev.rs	capture_diff	[200, 202]	-
+crates/af-execline/src/suite/swev.rs	verify	[240, 273, 286]	-
+crates/af-execline/src/suite/swev_unit.rs	execute	[184]	-
+crates/af-execline/src/suite/tb_unit.rs	execute	[157]	-
+crates/af-harness/src/run.rs	open_with_clock	[176]	-
+crates/af-mes/src/outbox.rs	open	[32]	-
+crates/af-mes/src/outbox.rs	park	[92, 109]	-
+crates/af-order/src/adjudicate.rs	append	[362, 365]	-
+crates/af-order/src/adjudicate.rs	persist	[213, 218]	-
+crates/af-order/src/admit.rs	append_receipt	[1001]	-
+crates/af-order/src/cli.rs	run_submit	[369]	-
+crates/af-order/src/router.rs	append_consumed	[507, 512]	-
+crates/af-order/src/router_liveness.rs	write_json_atomic	[336, 341, 343]	-
+crates/af-order/src/router_liveness.rs	write_snapshot	[458, 461, 463]	-
+crates/af-order/src/voucher.rs	issue_or_load	[174]	-
+crates/af-order/src/voucher.rs	load_or_create_seed	[221]	-
+crates/af-release-gate/src/bin/release-gate.rs	append_event	[64]	-
+crates/af-trace/src/anchor.rs	append_receipt	[499]	-
+crates/af-trace/src/anchor.rs	atomic_write	[531, 541]	-
+crates/af-trace/src/trace.rs	open_log	[802]	-
+crates/af-trace/src/trace.rs	open_prepared	[209]	-
+exit=0

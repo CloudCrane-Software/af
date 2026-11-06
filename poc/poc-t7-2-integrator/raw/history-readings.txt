@@ -1,0 +1,149 @@
+=== T7② 历史合流核验读数 ===
+仓根    ：/home/pan-ding/workspace/af-wt-t7-2
+复核器  ：python3 -I ci/integrator_bind_check.py
+git 版本：git version 2.53.0
+产品主线：product/main = 56ff52a57c022983d74d994fd4e1c63e98f45235（远端 56ff52a57c022983d74d994fd4e1c63e98f45235）
+
+────────────── 合流 ae6869d ──────────────
+合流提交 : ae6869d2bf6c7298e9b34dad85044efe05ae1435
+合流时间 : 2026-11-04T21:03:56+08:00
+标题     : Merge feature/poc-e-codeadapter：代码域适配器（lease 领还→leased worktree→patch→门→gitea 合入→订正）
+形态     : 单支直并入 product/main（真合并提交）
+被合分支 : feature/poc-e-codeadapter
+base_ref : e106b3ff060e23021fa6ce2985b0599d1c3850d5（合流时的目标分支头）
+source   : f14e79e（合流时的被合分支头）
+合流提交树: be3a91c16580a7c9879130ab43cfb4127d9fb66f
+-- 该分支现在的远端头（ls-remote origin refs/heads/feature/poc-e-codeadapter）--
+    f14e79e1123fdcd8fd8b0781fd52298b9c6daaa9	refs/heads/feature/poc-e-codeadapter
+-- 复核器自算实测侧（actual 子命令）--
+{
+  "base_head": "e106b3ff060e23021fa6ce2985b0599d1c3850d5",
+  "base_ref": "e106b3ff060e23021fa6ce2985b0599d1c3850d5",
+  "base_sha": "83bb71c12e5da73076ea67ce3280e65a5713ef62",
+  "branch": "",
+  "merge_mode": "merge-commit",
+  "merge_tree": "be3a91c16580a7c9879130ab43cfb4127d9fb66f",
+  "merge_tree_equals_source_tree": false,
+  "note": "实测侧自算读数（无记录侧 ⇒ 不构成复核结论）",
+  "remote": "origin",
+  "source_origin": "--source 指定本地提交 f14e79e",
+  "source_sha": "f14e79e1123fdcd8fd8b0781fd52298b9c6daaa9",
+  "suite_digest": "fee9564b9d95ee4a8c83972df66e1af1fd80f3a8d7f1cd2aca053d6ab88eef7f",
+  "suite_digest_of_source_tree": "400ac09f58b33c49b907b750d3dcdc09ff7717bf6dc4f389c3226dcf9cdbb6e6",
+  "suite_members": 44,
+  "suite_members_of_source_tree": 42,
+  "tested_tree": "3516c675b2eb6f22787ed03b3a74a911ba1debef"
+}
+-- 落地树 vs 合流提交实际树 --
+机算 ort 合并树 : be3a91c16580a7c9879130ab43cfb4127d9fb66f
+比对     : ★ 逐位相同 ⇒ 该历史合流是干净的 ort 合并（无 evil merge 夹带）
+
+────────────── 合流 df7c6e3 ──────────────
+合流提交 : df7c6e341ad88284e8f0d979ce416c1a4921f7f4
+合流时间 : 2026-11-04T22:33:31+08:00
+标题     : Merge feat/l3-l3-independent-port：L3' bash 超时可调 + L3'' judge 退避重试
+形态     : 单支直并入 product/main（真合并提交）
+被合分支 : feat/l3-l3-independent-port
+base_ref : b0cfa8ec5175dea9d31f3994da0f29568a970ee7（合流时的目标分支头）
+source   : b99bbb9（合流时的被合分支头）
+合流提交树: bd6306ba8843f9b00def2a966fd3b2bf63f93739
+-- 该分支现在的远端头（ls-remote origin refs/heads/feat/l3-l3-independent-port）--
+    b99bbb9ba2ac6110b615b2bb883ede29fe001579	refs/heads/feat/l3-l3-independent-port
+-- 复核器自算实测侧（actual 子命令）--
+{
+  "base_head": "b0cfa8ec5175dea9d31f3994da0f29568a970ee7",
+  "base_ref": "b0cfa8ec5175dea9d31f3994da0f29568a970ee7",
+  "base_sha": "8ef705d0e800895bd147145a4ff8e9ed3f172ac2",
+  "branch": "",
+  "merge_mode": "merge-commit",
+  "merge_tree": "bd6306ba8843f9b00def2a966fd3b2bf63f93739",
+  "merge_tree_equals_source_tree": false,
+  "note": "实测侧自算读数（无记录侧 ⇒ 不构成复核结论）",
+  "remote": "origin",
+  "source_origin": "--source 指定本地提交 b99bbb9",
+  "source_sha": "b99bbb9ba2ac6110b615b2bb883ede29fe001579",
+  "suite_digest": "ee751413a76a40b84997523886e9356823eb95dde59998f13304c9766c226596",
+  "suite_digest_of_source_tree": "fee9564b9d95ee4a8c83972df66e1af1fd80f3a8d7f1cd2aca053d6ab88eef7f",
+  "suite_members": 44,
+  "suite_members_of_source_tree": 44,
+  "tested_tree": "cc6c9b6c3024d3eaa38c66f93b5e607cf49b4722"
+}
+-- 落地树 vs 合流提交实际树 --
+机算 ort 合并树 : bd6306ba8843f9b00def2a966fd3b2bf63f93739
+比对     : ★ 逐位相同 ⇒ 该历史合流是干净的 ort 合并（无 evil merge 夹带）
+
+────────────── 合流 e448453 ──────────────
+合流提交 : e448453760166aa19684e1ae4bf75b4c6cd6c3ae
+合流时间 : 2026-11-04T22:33:31+08:00
+标题     : Merge fix/gate-inputs-repin：门输入钉重钉（补 c7f48c4 治理落账改 ci/debt-register.md 未同批重钉）
+形态     : 单支直并入 product/main（真合并提交）
+被合分支 : fix/gate-inputs-repin
+base_ref : df7c6e341ad88284e8f0d979ce416c1a4921f7f4（合流时的目标分支头）
+source   : 0e0e76a（合流时的被合分支头）
+合流提交树: 3ebe27d72088ef07cfc2e7829703ef9206419d4d
+-- 该分支现在的远端头（ls-remote origin refs/heads/fix/gate-inputs-repin）--
+    0e0e76a2979fe72fad8000be8c393a2741b59286	refs/heads/fix/gate-inputs-repin
+-- 复核器自算实测侧（actual 子命令）--
+{
+  "base_head": "df7c6e341ad88284e8f0d979ce416c1a4921f7f4",
+  "base_ref": "df7c6e341ad88284e8f0d979ce416c1a4921f7f4",
+  "base_sha": "8ef705d0e800895bd147145a4ff8e9ed3f172ac2",
+  "branch": "",
+  "merge_mode": "merge-commit",
+  "merge_tree": "3ebe27d72088ef07cfc2e7829703ef9206419d4d",
+  "merge_tree_equals_source_tree": false,
+  "note": "实测侧自算读数（无记录侧 ⇒ 不构成复核结论）",
+  "remote": "origin",
+  "source_origin": "--source 指定本地提交 0e0e76a",
+  "source_sha": "0e0e76a2979fe72fad8000be8c393a2741b59286",
+  "suite_digest": "067991cf189082f19a771b3c24a51ec2bde705e948b667a6c04be4937869fb59",
+  "suite_digest_of_source_tree": "400c19b684d7dec3b89c1460c2bd4800a1fd8560be892f7c6a704b4d94b72589",
+  "suite_members": 44,
+  "suite_members_of_source_tree": 44,
+  "tested_tree": "f7e89ced196afaf3c7a2d267e2ff77dd7d6fa506"
+}
+-- 落地树 vs 合流提交实际树 --
+机算 ort 合并树 : 3ebe27d72088ef07cfc2e7829703ef9206419d4d
+比对     : ★ 逐位相同 ⇒ 该历史合流是干净的 ort 合并（无 evil merge 夹带）
+
+────────────── 合流 83bb71c ──────────────
+合流提交 : 83bb71c12e5da73076ea67ce3280e65a5713ef62
+合流时间 : 2026-11-04T04:57:38+08:00
+标题     : Merge branch 'feature/boot-selfhost' into mainline：gate_unit 编译断裂修复并线（与合流支 e5ff59b 同一修复，blob 6a5eed5b 逐字节相同，自动合并）
+形态     : 集成批快进（product/main 由 0bb3b14 快进到集成分支头 83bb71c）
+被合分支 : feature/main-integration
+base_ref : 0bb3b14（合流时的目标分支头）
+source   : 83bb71c（合流时的被合分支头）
+合流提交树: c347b604ad575c3160f82fddf1d92abb963bbb56
+-- 该分支现在的远端头（ls-remote origin refs/heads/feature/main-integration）--
+    83bb71c12e5da73076ea67ce3280e65a5713ef62	refs/heads/feature/main-integration
+-- 复核器自算实测侧（actual 子命令）--
+{
+  "base_head": "0bb3b14806d4cf236e8b2341234ca84385af9062",
+  "base_ref": "0bb3b14",
+  "base_sha": "0bb3b14806d4cf236e8b2341234ca84385af9062",
+  "branch": "",
+  "merge_mode": "fast-forward",
+  "merge_tree": "c347b604ad575c3160f82fddf1d92abb963bbb56",
+  "merge_tree_equals_source_tree": true,
+  "note": "实测侧自算读数（无记录侧 ⇒ 不构成复核结论）",
+  "remote": "origin",
+  "source_origin": "--source 指定本地提交 83bb71c",
+  "source_sha": "83bb71c12e5da73076ea67ce3280e65a5713ef62",
+  "suite_digest": "400ac09f58b33c49b907b750d3dcdc09ff7717bf6dc4f389c3226dcf9cdbb6e6",
+  "suite_digest_of_source_tree": "400ac09f58b33c49b907b750d3dcdc09ff7717bf6dc4f389c3226dcf9cdbb6e6",
+  "suite_members": 42,
+  "suite_members_of_source_tree": 42,
+  "tested_tree": "c347b604ad575c3160f82fddf1d92abb963bbb56"
+}
+-- 落地树 vs 合流提交实际树 --
+机算 ort 合并树 : c347b604ad575c3160f82fddf1d92abb963bbb56
+比对     : ★ 逐位相同 ⇒ 该历史合流是干净的 ort 合并（无 evil merge 夹带）
+
+────────────── 历史记录面核证（记录件是否存在）──────────────
+· 全史是否有过 integrator 相关文件（git log --all --name-only -- '*integrator*'）：
+    ↑（空 = 全史无）
+· 仓内现存的 gate_result / record 类跟踪件：
+    ↑（空 = 无）
+· 结论：★ 历史合流**无等价记录面** —— 复核器对历史合流必然拒绝（RECORD-ABSENT）。
+  本脚本据此只给真实读数，**不伪造记录件**。

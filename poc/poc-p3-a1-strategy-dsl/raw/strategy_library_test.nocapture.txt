@@ -1,0 +1,70 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running tests/strategy_library_test.rs (/data/bench/targets/a2-p3a1-v2/debug/deps/strategy_library_test-0fdc4a2de29f665e)
+
+running 1 test
+[strategy-library] COMPILE-OK st-C005
+[strategy-library] COMPILE-OK st-C006
+[strategy-library] COMPILE-OK st-C007
+[strategy-library] COMPILE-OK st-C008
+[strategy-library] COMPILE-OK st-C009
+[strategy-library] COMPILE-OK st-C010
+[strategy-library] COMPILE-OK st-C012
+[strategy-library] COMPILE-OK st-C015
+[strategy-library] COMPILE-OK st-C016
+[strategy-library] COMPILE-OK st-C018
+[strategy-library] COMPILE-OK st-C019
+[strategy-library] COMPILE-OK st-C103
+[strategy-library] COMPILE-OK st-C122
+[strategy-library] COMPILE-OK st-b-C001
+[strategy-library] COMPILE-OK st-b-C003
+[strategy-library] NOT-APPLICABLE st-b-C022
+[strategy-library] COMPILE-OK st-b-C028
+[strategy-library] COMPILE-OK st-b-C029
+[strategy-library] COMPILE-OK st-b-C035
+[strategy-library] COMPILE-OK st-b-C036
+[strategy-library] COMPILE-OK st-b-C037
+[strategy-library] COMPILE-OK st-b-C038
+[strategy-library] COMPILE-OK st-b-C042
+[strategy-library] NOT-APPLICABLE st-b-C046
+[strategy-library] COMPILE-OK st-b-C048
+[strategy-library] NOT-APPLICABLE st-b-C054
+[strategy-library] COMPILE-OK st-b-C055
+[strategy-library] COMPILE-OK st-b-C056
+[strategy-library] COMPILE-OK st-b-C057
+[strategy-library] NOT-APPLICABLE st-b-C058
+[strategy-library] COMPILE-OK st-b-C060
+[strategy-library] COMPILE-OK st-b-C062
+[strategy-library] NOT-APPLICABLE st-b-C063
+[strategy-library] COMPILE-OK st-b-C064
+[strategy-library] COMPILE-OK st-b-C069
+[strategy-library] COMPILE-OK st-b-C071
+[strategy-library] NOT-APPLICABLE st-b-C073
+[strategy-library] NOT-APPLICABLE st-b-C075
+[strategy-library] COMPILE-OK st-b-C077
+[strategy-library] COMPILE-OK st-b-C078
+[strategy-library] COMPILE-OK st-b-C079
+[strategy-library] NOT-APPLICABLE st-b-C080
+[strategy-library] COMPILE-OK st-b-C086
+[strategy-library] NOT-APPLICABLE st-b-C087
+[strategy-library] COMPILE-OK st-b-C092
+[strategy-library] COMPILE-OK st-b-C095
+[strategy-library] COMPILE-OK st-b-C096
+[strategy-library] COMPILE-OK st-b-C097
+[strategy-library] NOT-APPLICABLE st-b-C098
+[strategy-library] COMPILE-OK st-b-C102
+[strategy-library] NOT-APPLICABLE st-b-C105
+[strategy-library] NOT-APPLICABLE st-b-C108
+[strategy-library] COMPILE-OK st-b-C109
+[strategy-library] COMPILE-OK st-b-C111
+[strategy-library] NOT-APPLICABLE st-b-C114
+[strategy-library] NOT-APPLICABLE st-b-C118
+[strategy-library] NOT-APPLICABLE st-b-C121
+[strategy-library] COMPILE-OK st-b-C124
+[strategy-library] COMPILE-OK st-b-C125
+[strategy-library] NOT-APPLICABLE st-b-C126
+[strategy-library] NOT-APPLICABLE st-b-C128
+[strategy-library] 条目 61：compilable=44 needs_syntax=0 not_applicable=17
+test strategy_library_entries_compile ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+

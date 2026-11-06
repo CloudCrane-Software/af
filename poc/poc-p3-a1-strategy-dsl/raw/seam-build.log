@@ -1,0 +1,46 @@
+   Compiling cedar-policy-core v4.14.1
+   Compiling clickhouse v0.15.3
+   Compiling af-dsl v0.1.0 (/home/pan-ding/af-dev/af/wt/p3-a1-strategy-dsl/crates/af-dsl)
+   Compiling af-trace v0.1.0 (/home/pan-ding/af-dev/af/wt/p3-a1-strategy-dsl/crates/af-trace)
+   Compiling af-eval v0.1.0 (/home/pan-ding/af-dev/af/wt/p3-a1-strategy-dsl/crates/af-eval)
+   Compiling af-compiler v0.1.0 (/home/pan-ding/af-dev/af/wt/p3-a1-strategy-dsl/crates/af-compiler)
+   Compiling af-mes v0.1.0 (/home/pan-ding/af-dev/af/wt/p3-a1-strategy-dsl/crates/af-mes)
+   Compiling cedar-policy-formatter v4.14.1
+   Compiling cedar-policy v4.14.1
+   Compiling af-credential v0.1.0 (/home/pan-ding/af-dev/af/wt/p3-a1-strategy-dsl/crates/af-credential)
+   Compiling af-harness v0.1.0 (/home/pan-ding/af-dev/af/wt/p3-a1-strategy-dsl/crates/af-harness)
+   Compiling af-execline v0.1.0 (/home/pan-ding/af-dev/af/wt/p3-a1-strategy-dsl/crates/af-execline)
+   Compiling p3a1-strategy-seam v0.1.0 (/home/pan-ding/af-dev/af/wt/p3-a1-strategy-dsl/poc/poc-p3-a1-strategy-dsl/seam)
+error[E0308]: mismatched types
+   --> src/main.rs:154:9
+    |
+153 |     let bound = match bind(&ir, &registry) {
+    |                       -------------------- this expression has type `BindReport`
+154 |         Ok(b) => {
+    |         ^^^^^ expected `BindReport`, found `Result<_, _>`
+    |
+    = note: expected struct `BindReport`
+                 found enum `Result<_, _>`
+
+error[E0308]: mismatched types
+   --> src/main.rs:158:9
+    |
+153 |     let bound = match bind(&ir, &registry) {
+    |                       -------------------- this expression has type `BindReport`
+...
+158 |         Err(e) => {
+    |         ^^^^^^ expected `BindReport`, found `Result<_, _>`
+    |
+    = note: expected struct `BindReport`
+                 found enum `Result<_, _>`
+
+error[E0599]: no method named `expect` found for struct `BindReport` in the current scope
+   --> src/main.rs:358:38
+    |
+358 |     let bound = bind(&ir, &registry).expect("链已过");
+    |                                      ^^^^^^ method not found in `BindReport`
+
+Some errors have detailed explanations: E0308, E0599.
+For more information about an error, try `rustc --explain E0308`.
+error: could not compile `p3a1-strategy-seam` (bin "p3a1-strategy-seam") due to 3 previous errors
+BUILD_EXIT=101

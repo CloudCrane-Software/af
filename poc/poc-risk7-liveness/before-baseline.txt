@@ -1,0 +1,13 @@
+== 改前（origin/product/main）af-order 面有无 liveness 消费面 ==
+94:/// 读侧所需的最小注册表视图（正本还有 repo_suites/liveness/slow_path 等
+
+== 改前 TriggerRegistry 只解 sources 段的自述注释 ==
+/// 读侧所需的最小注册表视图（正本还有 repo_suites/liveness/slow_path 等
+/// 段，本模块不消费、不拒未知字段——数据文件读侧，宽松解析）。
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct TriggerRegistry {
+    pub sources: Vec<SourceDef>,
+}
+
+== 改前 crates/af-order 全 crate grep liveness ==
+origin/product/main:crates/af-order/src/router.rs

@@ -1,0 +1,34 @@
+Execution Info:
+  WorkflowId            kill-a2c
+  RunId                 01a15145-911a-73c2-bbcd-0cd7da8cfc2e
+  Type                  KillTestWorkflow
+  Namespace             default
+  TaskQueue             verify-kill-queue
+  AssignedBuildId        
+  StartTime             6 seconds ago
+  ExecutionTime         6 seconds ago
+  SearchAttributes      map[BuildIds:metadata:{key:"encoding"  value:"json/plain"}  metadata:{key:"type"  value:"KeywordList"}  data:"[\"unversioned\",\"unversioned:d13ad76f3e53c2a045c33d4f218a52be\"]"]
+  StateTransitionCount  9
+  HistoryLength         11
+  HistorySize           1618
+  RootWorkflowId        kill-a2c
+  RootRunId             01a15145-911a-73c2-bbcd-0cd7da8cfc2e
+Extended Execution Info:
+  CancelRequested    false
+  OriginalStartTime  6 seconds ago
+
+Pending Activities: 1
+
+  ActivityId            2
+  Type                  trace_activity
+  State                 Started
+  Attempt               1
+  MaximumAttempts       10
+  ScheduledTime         4 seconds ago
+  LastStartedTime       4 seconds ago
+  LastHeartbeatTime     2 seconds ago
+  LastWorkerIdentity    3850514@PanDeveopComp
+  LastHeartbeatDetails  ["progress=1.0/14.0"]
+
+Pending Child Workflows: 0
+Pending Nexus Operations: 0

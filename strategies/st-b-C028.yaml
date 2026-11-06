@@ -1,0 +1,94 @@
+id: st-b-C028
+name: "LLM 摘要式对话压缩（auto-compact / LLMSummarizingCondenser，含默认参数基线）"
+tier: B
+claim: "LLM 摘要式对话压缩：接近上限时把历史摘要后重启，解决率 54% vs 基线 53%，单轮 API 成本最高降 2 倍"
+claimed_value:
+  metric: "api_cost_per_turn"
+  direction: down
+  context: "同一批 SWE-bench 任务对：对照组到上下文溢出即截断/失败；实验组接近上限即 LLM 摘要重启"
+sources: [S001, S009]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: llm_summarize_compact
+    graph_version: "1.0"
+    entry: agent_loop
+    input: compact_input
+    output: { ref: final_answer, from: finalize }
+    intent: "LLM 摘要式压缩（auto-compact 口径）：transcript 双视图装配——summarize 段把历史经 LLM 摘要器（pkg.ctx.llm_summarize@1）压成摘要，latest_k 段保留最近 6 轮原文（keep_recent 比例的 v0.1 视图等价）；接近上限触发比 0.85 与摘要失败降级 truncate 为组件/执行器侧参数（v0.1 段面无 trigger/on_failure 位）。S001 口径：解决率 54% vs 53%、单轮 API 成本最高降 2 倍；S009 负面证据（LLM 摘要可能纯增成本 24–94%）照登记：落地与观测掩码/无损压缩同台 A/B"
+  types:
+    - name: compact_input
+      schema:
+        type: object
+        required: [task]
+        properties:
+          task: { type: string }
+    - name: note
+      schema:
+        type: object
+        required: [body]
+        properties:
+          body: { type: string }
+    - name: final_answer
+      schema:
+        type: object
+        required: [answer]
+        properties:
+          answer: { type: string }
+  stores:
+    - name: transcript
+      type: message_log
+      writer: agent_loop
+      lifecycle: run
+      retention: { max_items: 256 }
+  nodes:
+    - id: agent_loop
+      kind: task
+      uses: { model: route.main@1 }
+      loop:
+        body:
+          nodes:
+            - id: turn
+              kind: task
+              uses: { model: route.main@1 }
+              emits: { observation: note, answer: note }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.agent.system, quota_tokens: 500 }
+                  - { from: input, fields: [task], quota_tokens: 300 }
+                  - { from: store, store: transcript, policy: summarize, component: pkg.ctx.llm_summarize@1, quota_tokens: 1200 }
+                  - { from: store, store: transcript, policy: latest_k, args: { k: 6 }, quota_tokens: 800 }
+            - id: solved
+              kind: check
+              uses: { unit: pkg.swe.checker@1 }
+              consumes: { answer: note }
+              emits: { answer: note }
+          edges:
+            - { from: turn, output: answer, to: solved, input: answer }
+        max_iterations: 16
+        safety_points:
+          - { node: solved, kind: check }
+        exit_when: "attempt.passed == true"
+        on_exhausted: continue
+      writes: [transcript]
+      emits: { answer: { from_body: turn.answer } }
+    - id: finalize
+      kind: task
+      uses: { model: route.main@1 }
+      consumes: { answer: note }
+      emits: { final_answer: final_answer }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.agent.finalize_system, quota_tokens: 400 }
+          - { from: edge, port: answer, quota_tokens: 500 }
+  edges:
+    - { from: agent_loop, output: answer, to: finalize, input: answer }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 600 }
+      - { id: token_cap, dimension: tokens_total, scope: loop:agent_loop, cap: 400000 }
+    failures:
+      - { class: budget_exhausted, terminal: true, outcome: failed }

@@ -1,0 +1,124 @@
+{
+  "population": {
+    "total_traces": 16,
+    "resolved": 6,
+    "failed": 10,
+    "indeterminate": 0
+  },
+  "failure_distribution": {
+    "tool_usage_error": {
+      "count": 3,
+      "share_milli": 300
+    },
+    "syntax_error": {
+      "count": 4,
+      "share_milli": 400
+    },
+    "other": {
+      "count": 3,
+      "share_milli": 300
+    }
+  },
+  "by_error_code": {
+    "(none)": 4,
+    "EX4001": 1,
+    "EX4005": 1,
+    "EX4006": 1,
+    "EX4007": 1,
+    "EX4008": 1,
+    "EX4009": 1
+  },
+  "by_source": {
+    "poc/poc-s17-trace-attribution/corpus/results.jsonl": {
+      "tool_usage_error": 3,
+      "syntax_error": 4,
+      "other": 3
+    }
+  },
+  "failed_traces": [
+    {
+      "trace_id": "fix-syn-1",
+      "class": "syntax_error",
+      "error_code": "EX4001",
+      "status": "setup_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    },
+    {
+      "trace_id": "fix-syn-2",
+      "class": "syntax_error",
+      "error_code": "EX4005",
+      "status": "setup_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    },
+    {
+      "trace_id": "fix-syn-3",
+      "class": "syntax_error",
+      "error_code": "EX4006",
+      "status": "run_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    },
+    {
+      "trace_id": "fix-syn-4",
+      "class": "syntax_error",
+      "error_code": "EX4008",
+      "status": "setup_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    },
+    {
+      "trace_id": "fix-tool-1",
+      "class": "tool_usage_error",
+      "error_code": "",
+      "status": "run_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    },
+    {
+      "trace_id": "fix-tool-2",
+      "class": "tool_usage_error",
+      "error_code": "",
+      "status": "run_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    },
+    {
+      "trace_id": "fix-tool-3",
+      "class": "tool_usage_error",
+      "error_code": "",
+      "status": "run_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    },
+    {
+      "trace_id": "fix-other-1",
+      "class": "other",
+      "error_code": "EX4007",
+      "status": "run_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    },
+    {
+      "trace_id": "fix-other-2",
+      "class": "other",
+      "error_code": "EX4009",
+      "status": "run_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    },
+    {
+      "trace_id": "fix-amb-1",
+      "class": "other",
+      "error_code": "",
+      "status": "run_failed",
+      "source": "poc/poc-s17-trace-attribution/corpus/results.jsonl"
+    }
+  ],
+  "sources": [
+    {
+      "path": "poc/poc-s17-trace-attribution/corpus/results.jsonl",
+      "rows": 13,
+      "unparsed": 0,
+      "mes_work_orders_seen": 0
+    },
+    {
+      "path": "poc/poc-s17-trace-attribution/corpus/records.jsonl",
+      "rows": 3,
+      "unparsed": 0,
+      "mes_work_orders_seen": 0
+    }
+  ]
+}

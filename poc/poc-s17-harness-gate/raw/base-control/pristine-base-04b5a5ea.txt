@@ -1,0 +1,32 @@
+===== 基线对照：pristine origin/product/main 04b5a5ea（git archive 抽取，零本卡改动）=====
+
+=====BC1 step12_check（预存红对照）=====
+RED [registry.pkgs] 复算值漂移：登记=37 复算=82（grep -c '"name": "pkg\.' af/packages/components.json）——数字跨文书漂移活现（35vs37/六门九门同模式）
+RED [adr.count] 复算值漂移：登记=14 复算=15（ls docs/adr/[0-9]*.md | wc -l）——数字跨文书漂移活现（35vs37/六门九门同模式）
+OK  [ci/subgates.list] 三者一致：名册计数==正则计数==名册逐件在场数==4
+OK  [ci/subgates.list] 名册集合 == ci/run.sh step14 槽接线集合：['branches_check', 'criteria_check', 'strategies_check', 'xcheck']
+step12 计数复算: keys=18 watch=1 docs=2 红=2
+step12 FAIL: 计数口径漂移（逐条 RED 见上）
+
+=====BC2 xcheck（预存红对照）=====
+[PASS] gates
+[PASS] gates-exec-binding
+[PASS] gates-g0-erratum
+[PASS] subgates-roster-binding
+[PASS] accountability-slot-floor
+[PASS] gates-subgate-census
+[FAIL] packages
+       红：组件计数/分解漂移 {'otter': (None, 1), 'harness': (None, 3), 'skill': (None, 2), 'hooks': (None, 1), 'ci': (None, 2), 'aci': (None, 6), 'alpha': (None, 1), 'cohesion': (None, 2), 'ctxrot': (None, 2), 'codet': (None, 1), 'ir': (None, 1), 'hopqa': (None, 2), 'critic': (None, 1), 'repo': (None, 4), 'fmt': (None, 1), 'judge': (None, 1), 'ticket': (None, 1), 'bench': (None, 2), 'swe': (None, 1), 'review': (None, 1), 'reflex': (None, 1), 'merge': (None, 3), 'ret': (None, 3), 'searchkit': (None, 2)}——复盘 C2『35 vs 37』形态
+[FAIL] redlist
+       红：红名单跨文书漂移——复盘 C2『19→22→23 三代/只改标题不改表体』形态（W1-C67/W2-C-53）
+[PASS] obs-dates
+[PASS] runsh-header
+== xcheck: 硬项 7/9 过；advisory 1/1 过（覆盖面 3/4：门数/packages/词表；码位组遗留登记见 [LEGACY] 行）
+
+=====BC3 mutations check-registry（run.sh step0 预存红对照）=====
+mutation_runner: 探针清单漂移：期望 13 条/哈希 188e157a37ec…，实得 13 条/哈希 881781d9dcfd…——探针被删/改须走 update-registry-baseline 同批评审
+
+=====BC4 clippy 门预存性（git  ancestry 事实，免二次 cargo）=====
+clippy 基线最后钉：1f5f4de3 2026-10-19（ci/clippy-baseline.txt）
+span_produce.rs 最后改：6ef49c80 2026-11-05（P3-A2 单根 trace）
+两者均为基线 04b5a5ea 祖先；本卡 commit 6a4783b3 零 .rs 文件（git diff --name-only 实测 0）⇒ clippy 读数与基线逐位相同

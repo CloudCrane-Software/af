@@ -1,0 +1,176 @@
+# =============================================================================
+# F1 快速门（GitHub Actions 接线）—— GitHub 端对等面（G1 批）
+# =============================================================================
+# 对等参照：af/.gitea/workflows/f1.yml（Gitea 端 F1 快速门）。
+# 本件是 **GitHub 端** 的 PR 级反馈面，语义面与 Gitea 端 F1 **1:1 对等**
+# （触发 / fmt --check / clippy -D warnings / af-dsl+af-compiler 快速测试 /
+#   超时止损 / 并发同分支只保最新 / 诊断一次收全三路）；
+# 环境面按 GitHub 侧现实改写（托管 runner / 内置 checkout 与 GITHUB_TOKEN /
+#   无持久 target），**逐条「改了什么、为什么、语义有无损失」登记**见
+#   poc/poc-g1-github-pr-surface/README.md §二 与 docs/CI-BOUNDARY.md §六。
+#
+# ★ 分工（与 Gitea 端同一条裁决：v0.3 T7 终裁 1）
+#   - F1 快速门 = 本文件。只跑三个快速门件：fmt --check / clippy -D warnings /
+#     一小撮封闭快速测试。目的：PR 级分钟级反馈，拦格式漂移与新增警告。
+#   - F2 全量门 = ci/run.sh 十四步管道。**不走 Actions**——走收件箱派单 +
+#     独立 runner（integrator 复核制）。严禁把全量门（含 cargo test --workspace
+#     全量 / step6 cosign 断网验签等）塞进本 workflow——Actions runner 上没有
+#     cosign/netns/POC 资产等外部依赖面。
+#
+# ★ 触发：仅 pull_request 且 base = 本仓 GitHub 侧默认分支 `main`。
+#   ★ 分支名不是假设的：2026-11-04 实测
+#     `git ls-remote --symref github HEAD`（remote github = https://github.com/Feasy898/af.git）
+#       → `ref: refs/heads/main  HEAD`（exit 0）
+#     原始读数：poc/poc-g1-github-pr-surface/readings/00-github-branch-probe.txt
+#       §B「复跑（成功）」条（首次直连 URL 复跑 exit=124 超时，原记录**保留不删**）。
+#     ⇒ GitHub 披露镜像的默认分支 = `main`；Gitea 端 base=`product/main`，
+#     GitHub 侧无该分支（ls-remote --heads 实测 24 个分支中无 product/main）
+#     ⇒ 按实际写 `main`，映射语义 = 「产品主线对应的 PR base 约束」不变。
+#
+# ★ 安全面（硬写死，判据只能变严）：
+#   - **禁用 pull_request_target**：它拿 base 仓上下文跑不可信 PR 代码 = 典型提权面。
+#     本 workflow 只用 pull_request（PR 头树 + 只读 token + 无 secret 依赖）。
+#   - **禁用 pull_request 之外的任何触发**（无 push / workflow_dispatch / schedule /
+#     workflow_run / issue_comment …）⇒ 拿不到 secret 的面一个都不开。
+#   - **permissions 收窄到只读**（顶层 + 每个 job 均 contents: read）。
+#   - **零长期凭据**：不引用任何 secrets.*（含 GITHUB_TOKEN 也不引——本仓为公开
+#     披露镜像，clone 走匿名 HTTP 即可，零凭据落盘、零凭据进 argv）。
+#   - **零 action 依赖**：不引任何 action（连 GitHub 第一方 actions/checkout 也不引）
+#     ⇒ 对等 Gitea 端「零外部 action 依赖」纪律的最严解读；代价见 README §二
+#     「改了什么/为什么/语义损失」表。
+#
+# ★ 判据面防弱化（机器面，不是人工自觉）：
+#   本 workflow 最后一个 step 自跑 `python3 -I ci/gh_workflow_check.py`
+#   （GitHub 端面静态自检器，G1 批新增）——它把上面每条约束变成可执行判定，
+#   且自带削弱变体负向自证（--selftest）。⇒ **谁把本文件的判据面改弱，
+#   同一次 PR run 就红**（自检 step 恒跑，不受前面步骤成败影响）。
+#   门位与生效条件见 docs/CI-BOUNDARY.md §六。
+# =============================================================================
+name: F1 快速门 (GitHub)
+run-name: "F1 快速门 @ ${{ github.event.pull_request.head.ref || github.ref_name }}"
+
+on:
+  pull_request:
+    branches:
+      - main
+
+# 只读权限收窄（顶层）：本 workflow 只读仓库内容，不写、不发评论、不动 PR。
+permissions:
+  contents: read
+
+# 同一 PR 分支重复推送只保最新一次快速门（快速门的意义就是快）。
+concurrency:
+  group: f1-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  f1-fast-gate:
+    # GitHub 侧现实：托管 runner（钉版本，不用浮动标签）。
+    #   改写登记：Gitea 端 `runs-on: [opch-ci]`（自托管 OpenCloudOS 9.6 容器）
+    #   → GitHub 端 `ubuntu-24.04`；语义损失 = 无（判据内容不变，环境依赖面换源）。
+    runs-on: ubuntu-24.04
+    # 超时止损：与 Gitea 端同值 45 分钟（判据面不得放宽 ⇒ 不得 >45）。
+    timeout-minutes: 45
+    # job 级同样收窄到只读（顶层与 job 级双写，防将来顶层被改宽后 job 仍宽松）。
+    permissions:
+      contents: read
+    env:
+      # 构建节流（本厂内存纪律）：并发 4，禁高并发编译。（与 Gitea 端同值）
+      CARGO_BUILD_JOBS: "4"
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: never
+      # ★ target 落盘位置**不写在本 job 级 env**：`runner` 上下文只在
+      #   jobs.<id>.steps.env 可用，job 级 env 不暴露它——写在这里 GitHub 判
+      #   「Unrecognized named-value: 'runner'」并让整件 workflow 失效
+      #   （2026-11-06 导入 PR 首跑实测：run 42188724117 同款 annotation，
+      #   0 job 直红）。托管 runner 每 job 一次性 ⇒ 无跨 run 持久化
+      #   （改写登记：Gitea 端 /var/lib/opch-ci/.af-f1-target 跨 run 复用；
+      #   GitHub 侧改落 runner.temp，语义损失 = 每次 run 冷编译「更慢」，非「更松」；
+      #   判据内容（跑哪些门、什么阈值）一字未改）。CARGO_TARGET_DIR 改在各
+      #   cargo step 的 step 级 env 供给。
+    steps:
+      - name: 分工声明（F1 快速门在此跑；F2 全量门不走 Actions）
+        run: |
+          echo "F1 快速门：fmt --check / clippy -D warnings / af-dsl+af-compiler 快速测试"
+          echo "F2 全量门：ci/run.sh 十四步——走收件箱派单+独立 runner（integrator 复核制），不进 Actions"
+
+      - name: checkout（PR 头树；零外部 action 依赖，不用 actions/checkout）
+        env:
+          AF_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          AF_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          AF_HEAD_CLONE_URL: ${{ github.event.pull_request.head.repo.clone_url }}
+          AF_REPOSITORY: ${{ github.repository }}
+        run: |
+          set -eu
+          REF="${AF_HEAD_REF:-${GITHUB_HEAD_REF:-}}"
+          if [ -z "$REF" ]; then
+            echo "取不到 PR 头分支（事件上下文缺 pull_request.head.ref）" >&2
+            exit 1
+          fi
+          # PR 头可能在 fork 上 ⇒ 优先用 head.repo.clone_url（fork 仓地址），
+          # 缺席回落本仓地址（同名 PR 的常见形态）。
+          URL="${AF_HEAD_CLONE_URL:-}"
+          if [ -z "$URL" ]; then
+            URL="https://github.com/${AF_REPOSITORY}.git"
+          fi
+          # 公开披露镜像 ⇒ 匿名 clone 即可：本 workflow 不注入任何 token
+          # （零长期凭据、零凭据落盘、零凭据进 argv）。
+          git clone --depth 1 --branch "$REF" "$URL" .
+          git --no-pager log --oneline -1
+          echo "检出 PR 头树：ref=$REF url=$URL 期望 head.sha=${AF_HEAD_SHA:-未提供}"
+
+      - name: 工具链供给（按仓内钉住版供给 rustfmt/clippy 组件；已装则复用）
+        run: |
+          set -eu
+          export PATH="$HOME/.cargo/bin:$PATH"
+          if ! command -v cargo >/dev/null 2>&1; then
+            echo "runner 无 rust——rustup 自举"
+            curl -sSfL https://static.rust-lang.org/rustup/dist/x86_64-unknown-linux-gnu/rustup-init \
+              -o /tmp/rustup-init
+            chmod +x /tmp/rustup-init
+            /tmp/rustup-init -y --profile minimal --no-modify-path
+            export PATH="$HOME/.cargo/bin:$PATH"
+          else
+            echo "cargo 已在（复用既有供给）: $(cargo --version)"
+          fi
+          # 按 rust-toolchain.toml 钉住的 channel 装工具链与 rustfmt/clippy 组件
+          CHANNEL="$(sed -n 's/^channel *= *"\(.*\)"/\1/p' rust-toolchain.toml)"
+          echo "钉住 channel: $CHANNEL"
+          rustup toolchain install "$CHANNEL" --profile minimal \
+            --component rustfmt --component clippy 2>&1 | tail -5
+          rustup default "$CHANNEL"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          cargo --version && rustc --version && cargo fmt --version
+
+      - name: fmt --check（硬门；主线已归零，红即如实亮红）
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-f1-target
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo fmt --check --all
+
+      - name: clippy -D warnings（硬门；快速门用 -D 全量拦，比 F2 的基线门更严）
+        # fmt 红不遮蔽 clippy/test 判定——一次 run 收全三路诊断（对齐 ci/run.sh
+        # 「步骤失败不中断、跑完全部步骤收集完整诊断」哲学）；job 结论仍任一红即红。
+        if: ${{ always() }}
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-f1-target
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
+        if: ${{ always() }}
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-f1-target
+        run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cargo test -p af-dsl -p af-compiler
+
+      - name: 判据面自检（GitHub 端面防弱化；本仓零外部 action 依赖）
+        # 机器面：谁把本文件的判据面改弱（去掉 clippy -D warnings / 放宽 permissions /
+        # 引入 action / 去掉超时或并发 / 改成 pull_request_target …），本 step 即红。
+        # 恒跑（always）：前序步骤红不遮蔽本判定。
+        if: ${{ always() }}
+        run: |
+          python3 -I ci/gh_workflow_check.py

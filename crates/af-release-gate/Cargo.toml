@@ -1,0 +1,25 @@
+[package]
+name = "af-release-gate"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+
+[dependencies]
+# 工单状态机在 af-workorder。本 crate 只在 Created→Released 前调用它的 release 门控，不改那个 crate。
+af-workorder = { path = "../af-workorder" }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+# 属性测试（CONWIP 不超发 / 渐放单调 / 拒绝不部分提交）。
+# 版本与 af-calendar、af-sampling、af-stop 对齐，精确钉 1.12.0。
+# 默认特性含 fork、timeout、bit-set；bit-set 会经 bit-vec 把 borsh derive
+# 特性统一进工作区，故只开 std。
+proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
+# 集成测试要自己构造工单。与上面的路径依赖是同一个 crate，不是新的第三方包。
+af-workorder = { path = "../af-workorder" }

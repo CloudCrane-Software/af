@@ -1,0 +1,3 @@
+task_package_manifest_check: 注册表漂移：实得 sha256=60fb404b8041… 钉 e4bbf44479d6…——改覆盖面正本须同批更新脚本常量并同批评审
+task_package_manifest_check: 生产写入点未造册（覆盖不到=破窗）：crates/af-order/src/voucher.rs::issue_or_load（写 API 行 [174]）——须同批入册 ci/baselines/task-package-writepoints.json 并重钉
+exit=1

@@ -1,0 +1,10 @@
+{"trace_id":"fix-syn-1","human_label":"syntax_error","annotator":"wave-02-d55","rationale":"template_ref 不在盘上登记面=计划装订结构错"}
+{"trace_id":"fix-syn-2","human_label":"syntax_error","annotator":"wave-02-d55","rationale":"预算条目不在执行面强制集=计划装订一致性错（EX4005）"}
+{"trace_id":"fix-syn-3","human_label":"syntax_error","annotator":"wave-02-d55","rationale":"envelope 端口类型违例=契约结构错（EX4006）"}
+{"trace_id":"fix-syn-4","human_label":"syntax_error","annotator":"wave-02-d55","rationale":"loop 部分构造缺表达=图形态结构错（EX4008）"}
+{"trace_id":"fix-tool-1","human_label":"tool_usage_error","annotator":"wave-02-d55","rationale":"agent 给 assess 工具传错参数（query 缺失）"}
+{"trace_id":"fix-tool-2","human_label":"tool_usage_error","annotator":"wave-02-d55","rationale":"agent off-interface 调用未注册工具"}
+{"trace_id":"fix-tool-3","human_label":"tool_usage_error","annotator":"wave-02-d55","rationale":"agent 连续 3 次 bad args 未修正=工具入参使用错误"}
+{"trace_id":"fix-other-1","human_label":"other","annotator":"wave-02-d55","rationale":"预算熔断=资源帽，非工具/语法"}
+{"trace_id":"fix-other-2","human_label":"other","annotator":"wave-02-d55","rationale":"节点墙钟超时=时限，非工具/语法"}
+{"trace_id":"fix-amb-1","human_label":"tool_usage_error","annotator":"wave-02-d55","rationale":"agent 选错检索工具（grep 代 codegrep）=工具选择/使用错误——刻意对抗例：判官关键词未覆盖「选择」措辞，用于验证对齐率夹具具备咬合力（非橡皮图章）"}

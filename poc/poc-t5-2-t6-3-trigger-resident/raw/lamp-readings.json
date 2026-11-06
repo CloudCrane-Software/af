@@ -1,0 +1,77 @@
+[
+ {
+  "state": "SETUP",
+  "name": "形态① 沙箱 inbox 投递文件 mtime 置旧（龄 300min）",
+  "detail": "/tmp/t5t6-verify/lamp/A/home/inbox/gitea-webhook/delivery-old.json mtime=2026-11-04 18:39:38"
+ },
+ {
+  "state": "SETUP",
+  "name": "形态① 隔离收件箱实例已起（生产副本，路径=af 仓 worktree 落点）",
+  "detail": "pid=1481843 tool=/home/pan-ding/workspace/af-wt-t5t6/tools/trigger-inbox.py home=/tmp/t5t6-verify/lamp/A/home port=18775"
+ },
+ {
+  "state": "FORM1",
+  "name": "① 收件箱在（keepalive 判活结论）",
+  "detail": "alive=True detail=进程=[1481843] home=/tmp/t5t6-verify/lamp/A/home inbox 可写 secret 在位"
+ },
+ {
+  "state": "FORM1",
+  "name": "① 判据文件 status/alarm_code",
+  "detail": "status=amber alarm_code=trigger-inbox-source-silent silent_s=18000 threshold_min=240 process_alive=True"
+ },
+ {
+  "state": "FORM1",
+  "name": "① 判据文件 message",
+  "detail": "trigger-inbox 源断供：收件箱进程在（pid=[1481843] home=/tmp/t5t6-verify/lamp/A/home）但最新投递距今 300min（>阈 240min）——形态B（源头无事件可路由）；恢复=事件源重投/查 webhook 出口；与『进程不在』（trigger-inbox-down）**分码**"
+ },
+ {
+  "state": "FORM1",
+  "name": "① alarms.log 行（形态①）",
+  "detail": "['trigger-inbox-source-silent@2026-11-04 23:39:39']"
+ },
+ {
+  "state": "FORM1",
+  "name": "① 断言：新码已发且既有 down 码未出现",
+  "detail": "has_source_silent=True has_down=False"
+ },
+ {
+  "state": "FORM1-CTRL",
+  "name": "① 对照组：投递改新后同一判定结论",
+  "detail": "alive=True status=green alarm_code=None silent_s=0（证明琥珀由龄驱动，非常量）"
+ },
+ {
+  "state": "SETUP",
+  "name": "形态① 实例已停（测完即弃）",
+  "detail": "rc=-15"
+ },
+ {
+  "state": "FORM2",
+  "name": "② 判活结论（进程不在）",
+  "detail": "alive=False detail=进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）"
+ },
+ {
+  "state": "FORM2",
+  "name": "② 判据文件 status/alarm_code",
+  "detail": "status=down alarm_code=trigger-inbox-down process_alive=False"
+ },
+ {
+  "state": "FORM2",
+  "name": "② 判据文件 message",
+  "detail": "进程不在（trigger-inbox.py；拉起闸=主代理，本守护只报警不拉起）——形态A（收件箱进程不在）；本形态的报警由既有 trigger-inbox-down 报警行负责，本判据行**不覆盖既有码**"
+ },
+ {
+  "state": "FORM2",
+  "name": "② 既有 fix 路径实发（沙箱 alarms.log）",
+  "detail": "['trigger-inbox-down@2026-11-04 23:39:39']"
+ },
+ {
+  "state": "FORM2",
+  "name": "② 断言：既有 down 码在场且新码未出现",
+  "detail": "has_down=True has_source_silent=False"
+ },
+ {
+  "state": "FORM2",
+  "name": "② 两码并置对照",
+  "detail": "形态①码=['trigger-inbox-source-silent'] | 形态②码=['trigger-inbox-down']"
+ }
+]

@@ -1,0 +1,108 @@
+id: st-b-C069
+name: "编辑命令内嵌 lint 门禁：致命语法错拒绝落盘并回显前后对照"
+tier: B
+claim: "编辑命令内嵌lint门禁：致命语法错拒绝落盘并回显前后对照（18.0%对15.0%）"
+claimed_value:
+  metric: "resolved_rate"
+  direction: up
+  context: "对照组=编辑直接落盘不做 lint；实验组=编辑命令内嵌 lint，致命语法错拒绝落盘"
+sources: [S062, S119]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: edit_embedded_lint_gate
+    graph_version: "1.0"
+    entry: edit_loop
+    input: lint_input
+    output: { ref: "list<code_file>", from: edit_loop }
+    intent: "编辑命令内嵌 lint 门禁：致命语法错在落盘前被 gate 拒绝并回灌前后对照，合法编辑才提交入 repo"
+  types:
+    - name: lint_input
+      schema:
+        type: object
+        required: [issue]
+        properties:
+          issue: { type: string }
+    - name: patch
+      schema:
+        type: object
+        required: [ref, diff_ref, syntax_ok, fatal_errors]
+        properties:
+          ref: { type: string }
+          diff_ref: { type: string }
+          syntax_ok: { type: boolean }
+          fatal_errors: { type: array, items: { type: string } }
+    - name: lint_report
+      schema:
+        type: object
+        required: [fatal_errors]
+        properties:
+          fatal_errors: { type: array, items: { type: string } }
+    - name: code_file
+      schema:
+        type: object
+        required: [path, content_ref]
+        properties:
+          path: { type: string }
+          content_ref: { type: string }
+  stores:
+    - name: repo
+      type: collection
+      item: code_file
+      writer: edit_loop.commit          # INV-2：仅过闸编辑由 commit 节点单写
+      lifecycle: run
+      retention: { max_items: 256 }
+  nodes:
+    - id: edit_loop
+      kind: task
+      loop:
+        body:
+          nodes:
+            - id: edit
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.sweng.edit_linted] }   # 内嵌 lint 的编辑命令（lint 结果随 patch 回传）
+              consumes: { feedback: lint_report }
+              emits: { patch: patch }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.coder_system, quota_tokens: 600 }
+                  - { from: input, fields: [issue], policy: project, quota_tokens: 900 }
+                  - { from: edge, port: feedback, fields: [fatal_errors], policy: project, quota_tokens: 800, optional: true }
+            - id: syntax_gate
+              kind: gate
+              consumes: { patch: patch }
+              emits: { patch: patch, report: lint_report }
+              assert: "inputs.patch.syntax_ok == true"    # 致命语法错拒绝落盘
+              route:
+                default: commit
+                rules:
+                  - { when: "syntax_gate.passed == false", goto: edit }
+            - id: commit
+              kind: transform
+              writes: [repo]
+              consumes: { patch: patch }
+              ops:
+                - { op: project, port: patch, fields: [ref, diff_ref], into: file_entry }
+              emits: { snapshot: "list<code_file>" }
+          edges:
+            - { from: edit, output: patch, to: syntax_gate, input: patch }
+            - { from: syntax_gate, output: report, to: edit, input: feedback }
+            - { from: syntax_gate, output: patch, to: commit, input: patch }
+        max_iterations: 3
+        carried:
+          - { store: repo, max_items: 256 }
+        safety_points:
+          - { node: syntax_gate, kind: gate }    # 落盘前安全点
+        exit_when: "attempt.passed == true"
+        on_exhausted: fail
+      emits: { snapshot: { from_body: commit.snapshot } }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 400 }
+      - { id: edit_turns, dimension: turns, scope: loop:edit_loop, cap: 36 }
+    failures:
+      - { class: gate_refused, route: same_node, feedback: error_observation }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

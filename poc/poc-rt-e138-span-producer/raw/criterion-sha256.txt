@@ -1,0 +1,7 @@
+# 工厂真仓判据件 sha256（本轮零改动核，2026-11-05 07:45 +08）
+1b7cd0a69e6c373e8dbc313f4ca279c7d0c49d80586a8ff1af16c4f5c7812fbc  tools/otel/otlp-assert.py
+d44add1c9adfafd3dfbef1647d8a3ff319b55dddc62fdab0d018ce837841d7a5  tools/all-gates.sh
+3ecd80ff9d4408a16c5f1edaa247a7eab27c01c3ffd0fa9ded5d831560000d2c  tools/gate-pins.list
+19dbf455e2e442ca18a7c7a4a60c7ea42e2e39d08731c87226eb2845320113e3  tools/factory-keepalive.py
+2b924a5092fcde6ac8cf2e97eb9c0407c98b10aed33e94697dca5bd89b5bd8be  tools/factory-watch.py
+a9a9b29c809f78d80b4b9d7656cd4746baefb2c595c7bd90350d9810c4985890  tools/deploy-consistency-probe.sh

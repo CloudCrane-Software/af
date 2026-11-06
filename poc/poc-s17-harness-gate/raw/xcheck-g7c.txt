@@ -1,0 +1,34 @@
+[PASS] gates
+       AGENT.md 主张 9 门（step1-8 硬门 + step9 FV advisory）
+       run.sh 实测 8 基础硬门 step[1, 2, 3, 4, 5, 6, 7, 8] + 1 advisory = 9 门（基础口径）
+       run.sh 另见 G0 机制批新 step[10, 11, 12, 13, 14]（step10-14 槽位；当前合计 14 step）
+[PASS] gates-exec-binding
+       登记槽 step[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]；执行事实槽 step[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]（step 助手调用行 + 执行重定向行 `> "$OUT/stepN.log"`）
+[PASS] gates-g0-erratum
+       AGENT.md 勘误行主张九门+G0 五门=14 step；run.sh 实测 G0 批 5/5 个新 step，合计 14 step
+[PASS] subgates-roster-binding
+       名册 subgates.list = ['branches_check', 'xcheck', 'criteria_check', 'strategies_check', 'harness_regression_gate']；ci/run.sh step14 槽接线集合 = ['branches_check', 'criteria_check', 'harness_regression_gate', 'strategies_check', 'xcheck']
+[PASS] accountability-slot-floor
+       step10（ci/step10_check.py，承诺-交付对账 deliverables.yaml）执行事实行在场
+       step11（ci/step11_check.py，自述-实现对账 doc-claims.txt）执行事实行在场
+       step12（ci/step12_check.py，计数复算 numbers.json）执行事实行在场
+       独立锚口径：本臂只看 run.sh 执行事实与门脚本盘面真件，不消费 numbers.json 任何键——ci.steps_total 登记锚可被「摘槽+同批改账」自证吸收，本臂不可
+[PASS] gates-subgate-census
+       census（槽→字母缀，执行事实）= {13: ['a', 'b', 'c']}；CO_HOSTED_SUBGATES（登记锚）= {13: ['a', 'b', 'c']}
+       step13 共宿子门字母缀 ['a', 'b', 'c'] 与登记一致（3 件执行事实全数在场）
+[FAIL] packages
+       README 主张十包 37 件；components.json 实测 82 件（根级 pkg.* 段）
+       README 分解 {'aflowkit': 2, 'agensh': 8, 'camelkit': 1, 'crewkit': 7, 'debatekit': 2, 'reactkit': 2, 'reflexkit': 3, 'sweagent': 10, 'langgraph': 1, 'openworld': 1}
+       实测分解 {'aflowkit': 2, 'agensh': 8, 'crewkit': 7, 'debatekit': 2, 'reactkit': 2, 'reflexkit': 3, 'sweagent': 10, 'openworld': 1, 'camelkit': 1, 'langgraph': 1, 'repo': 4, 'ret': 3, 'hopqa': 2, 'cohesion': 2, 'searchkit': 2, 'bench': 2, 'ctxrot': 2, 'aci': 6, 'harness': 3, 'skill': 2, 'merge': 3, 'swe': 1, 'reflex': 1, 'ci': 2, 'fmt': 1, 'hooks': 1, 'critic': 1, 'codet': 1, 'otter': 1, 'ticket': 1, 'alpha': 1, 'judge': 1, 'review': 1, 'ir': 1}
+       红：组件计数/分解漂移 {'judge': (None, 1), 'review': (None, 1), 'cohesion': (None, 2), 'reflex': (None, 1), 'alpha': (None, 1), 'repo': (None, 4), 'codet': (None, 1), 'ret': (None, 3), 'skill': (None, 2), 'searchkit': (None, 2), 'hooks': (None, 1), 'hopqa': (None, 2), 'ticket': (None, 1), 'merge': (None, 3), 'ir': (None, 1), 'aci': (None, 6), 'fmt': (None, 1), 'critic': (None, 1), 'otter': (None, 1), 'bench': (None, 2), 'ctxrot': (None, 2), 'swe': (None, 1), 'ci': (None, 2), 'harness': (None, 3)}——复盘 C2『35 vs 37』形态
+[FAIL] redlist
+       方案 §1.3 标题主张 23 项；表体 23 行；expected-fail.txt 实测 24 行
+       条目集合差：仅文书有 []；仅名单有 ['af-compiler::registry_decl_test::all_e9001_declarations_resolve_with_builtin_impl_ref']
+       红：红名单跨文书漂移——复盘 C2『19→22→23 三代/只改标题不改表体』形态（W1-C67/W2-C-53）
+[FAIL] obs-dates
+       README: 文书缺席（/home/pan-ding/workspace/agent黑灯工厂/README.md）——缺文件=未达成（复盘 C7 口径），四文书一致无法成立
+[PASS] runsh-header
+       头注无『N 步验收管道』字样（可接受）
+[LEGACY] codepoints 码位/债号/ADR 三方对账未实现（SPEC ⑧.2 / 总对账 §六.2：正本 error.rs 码位表摸排工作量未在本批全量落地）——机制覆盖面按 3/4 组对账交卷（门数/packages/词表）；不静默缺席
+== xcheck: 硬项 6/9 过；advisory 1/1 过（覆盖面 3/4：门数/packages/词表；码位组遗留登记见 [LEGACY] 行）
+== 对账明细落档：/data/bench/s17-harness-regression-gate-wt/ci/out/xcheck-report.txt

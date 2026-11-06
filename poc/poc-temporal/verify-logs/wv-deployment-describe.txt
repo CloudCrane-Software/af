@@ -1,0 +1,14 @@
+Worker Deployment:
+  Name                          verify-dep
+  CreateTime                    8 minutes ago
+  LastModifierIdentity          temporal-cli:pan-ding@PanDeveopComp
+  CurrentVersionDeploymentName  verify-dep
+  CurrentVersionBuildID         2.0
+  CurrentVersionChangedTime     5 minutes ago
+
+Version Summaries:
+  DeploymentName  BuildID  DrainageStatus   CreateTime  
+  verify-dep      2.0      unspecified     5 minutes ago
+  verify-dep      1.0      drained         8 minutes ago
+     Name      CreateTime    CurrentVersionDeploymentName  CurrentVersionBuildID  RampingVersionDeploymentName  RampingVersionBuildID  RampingVersionPercentage
+  verify-dep  8 minutes ago  verify-dep                    2.0                                                                                                0

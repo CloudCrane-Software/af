@@ -1,0 +1,19 @@
+{
+  "schema": "af.diagnostics.v1",
+  "diagnostics": [
+    {
+      "code": "E2001",
+      "severity": "error",
+      "message": "边引用未声明节点 to=\"ghost\"",
+      "phase": "validate",
+      "location": {
+        "file": "poc/poc-compiler-diagnostics/inputs/failure-e2001.yaml",
+        "line": null,
+        "column": null
+      },
+      "node": "root",
+      "reference": null,
+      "rule": "dangling_reference"
+    }
+  ]
+}

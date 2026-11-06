@@ -1,0 +1,9 @@
+$ /usr/bin/python3 -B ci/strategies_check.py --skip-compile   # cwd=/data/bench/wt-r5-crosstree
+exit=1
+
+[INFO] R0 入库对账 OK：被测对象 65 件全部在 git 跟踪面内（strategies/ 全库 + crates/af-dsl/tests/strategy_library_test.rs）
+[INFO] 命名空间分解：A 线（st-C*）12 条，B 线（st-b-*）48 条，全部登记=True
+[INFO] R4 编译断言已按 --skip-compile 跳过（非常跑形态）
+[FAIL] R5 only-in-head：strategies/st-C005.yaml——HEAD 提交树有、工作树无（工作树缺件或旧树，当前判定对着残缺集合）
+[FAIL] R2 index 条目 st-C005: file=st-C005.yaml 不在场（/data/bench/wt-r5-crosstree/strategies/st-C005.yaml）
+== strategies_check: 红 2 项（schema/index 计数/编译断言/跨树集合）

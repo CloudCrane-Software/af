@@ -1,0 +1,45 @@
+{
+  "recipe_kind": "af.gate.trigger_recipe.v1",
+  "registry": {
+    "f1-fast": {
+      "evaluation": {
+        "lineage_id": "f1-fast",
+        "version": 1,
+        "snapshot_hash_source": "Catalog.benchmark(frozen).snapshot_hash"
+      },
+      "graph_node": {
+        "kind": "check",
+        "uses": {
+          "unit": "pkg.af.gate_result@1"
+        }
+      }
+    },
+    "f2-full": {
+      "evaluation": {
+        "lineage_id": "f2-full",
+        "version": 1,
+        "snapshot_hash_source": "Catalog.benchmark(frozen).snapshot_hash"
+      },
+      "graph_node": {
+        "kind": "check",
+        "uses": {
+          "unit": "pkg.af.gate_result@1"
+        }
+      }
+    }
+  },
+  "rules": [
+    {
+      "rule_id": "push-f1-fast",
+      "event": "push",
+      "actions": [],
+      "suite": "f1-fast"
+    },
+    {
+      "rule_id": "pull-request-f2-full",
+      "event": "pull_request",
+      "actions": ["opened", "synchronize"],
+      "suite": "f2-full"
+    }
+  ]
+}

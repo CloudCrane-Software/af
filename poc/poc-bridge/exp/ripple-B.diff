@@ -1,0 +1,12 @@
+--- exp/v1-baseline/form_b_workflow.py	2026-10-19 11:22:11.560602142 +0800
++++ exp/v2-form_b_workflow.py	2026-10-19 11:25:59.414244739 +0800
+@@ -129,6 +129,9 @@
+         m.append("BudgetVoucherNotIssued")
+     elif not o.budget_voucher.signed:
+         m.append({"BudgetVoucherNotSigned": {"voucher_id": o.budget_voucher.voucher_id}})
++    # v2 新增前置条件（E3 涟漪实验）：release 额外要求 SLA deadline 已设置
++    if o.sla is None or o.sla.deadline is None:
++        m.append("SlaDeadlineNotSet")
+     return m
+ 
+ 

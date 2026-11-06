@@ -1,0 +1,7 @@
+宿主供给核：repo=/home/pan-ding/workspace/af-wt-t7-1-f2  结论=缺件
+  [缺 ] cosign       /home/pan-ding/workspace/af-wt-t7-1-f2/bin/cosign  
+  [OK ] cargo-deny   /home/pan-ding/.cargo/bin/cargo-deny  cargo-deny 0.20.2
+  [OK ] advisory-db  /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691  files=1388 git_head=999ec89d5d3f
+  [OK ] netns        /usr/bin/unshare  unshare -Urn 可用（非特权 user+netns）
+缺件（⇒ SKIP，不得计绿）：cosign
+exit=1

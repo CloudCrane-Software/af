@@ -1,0 +1,179 @@
+id: st-b-C058
+name: "自建工具检索层前先测检索器：工具检索本身是短板（ToolRet）"
+tier: B
+claim: "自建工具检索层前先测检索器：ToolRet最佳嵌入nDCG@10仅33.83，检索差拖累通过率11.4%"
+claimed_value:
+  metric: "tool_retrieval_nDCG@10"
+  direction: up
+  context: "以自有工具描述+真实任务查询构造内部评测集；先测检索器本身再建检索层"
+sources: [S043, S055, S056, S057]
+consensus: {corpora: 1, cards: 4}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+# S17 供给注册批 A（设计稿 strategies17-供给面设计-20261106.md §五）：
+# not_applicable → compilable。原 na_reason 的三态判据被 §四 的三分类
+# 复核推翻（与 st-C007/st-C019/st-b-C001 既有 compilable 先例不符），
+# 依据见 dsl_snippet 的 intent 段；组件声明见 af/packages/components.json。
+dsl_snippet: |
+  version: 1
+  meta:
+    name: tool_retrieval_ndcg_ab
+    graph_version: "1.0"
+    entry: loader
+    input: retrieval_input
+    output: { ref: retrieval_report, from: report }
+    intent: "ToolRet 投影（设计稿 §五.1）：map over arms——每臂一个检索 task（uses.tools 固定为已注册 pkg.ret.codegrep@1/pkg.repo.grep@1，臂间差异经 arg.item 的 retriever_ref/rewrite 入参表达，不新增工具件）→ 记分板落 hits → check 节点 pkg.retrieval.ndcg@1 读 qrels（eval_input 只对评估器可读，INV-4）算 nDCG@10 → tally 臂间差 → 报告。「追踪下游任务成功率」= 第二评估臂（pkg.bench.resolved@1 已注册），入报告结论栏。"
+  types:
+    - name: retrieval_input
+      schema:
+        type: object
+        required: [question, queries, arms]
+        properties:
+          question: { type: string }
+          queries: { type: array, items: { type: string } }
+          arms:
+            type: array
+            items:
+              type: object
+              required: [arm_id, retriever_ref, rewrite]
+              properties:
+                arm_id: { type: string }
+                retriever_ref: { type: string }
+                rewrite: { type: boolean }
+    - name: retrieval_hit
+      schema:
+        type: object
+        required: [query_id, doc_id, rank, score_milli]
+        properties:
+          query_id: { type: string }
+          doc_id: { type: string }
+          rank: { type: integer }
+          score_milli: { type: integer }
+    - name: qrel
+      schema:
+        type: object
+        required: [query_id, doc_id, grade]
+        properties:
+          query_id: { type: string }
+          doc_id: { type: string }
+          grade: { type: integer }
+    - name: arm_hits
+      schema:
+        type: object
+        required: [arm_id, hits]
+        properties:
+          arm_id: { type: string }
+          hits:
+            type: array
+            items: { type: retrieval_hit }
+    - name: arm_ndcg
+      schema:
+        type: object
+        required: [arm_id, ndcg_at10_milli]
+        properties:
+          arm_id: { type: string }
+          ndcg_at10_milli: { type: integer }
+    - name: tally_result
+      schema:
+        type: object
+        required: [answers, top_count, top_share_milli]
+        properties:
+          answers: { type: integer }
+          top_count: { type: integer }
+          top_share_milli: { type: integer }
+    - name: retrieval_report
+      schema:
+        type: object
+        required: [best_arm, worst_arm, max_delta_pp, arms]
+        properties:
+          best_arm: { type: string }
+          worst_arm: { type: string }
+          max_delta_pp: { type: integer }
+          arms: { type: integer }
+  stores:
+    - name: hits_board
+      type: collection
+      item: arm_hits
+      writer: ledger
+      lifecycle: run
+      retention: { max_items: 512 }
+    - name: qrels_ref
+      type: collection
+      item: qrel
+      writer: loader
+      lifecycle: run
+      retention: { max_items: 256 }
+      eval_input: true
+  nodes:
+    - id: loader
+      kind: task
+      uses: { tool: pkg.searchkit.corpus@1 }
+      writes: [qrels_ref]
+      emits: { done: signal }
+    - id: sweep
+      kind: task
+      map:
+        over: input.arms
+        body:
+          nodes:
+            - id: retrieve
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.ret.codegrep@1, pkg.repo.grep@1] }
+              emits: { arm_hits: arm_hits }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.retrieval_arm_system, vars: { retriever: arg.item.retriever_ref, rewrite: arg.item.rewrite }, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question, queries], policy: project, quota_tokens: 400 }
+          edges: []
+      emits: { arm_hits: { from_body: retrieve.arm_hits } }
+    - id: ledger
+      kind: transform
+      consumes: { arm_hits: "list<arm_hits>" }
+      writes: [hits_board]
+      ops:
+        - { op: project, port: arm_hits, into: hits_board }
+      emits: { ledgered: "list<arm_hits>" }
+    - id: assess
+      kind: check
+      uses: { unit: pkg.retrieval.ndcg@1 }
+      reads: [qrels_ref]
+      consumes: { ledgered: "list<arm_hits>" }
+      emits: { ndcg_rows: "list<arm_ndcg>" }
+    - id: delta
+      kind: transform
+      consumes: { ndcg_rows: "list<arm_ndcg>" }
+      ops:
+        - { op: tally, port: ndcg_rows, by: arm_id, into: stats }
+        - { op: select_best, port: ndcg_rows, by: ndcg_at10_milli, prefer: max, into: best }
+      emits:
+        stats: tally_result
+        best: arm_ndcg
+    - id: report
+      kind: task
+      uses: { model: route.cheap@1 }
+      consumes: { stats: tally_result, best: arm_ndcg }
+      emits: { report: retrieval_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.retrieval_delta_system, quota_tokens: 400 }
+          - { from: edge, port: stats, policy: project, quota_tokens: 300 }
+          - { from: edge, port: best, policy: project, quota_tokens: 300 }
+  edges:
+    - { from: loader, output: done, to: sweep, input: done }
+    - { from: sweep, output: arm_hits, to: ledger, input: arm_hits }
+    - { from: ledger, output: ledgered, to: assess, input: ledgered }
+    - { from: assess, output: ndcg_rows, to: delta, input: ndcg_rows }
+    - { from: delta, output: stats, to: report, input: stats }
+    - { from: delta, output: best, to: report, input: best }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 4000 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 4000000 }
+    failures:
+      - class: tool_error
+        route: same_node
+        feedback: error_observation
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed

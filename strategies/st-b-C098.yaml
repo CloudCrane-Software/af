@@ -1,0 +1,145 @@
+id: st-b-C098
+name: "CRBugBench：先量化『review agent 到底能抓多少真 bug』，再谈无人值守产线"
+tier: B
+claim: "CRBugBench 评审能力标定：最强 review agent 在 top-5 评论内抓到 71.9% 的 bug，复杂改动明显掉点"
+claimed_value:
+  metric: "review_agent_bug_capture_rate"
+  direction: up
+  context: "对照组=无评审直接合入；实验组=review agent（top-5 评论）作为合入 gate；比逃逸缺陷数/耗时/误报返工"
+sources: [S105, S106, S144]
+consensus: {corpora: 1, cards: 3}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+# S17 供给注册批 A（设计稿 strategies17-供给面设计-20261106.md §五）：
+# not_applicable → compilable。原 na_reason 的三态判据被 §四 的三分类
+# 复核推翻（与 st-C007/st-C019/st-b-C001 既有 compilable 先例不符），
+# 依据见 dsl_snippet 的 intent 段；组件声明见 af/packages/components.json。
+dsl_snippet: |
+  version: 1
+  meta:
+    name: review_bug_capture_calibration
+    graph_version: "1.0"
+    entry: loader
+    input: review_input
+    output: { ref: review_report, from: report }
+    intent: "CRBugBench 投影（设计稿 §五.3）：map over changes（eval_input 语料经 bug_labels_ref 只对评估器可读，INV-4）→ 每改动一个 review task 臂（route.judge@1 已注册，产 top-5 评论）→ check pkg.review.bug_capture@1 算 top5_capture_milli + 逐改动 captured/missed → 报告。「是否进无人值守」= 准入决策归人类，入报告结论栏（na_reason 原文即此意）。标注集装载用已注册 tool pkg.searchkit.corpus@1（st-C007/C009 同型 loader）；pkg.review.scope_diff 是 Unit 类（st-C122 用于 gate 节点），不作 tool 引用（E9003 类不匹配）。"
+  types:
+    - name: review_input
+      schema:
+        type: object
+        required: [question, changes]
+        properties:
+          question: { type: string }
+          changes: { type: array, items: { type: string } }
+    - name: review_comment
+      schema:
+        type: object
+        required: [change_id, rank, line_ref, text]
+        properties:
+          change_id: { type: string }
+          rank: { type: integer }
+          line_ref: { type: string }
+          text: { type: string }
+    - name: bug_label
+      schema:
+        type: object
+        required: [change_id, bug_id, line_ref]
+        properties:
+          change_id: { type: string }
+          bug_id: { type: string }
+          line_ref: { type: string }
+    - name: review_comments
+      schema:
+        type: object
+        required: [change_id, comments]
+        properties:
+          change_id: { type: string }
+          comments:
+            type: array
+            items: { type: review_comment }
+    - name: change_capture
+      schema:
+        type: object
+        required: [change_id, captured, missed]
+        properties:
+          change_id: { type: string }
+          captured: { type: integer }
+          missed: { type: integer }
+    - name: capture_result
+      schema:
+        type: object
+        required: [top5_capture_milli, per_change]
+        properties:
+          top5_capture_milli: { type: integer }
+          per_change:
+            type: array
+            items: { type: change_capture }
+    - name: review_report
+      schema:
+        type: object
+        required: [top5_capture_milli, changes, notes]
+        properties:
+          top5_capture_milli: { type: integer }
+          changes: { type: integer }
+          notes: { type: string }
+  stores:
+    - name: bug_labels_ref
+      type: collection
+      item: bug_label
+      writer: loader
+      lifecycle: run
+      retention: { max_items: 512 }
+      eval_input: true
+  nodes:
+    - id: loader
+      kind: task
+      uses: { tool: pkg.searchkit.corpus@1 }
+      writes: [bug_labels_ref]
+      emits: { done: signal }
+    - id: sweep
+      kind: task
+      map:
+        over: input.changes
+        body:
+          nodes:
+            - id: review
+              kind: task
+              uses: { model: route.judge@1 }
+              emits: { review_comments: review_comments }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.review_arm_system, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question], policy: project, quota_tokens: 300 }
+          edges: []
+      emits: { comments: { from_body: review.review_comments } }
+    - id: assess
+      kind: check
+      uses: { unit: pkg.review.bug_capture@1 }
+      reads: [bug_labels_ref]
+      consumes: { comments: "list<review_comments>" }
+      emits: { capture: capture_result }
+    - id: report
+      kind: task
+      uses: { model: route.cheap@1 }
+      consumes: { capture: capture_result }
+      emits: { report: review_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.review_delta_system, quota_tokens: 400 }
+          - { from: edge, port: capture, policy: project, quota_tokens: 400 }
+  edges:
+    - { from: loader, output: done, to: sweep, input: done }
+    - { from: sweep, output: comments, to: assess, input: comments }
+    - { from: assess, output: capture, to: report, input: capture }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 4000 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 4000000 }
+    failures:
+      - class: tool_error
+        route: same_node
+        feedback: error_observation
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed

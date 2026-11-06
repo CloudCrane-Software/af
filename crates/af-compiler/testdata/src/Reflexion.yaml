@@ -1,0 +1,182 @@
+version: 1
+meta:
+  name: reflexion_episodic
+  graph_version: "1.0"
+  entry: attempts
+  input: reflexion_input
+  output: { ref: answer, from: attempts }
+  intent: "双层环：外层=多尝试重跑（≤4），内层=Actor 节点运行时内 ReAct 自环；失败→L4 仲裁→反思节点→条件写 Buffer；下一次尝试以 top-k 相似反思为先验注入 Actor 上下文"
+
+types:
+  - name: reflexion_input
+    schema:
+      type: object
+      required: [task, task_id]
+      properties:
+        task: { type: string }
+        task_id: { type: string }
+  - name: answer
+    schema:
+      type: object
+      required: [text]
+      properties:
+        text: { type: string }
+  - name: verdict_record
+    schema:
+      type: object
+      required: [success, signal, reason]
+      properties:
+        success: { type: boolean }
+        signal: { type: integer }
+        reason: { type: string }
+  - name: reflect_decision
+    schema:
+      type: object
+      required: [warranted, strength, reason]
+      properties:
+        warranted: { type: boolean }
+        strength: { type: integer }
+        reason: { type: string }
+  - name: reflection_entry
+    schema:
+      type: object
+      required: [task_id, text, diagnosis, improvement, writable]
+      properties:
+        task_id: { type: string }
+        text: { type: string }
+        diagnosis: { type: string }
+        improvement: { type: string }
+        writable: { type: boolean }
+
+stores:
+  - name: trajectory
+    type: message_log          # 单次尝试内的 Thought-Action-Observation 全序列（scratchpad）
+    writer: attempts.actor      # INV-2：唯一写者 = Actor 节点
+    lifecycle: iteration        # 作用域=单次尝试：每次迭代重建，尝试结束即弃
+    retention: { max_items: 128 }
+  - name: episodic_buffer
+    type: collection
+    item: reflection_entry
+    writer: attempts.memorize   # INV-2：唯一写者 = 反思后的写入点（单写，规避并发写）
+    lifecycle: persistent       # 跨尝试、跨回合持久化的唯一学习载体
+    retention: { policy: rolling_window, max_items: 64, keep_system: true }
+
+nodes:
+  - id: attempts
+    kind: task
+    loop:
+      body:
+        nodes:
+          - id: actor
+            kind: task
+            uses:
+              model: route.main@1
+              tools: [pkg.reflexkit.env_exec@1, pkg.reflexkit.search@1]
+            writes: [trajectory]                       # 轨迹只写 Actor 一处
+            emits: { answer: answer }
+            context:
+              sections:
+                # ⑥a-5/⑥a-6：反思先验来自外部 Buffer 的 top-k 相似检索，不是当前轨迹
+                - { from: store, store: episodic_buffer, policy: retrieve, component: pkg.reflexkit.similarity@1, args: { k: 2 }, quota_tokens: 600 }
+                # 卡片③的典型拼装序：反思 → 任务描述 → 环境/工具说明与输出格式 → 当前轨迹
+                - { from: arg, name: task, policy: project, quota_tokens: 400 }
+                - { from: template, template_ref: pkg.reflexkit.actor_system, quota_tokens: 500 }
+                - { from: store, store: trajectory, policy: full, quota_tokens: 4000 }
+          - id: verdict
+            kind: check                                 # ⑥a-3：显式评估节点（验证面，内建 passed）
+            uses: { unit: pkg.reflexkit.evaluator@1 }
+            reads: [trajectory]                         # Evaluator 只看轨迹（+ 少量参考信号）
+            consumes: { answer: answer }
+            emits: { verdict: verdict_record }
+            route:
+              default: exit                             # 成功 → 本次尝试收束（不产生反思）
+              rules:
+                - { when: "verdict.passed == false", goto: judge_inject }
+          - id: judge_inject
+            kind: task
+            escape:                                     # L4 记账：卡片⑥b-6（异质 Evaluator / 运行时打分函数注入）
+              kind: llm_predicate
+              impl_ref: packages/reflexkit@1.0.0/hatches/judge_inject.py
+              reason: "判定单元只支持固定类型判定；卡片④要求的『任务层失败 vs 执行错误』区分与 LLM-as-judge 打分需运行时注入打分函数（卡片⑥b-6），其判定结果以 reflect_decision 工件回传"
+              owner: lang-team
+              share_budget_pct: 15
+            reads: [trajectory]
+            consumes: { verdict: verdict_record }
+            emits: { decision: reflect_decision }
+            route:
+              default: exit                             # 不值得反思 → 本次尝试收束，不写 Buffer
+              rules:
+                - { when: "judge_inject.decision.warranted == true", goto: reflect }
+          - id: reflect
+            kind: task                                   # ⑥a-4：反思 = 独立 LLM 角色 + 独立 prompt
+            uses: { model: route.reflect@1 }
+            consumes: { decision: reflect_decision }
+            emits: { entry: reflection_entry }
+            context:
+              sections:
+                - { from: template, template_ref: pkg.reflexkit.reflector_system, quota_tokens: 600 }
+                - { from: input, fields: [task_id], policy: project, quota_tokens: 100 }
+                - { from: edge, port: decision, fields: [warranted, reason, strength], policy: project, quota_tokens: 300 }
+                - { from: store, store: trajectory, policy: full, quota_tokens: 4000 }
+          - id: memorize_guard
+            kind: task
+            escape:                                     # L4 记账：卡片⑥b-1 / ⑥b-7（运行时决定是否写记忆、写什么）
+              kind: runtime_context_mutation
+              impl_ref: packages/reflexkit@1.0.0/hatches/memorize_guard.py
+              reason: "『反思为空/格式不可解析则跳过写入』与『成功后也反思』等变体由运行时条件决定（卡片⑥b-1、⑥b-7），静态路由只能近似；守卫以 writable 标志回写工件，随后由静态写入点落库"
+              owner: lang-team
+              share_budget_pct: 10
+            consumes: { entry: reflection_entry }
+            emits: { entry: reflection_entry }
+            route:
+              default: exit                             # 跳过写入 → 本次尝试收束
+              rules:
+                - { when: "memorize_guard.entry.writable == true", goto: memorize }
+          - id: memorize
+            kind: transform                              # ⑥a-5：Buffer 写入点（静态声明 + 单写者）
+            writes: [episodic_buffer]
+            consumes: { entry: reflection_entry }
+            ops:
+              - { op: project, port: entry, into: episodic_buffer }   # 末端落点 = store
+            emits: {}
+        edges:
+          - { from: actor, output: answer, to: verdict, input: answer }
+          - { from: verdict, output: verdict, to: judge_inject, input: verdict }
+          - { from: judge_inject, output: decision, to: reflect, input: decision }
+          - { from: reflect, output: entry, to: memorize_guard, input: entry }
+          - { from: memorize_guard, output: entry, to: memorize, input: entry }
+      max_iterations: 4                              # 论文级尝试上限（actor 尝试通常 ≤3~4 次）
+      args: { task: input.task }                    # 体形参：任务描述
+      carried:
+        - { store: trajectory, max_items: 128 }      # E2211：体内写、体外声明的 store 全部登记
+        - { store: episodic_buffer, max_items: 64 }
+      safety_points:
+        - { node: verdict, kind: check }             # 每轮必须过外部评估面
+      exit_when: "attempt.passed == true"            # 通过评估 → 收束整条尝试链
+      on_exhausted: fail                             # 尝试次数用尽仍未解出 → 任务失败
+    emits: { answer: { from_body: actor.answer } }
+
+edges: []                       # 根图只有 attempts 一个节点：重试由外层受控循环承担
+
+policies:
+  budgets:
+    - { id: attempt_turns, dimension: turns, scope: loop:attempts, cap: 40 }
+    - { id: reflect_calls, dimension: model_calls, scope: node:attempts.reflect, cap: 4 }
+    - { id: plan_cost, dimension: cents, scope: plan, cap: 300 }
+    - { id: plan_tokens, dimension: tokens_total, scope: plan, cap: 800000 }
+  stop:
+    - { when: "steps.iterations >= 4", outcome: failed }        # 尝试次数用尽仍未通过
+    - { when: "budget.cents_spent >= budget.cents_cap", outcome: failed }
+  failures:
+    - class: tool_error                                 # 动作级失败：观察回灌，同一上下文继续（卡片④）
+      route: same_node
+      feedback: error_observation
+    - class: environment_failure                         # 执行错误由环境直接纠正，不触发反思（卡片④）
+      retry: { max: 2, backoff_ms: 1000 }
+    - class: schema_invalid                             # 反思工件不合 schema：重问反思
+      retry: { max: 2, backoff_ms: 0 }
+      route: same_node
+      feedback: format_reminder
+    - class: budget_exhausted                           # 尝试/成本预算耗尽
+      terminal: true
+      outcome: failed

@@ -1,0 +1,19 @@
+{
+  "schema": "af.otel.production.v1",
+  "updated_at_unix": 1793866515,
+  "producer": "af-execline/span_produce",
+  "spans": [
+    {
+      "order_id": "ord-missing-sid",
+      "stable_id": "",
+      "span_name": "invoke_workflow",
+      "span_id": "ord-missing-sid:invoke_workflow",
+      "source": "ledger.jsonl+mes-events.jsonl",
+      "attrs": {
+        "ledger_entries": 8,
+        "final_state": "Closed",
+        "mes_kinds": []
+      }
+    }
+  ]
+}

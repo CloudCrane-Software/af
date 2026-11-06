@@ -1,0 +1,15 @@
+---
+source: crates/af-graph/tests/validate_snapshots.rs
+expression: decision
+---
+artifact: graph-compile-decision
+issuer: afg-validate
+subject_name: article-pipeline
+graph_version: "7"
+nodes: 6
+edges: 5
+subgraphs: 0
+unknown_kinds: []
+verdict: accept
+violation_count: 0
+violations: []

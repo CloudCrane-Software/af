@@ -1,0 +1,15 @@
+{
+    "scheduling": {
+        "batchIntervalSec": 15,
+        "maxConcurrentJobs": 4,
+        "retry": {
+            "maxAttempts": 3,
+            "backoffSec": 5
+        }
+    },
+    "thresholds": {
+        "cycleTimeWarnSec": 120,
+        "defectRatioWarn": 0.05,
+        "temperatureCritC": 85
+    }
+}

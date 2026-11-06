@@ -1,0 +1,25 @@
+    Checking af-execline v0.1.0 (/data/bench/s17-judge-reliability-protocol-wt/crates/af-execline)
+error: this `if` statement can be collapsed
+   --> crates/af-execline/src/span_produce.rs:515:9
+    |
+515 | /         if !parent.as_os_str().is_empty() {
+516 | |             if fs::create_dir_all(parent).is_err() {
+517 | |                 return;
+518 | |             }
+519 | |         }
+    | |_________^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.99.0/index.html#collapsible_if
+    = note: `-D clippy::collapsible-if` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::collapsible_if)]`
+help: collapse nested if block
+    |
+515 ~         if !parent.as_os_str().is_empty()
+516 ~             && fs::create_dir_all(parent).is_err() {
+517 |                 return;
+518 ~             }
+    |
+
+error: could not compile `af-execline` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `af-execline` (lib test) due to 1 previous error

@@ -1,0 +1,5 @@
+# debate prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+ecd339977b8b6719dedbec78d26c2805056eee5fbc0a1dafb8265134af81cba0  prompts/adjudicator_system.md
+6d3ea8248ed8411377e38328df3eed9277a62ec10d33c1ec9e720f1d4091fb47  prompts/critic_system.md
+fad8545e76a6ebfcb954d586f1fb0df2fdc6cd83e1c13f567c3729fe19194c32  prompts/respond_system.md

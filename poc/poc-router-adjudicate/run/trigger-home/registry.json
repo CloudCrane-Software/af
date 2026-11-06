@@ -1,0 +1,15 @@
+{
+ "$comment": "poc-router-adjudicate 运行位注册表（af.trigger.v1 契约 §6）：只登记 MES 消费腿源；git 域源属 PoC-D event-router，与本腿无关不复制。",
+ "schema": "af.trigger.registry.v1",
+ "sources": [
+  {
+   "name": "mes-execline",
+   "domain": "mes",
+   "key_id": "pocr-mes-key-1",
+   "hmac": "sha256",
+   "events": [
+    "order_complete"
+   ]
+  }
+ ]
+}

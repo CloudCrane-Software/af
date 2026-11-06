@@ -1,0 +1,27 @@
+########## G7b xcheck（--agent-md 显式，补 anolis 侧名册绑定读数）##########
+Traceback (most recent call last):
+  File "/data/bench/s17-harness-regression-gate-wt/ci/xcheck.py", line 609, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/bench/s17-harness-regression-gate-wt/ci/xcheck.py", line 572, in main
+    check_redlist(args.plan_doc, args.expected_fail)
+  File "/data/bench/s17-harness-regression-gate-wt/ci/xcheck.py", line 452, in check_redlist
+    doc = read(plan_doc)
+          ^^^^^^^^^^^^^^
+  File "/data/bench/s17-harness-regression-gate-wt/ci/xcheck.py", line 74, in read
+    return Path(p).read_text(encoding="utf-8")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/pathlib.py", line 1058, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/pathlib.py", line 1044, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/home/pan-ding/workspace/agent黑灯工厂/计划/研究组/G4-任务中立性机器检查方案.md'
+XCHECK_RC=1
+
+########## G5b clippy 门（clippy_gate.py 基线对账，只拦新增警告）##########
+usage: clippy_gate.py [-h] [--baseline BASELINE] [--update] [--root ROOT]
+                      jsonl
+clippy_gate.py: error: the following arguments are required: jsonl
+CLIPPY_GATE_RC=2

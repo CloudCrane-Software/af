@@ -1,0 +1,92 @@
+id: st-b-C038
+name: "工具输出按意图闸门过滤成「紧凑证据包」，原文外置可按需回取（可逆压缩）"
+tier: B
+claim: "工具输出意图闸门过滤：返回紧凑证据包，同时保留按需恢复完整源码"
+claimed_value:
+  metric: "context_token_cost"
+  direction: down
+  context: "对照组=现 harness 整段工具输出直塞（必要时加普通截断）；实验组=意图闸门过滤+原文外置+按需回取"
+sources: [S016, S165]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: tool_output_intent_gate
+    graph_version: "1.0"
+    entry: probe
+    input: task_spec
+    output: { ref: task_result, from: finish }
+    intent: "工具输出治理：probe 跑检索工具 →pack 经 project 算子按意图字段白名单（path/line/snippet）投影成紧凑证据包并截断（compact_quota 800）→原文外置 tool_outputs（kv 单写者，句柄回取=可逆）→finish 装配证据包 + retrieve 段（pkg.tools.recall@1, k=4）按需回取原文完成修复。S016/S165 口径：context_token_cost 下降且完整源码可恢复；意图→字段白名单映射由 harness 按查询意图填 project 算子 fields（v0.1 无 tools_output 段，闸门=transform 算子面）"
+  types:
+    - name: task_spec
+      schema:
+        type: object
+        required: [task, intent]
+        properties:
+          task: { type: string }
+          intent: { type: string }
+    - name: tool_output
+      schema:
+        type: object
+        required: [output_ref, content_ref]
+        properties:
+          output_ref: { type: string }
+          content_ref: { type: string }
+    - name: evidence_pack
+      schema:
+        type: object
+        required: [summary, evidence_ref]
+        properties:
+          summary: { type: string }
+          evidence_ref: { type: string }
+    - name: task_result
+      schema:
+        type: object
+        required: [answer]
+        properties:
+          answer: { type: string }
+  stores:
+    - name: tool_outputs
+      type: kv
+      value: tool_output
+      writer: pack
+      lifecycle: run
+      retention: { max_items: 1024 }
+  nodes:
+    - id: probe
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.repo.grep@1, pkg.repo.read@1] }
+      emits: { raw: tool_output }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.probe.system, quota_tokens: 400 }
+          - { from: input, fields: [task, intent], quota_tokens: 500 }
+    - id: pack
+      kind: transform
+      consumes: { raw: tool_output }
+      writes: [tool_outputs]
+      ops:
+        - { op: project, port: raw, fields: [path, line, snippet], into: compact }
+        - { op: truncate, port: compact, max_tokens_each: 800 }
+      emits: { compact: evidence_pack }
+    - id: finish
+      kind: task
+      uses: { model: route.main@1 }
+      consumes: { compact: evidence_pack }
+      emits: { result: task_result }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.coder.system, quota_tokens: 500 }
+          - { from: edge, port: compact, quota_tokens: 700 }
+          - { from: store, store: tool_outputs, policy: retrieve, component: pkg.tools.recall@1, args: { k: 4 }, quota_tokens: 1000 }
+  edges:
+    - { from: probe, output: raw, to: pack, input: raw }
+    - { from: pack, output: compact, to: finish, input: compact }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 450 }
+    failures:
+      - { class: tool_error, retry: { max: 2, backoff_ms: 1000 } }
+      - { class: budget_exhausted, terminal: true, outcome: failed }

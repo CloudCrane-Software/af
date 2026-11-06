@@ -1,0 +1,51 @@
+{
+  "graph_version": "12",
+  "name": "corpus-summarizer",
+  "entry": "reader",
+  "nodes": [
+    { "id": "reader", "kind": "task" },
+    { "id": "chunk_map", "kind": "task",
+      "map_spec": { "body": "map_body", "over": "reader.chunks", "max_fanout": 8 } },
+    { "id": "polish", "kind": "task",
+      "loop_spec": {
+        "body": "revise_loop",
+        "max_iterations": 2,
+        "carried_state": { "name": "digest", "max_items": 1, "max_bytes": 65536 },
+        "safety_points": [ { "node": "human_review", "kind": "human" } ]
+      } },
+    { "id": "assemble", "kind": "task" },
+    { "id": "final_gate", "kind": "gate",
+      "human": { "station": "acceptance-desk", "role": "client-rep", "quorum": 2 } }
+  ],
+  "edges": [
+    { "from": "reader", "output": "chunks", "to": "chunk_map", "input": "chunks" },
+    { "from": "chunk_map", "output": "summaries", "to": "polish", "input": "digest" },
+    { "from": "polish", "output": "final", "to": "assemble", "input": "final" },
+    { "from": "assemble", "output": "package", "to": "final_gate", "input": "package" }
+  ],
+  "subgraphs": {
+    "map_body": {
+      "graph_version": "4",
+      "entry": "summarize",
+      "nodes": [
+        { "id": "summarize", "kind": "task" },
+        { "id": "self_check", "kind": "check" }
+      ],
+      "edges": [
+        { "from": "summarize", "output": "summary", "to": "self_check", "input": "candidate" }
+      ]
+    },
+    "revise_loop": {
+      "entry": "human_review",
+      "nodes": [
+        { "id": "human_review", "kind": "gate",
+          "human": { "station": "review-desk", "role": "editor" } },
+        { "id": "apply_fix", "kind": "transform" }
+      ],
+      "edges": [
+        { "from": "human_review", "output": "verdict", "to": "apply_fix", "input": "verdict" },
+        { "from": "apply_fix", "output": "manuscript_v_next", "to": "human_review", "input": "manuscript" }
+      ]
+    }
+  }
+}

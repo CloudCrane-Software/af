@@ -1,0 +1,2 @@
+# 故意造的坏信封：缺 version 键 → E0001 装载拒绝（stage 1 信封层）
+foo: bar

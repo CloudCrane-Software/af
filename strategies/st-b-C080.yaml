@@ -1,0 +1,13 @@
+id: st-b-C080
+name: "评测有效性本身会让 A/B 结论失真：基准记忆污染 + agent 极少能自己发现首个错误"
+tier: B
+claim: "评测有效性失真：基准可能被训练数据覆盖（记忆污染），且 agent 极少能自己发现首个错误，六个前沿 judge 也不行"
+claimed_value:
+  metric: "ab_conclusion_validity"
+  direction: up
+  context: "每轮 A/B 同时报三个数：Verified 分数、自造或扰动版分数、agent 能否自行定位首个错误（独立 verifier 标注）"
+sources: [S076, S122]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: not_applicable
+na_reason: "评测有效性方法论：策略内容是「基准污染自查 + 首错自查能力 + 多 judge 不可依赖」的评测纪律（S122 body.测试设计），约束的是实验解释而非运行图；AFB 无「评测有效性协议」语义，投影不产生有意义的图。三数同报落入实验报告模板栏位（实验面文档），AFB 面零投影。"

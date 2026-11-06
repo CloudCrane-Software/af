@@ -1,0 +1,184 @@
+# ci/arm-wiring.yaml — 三臂防线逐格断言清单（G0-C 施工批落地件）
+# 草案出处：计划/研究组/G0-CI机制批-实施规格-20261027/C/2-arm-wiring/arm-wiring.yaml（子代理 C）
+# 规格：同目录 SPEC.md；正本锚：红队复盘 C6 升级①（:186「三臂对称收敛为 ci/arm-wiring.yaml
+#       单一清单：每臂×每条防线一行，CI 逐格断言在场，删任一格即红」）+ C1-6（:105）+
+#       PP4 升级③（:292）+ §5.1 arm-wiring 行（:317）+ §5.2-5（:334 graph 补门）。
+# 语义：present/variant 格 = evidence 里每个 `文件:行号` 锚点 ±5 行内必须命中至少一个
+#       `反引号断言串`（删格/删证据代码即红；漂移 >5 行 WARN、>30 行红，SPEC ⑧-4）；
+#       absent 格 = 必须挂可解析债号（^D-\d+$ 且在册）——「absent 无债号」是本门自身的
+#       fail-loud（防「清单登记了缺口=缺口合法化」）。variant 格断言其变体独有 token。
+# G0-C 落地变更（相对草案）：①全部锚点行号/断言串按本工作树（g0c@先修后）重新亲测回填
+#       （report_unit.rs 先修后 +4 行漂移已按实测改）；②债务号由草案占位 D-49/D-50 改
+#       顺延新号 D-51（graph 一揽子）/D-52（report 三门）——正本 10-28 已另册 D-49
+#       （quota-governor），占位号冲突，见 ci/debt-register.md 镜像头注；③债册解析指向
+#       仓内镜像 ci/debt-register.md（SPEC 2 ⑧-1 镜像入仓裁决）；④rows 臂数改由
+#       defs.arms 声明驱动（新臂入册即须同批入全部 rows，缺格=红，SPEC ⑤-5）。
+version: 1
+
+defs:
+  arms:                    # 三臂实现位（亲测定位；graph 臂不在 suite/ 目录）
+    swev:   "crates/af-execline/src/suite/swev.rs + swev_unit.rs（判分经 crates/af-execline/src/judge.rs）"
+    report: "crates/af-execline/src/suite/report_unit.rs（判分=citation/rubric 子进程，不经 judge.rs）"
+    graph:  "crates/af-execline/src/graph_unit.rs（判分=check 节点 test_command 直调，不经冻结判分链——:1173 注释亲见）"
+  statuses: [present, variant, absent, pending-debt]
+  # present=现状在场且被断言; variant=在场但实现形态与 swev 原版不同（断言其变体本身）;
+  # absent=现状缺（目标格：v0.2 补齐后翻 present，未补齐前以债号放行，无债号即红）
+
+defenses:
+  - id: D1-fingerprint-load       # 冻结指纹·装载期
+    rows:
+      - arm: swev
+        status: present
+        evidence: "swev_unit.rs:131 `spec.judge.check_fingerprint()?`（SwevExecuteUnit::new，装载 fail-loud）"
+      - arm: report
+        status: present
+        evidence: "report_unit.rs:1453 `spec.judges.check_fingerprints()?`（ReportExecuteUnit 构造装载期）"
+      - arm: graph
+        status: absent
+        evidence: "graph_unit.rs 全文 grep check_fingerprint/ImportAnchor 零命中（2026-10-28 亲测）；判分不经冻结判分链的结构原因：graph_unit.rs:1173 `不走冻结判分链`；复盘 §5.2-5（:334）点名待补"
+        debt: D-51
+  - id: D2-fingerprint-verify     # 冻结指纹·verify 入口（第二道门）
+    rows:
+      - arm: swev
+        status: present
+        evidence: "swev.rs:231 `judge.check_fingerprint()`（verify :219 入口，:229-230 注释「双重防线」）"
+      - arm: report
+        status: present
+        evidence: "report_unit.rs:1618 `check_fingerprints()?`（verify 入口第二道门）"
+      - arm: graph
+        status: absent
+        evidence: "graph_unit.rs 零命中（同 D1 亲测）；结构原因同 D1：graph_unit.rs:1173 `不走冻结判分链`"
+        debt: D-51
+  - id: D3-truth-source-anchor    # 判分真值源 sha256 锚（swev=ImportAnchor 六件；report=三锚）
+    rows:
+      - arm: swev
+        status: present
+        evidence: "judge.rs:49 `ImportAnchor` 类型；judge.rs:69 `import_chain` 字段；judge.rs:88 `ImportAnchor` production() 六件枚举（swebench/__init__、harness/__init__、grading.py、constants/__init__、test_spec/__init__、test_spec/test_spec.py，逐件 sha256）；judge.rs:146 `JudgeFingerprintMismatch` 逐件对锚不匹配即拒；error.rs:158 `EX3002`"
+      - arm: report
+        status: variant           # 自有三锚（citation/rubric/render），非 ImportAnchor 类型
+        evidence: "report_unit.rs:88 `check_fingerprints` 三脚本 sha256 对锚循环；report_unit.rs:93 `render_script` 第三锚（W1-C61 把渲染器纳入，:82-84 注释）；断言此变体：三锚全在场且 render 锚不得回退为双锚"
+      - arm: graph
+        status: absent
+        evidence: "graph_unit.rs 零命中；test_command 声明面冻结（task.json digest，:601-606）但判分命令的执行体无任何 sha256 锚；结构原因：graph_unit.rs:1173 `不走冻结判分链`"
+        debt: D-51
+  - id: D4-judge-inject-b         # judge 注入 -B
+    rows:
+      - arm: swev
+        status: present
+        evidence: "judge.rs:193 `.arg(\"-B\")`（invoke argv 契约 :170-171 注释）"
+      - arm: report
+        status: present
+        evidence: "report_unit.rs:160 `.arg(\"-B\")`（judge_python，:158 fn）；invoke_citation/invoke_rubric 统一走 judge_python"
+      - arm: graph
+        status: absent
+        evidence: "graph_unit.rs grep `\"-B\"`/judge::invoke 零命中；check 节点 test_command 直调不经统一注入面；结构原因：graph_unit.rs:1173 `不走冻结判分链`"
+        debt: D-51
+  - id: D5-judge-inject-dontwritebytecode   # judge 注入 PYTHONDONTWRITEBYTECODE=1
+    rows:
+      - arm: swev
+        status: present
+        evidence: "judge.rs:198 `.env(\"PYTHONDONTWRITEBYTECODE\", \"1\")`"
+      - arm: report
+        status: present
+        evidence: "report_unit.rs:161 `.env(\"PYTHONDONTWRITEBYTECODE\", \"1\")`（judge_python）"
+      - arm: graph
+        status: absent
+        evidence: "graph_unit.rs 零命中；结构原因：graph_unit.rs:1173 `不走冻结判分链`"
+        debt: D-51
+  - id: D6-pyc-shadow-guard       # pyc 影子执行面读取侧防线
+    rows:
+      - arm: swev
+        status: variant           # 非在场扫描，而是重定向+受控空目录（site-packages 4913 枚合法 pyc 不可禁）
+        evidence: "judge.rs:183 `mirror` 每判分调用建 pid+纳秒唯一空 mirror 目录；judge.rs:199 `.env(\"PYTHONPYCACHEPREFIX\", &mirror)` 重定向写入；模块头 :19-30 论证「影子整体不可达…出现任何 .pyc 即有子进程绕过①②」；断言此变体：mirror env 注入在场"
+      - arm: report
+        status: present           # 原版在场门（复盘 C6 文字的本体）
+        evidence: "report_unit.rs:136 `__pycache__` 判分目录（三脚本父目录）在场扫描；report_unit.rs:140 `判分目录不得存在字节码` 拒收文案（一律 EX3002；W2-C52 注释 :112-117 亲见）"
+      - arm: graph
+        status: absent
+        evidence: "graph_unit.rs grep __pycache__/pyc/EX3002 零命中；结构原因：graph_unit.rs:1173 `不走冻结判分链`"
+        debt: D-51
+  - id: D7-log-parsed             # 判分日志已解析注记（log_parsed=false 不得当成功）
+    rows:
+      - arm: swev
+        status: present
+        evidence: "swev.rs:371 `log_parsed` → `\"[log_parsed=false] \"` 前缀（verdict_from_judge_row :362；拼接序 :359-360 注释）"
+      - arm: report
+        status: absent            # 亲测新发现（复盘未点名）：citation/rubric JSON 无 log_parsed 概念
+        evidence: "report_unit.rs grep log_parsed 零命中（2026-10-28 亲测）；verdict=citation_passed&&rubric_passed 组装（:1612-1618 一带），日志未解析形态无降级"
+        debt: D-52
+      - arm: graph
+        status: absent
+        evidence: "graph_unit.rs grep log_parsed 零命中；结构原因：graph_unit.rs:1173 `不走冻结判分链`"
+        debt: D-51
+  - id: D8-tests-collected        # tests_collected 零测试降级（空清单不得 resolved=true）
+    rows:
+      - arm: swev
+        status: present
+        evidence: "swev.rs:364 `zero_tests` tests_collected→resolved 经 filter 降级（:365-368）+ :376-378 注记；doc :350-360（含「判据被清空」形态）；负例测试 :417/:430"
+      - arm: report
+        status: absent            # 亲测新发现：无 tests_collected/failures 空集降级
+        evidence: "report_unit.rs grep tests_collected 零命中；report_unit.rs:1615 `.unwrap_or(0)` failures 数组缺席按 0 解读，判据面清空不可见"
+        debt: D-52
+      - arm: graph
+        status: absent            # 无 swev 同套门；graph 特有判据门另行断言（见 graph_specific）
+        evidence: "graph_unit.rs grep tests_collected 零命中；结构原因：graph_unit.rs:1173 `不走冻结判分链`"
+        debt: D-51
+  - id: D9-eval-sha256            # 判分日志字节指纹落行（eval_sha256）
+    rows:
+      - arm: swev
+        status: present
+        evidence: "swev.rs:294 `let eval_sha256 = sha256_hex(&log_path);`（verify 返回三元组 :210 注释）"
+      - arm: report
+        status: absent            # 亲测新发现（复盘未点名）：ExecutionFacts 落行 eval_sha256: None
+        evidence: "report_unit.rs:1677 `eval_sha256: None`（ExecutionFacts 构造，判分输出无字节指纹入行）"
+        debt: D-52
+      - arm: graph
+        status: absent            # 复盘 §5.2-5（:334）点名四门之一，盘上证实的确缺
+        evidence: "graph_unit.rs:1057 `eval_sha256: None`（全文唯一命中）"
+        debt: D-51
+  - id: D10-budget-gate-symmetry  # 预算门/旗标装配对称（并入清单，复盘 C6 升级①末句）
+    rows:
+      - arm: swev
+        status: present
+        evidence: "swev_unit.rs:63 `max_turns` 声明；swev_unit.rs:69 `spend_cap_cents` 声明；:92-95 缺省 250/300；swev_unit.rs:198 `budget_ledger_cents` 装配"
+      - arm: report
+        status: present
+        evidence: "report_unit.rs:985 `ring_cap_cents` =min(spec, ring_caps) + :988 ring_spent_cents:i64 + :992-996「成员起动前对账（cents/turns/tokens_total 三维，与图执行器预算 gate…）」；plan.body.budget 白名单提取 RingBudgets::of :717-769（report_unit.rs:700 `强制集外条目一律 fail-loud` 拒收注释；report_unit.rs:757 `(scope, dim) =>` 绑定兜底臂 return Err）"
+      - arm: graph
+        status: present
+        evidence: "graph_unit.rs:375 `node_spend_cap` 调用；graph_unit.rs:1408 `node_spend_cap` impl；graph_unit.rs:2755 `node_spend_cap_saturates_giant_u64_caps_instead_of_wrapping_to_one_cent` 巨帽饱和测试"
+
+graph_specific:            # graph 臂特有判据门（非 swev 同套，但属三布局证据面——单列防误删）
+  - id: G1-test-command-frozen
+    status: present
+    evidence: "graph_unit.rs:606 `test_command` check 节点 task.json 缺非空 test_command 即 fail-loud 拒载（W2-C48：DEFAULT_TEST_COMMAND 缺省判据面废除，:1122-1123 注释）；graph_unit.rs:612 `判据命令未声明` fail-loud 文案；graph_unit.rs:601 `verify_task_digest` task.json 经 setup 相 digest 钉死（:600-601 注释）"
+  - id: G2-criteria-degeneration-gate
+    status: present
+    evidence: "graph_unit.rs:617 `判据退化门` 判分前取工作区 diff，模型碰测试面=判据被换，退出码 0 亦不得授予 pass（W2-C48②，注释明言「swev 臂同款防线，图臂此前为零道」）；graph_unit.rs:687 `模型改动测试面` 运行时拒授文案"
+  - id: G3-evidence-tree
+    status: present
+    evidence: "graph_unit.rs:620 `nodes/<id>` pass 与否一律建 tester 节点目录；graph_unit.rs:621 `test-evidence.json` 证据树三件套（test.log + test-evidence.json + agent.diff）；graph_unit.rs:632 `capture_diff` diff 取证失败 fail-loud（W2-C49）"
+
+meta:
+  defenses_expected:        # 在册防线清单钉死（删任一线/任一格即 validate 红——SPEC 2 ⑤-4）
+    - "D1-fingerprint-load"
+    - "D2-fingerprint-verify"
+    - "D3-truth-source-anchor"
+    - "D4-judge-inject-b"
+    - "D5-judge-inject-dontwritebytecode"
+    - "D6-pyc-shadow-guard"
+    - "D7-log-parsed"
+    - "D8-tests-collected"
+    - "D9-eval-sha256"
+    - "D10-budget-gate-symmetry"
+  graph_specific_expected:
+    - "G1-test-command-frozen"
+    - "G2-criteria-degeneration-gate"
+    - "G3-evidence-tree"
+  assert_rule: >-
+    CI 逐格断言：present/variant 格 = evidence 每个 `文件:行号` 锚点 ±5 行邻域内 grep 命中
+    至少一个 `反引号断言串` 即绿，删格/删证据代码即红（漂移 >5 行 WARN、>30 行红）；
+    absent 格 = 必须挂可解析债号（^D-\d+$ 且在册），无债号即红——「absent 无债号」是
+    本门自身的 fail-loud（防「清单登记了缺口=缺口合法化」）。
+  debt_pointer: "ci/debt-register.md（正本 计划/技术债登记.md 仓内镜像+sha256 对账，SPEC 2 ⑧-1；D-51/D-52 为 G0-C 批新增——草案占位 D-49/D-50 与正本 10-28 在册号冲突，见镜像头注）"
+  review_hook: "复盘 C6-③：graph 臂防退化门集合从 swev 臂逐项复制并在本清单对账；每新增臂必须同批入 defs.arms 与全部 defenses 的 rows（缺格=validate 红，SPEC ⑤-5）"

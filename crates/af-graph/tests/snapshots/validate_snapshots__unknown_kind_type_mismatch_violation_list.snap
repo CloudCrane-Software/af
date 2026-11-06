@@ -1,0 +1,6 @@
+---
+source: crates/af-graph/tests/validate_snapshots.rs
+expression: stdout
+---
+FAIL fixtures/unknown-kind-type-mismatch.json  (1 条违例)
+  - [E2002 VALUE_OUT_OF_RANGE] graph: 安全点 human_review 类型不符：要求 Check，但体中该节点 kind=`rerank` 且 human 标记=false

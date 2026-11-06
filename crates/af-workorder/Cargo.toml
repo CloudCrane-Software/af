@@ -1,0 +1,28 @@
+[package]
+name = "af-workorder"
+version = "0.1.0"
+edition.workspace = true
+license = "Apache-2.0"
+
+# serde/serde_json:序列化与 payload 规范化。thiserror:类型化门控错误。
+# sha2 0.10:payload_hash(锁文件已有 0.10.9,af-credential 经 biscuit-auth 带入),不另选 blake3。
+# ed25519-dalek 2.2:变更单签名,与 biscuit-auth 的锁版本相同;不启用 rand_core,种子由调用方注入。
+# af-calendar + chrono 0.4(serde):Sla.deadline 为 DateTime<Utc>,线格式保持 RFC3339 兼容旧载荷。
+[dependencies]
+af-calendar = { path = "../af-calendar" }
+chrono = { version = "0.4", features = ["serde"] }
+ed25519-dalek = "2.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = "0.10"
+thiserror = { workspace = true }
+
+[dev-dependencies]
+# JSON 快照。crates.io 最新稳定 = 1.49.0。json 供 assert_json_snapshot!；
+# redactions 把签名字节与哈希涂成固定占位，避免密钥材料进快照、二次运行出 diff。
+insta = { version = "1.49.0", features = ["json", "redactions"] }
+# 集成测试构造 Europe/Berlin 日历以覆盖 DST。版本与 af-calendar 的 chrono-tz 0.10 一致(锁定 0.10.4)。
+chrono-tz = "0.10"
+
+[lints]
+workspace = true

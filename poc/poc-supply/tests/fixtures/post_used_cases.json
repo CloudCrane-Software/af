@@ -1,0 +1,51 @@
+{
+  "decimal_gigabyte_bytes": 1000000000,
+  "cases": [
+    {
+      "name": "required_reject_20g_avail_5g_reserved_10g_new_10g_min",
+      "total_bytes": 100000000000,
+      "available_bytes": 20000000000,
+      "lease_reserved_bytes": 5000000000,
+      "request_bytes": 10000000000,
+      "min_post_free_bytes": 10000000000,
+      "max_post_used_pct": 100,
+      "expected_admit": false,
+      "expected_post_free_bytes": 5000000000,
+      "expected_reasons": ["MIN_POST_FREE_BYTES"]
+    },
+    {
+      "name": "post_used_percentage_reject",
+      "total_bytes": 100000000000,
+      "available_bytes": 20000000000,
+      "lease_reserved_bytes": 5000000000,
+      "request_bytes": 10000000000,
+      "min_post_free_bytes": 0,
+      "max_post_used_pct": 90,
+      "expected_admit": false,
+      "expected_post_free_bytes": 5000000000,
+      "expected_reasons": ["MAX_POST_USED_PCT"]
+    },
+    {
+      "name": "both_thresholds_admit",
+      "total_bytes": 100000000000,
+      "available_bytes": 40000000000,
+      "lease_reserved_bytes": 5000000000,
+      "request_bytes": 10000000000,
+      "min_post_free_bytes": 10000000000,
+      "max_post_used_pct": 85,
+      "expected_admit": true,
+      "expected_post_free_bytes": 25000000000,
+      "expected_reasons": []
+    }
+  ],
+  "independent_mounts": {
+    "total_bytes": 100000000000,
+    "root_available_bytes": 12000000000,
+    "data_available_bytes": 100000000000,
+    "request_bytes": 10000000000,
+    "min_post_free_bytes": 10000000000,
+    "max_post_used_pct": 100,
+    "expected_root_post_free_bytes": 2000000000,
+    "expected_data_post_free_bytes": 90000000000
+  }
+}

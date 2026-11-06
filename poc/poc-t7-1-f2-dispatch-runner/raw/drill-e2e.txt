@@ -1,0 +1,1469 @@
+F2 执行面端到端演练（隔离目录）
+时间=2026-11-05 00:39:18  DRILL_ROOT=/home/pan-ding/workspace/f2-drill-scratch/run
+本机工作树=/home/pan-ding/workspace/af-wt-t7-1-f2  共享树(只读)=/home/pan-ding/workspace/agent黑灯工厂/af
+★ 门是桩门（stub_gate.sh）；真实 ci/run.sh 全量门本机未跑（README §五 已登记理由）
+
+===== [S01] 候选树：共享树的 sparse shared clone（对象共享，不写 af 仓 worktree 登记） =====
+正克隆到 '/home/pan-ding/workspace/f2-drill-scratch/run/candidate'...
+完成。
+候选树 HEAD=f48960116a6005cd37eadbc013263d5f38487825  干净性=0 行变更
+集成器复核器在位=yes
+
+===== [S02] 造演练夹具（本地文件面；非合成 gitea 投递） =====
+--- make_fixture（正向臂：source=base=f48960116a6005cd37eadbc013263d5f38487825）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/make_fixture.py --out /home/pan-ding/workspace/f2-drill-scratch/run --source-sha f48960116a6005cd37eadbc013263d5f38487825 --base-sha f48960116a6005cd37eadbc013263d5f38487825 --delivery-id drill-f2-delivery-0001
+{
+  "base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+  "delivery_id": "drill-f2-delivery-0001",
+  "note": "合成夹具；不构成任何真实门结论",
+  "order_id": "F2-opchadmin-af-d41f6a92da893388",
+  "recipe_digest": "b7d445d2a032621eef49e949b9115be0c44ac2f7f766fed247ddf7b5339c37ff",
+  "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers"
+}
+--- exit=0
+
+===== [S03] 负向臂 N-A：宿主供给核（对真实 af 工作树；cosign 不入库 ⇒ 真实缺件） =====
+--- f2_runner supply --repo /home/pan-ding/workspace/af-wt-t7-1-f2
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py supply --repo /home/pan-ding/workspace/af-wt-t7-1-f2
+宿主供给核：repo=/home/pan-ding/workspace/af-wt-t7-1-f2  结论=缺件
+  [缺 ] cosign       /home/pan-ding/workspace/af-wt-t7-1-f2/bin/cosign  
+  [OK ] cargo-deny   /home/pan-ding/.cargo/bin/cargo-deny  cargo-deny 0.20.2
+  [OK ] advisory-db  /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691  files=1388 git_head=999ec89d5d3f
+  [OK ] netns        /usr/bin/unshare  unshare -Urn 可用（非特权 user+netns）
+缺件（⇒ SKIP，不得计绿）：cosign
+--- exit=1
+
+===== [S04] 正向臂准备：装**演练用** cosign 替身到候选树 bin/（bin/ 在 .gitignore 行 2 ⇒ 不入版本面） =====
+--- f2_runner supply --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate（替身装好后）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py supply --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate
+宿主供给核：repo=/home/pan-ding/workspace/f2-drill-scratch/run/candidate  结论=齐备
+  [OK ] cosign       /home/pan-ding/workspace/f2-drill-scratch/run/candidate/bin/cosign  cosign (DRILL STUB) 2.4.0-dry-run
+  [OK ] cargo-deny   /home/pan-ding/.cargo/bin/cargo-deny  cargo-deny 0.20.2
+  [OK ] advisory-db  /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691  files=1388 git_head=999ec89d5d3f
+  [OK ] netns        /usr/bin/unshare  unshare -Urn 可用（非特权 user+netns）
+--- exit=0
+候选树 git status（替身不应污染）：0 行
+
+===== [S05] 派单侧：ingest（在役面只读 → runner 自有队列） =====
+--- f2_dispatch ingest
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+{
+  "command": "ingest",
+  "counts": {
+    "conflict": 0,
+    "created": 1,
+    "duplicate": 0,
+    "skipped": 0
+  },
+  "items": [
+    {
+      "base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+      "delivery_id": "drill-f2-delivery-0001",
+      "idempotency_key": "3b9ffb96c604ac42de1ba73eea7fee931f74c2239430675a6c3c7c7e32204325",
+      "order_id": "F2-opchadmin-af-d41f6a92da893388",
+      "result": "created",
+      "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+      "task_id": "F2-opchadmin-af-d41f6a92da893388",
+      "task_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/tasks/F2-opchadmin-af-d41f6a92da893388.json"
+    }
+  ],
+  "note": "在役面只读；本件只写 runner 自有队列目录。",
+  "queue": "/home/pan-ding/workspace/f2-drill-scratch/run/queue",
+  "recipe_digest": "b7d445d2a032621eef49e949b9115be0c44ac2f7f766fed247ddf7b5339c37ff",
+  "registry": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers/registry.json",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers"
+}
+--- exit=0
+TASK_ID=F2-opchadmin-af-d41f6a92da893388
+
+===== [S06] 负向臂 N-B：同一投递再 ingest 一次 ⇒ 幂等（不得产生第二个任务） =====
+--- f2_dispatch ingest（第二次）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+{
+  "command": "ingest",
+  "counts": {
+    "conflict": 0,
+    "created": 0,
+    "duplicate": 1,
+    "skipped": 0
+  },
+  "items": [
+    {
+      "delivery_id": "drill-f2-delivery-0001",
+      "reason": "同幂等键任务已在队列（重投天然幂等）",
+      "result": "duplicate",
+      "status": "queued",
+      "task_id": "F2-opchadmin-af-d41f6a92da893388"
+    }
+  ],
+  "note": "在役面只读；本件只写 runner 自有队列目录。",
+  "queue": "/home/pan-ding/workspace/f2-drill-scratch/run/queue",
+  "recipe_digest": "b7d445d2a032621eef49e949b9115be0c44ac2f7f766fed247ddf7b5339c37ff",
+  "registry": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers/registry.json",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers"
+}
+--- exit=0
+队列任务件数=1（应为 1）
+
+===== [S07] runner：领单 → 跑门（桩门）→ 落 SUMMARY → 结论入账 → 回报 =====
+--- f2_runner run（正向臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-d41f6a92da893388 --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-1
+{
+  "command": "run",
+  "idempotent": false,
+  "result": {
+    "attempts": 1,
+    "backoff_sec": 0,
+    "base_advanced_since_dispatch": false,
+    "base_head_at_gate_time": "f48960116a6005cd37eadbc013263d5f38487825",
+    "base_sha_at_dispatch": "f48960116a6005cd37eadbc013263d5f38487825",
+    "duration_ms": 919,
+    "finished_at": "2026-11-05T00:39:21+08:00",
+    "gate": {
+      "command": "bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh",
+      "duration_ms": 278,
+      "exit": 0,
+      "log_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/logs/F2-opchadmin-af-d41f6a92da893388.attempt1.log",
+      "started_at": "2026-11-05T00:39:21+08:00",
+      "summary": {
+        "green": true,
+        "non_green_steps": [],
+        "slots_covered": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14"
+        ],
+        "slots_missing": [],
+        "slots_required": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14"
+        ],
+        "step_count": 16,
+        "steps": [
+          {
+            "line": "step1  PASS  11ms  cargo fmt --check + K5 判分链路径 lint",
+            "slot": "1",
+            "status": "PASS"
+          },
+          {
+            "line": "step2  PASS  23ms  cargo clippy + clippy_gate",
+            "slot": "2",
+            "status": "PASS"
+          },
+          {
+            "line": "step3  PASS  913ms  provenance 门 + cargo test -j4 --workspace",
+            "slot": "3",
+            "status": "PASS"
+          },
+          {
+            "line": "step4  PASS  7ms  cue recipe vet+export+断言",
+            "slot": "4",
+            "status": "PASS"
+          },
+          {
+            "line": "step5  PASS  4ms  parse_scrub × 7 真实日志",
+            "slot": "5",
+            "status": "PASS"
+          },
+          {
+            "line": "step6  PASS  31ms  cosign 断网 verify-blob",
+            "slot": "6",
+            "status": "PASS"
+          },
+          {
+            "line": "step7  PASS  52ms  cargo deny --offline check",
+            "slot": "7",
+            "status": "PASS"
+          },
+          {
+            "line": "step8  PASS  18ms  neutrality 删包自洽+领域词扫描+golden 登记",
+            "slot": "8",
+            "status": "PASS"
+          },
+          {
+            "line": "step9  ADVISORY-PASS  64ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）",
+            "slot": "9",
+            "status": "ADVISORY-PASS"
+          },
+          {
+            "line": "step10  PASS  6ms  承诺-交付对账 deliverables.yaml",
+            "slot": "10",
+            "status": "PASS"
+          },
+          {
+            "line": "step11  PASS  3ms  自述-实现对账 doc-claims.txt",
+            "slot": "11",
+            "status": "PASS"
+          },
+          {
+            "line": "step12  PASS  5ms  计数复算 numbers.json + 占位符",
+            "slot": "12",
+            "status": "PASS"
+          },
+          {
+            "line": "step13a  PASS  9ms  fix-scan 同族横切扫描",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step13b  PASS  7ms  arm-wiring 三臂防线逐格断言",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step13c  PASS  3ms  budget-cast-lint 预算 cast 门",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step14  PASS  12ms  机读一致性批（branches+xcheck+criteria+strategies）",
+            "slot": "14",
+            "status": "PASS"
+          }
+        ]
+      },
+      "summary_path": "/home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY.txt",
+      "summary_present": true,
+      "summary_sha256": "c6f7566d7b6ac0ee4fb4cd77eb9fe5e5ebce93a73dff6df4c8dd2e51cb8405e9",
+      "worktree": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate"
+    },
+    "host_supply": {
+      "checked_at": "2026-11-05T00:39:21+08:00",
+      "manifest_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/supply/host-supply-F2-opchadmin-af-d41f6a92da893388.json",
+      "missing": [],
+      "ok": true,
+      "pieces": {
+        "advisory-db": {
+          "path": "/home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691",
+          "present": true,
+          "required": true,
+          "sha256": "999ec89d5d3f",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "version": "files=1388 git_head=999ec89d5d3f"
+        },
+        "cargo-deny": {
+          "path": "/home/pan-ding/.cargo/bin/cargo-deny",
+          "present": true,
+          "required": true,
+          "sha256": "c53e251d6d65",
+          "supply_rule": "cargo install cargo-deny（仓外供给；本件不代装）",
+          "version": "cargo-deny 0.20.2"
+        },
+        "cosign": {
+          "path": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate/bin/cosign",
+          "present": true,
+          "required": true,
+          "sha256": "2b497f522999",
+          "supply_rule": "放宿主 clone 的 <候选树>/bin/cosign（bin/ 不入库，见 .gitignore 行 2 /bin）",
+          "version": "cosign (DRILL STUB) 2.4.0-dry-run"
+        },
+        "netns": {
+          "path": "/usr/bin/unshare",
+          "present": true,
+          "required": true,
+          "sha256": "",
+          "supply_rule": "内核需允许非特权 user namespace（unshare -Urn）；ci/run.sh 另有 sudo unshare -n 优先路径（由 run.sh 自带，本件不调用 sudo）",
+          "version": "unshare -Urn 可用（非特权 user+netns）"
+        }
+      },
+      "policy": "缺件 ⇒ SKIP（environment_unavailable）⇒ 不跑门、不写记录件、不得计绿（docs/CI-BOUNDARY.md §一；SKIP 不得计绿）",
+      "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+      "schema_version": "af.f2.host_supply.v1"
+    },
+    "idempotency_key": "3b9ffb96c604ac42de1ba73eea7fee931f74c2239430675a6c3c7c7e32204325",
+    "integrator": {
+      "emit_exit": 0,
+      "emit_stdout": "{\"base_sha\": \"f48960116a6005cd37eadbc013263d5f38487825\", \"record\": \"/home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json\", \"record_sha256\": \"6350b3b0c7b4c70de579571cdb1aedce73e9d33e0e6b55f4fb7f4c72e8ab187a\", \"result\": \"RECORD-WRITTEN\", \"source_sha\": \"f48960116a6005cd37eadbc013263d5f38487825\", \"suite_digest\": \"a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31\", \"suite_members\": 46, \"tested_tree\": \"804cc31c5abc1c83d9de7fcbe9049e9e551273f7\", \"verdict\": \"pass\"}",
+      "four_tuple": {
+        "base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+        "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+        "suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+        "tested_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7"
+      },
+      "gate_base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+      "record_path": "/home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json",
+      "record_sha256": "6350b3b0c7b4c70de579571cdb1aedce73e9d33e0e6b55f4fb7f4c72e8ab187a",
+      "source_origin": "本地提交（未绑定远端头）",
+      "verdict": "pass"
+    },
+    "next_attempt_at": "2026-11-05T00:39:20+08:00",
+    "note": "结论只认三种：pass（门绿且 SUMMARY 全绿且槽位齐全、记录件已写）/ fail（门红或入账被拒）/ skip-host-supply-missing（宿主缺件 ⇒ SKIP 不得计绿）",
+    "order_id": "F2-opchadmin-af-d41f6a92da893388",
+    "reason_codes": [],
+    "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+    "runner": {
+      "host": "PanDeveopComp",
+      "id": "drill-runner-1",
+      "pid": 1618519
+    },
+    "schema_version": "af.f2.result.v1",
+    "started_at": "2026-11-05T00:39:21+08:00",
+    "status": "done",
+    "task_id": "F2-opchadmin-af-d41f6a92da893388",
+    "verdict": "pass",
+    "worktree": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate"
+  }
+}
+--- exit=0
+结果件 verdict=pass  reason=[]
+四元组（自记录件读出，非手抄）={'base_sha': 'f48960116a6005cd37eadbc013263d5f38487825', 'source_sha': 'f48960116a6005cd37eadbc013263d5f38487825', 'suite_digest': 'a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31', 'tested_tree': '804cc31c5abc1c83d9de7fcbe9049e9e551273f7'}
+记录件=/home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json  在位=yes
+
+===== [S08] T7② integrator 复核面：verify（机器侧核对四项绑定 + 门摘要回读） =====
+--- integrator_bind_check verify
+$ python3 -I /home/pan-ding/workspace/f2-drill-scratch/run/candidate/ci/integrator_bind_check.py verify --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --branch feature/f2-drill --remote origin --base-ref origin/product/main --source f48960116a6005cd37eadbc013263d5f38487825 --allow-local-source
+=== integrator 复核（四项绑定 + 门结论）===
+结论：PASS  reason_code=OK
+  [OK ] 记录件可读且 schema 正确 — /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json
+  [OK ] 记录侧四项齐全且非空 — base_sha=f48960116a60…, source_sha=f48960116a60…, tested_tree=804cc31c5abc…, suite_digest=a7c06bc18164…
+  [OK ] verdict 严格等于 'pass' — 'pass'
+  [OK ] 门摘要回读三方一致（磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文） — /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY.txt（sha256=c6f7566d7b6ac0ee…）
+  [OK ] 门摘要自证绿（回读原文 + sha256 + step 全非红） — gate_exit=0
+  [OK ] 实测侧四项自算完成 — source_sha=f48960116a6005cd37eadbc013263d5f38487825（本地提交 f48960116a6005cd37eadbc013263d5f38487825（--allow-local-source；**未绑定远端头**））; base_sha=merge-base(origin/product/main@f48960116a60…, f48960116a60…)=f48960116a60…; tested_tree=804cc31c5abc…; 合并树=804cc31c5abc…(fast-forward, 门集成员 46 件)
+  [OK ] 主线未前移（门跑时的目标头 == 现目标头） — f48960116a60…
+  [OK ] 四项绑定逐项相符 — base_sha / source_sha / tested_tree / suite_digest
+  [OK ] 候选树门覆盖成立（落地树 == 门跑过的树） — 804cc31c5abc…
+  [OK ] 门没被换（候选树与落地树的门执行面逐字节同） — suite_digest=a7c06bc18164bc0c… 成员 46 件
+  记录侧(expected) / 实测侧(actual)：
+    base_sha      f48960116a6005cd37eadbc013263d5f38487825
+    source_sha    f48960116a6005cd37eadbc013263d5f38487825
+    tested_tree   804cc31c5abc1c83d9de7fcbe9049e9e551273f7
+    suite_digest  a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31
+  实测侧四项：
+    base_sha      f48960116a6005cd37eadbc013263d5f38487825
+    source_sha    f48960116a6005cd37eadbc013263d5f38487825
+    tested_tree   804cc31c5abc1c83d9de7fcbe9049e9e551273f7
+    suite_digest  a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31
+  落地树(合并树)：804cc31c5abc1c83d9de7fcbe9049e9e551273f7  方式=fast-forward
+  人工看点：★ 候选头取自**本地提交**（本地提交 f48960116a6005cd37eadbc013263d5f38487825（--allow-local-source；**未绑定远端头**））⇒ 未与远端头绑定；须人工确认该提交已推送到候选分支（否则远端跑的不是被测的那个提交）
+  人工看点：（无）候选树仅动文档/工件面且可快进 ⇒ 可按 SOP 自动判过路径处理（合流决定仍由人作）
+  说明：机器辅助核对结论；机器仲裁员首版不启用——合流与否由人工 integrator 依 docs/INTEGRATOR-SOP.md 决定。
+--- exit=0
+
+===== [S09] 负向臂 N-C：门摘要文件被追加一行 ⇒ 复核面三方比对（磁盘↔内嵌 sha↔内嵌原文）拒绝 =====
+--- integrator_bind_check verify（篡改后）
+$ python3 -I /home/pan-ding/workspace/f2-drill-scratch/run/candidate/ci/integrator_bind_check.py verify --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --branch feature/f2-drill --remote origin --base-ref origin/product/main --source f48960116a6005cd37eadbc013263d5f38487825 --allow-local-source
+=== integrator 复核（四项绑定 + 门结论）===
+结论：REJECT  reason_code=GATE-SUMMARY-DIGEST
+拒绝理由：门摘要回读不符：磁盘文件 sha256 '503c5773d9d563cabaa3468a422a32fb664b42fcd245327666bd939dcdb12d9c' != 记录件内嵌 'c6f7566d7b6ac0ee4fb4cd77eb9fe5e5ebce93a73dff6df4c8dd2e51cb8405e9'（/home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY.txt）⇒ 门摘要文件与记录件描述的不是同一份内容
+  [OK ] 记录件可读且 schema 正确 — /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json
+  [OK ] 记录侧四项齐全且非空 — base_sha=f48960116a60…, source_sha=f48960116a60…, tested_tree=804cc31c5abc…, suite_digest=a7c06bc18164…
+  [OK ] verdict 严格等于 'pass' — 'pass'
+  说明：fail-closed：任一不符/为空/缺项/verdict≠pass/门不可跑 ⇒ 拒绝，不许跳过复核。
+--- exit=1
+
+===== [S10] 负向臂 N-D：门红（桩门 mode=red）⇒ 不写记录件 =====
+{
+  "base_sha": "56ff52a57c022983d74d994fd4e1c63e98f45235",
+  "delivery_id": "drill-f2-delivery-0002",
+  "note": "合成夹具；不构成任何真实门结论",
+  "order_id": "F2-opchadmin-af-5dced5685fb14315",
+  "recipe_digest": "b7d445d2a032621eef49e949b9115be0c44ac2f7f766fed247ddf7b5339c37ff",
+  "source_sha": "56ff52a57c022983d74d994fd4e1c63e98f45235",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers"
+}
+--- f2_dispatch ingest（红门臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+{
+  "command": "ingest",
+  "counts": {
+    "conflict": 0,
+    "created": 1,
+    "duplicate": 1,
+    "skipped": 0
+  },
+  "items": [
+    {
+      "delivery_id": "drill-f2-delivery-0001",
+      "reason": "同幂等键任务已在队列（重投天然幂等）",
+      "result": "duplicate",
+      "status": "done",
+      "task_id": "F2-opchadmin-af-d41f6a92da893388"
+    },
+    {
+      "base_sha": "56ff52a57c022983d74d994fd4e1c63e98f45235",
+      "delivery_id": "drill-f2-delivery-0002",
+      "idempotency_key": "08187220f6364d761effa2f8988e72b9aaa874d0d3a7d98b2a24eeb733b5405c",
+      "order_id": "F2-opchadmin-af-5dced5685fb14315",
+      "result": "created",
+      "source_sha": "56ff52a57c022983d74d994fd4e1c63e98f45235",
+      "task_id": "F2-opchadmin-af-5dced5685fb14315",
+      "task_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/tasks/F2-opchadmin-af-5dced5685fb14315.json"
+    }
+  ],
+  "note": "在役面只读；本件只写 runner 自有队列目录。",
+  "queue": "/home/pan-ding/workspace/f2-drill-scratch/run/queue",
+  "recipe_digest": "b7d445d2a032621eef49e949b9115be0c44ac2f7f766fed247ddf7b5339c37ff",
+  "registry": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers/registry.json",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers"
+}
+--- exit=0
+--- f2_runner run（红门臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-5dced5685fb14315 --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-red.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-1
+{
+  "command": "run",
+  "idempotent": false,
+  "result": {
+    "attempts": 1,
+    "backoff_sec": 51,
+    "base_advanced_since_dispatch": true,
+    "base_head_at_gate_time": "f48960116a6005cd37eadbc013263d5f38487825",
+    "base_sha_at_dispatch": "56ff52a57c022983d74d994fd4e1c63e98f45235",
+    "duration_ms": 583,
+    "finished_at": "2026-11-05T00:39:24+08:00",
+    "gate": {
+      "command": "bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh",
+      "duration_ms": 209,
+      "exit": 0,
+      "log_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/logs/F2-opchadmin-af-5dced5685fb14315.attempt1.log",
+      "started_at": "2026-11-05T00:39:23+08:00",
+      "summary": {
+        "green": false,
+        "non_green_steps": [
+          "step7  FAIL  88ms  cargo deny --offline check"
+        ],
+        "slots_covered": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14"
+        ],
+        "slots_missing": [],
+        "slots_required": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14"
+        ],
+        "step_count": 16,
+        "steps": [
+          {
+            "line": "step1  PASS  11ms  cargo fmt --check + K5 判分链路径 lint",
+            "slot": "1",
+            "status": "PASS"
+          },
+          {
+            "line": "step2  PASS  23ms  cargo clippy + clippy_gate",
+            "slot": "2",
+            "status": "PASS"
+          },
+          {
+            "line": "step3  PASS  913ms  provenance 门 + cargo test -j4 --workspace",
+            "slot": "3",
+            "status": "PASS"
+          },
+          {
+            "line": "step4  PASS  7ms  cue recipe vet+export+断言",
+            "slot": "4",
+            "status": "PASS"
+          },
+          {
+            "line": "step5  PASS  4ms  parse_scrub × 7 真实日志",
+            "slot": "5",
+            "status": "PASS"
+          },
+          {
+            "line": "step6  PASS  31ms  cosign 断网 verify-blob",
+            "slot": "6",
+            "status": "PASS"
+          },
+          {
+            "line": "step7  FAIL  88ms  cargo deny --offline check",
+            "slot": "7",
+            "status": "FAIL"
+          },
+          {
+            "line": "step8  PASS  18ms  neutrality 删包自洽+领域词扫描+golden 登记",
+            "slot": "8",
+            "status": "PASS"
+          },
+          {
+            "line": "step9  ADVISORY-PASS  64ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）",
+            "slot": "9",
+            "status": "ADVISORY-PASS"
+          },
+          {
+            "line": "step10  PASS  6ms  承诺-交付对账 deliverables.yaml",
+            "slot": "10",
+            "status": "PASS"
+          },
+          {
+            "line": "step11  PASS  3ms  自述-实现对账 doc-claims.txt",
+            "slot": "11",
+            "status": "PASS"
+          },
+          {
+            "line": "step12  PASS  5ms  计数复算 numbers.json + 占位符",
+            "slot": "12",
+            "status": "PASS"
+          },
+          {
+            "line": "step13a  PASS  9ms  fix-scan 同族横切扫描",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step13b  PASS  7ms  arm-wiring 三臂防线逐格断言",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step13c  PASS  3ms  budget-cast-lint 预算 cast 门",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step14  PASS  12ms  机读一致性批（branches+xcheck+criteria+strategies）",
+            "slot": "14",
+            "status": "PASS"
+          }
+        ]
+      },
+      "summary_path": "/home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-red.txt",
+      "summary_present": true,
+      "summary_sha256": "ed8792bba7edf4141cf2d34ab90fe5c5728a0c4af4bc84e1a1dd52c30f01a2c2",
+      "worktree": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate"
+    },
+    "host_supply": {
+      "checked_at": "2026-11-05T00:39:23+08:00",
+      "manifest_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/supply/host-supply-F2-opchadmin-af-5dced5685fb14315.json",
+      "missing": [],
+      "ok": true,
+      "pieces": {
+        "advisory-db": {
+          "path": "/home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691",
+          "present": true,
+          "required": true,
+          "sha256": "999ec89d5d3f",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "version": "files=1388 git_head=999ec89d5d3f"
+        },
+        "cargo-deny": {
+          "path": "/home/pan-ding/.cargo/bin/cargo-deny",
+          "present": true,
+          "required": true,
+          "sha256": "c53e251d6d65",
+          "supply_rule": "cargo install cargo-deny（仓外供给；本件不代装）",
+          "version": "cargo-deny 0.20.2"
+        },
+        "cosign": {
+          "path": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate/bin/cosign",
+          "present": true,
+          "required": true,
+          "sha256": "2b497f522999",
+          "supply_rule": "放宿主 clone 的 <候选树>/bin/cosign（bin/ 不入库，见 .gitignore 行 2 /bin）",
+          "version": "cosign (DRILL STUB) 2.4.0-dry-run"
+        },
+        "netns": {
+          "path": "/usr/bin/unshare",
+          "present": true,
+          "required": true,
+          "sha256": "",
+          "supply_rule": "内核需允许非特权 user namespace（unshare -Urn）；ci/run.sh 另有 sudo unshare -n 优先路径（由 run.sh 自带，本件不调用 sudo）",
+          "version": "unshare -Urn 可用（非特权 user+netns）"
+        }
+      },
+      "policy": "缺件 ⇒ SKIP（environment_unavailable）⇒ 不跑门、不写记录件、不得计绿（docs/CI-BOUNDARY.md §一；SKIP 不得计绿）",
+      "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+      "schema_version": "af.f2.host_supply.v1"
+    },
+    "idempotency_key": "08187220f6364d761effa2f8988e72b9aaa874d0d3a7d98b2a24eeb733b5405c",
+    "integrator": {},
+    "next_attempt_at": "2026-11-05T00:40:15+08:00",
+    "note": "结论只认三种：pass（门绿且 SUMMARY 全绿且槽位齐全、记录件已写）/ fail（门红或入账被拒）/ skip-host-supply-missing（宿主缺件 ⇒ SKIP 不得计绿）",
+    "order_id": "F2-opchadmin-af-5dced5685fb14315",
+    "reason_codes": [
+      "SUMMARY-NON-GREEN-STEP"
+    ],
+    "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+    "runner": {
+      "host": "PanDeveopComp",
+      "id": "drill-runner-1",
+      "pid": 1619275
+    },
+    "schema_version": "af.f2.result.v1",
+    "started_at": "2026-11-05T00:39:23+08:00",
+    "status": "queued",
+    "task_id": "F2-opchadmin-af-5dced5685fb14315",
+    "verdict": "fail",
+    "worktree": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate"
+  }
+}
+--- exit=1
+红门臂 verdict=fail  reason=['SUMMARY-NON-GREEN-STEP']
+红门臂记录件在位=no（应为 no）
+
+===== [S11] 负向臂 N-E：SUMMARY 里出现 SKIP 状态（不在白名单）⇒ 不得计绿 ⇒ 不写记录件 =====
+{
+  "base_sha": "04c70fa269fa137370d26d37025b9fd9d7a29ed2",
+  "delivery_id": "drill-f2-delivery-0003",
+  "note": "合成夹具；不构成任何真实门结论",
+  "order_id": "F2-opchadmin-af-27910a8c445fef42",
+  "recipe_digest": "b7d445d2a032621eef49e949b9115be0c44ac2f7f766fed247ddf7b5339c37ff",
+  "source_sha": "04c70fa269fa137370d26d37025b9fd9d7a29ed2",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers"
+}
+--- f2_dispatch ingest（SKIP 臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+{
+  "command": "ingest",
+  "counts": {
+    "conflict": 0,
+    "created": 1,
+    "duplicate": 2,
+    "skipped": 0
+  },
+  "items": [
+    {
+      "delivery_id": "drill-f2-delivery-0001",
+      "reason": "同幂等键任务已在队列（重投天然幂等）",
+      "result": "duplicate",
+      "status": "done",
+      "task_id": "F2-opchadmin-af-d41f6a92da893388"
+    },
+    {
+      "delivery_id": "drill-f2-delivery-0002",
+      "reason": "同幂等键任务已在队列（重投天然幂等）",
+      "result": "duplicate",
+      "status": "queued",
+      "task_id": "F2-opchadmin-af-5dced5685fb14315"
+    },
+    {
+      "base_sha": "04c70fa269fa137370d26d37025b9fd9d7a29ed2",
+      "delivery_id": "drill-f2-delivery-0003",
+      "idempotency_key": "4f5cd337d5cb45a31766b4f98253d788dd599e569cc57b72736f1e463b059847",
+      "order_id": "F2-opchadmin-af-27910a8c445fef42",
+      "result": "created",
+      "source_sha": "04c70fa269fa137370d26d37025b9fd9d7a29ed2",
+      "task_id": "F2-opchadmin-af-27910a8c445fef42",
+      "task_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/tasks/F2-opchadmin-af-27910a8c445fef42.json"
+    }
+  ],
+  "note": "在役面只读；本件只写 runner 自有队列目录。",
+  "queue": "/home/pan-ding/workspace/f2-drill-scratch/run/queue",
+  "recipe_digest": "b7d445d2a032621eef49e949b9115be0c44ac2f7f766fed247ddf7b5339c37ff",
+  "registry": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers/registry.json",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers"
+}
+--- exit=0
+--- f2_runner run（SKIP 臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-27910a8c445fef42 --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-skip.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-1
+{
+  "command": "run",
+  "idempotent": false,
+  "result": {
+    "attempts": 1,
+    "backoff_sec": 71,
+    "base_advanced_since_dispatch": true,
+    "base_head_at_gate_time": "f48960116a6005cd37eadbc013263d5f38487825",
+    "base_sha_at_dispatch": "04c70fa269fa137370d26d37025b9fd9d7a29ed2",
+    "duration_ms": 513,
+    "finished_at": "2026-11-05T00:39:25+08:00",
+    "gate": {
+      "command": "bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh",
+      "duration_ms": 297,
+      "exit": 0,
+      "log_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/logs/F2-opchadmin-af-27910a8c445fef42.attempt1.log",
+      "started_at": "2026-11-05T00:39:25+08:00",
+      "summary": {
+        "green": false,
+        "non_green_steps": [
+          "step6  SKIP-UNMET-HOST-SUPPLY  0ms  cosign 断网 verify-blob（宿主未供给 bin/cosign ⇒ 跳过档）"
+        ],
+        "slots_covered": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14"
+        ],
+        "slots_missing": [],
+        "slots_required": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14"
+        ],
+        "step_count": 16,
+        "steps": [
+          {
+            "line": "step1  PASS  11ms  cargo fmt --check + K5 判分链路径 lint",
+            "slot": "1",
+            "status": "PASS"
+          },
+          {
+            "line": "step2  PASS  23ms  cargo clippy + clippy_gate",
+            "slot": "2",
+            "status": "PASS"
+          },
+          {
+            "line": "step3  PASS  913ms  provenance 门 + cargo test -j4 --workspace",
+            "slot": "3",
+            "status": "PASS"
+          },
+          {
+            "line": "step4  PASS  7ms  cue recipe vet+export+断言",
+            "slot": "4",
+            "status": "PASS"
+          },
+          {
+            "line": "step5  PASS  4ms  parse_scrub × 7 真实日志",
+            "slot": "5",
+            "status": "PASS"
+          },
+          {
+            "line": "step6  SKIP-UNMET-HOST-SUPPLY  0ms  cosign 断网 verify-blob（宿主未供给 bin/cosign ⇒ 跳过档）",
+            "slot": "6",
+            "status": "SKIP-UNMET-HOST-SUPPLY"
+          },
+          {
+            "line": "step7  PASS  52ms  cargo deny --offline check",
+            "slot": "7",
+            "status": "PASS"
+          },
+          {
+            "line": "step8  PASS  18ms  neutrality 删包自洽+领域词扫描+golden 登记",
+            "slot": "8",
+            "status": "PASS"
+          },
+          {
+            "line": "step9  ADVISORY-PASS  64ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）",
+            "slot": "9",
+            "status": "ADVISORY-PASS"
+          },
+          {
+            "line": "step10  PASS  6ms  承诺-交付对账 deliverables.yaml",
+            "slot": "10",
+            "status": "PASS"
+          },
+          {
+            "line": "step11  PASS  3ms  自述-实现对账 doc-claims.txt",
+            "slot": "11",
+            "status": "PASS"
+          },
+          {
+            "line": "step12  PASS  5ms  计数复算 numbers.json + 占位符",
+            "slot": "12",
+            "status": "PASS"
+          },
+          {
+            "line": "step13a  PASS  9ms  fix-scan 同族横切扫描",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step13b  PASS  7ms  arm-wiring 三臂防线逐格断言",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step13c  PASS  3ms  budget-cast-lint 预算 cast 门",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step14  PASS  12ms  机读一致性批（branches+xcheck+criteria+strategies）",
+            "slot": "14",
+            "status": "PASS"
+          }
+        ]
+      },
+      "summary_path": "/home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-skip.txt",
+      "summary_present": true,
+      "summary_sha256": "8c1a4d24aeaf0d4b378f6c39bf2107b1c44868335cb7ad8e29e573b7ef96f52a",
+      "worktree": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate"
+    },
+    "host_supply": {
+      "checked_at": "2026-11-05T00:39:25+08:00",
+      "manifest_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/supply/host-supply-F2-opchadmin-af-27910a8c445fef42.json",
+      "missing": [],
+      "ok": true,
+      "pieces": {
+        "advisory-db": {
+          "path": "/home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691",
+          "present": true,
+          "required": true,
+          "sha256": "999ec89d5d3f",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "version": "files=1388 git_head=999ec89d5d3f"
+        },
+        "cargo-deny": {
+          "path": "/home/pan-ding/.cargo/bin/cargo-deny",
+          "present": true,
+          "required": true,
+          "sha256": "c53e251d6d65",
+          "supply_rule": "cargo install cargo-deny（仓外供给；本件不代装）",
+          "version": "cargo-deny 0.20.2"
+        },
+        "cosign": {
+          "path": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate/bin/cosign",
+          "present": true,
+          "required": true,
+          "sha256": "2b497f522999",
+          "supply_rule": "放宿主 clone 的 <候选树>/bin/cosign（bin/ 不入库，见 .gitignore 行 2 /bin）",
+          "version": "cosign (DRILL STUB) 2.4.0-dry-run"
+        },
+        "netns": {
+          "path": "/usr/bin/unshare",
+          "present": true,
+          "required": true,
+          "sha256": "",
+          "supply_rule": "内核需允许非特权 user namespace（unshare -Urn）；ci/run.sh 另有 sudo unshare -n 优先路径（由 run.sh 自带，本件不调用 sudo）",
+          "version": "unshare -Urn 可用（非特权 user+netns）"
+        }
+      },
+      "policy": "缺件 ⇒ SKIP（environment_unavailable）⇒ 不跑门、不写记录件、不得计绿（docs/CI-BOUNDARY.md §一；SKIP 不得计绿）",
+      "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+      "schema_version": "af.f2.host_supply.v1"
+    },
+    "idempotency_key": "4f5cd337d5cb45a31766b4f98253d788dd599e569cc57b72736f1e463b059847",
+    "integrator": {},
+    "next_attempt_at": "2026-11-05T00:40:36+08:00",
+    "note": "结论只认三种：pass（门绿且 SUMMARY 全绿且槽位齐全、记录件已写）/ fail（门红或入账被拒）/ skip-host-supply-missing（宿主缺件 ⇒ SKIP 不得计绿）",
+    "order_id": "F2-opchadmin-af-27910a8c445fef42",
+    "reason_codes": [
+      "SUMMARY-NON-GREEN-STEP"
+    ],
+    "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+    "runner": {
+      "host": "PanDeveopComp",
+      "id": "drill-runner-1",
+      "pid": 1619650
+    },
+    "schema_version": "af.f2.result.v1",
+    "started_at": "2026-11-05T00:39:25+08:00",
+    "status": "queued",
+    "task_id": "F2-opchadmin-af-27910a8c445fef42",
+    "verdict": "fail",
+    "worktree": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate"
+  }
+}
+--- exit=1
+SKIP 臂 verdict=fail  reason=['SUMMARY-NON-GREEN-STEP']
+SKIP 臂记录件在位=no（应为 no）
+
+===== [S12] 负向臂 N-F：宿主供给缺件（撤走 cosign 替身）⇒ 不跑门、SKIP 不得计绿、不写记录件 =====
+{
+  "base_sha": "335b6d6bec3a1324ba96147b19e840012dfc845d",
+  "delivery_id": "drill-f2-delivery-0004",
+  "note": "合成夹具；不构成任何真实门结论",
+  "order_id": "F2-opchadmin-af-03e97208f15fae15",
+  "recipe_digest": "b7d445d2a032621eef49e949b9115be0c44ac2f7f766fed247ddf7b5339c37ff",
+  "source_sha": "335b6d6bec3a1324ba96147b19e840012dfc845d",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers"
+}
+--- f2_dispatch ingest（缺件臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+{
+  "command": "ingest",
+  "counts": {
+    "conflict": 0,
+    "created": 1,
+    "duplicate": 3,
+    "skipped": 0
+  },
+  "items": [
+    {
+      "delivery_id": "drill-f2-delivery-0001",
+      "reason": "同幂等键任务已在队列（重投天然幂等）",
+      "result": "duplicate",
+      "status": "done",
+      "task_id": "F2-opchadmin-af-d41f6a92da893388"
+    },
+    {
+      "delivery_id": "drill-f2-delivery-0002",
+      "reason": "同幂等键任务已在队列（重投天然幂等）",
+      "result": "duplicate",
+      "status": "queued",
+      "task_id": "F2-opchadmin-af-5dced5685fb14315"
+    },
+    {
+      "delivery_id": "drill-f2-delivery-0003",
+      "reason": "同幂等键任务已在队列（重投天然幂等）",
+      "result": "duplicate",
+      "status": "queued",
+      "task_id": "F2-opchadmin-af-27910a8c445fef42"
+    },
+    {
+      "base_sha": "335b6d6bec3a1324ba96147b19e840012dfc845d",
+      "delivery_id": "drill-f2-delivery-0004",
+      "idempotency_key": "18be0c9e01ebad216cab090eed04b76803edce5577121ce095eebcd6e7975159",
+      "order_id": "F2-opchadmin-af-03e97208f15fae15",
+      "result": "created",
+      "source_sha": "335b6d6bec3a1324ba96147b19e840012dfc845d",
+      "task_id": "F2-opchadmin-af-03e97208f15fae15",
+      "task_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/tasks/F2-opchadmin-af-03e97208f15fae15.json"
+    }
+  ],
+  "note": "在役面只读；本件只写 runner 自有队列目录。",
+  "queue": "/home/pan-ding/workspace/f2-drill-scratch/run/queue",
+  "recipe_digest": "b7d445d2a032621eef49e949b9115be0c44ac2f7f766fed247ddf7b5339c37ff",
+  "registry": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers/registry.json",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/triggers"
+}
+--- exit=0
+--- f2_runner run（缺件臂）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-03e97208f15fae15 --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-nosupply.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-1
+{
+  "command": "run",
+  "idempotent": false,
+  "result": {
+    "attempts": 1,
+    "backoff_sec": 65,
+    "base_advanced_since_dispatch": true,
+    "base_head_at_gate_time": "f48960116a6005cd37eadbc013263d5f38487825",
+    "base_sha_at_dispatch": "335b6d6bec3a1324ba96147b19e840012dfc845d",
+    "duration_ms": 181,
+    "finished_at": "2026-11-05T00:39:26+08:00",
+    "gate": {},
+    "host_supply": {
+      "checked_at": "2026-11-05T00:39:26+08:00",
+      "manifest_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/supply/host-supply-F2-opchadmin-af-03e97208f15fae15.json",
+      "missing": [
+        "cosign"
+      ],
+      "ok": false,
+      "pieces": {
+        "advisory-db": {
+          "path": "/home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691",
+          "present": true,
+          "required": true,
+          "sha256": "999ec89d5d3f",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "version": "files=1388 git_head=999ec89d5d3f"
+        },
+        "cargo-deny": {
+          "path": "/home/pan-ding/.cargo/bin/cargo-deny",
+          "present": true,
+          "required": true,
+          "sha256": "c53e251d6d65",
+          "supply_rule": "cargo install cargo-deny（仓外供给；本件不代装）",
+          "version": "cargo-deny 0.20.2"
+        },
+        "cosign": {
+          "path": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate/bin/cosign",
+          "present": false,
+          "required": true,
+          "sha256": "",
+          "supply_rule": "放宿主 clone 的 <候选树>/bin/cosign（bin/ 不入库，见 .gitignore 行 2 /bin）",
+          "version": ""
+        },
+        "netns": {
+          "path": "/usr/bin/unshare",
+          "present": true,
+          "required": true,
+          "sha256": "",
+          "supply_rule": "内核需允许非特权 user namespace（unshare -Urn）；ci/run.sh 另有 sudo unshare -n 优先路径（由 run.sh 自带，本件不调用 sudo）",
+          "version": "unshare -Urn 可用（非特权 user+netns）"
+        }
+      },
+      "policy": "缺件 ⇒ SKIP（environment_unavailable）⇒ 不跑门、不写记录件、不得计绿（docs/CI-BOUNDARY.md §一；SKIP 不得计绿）",
+      "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+      "schema_version": "af.f2.host_supply.v1"
+    },
+    "idempotency_key": "18be0c9e01ebad216cab090eed04b76803edce5577121ce095eebcd6e7975159",
+    "integrator": {},
+    "next_attempt_at": "2026-11-05T00:40:31+08:00",
+    "note": "结论只认三种：pass（门绿且 SUMMARY 全绿且槽位齐全、记录件已写）/ fail（门红或入账被拒）/ skip-host-supply-missing（宿主缺件 ⇒ SKIP 不得计绿）",
+    "order_id": "F2-opchadmin-af-03e97208f15fae15",
+    "reason_codes": [
+      "SKIP-HOST-SUPPLY-MISSING"
+    ],
+    "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+    "runner": {
+      "host": "PanDeveopComp",
+      "id": "drill-runner-1",
+      "pid": 1620033
+    },
+    "schema_version": "af.f2.result.v1",
+    "started_at": "2026-11-05T00:39:26+08:00",
+    "status": "queued",
+    "task_id": "F2-opchadmin-af-03e97208f15fae15",
+    "verdict": "skip-host-supply-missing",
+    "worktree": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate"
+  }
+}
+--- exit=1
+缺件臂 verdict=skip-host-supply-missing  reason=['SKIP-HOST-SUPPLY-MISSING']
+缺件臂门日志在位=0（应为 0：门未执行）
+缺件臂记录件在位=no（应为 no）
+
+===== [S13] 负向臂 N-G：任务上存在**未过期**租约 ⇒ 第二个 runner 领不走（认领唯一写者） =====
+{
+  "base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+  "delivery_id": "drill-f2-delivery-0005",
+  "note": "合成夹具；不构成任何真实门结论",
+  "order_id": "F2-opchadmin-af-4f46cd8ecb8e2dfe",
+  "recipe_digest": "dce300e0cd5abbacdd8ce1b611428c98ac47766c5214ed65c89456eb2b8bcd61",
+  "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/lease-arm/triggers"
+}
+--- f2_dispatch ingest（租约臂；独立夹具目录 ⇒ 独立 order_id）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_dispatch.py ingest --triggers-home /home/pan-ding/workspace/f2-drill-scratch/run/lease-arm/triggers --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --json
+{
+  "command": "ingest",
+  "counts": {
+    "conflict": 0,
+    "created": 1,
+    "duplicate": 0,
+    "skipped": 0
+  },
+  "items": [
+    {
+      "base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+      "delivery_id": "drill-f2-delivery-0005",
+      "idempotency_key": "e12c3b1532396db0ae91e5ed38a022af21ea5b51d4b464d8d4910d66fb327fda",
+      "order_id": "F2-opchadmin-af-4f46cd8ecb8e2dfe",
+      "result": "created",
+      "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+      "task_id": "F2-opchadmin-af-4f46cd8ecb8e2dfe",
+      "task_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/tasks/F2-opchadmin-af-4f46cd8ecb8e2dfe.json"
+    }
+  ],
+  "note": "在役面只读；本件只写 runner 自有队列目录。",
+  "queue": "/home/pan-ding/workspace/f2-drill-scratch/run/queue",
+  "recipe_digest": "dce300e0cd5abbacdd8ce1b611428c98ac47766c5214ed65c89456eb2b8bcd61",
+  "registry": "/home/pan-ding/workspace/f2-drill-scratch/run/lease-arm/triggers/registry.json",
+  "triggers_home": "/home/pan-ding/workspace/f2-drill-scratch/run/lease-arm/triggers"
+}
+--- exit=0
+--- f2_runner run（他人租约未过期 ⇒ 应领单失败）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-4f46cd8ecb8e2dfe --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-lease.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-2
+f2_runner: 领单失败：ALREADY-CLAIMED：租约未过期（runner=other-runner expires_at=2026-11-05T00:49:27+08:00）
+--- exit=1
+
+===== [S14] 负向臂 N-H：租约**已过期** ⇒ 允许重领（租约超时语义） =====
+--- f2_runner run（过期租约 ⇒ 应领单成功并跑门）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py run --queue /home/pan-ding/workspace/f2-drill-scratch/run/queue --task-id F2-opchadmin-af-4f46cd8ecb8e2dfe --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --worktree /home/pan-ding/workspace/f2-drill-scratch/run/candidate --gate-command bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh --summary-path /home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-lease.txt --record-dir /home/pan-ding/workspace/f2-drill-scratch/run/out --runner-id drill-runner-2
+{
+  "command": "run",
+  "idempotent": false,
+  "result": {
+    "attempts": 1,
+    "backoff_sec": 0,
+    "base_advanced_since_dispatch": false,
+    "base_head_at_gate_time": "f48960116a6005cd37eadbc013263d5f38487825",
+    "base_sha_at_dispatch": "f48960116a6005cd37eadbc013263d5f38487825",
+    "duration_ms": 927,
+    "finished_at": "2026-11-05T00:39:28+08:00",
+    "gate": {
+      "command": "bash /home/pan-ding/workspace/af-wt-t7-1-f2/poc/poc-t7-1-f2-dispatch-runner/drill/stub_gate.sh",
+      "duration_ms": 267,
+      "exit": 0,
+      "log_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/logs/F2-opchadmin-af-4f46cd8ecb8e2dfe.attempt1.log",
+      "started_at": "2026-11-05T00:39:27+08:00",
+      "summary": {
+        "green": true,
+        "non_green_steps": [],
+        "slots_covered": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14"
+        ],
+        "slots_missing": [],
+        "slots_required": [
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14"
+        ],
+        "step_count": 16,
+        "steps": [
+          {
+            "line": "step1  PASS  11ms  cargo fmt --check + K5 判分链路径 lint",
+            "slot": "1",
+            "status": "PASS"
+          },
+          {
+            "line": "step2  PASS  23ms  cargo clippy + clippy_gate",
+            "slot": "2",
+            "status": "PASS"
+          },
+          {
+            "line": "step3  PASS  913ms  provenance 门 + cargo test -j4 --workspace",
+            "slot": "3",
+            "status": "PASS"
+          },
+          {
+            "line": "step4  PASS  7ms  cue recipe vet+export+断言",
+            "slot": "4",
+            "status": "PASS"
+          },
+          {
+            "line": "step5  PASS  4ms  parse_scrub × 7 真实日志",
+            "slot": "5",
+            "status": "PASS"
+          },
+          {
+            "line": "step6  PASS  31ms  cosign 断网 verify-blob",
+            "slot": "6",
+            "status": "PASS"
+          },
+          {
+            "line": "step7  PASS  52ms  cargo deny --offline check",
+            "slot": "7",
+            "status": "PASS"
+          },
+          {
+            "line": "step8  PASS  18ms  neutrality 删包自洽+领域词扫描+golden 登记",
+            "slot": "8",
+            "status": "PASS"
+          },
+          {
+            "line": "step9  ADVISORY-PASS  64ms  FV advisory: Rocq coqc + Kani INV 镜像（非阻塞）",
+            "slot": "9",
+            "status": "ADVISORY-PASS"
+          },
+          {
+            "line": "step10  PASS  6ms  承诺-交付对账 deliverables.yaml",
+            "slot": "10",
+            "status": "PASS"
+          },
+          {
+            "line": "step11  PASS  3ms  自述-实现对账 doc-claims.txt",
+            "slot": "11",
+            "status": "PASS"
+          },
+          {
+            "line": "step12  PASS  5ms  计数复算 numbers.json + 占位符",
+            "slot": "12",
+            "status": "PASS"
+          },
+          {
+            "line": "step13a  PASS  9ms  fix-scan 同族横切扫描",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step13b  PASS  7ms  arm-wiring 三臂防线逐格断言",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step13c  PASS  3ms  budget-cast-lint 预算 cast 门",
+            "slot": "13",
+            "status": "PASS"
+          },
+          {
+            "line": "step14  PASS  12ms  机读一致性批（branches+xcheck+criteria+strategies）",
+            "slot": "14",
+            "status": "PASS"
+          }
+        ]
+      },
+      "summary_path": "/home/pan-ding/workspace/f2-drill-scratch/run/out/SUMMARY-lease.txt",
+      "summary_present": true,
+      "summary_sha256": "2f4d4e6904022f6f8acf63ca7ad83ca000df598d3a66bbdc27a2f6855af83594",
+      "worktree": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate"
+    },
+    "host_supply": {
+      "checked_at": "2026-11-05T00:39:27+08:00",
+      "manifest_path": "/home/pan-ding/workspace/f2-drill-scratch/run/queue/supply/host-supply-F2-opchadmin-af-4f46cd8ecb8e2dfe.json",
+      "missing": [],
+      "ok": true,
+      "pieces": {
+        "advisory-db": {
+          "path": "/home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691",
+          "present": true,
+          "required": true,
+          "sha256": "999ec89d5d3f",
+          "supply_rule": "ci/refresh-advisory-db.sh 刷新到 /home/pan-ding/.cargo/advisory-dbs/advisory-db-3157b0e258782691（代理 socks5h://<内网地址>:1080；GitHub 不可达时沿用旧库 WARN 降级）",
+          "version": "files=1388 git_head=999ec89d5d3f"
+        },
+        "cargo-deny": {
+          "path": "/home/pan-ding/.cargo/bin/cargo-deny",
+          "present": true,
+          "required": true,
+          "sha256": "c53e251d6d65",
+          "supply_rule": "cargo install cargo-deny（仓外供给；本件不代装）",
+          "version": "cargo-deny 0.20.2"
+        },
+        "cosign": {
+          "path": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate/bin/cosign",
+          "present": true,
+          "required": true,
+          "sha256": "d58729ff5a57",
+          "supply_rule": "放宿主 clone 的 <候选树>/bin/cosign（bin/ 不入库，见 .gitignore 行 2 /bin）",
+          "version": "cosign (DRILL STUB) 2.4.0-dry-run"
+        },
+        "netns": {
+          "path": "/usr/bin/unshare",
+          "present": true,
+          "required": true,
+          "sha256": "",
+          "supply_rule": "内核需允许非特权 user namespace（unshare -Urn）；ci/run.sh 另有 sudo unshare -n 优先路径（由 run.sh 自带，本件不调用 sudo）",
+          "version": "unshare -Urn 可用（非特权 user+netns）"
+        }
+      },
+      "policy": "缺件 ⇒ SKIP（environment_unavailable）⇒ 不跑门、不写记录件、不得计绿（docs/CI-BOUNDARY.md §一；SKIP 不得计绿）",
+      "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+      "schema_version": "af.f2.host_supply.v1"
+    },
+    "idempotency_key": "e12c3b1532396db0ae91e5ed38a022af21ea5b51d4b464d8d4910d66fb327fda",
+    "integrator": {
+      "emit_exit": 0,
+      "emit_stdout": "{\"base_sha\": \"f48960116a6005cd37eadbc013263d5f38487825\", \"record\": \"/home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-4f46cd8ecb8e2dfe.json\", \"record_sha256\": \"be85a6c266a149ede2a0244c1b148e2db613d3f090aedee2756f3957e7aec00c\", \"result\": \"RECORD-WRITTEN\", \"source_sha\": \"f48960116a6005cd37eadbc013263d5f38487825\", \"suite_digest\": \"a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31\", \"suite_members\": 46, \"tested_tree\": \"804cc31c5abc1c83d9de7fcbe9049e9e551273f7\", \"verdict\": \"pass\"}",
+      "four_tuple": {
+        "base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+        "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+        "suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+        "tested_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7"
+      },
+      "gate_base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+      "record_path": "/home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-4f46cd8ecb8e2dfe.json",
+      "record_sha256": "be85a6c266a149ede2a0244c1b148e2db613d3f090aedee2756f3957e7aec00c",
+      "source_origin": "本地提交（未绑定远端头）",
+      "verdict": "pass"
+    },
+    "next_attempt_at": "2026-11-05T00:39:27+08:00",
+    "note": "结论只认三种：pass（门绿且 SUMMARY 全绿且槽位齐全、记录件已写）/ fail（门红或入账被拒）/ skip-host-supply-missing（宿主缺件 ⇒ SKIP 不得计绿）",
+    "order_id": "F2-opchadmin-af-4f46cd8ecb8e2dfe",
+    "reason_codes": [],
+    "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+    "runner": {
+      "host": "PanDeveopComp",
+      "id": "drill-runner-2",
+      "pid": 1620361
+    },
+    "schema_version": "af.f2.result.v1",
+    "started_at": "2026-11-05T00:39:27+08:00",
+    "status": "done",
+    "task_id": "F2-opchadmin-af-4f46cd8ecb8e2dfe",
+    "verdict": "pass",
+    "worktree": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate"
+  }
+}
+--- exit=0
+
+===== [S15] 结论入账交接：handover（只读实测侧复算 + rebase 漂移动作清单） =====
+--- f2_runner handover
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py handover --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --base-ref origin/product/main --branch feature/f2-drill
+{
+  "actions": [],
+  "aligned": true,
+  "base_drift": false,
+  "base_drift_note": "",
+  "base_head_now": "f48960116a6005cd37eadbc013263d5f38487825",
+  "base_ref": "origin/product/main",
+  "command": "handover",
+  "gate_base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+  "measured_side": {
+    "merge_mode": "fast-forward",
+    "merge_suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+    "merge_suite_members": 46,
+    "merge_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7",
+    "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+    "source_suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+    "source_suite_members": 46,
+    "source_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7"
+  },
+  "note": "四元组来源＝记录件（由 ci/integrator_bind_check.py emit 机器自算，禁手抄）；本子命令只做**只读**实测侧复算与动作清单产出，**不执行** rebase/push（改 ref 与推送由 integrator 依 docs/INTEGRATOR-SOP.md §五 执行）",
+  "record": "/home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json",
+  "record_side": {
+    "base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+    "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+    "suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+    "tested_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7",
+    "verdict": "pass"
+  },
+  "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+  "suite_equivalent": true,
+  "tree_equivalent": true
+}
+--- exit=0
+
+===== [S15b] 交接漂移臂①：handover（base 取 c962cec：非门跑时基点，但落地树仍==门跑过的树） =====
+--- f2_runner handover（漂移臂①）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py handover --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --base-ref c962cec287e80ff76f689d1434f9465c4909877e --branch feature/f2-drill
+{
+  "actions": [],
+  "aligned": true,
+  "base_drift": true,
+  "base_drift_note": "基点已前移但内容等价（落地树 == 门跑过的树、门面逐字节同）⇒ 门结论仍描述这棵树；基点变了这件事必须写进合流报告/台账（docs/INTEGRATOR-SOP.md §5.2 步 6）",
+  "base_head_now": "c962cec287e80ff76f689d1434f9465c4909877e",
+  "base_ref": "c962cec287e80ff76f689d1434f9465c4909877e",
+  "command": "handover",
+  "gate_base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+  "measured_side": {
+    "merge_mode": "merge-commit",
+    "merge_suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+    "merge_suite_members": 46,
+    "merge_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7",
+    "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+    "source_suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+    "source_suite_members": 46,
+    "source_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7"
+  },
+  "note": "四元组来源＝记录件（由 ci/integrator_bind_check.py emit 机器自算，禁手抄）；本子命令只做**只读**实测侧复算与动作清单产出，**不执行** rebase/push（改 ref 与推送由 integrator 依 docs/INTEGRATOR-SOP.md §五 执行）",
+  "record": "/home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json",
+  "record_side": {
+    "base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+    "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+    "suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+    "tested_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7",
+    "verdict": "pass"
+  },
+  "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+  "suite_equivalent": true,
+  "tree_equivalent": true
+}
+--- exit=0
+
+===== [S15c] 交接漂移臂②：handover（base 取 c1f45f9：落地树≠门跑过的树 ⇒ 出 rebase/重跑门 动作清单） =====
+--- f2_runner handover（漂移臂②）
+$ python3 -I /home/pan-ding/workspace/af-wt-t7-1-f2/ci/f2_runner.py handover --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --base-ref c1f45f9aa2b5d09b88779a5e491b0d343728eb9e --branch feature/f2-drill
+{
+  "actions": [
+    {
+      "cmd": "git -C /home/pan-ding/workspace/f2-drill-scratch/run/candidate fetch origin c1f45f9aa2b5d09b88779a5e491b0d343728eb9e && git -C /home/pan-ding/workspace/f2-drill-scratch/run/candidate rebase origin/c1f45f9aa2b5d09b88779a5e491b0d343728eb9e",
+      "note": "真合并形态改为把主线合入候选分支并解冲突，重做候选树定稿",
+      "order": 1,
+      "what": "重落基点"
+    },
+    {
+      "cmd": "git -C /home/pan-ding/workspace/f2-drill-scratch/run/candidate push origin <候选分支>  # Actions 自动重跑 F1（.gitea/workflows/f1.yml，仅 base=product/main 触发）",
+      "note": "F1 绿是合流的**必要非充分**条件；F1 绿**不替代** F2 记录件",
+      "order": 2,
+      "what": "重跑 F1 快速门"
+    },
+    {
+      "cmd": "bash ci/run.sh   # 在候选树工作树上（重落基点之后）",
+      "note": "按记录件 gate_id 重跑那一门；★ 不许拿「四项里前三项对上了」搪塞",
+      "order": 3,
+      "what": "重跑 F2 全量门"
+    },
+    {
+      "cmd": "python3 -I /home/pan-ding/workspace/f2-drill-scratch/run/candidate/ci/integrator_bind_check.py emit --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388-r2.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --branch <候选分支> --remote origin --base-ref c1f45f9aa2b5d09b88779a5e491b0d343728eb9e --gate-id f2-full --gate-command \"bash ci/run.sh\" --gate-exit 0 --gate-summary <候选树>/ci/out/SUMMARY.txt --recorded-by <人>",
+      "note": "emit 拒写非绿记录件（门摘要判不出绿 ⇒ 拒绝）",
+      "order": 4,
+      "what": "重写记录件（新文件名带 -r2/-r3；旧件不许删）"
+    },
+    {
+      "cmd": "python3 -I /home/pan-ding/workspace/f2-drill-scratch/run/candidate/ci/integrator_bind_check.py verify --record /home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388-r2.json --repo /home/pan-ding/workspace/f2-drill-scratch/run/candidate --branch <候选分支> --remote origin --base-ref c1f45f9aa2b5d09b88779a5e491b0d343728eb9e",
+      "note": "复核绿 ⇒ 进 SOP §六 判读；红 ⇒ SOP §七",
+      "order": 5,
+      "what": "再复核"
+    }
+  ],
+  "aligned": false,
+  "base_drift": true,
+  "base_drift_note": "",
+  "base_head_now": "c1f45f9aa2b5d09b88779a5e491b0d343728eb9e",
+  "base_ref": "c1f45f9aa2b5d09b88779a5e491b0d343728eb9e",
+  "command": "handover",
+  "gate_base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+  "measured_side": {
+    "merge_mode": "MERGE-TREE-CONFLICT",
+    "merge_suite_digest": "",
+    "merge_suite_members": 0,
+    "merge_tree": "",
+    "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+    "source_suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+    "source_suite_members": 46,
+    "source_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7"
+  },
+  "note": "四元组来源＝记录件（由 ci/integrator_bind_check.py emit 机器自算，禁手抄）；本子命令只做**只读**实测侧复算与动作清单产出，**不执行** rebase/push（改 ref 与推送由 integrator 依 docs/INTEGRATOR-SOP.md §五 执行）",
+  "record": "/home/pan-ding/workspace/f2-drill-scratch/run/out/integrator-record-f2-F2-opchadmin-af-d41f6a92da893388.json",
+  "record_side": {
+    "base_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+    "source_sha": "f48960116a6005cd37eadbc013263d5f38487825",
+    "suite_digest": "a7c06bc18164bc0c592f17f07e7199f975842a7a17e186aa6047577d2a351f31",
+    "tested_tree": "804cc31c5abc1c83d9de7fcbe9049e9e551273f7",
+    "verdict": "pass"
+  },
+  "repo": "/home/pan-ding/workspace/f2-drill-scratch/run/candidate",
+  "suite_equivalent": false,
+  "tree_equivalent": false
+}
+--- exit=0
+
+===== [S16] 收尾读数 =====
+队列任务件数=5
+结果件数=5
+回报行数=5
+记录件数（正向臂 + 租约臂；红/SKIP/缺件臂应无记录）=2
+演练结束=2026-11-05 00:39:31

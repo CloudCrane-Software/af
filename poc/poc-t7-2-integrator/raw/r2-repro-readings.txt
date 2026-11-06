@@ -1,0 +1,35 @@
+=== v0.3-T7② 返修批：复核员实测场景复现读数 ===
+命令：python3 -I poc/poc-t7-2-integrator/r2_repro.py --out /home/pan-ding/workspace/af-wt-t7-2/poc/poc-t7-2-integrator/raw
+夹具：/tmp/t7-2-r2-fixture-p3ty_r9r/fixture-repo（门摘要真文件）
+夹具门摘要原文：
+step1  PASS  1ms  门摘要复现
+step9  ADVISORY-PASS  1ms  FV advisory
+step14  PASS-WITH-WARN  2ms  机读一致性批
+──────────────
+[复现] OK  复现1-emit-PASS-WITH-WARN（初版 exit=2 假红）
+        说明：门摘要 step1 PASS / step9 ADVISORY-PASS / step14 PASS-WITH-WARN（run.sh:615 rc=2 ⇒ 门仍绿）
+        命令退出码=0  reason_code=（无/绿）  期望=exit 0（绿）
+[复现] OK  复现1-verify-同一记录件（回读通过⇒绿）
+        说明：复核**强制回读**门摘要文件：磁盘文件 ↔ 内嵌 sha256 ↔ 内嵌原文 三方一致 ⇒ 绿
+        命令退出码=0  reason_code=OK  期望=exit 0（绿）
+[复现] OK  复现2-洗内嵌摘要并重算sha（初版 exit=0/OK）
+        说明：记录件作者可控的'门摘要原文'必须被回读比对挡住（磁盘文件未动）
+        命令退出码=1  reason_code=GATE-SUMMARY-DIGEST  期望=exit 非 0（红）
+[复现] OK  复现3-磁盘门摘要文件被改（记录件不动）
+        说明：门摘要文件被换 ⇒ 回读三方不一致 ⇒ 红
+        命令退出码=1  reason_code=GATE-SUMMARY-DIGEST  期望=exit 非 0（红）
+[复现] OK  复现4-verify--source本地提交（初版 exit=0 绕开远端绑定）
+        说明：候选头取自本地提交 ⇒ 必须显式 --allow-local-source 才生效
+        命令退出码=1  reason_code=LOCAL-SOURCE-NOT-ALLOWED  期望=exit 非 0（红）
+[复现] OK  复现5-verify--source--allow-local-source（显式承认）
+        说明：显式承认本地来源 ⇒ 绿；输出须留 source_origin=本地提交…
+        命令退出码=0  reason_code=OK  期望=exit 0（绿）
+[复现] OK  复现5-source_origin 留痕：本地提交 dd154fbbc91a0f2dc80b02264af14655f58b66ff（--allow-local-source；**未绑定远端头**）
+[复现] OK  复现6-emit-FAIL（红词表必须拒写记录件）
+        说明：词表项 FAIL 不在白名单 ⇒ 门红 ⇒ emit 拒写绿记录件
+        命令退出码=2  reason_code=ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step14  FAIL  1ms  机读一致性批  期望=exit 非 0（红）
+[复现] OK  复现6-emit-ADVISORY-FAIL（红词表必须拒写记录件）
+        说明：词表项 ADVISORY-FAIL 不在白名单 ⇒ 门红 ⇒ emit 拒写绿记录件
+        命令退出码=2  reason_code=ERROR: 门摘要判不出绿（不许写绿记录件）：step 非绿: step9  ADVISORY-FAIL  1ms  FV advisory  期望=exit 非 0（红）
+──────────────
+结论：R2-REPRO-GREEN；failures=[]

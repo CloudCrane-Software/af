@@ -1,0 +1,1 @@
+{"id":"wo-done","state":"Completed","graph_version":"g-9","line":{"line_id":"L9","line_version":"v9"},"budget_voucher":{"voucher_id":"bv9","amount":1,"signed":false},"artifacts":[{"artifact_id":"fa","is_final":true,"qualified":true}],"sla":{"deadline":null,"priority":"High"},"supersedes":"wo-old","history":[{"from":"Created","to":"Released"}]}

@@ -1,0 +1,22 @@
+== 1. clippy-baseline.txt vs 哈希钉（未动证明）
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  ci/clippy-baseline.txt
+a48639e75b5203fef7e1ffc7026b8f0d9de20f3ce862fa3988a1ec6b49326ba4  0  clippy-baseline.txt
+-- 与基线（origin/product/main）逐字节对照：
+0
+
+== 2. crates/ crate 集合 vs 基线（零新增）
+crate 集合与基线一致
+
+== 3. 三目标外零改动（porcelain 逐件）
+ M ci/fix_scan.py
+ M ci/run.sh
+ M docs/CI-BOUNDARY.md
+?? .offload/
+?? poc/poc-ci-diffbase-fix/
+?? redteam/scans/2026-11-04-25429293/
+
+== 4. 三件改动 diff 规模
+ ci/fix_scan.py      |  8 ++++++--
+ ci/run.sh           |  2 +-
+ docs/CI-BOUNDARY.md | 20 ++++++++++++++++++++
+ 3 files changed, 27 insertions(+), 3 deletions(-)

@@ -1,0 +1,14 @@
+=== clippy json run ===
+== env ==
+CARGO_TARGET_DIR=/data/bench/targets/a2-p3a1-v2
+CARGO_BUILD_JOBS=8
+== cargo clippy --workspace --all-targets -j8 --message-format=json ==
+clippy_json_exit=0
+=== counts ===
+error_level=0
+warning_level=0
+build_finished=True
+success=True
+=== clippy_gate ===
+CLIPPY GATE: PASS —— 现有 0 条警告 / 0 签名，均在基线内（基线 0 签名）
+clippy_gate_exit=0

@@ -1,0 +1,18 @@
+[package]
+name = "demo"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+
+[dev-dependencies]
+proptest = "1"
+insta = "1"
+criterion = "0.5"
+
+[[bench]]
+name = "bench_markup"
+harness = false
+
+[workspace]

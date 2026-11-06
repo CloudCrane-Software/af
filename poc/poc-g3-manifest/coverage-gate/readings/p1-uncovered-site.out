@@ -1,0 +1,2 @@
+task_package_manifest_check: 生产写入点未造册（覆盖不到=破窗）：crates/af-station/src/lib.rs::g3_probe_unregistered_writer（写 API 行 [1023, 1024]）——须同批入册 ci/baselines/task-package-writepoints.json 并重钉
+exit=1

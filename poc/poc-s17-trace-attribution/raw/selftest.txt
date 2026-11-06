@@ -1,0 +1,10 @@
+== trace_attribution_batch --selftest（判别力自证）==
+[PASS] report 干净集合 ⇒ 绿（实测 rc=0）
+[PASS] report 零轨迹 ⇒ 红（fail-closed）（实测 rc=1）
+[PASS] align 有效标注 ⇒ 绿（实测 rc=0）
+[PASS] align 无标注（缺件）⇒ 红（fail-closed）（实测 rc=1）
+[PASS] align 空标注 ⇒ 红（fail-closed）（实测 rc=1）
+[PASS] align 孤儿标注 ⇒ 红（fail-closed）（实测 rc=1）
+[PASS] report 源缺件 ⇒ rc=2 不可证（实测 rc=2）
+[PASS] 判官判别力：syn/tool/other 各判对各的类（实测 rc=0）
+SELFTEST_VERDICT=BATCH_BITES

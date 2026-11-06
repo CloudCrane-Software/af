@@ -1,0 +1,22 @@
+{
+  "graph_version": "7",
+  "name": "article-pipeline-unknown-kind",
+  "entry": "reader",
+  "nodes": [
+    { "id": "reader", "kind": "task" },
+    { "id": "draft", "kind": "task" },
+    { "id": "review_gate", "kind": "gate",
+      "human": { "station": "review-desk", "role": "senior-editor" } },
+    { "id": "revise", "kind": "transform",
+      "human": { "station": "review-desk", "role": "editor", "quorum": 1 } },
+    { "id": "qc", "kind": "rerank" },
+    { "id": "publish", "kind": "task" }
+  ],
+  "edges": [
+    { "from": "reader", "output": "raw", "to": "draft", "input": "raw" },
+    { "from": "draft", "output": "draft_v1", "to": "review_gate", "input": "candidate" },
+    { "from": "review_gate", "output": "review_verdict", "to": "revise", "input": "verdict" },
+    { "from": "revise", "output": "draft_v2", "to": "qc", "input": "candidate" },
+    { "from": "qc", "output": "qc_report", "to": "publish", "input": "qc" }
+  ]
+}

@@ -1,0 +1,5 @@
+$ python3 -I ci/k5-path-lint.py  （cwd=S5-empty-manifest）
+exit=1
+--- stdout ---
+--- stderr ---
+k5-path-lint: 登记表为空（判分链保护面缺失）

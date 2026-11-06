@@ -1,0 +1,5 @@
+finding: F1-swev-django-11099-glm-cp: django__django-11099-a1 旁路 run（terminal=None），不投影
+emitted 19 semantic spans → http://<内网地址>:4318/v1/traces
+  order_id=F1-swev-django-11099-glm-cp work_order_id=sid-9db2d04ac82e… names={'invoke_workflow': 1, 'invoke_agent': 1, 'chat': 7, 'execute_tool': 10}
+  harvest ok=True task_id=F1-swev-django-11099-glm-cp
+emit_rc=0

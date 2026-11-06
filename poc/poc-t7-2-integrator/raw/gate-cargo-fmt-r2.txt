@@ -1,0 +1,6 @@
+=== 命令：cargo fmt --check --all ===
+工作树：/home/pan-ding/workspace/af-wt-t7-2
+cargo 版本：cargo 1.99.1 (5f94df478 2026-08-27)
+rustfmt：rustfmt 1.10.0-stable (58cf8f9c35 2026-10-13)
+--- 输出（空 = 无格式漂移）---
+exit=0

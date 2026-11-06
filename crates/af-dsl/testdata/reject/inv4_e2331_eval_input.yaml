@@ -1,0 +1,49 @@
+version: 1
+meta:
+  name: inv4_demo
+  graph_version: "1.0"
+  entry: loader
+  input: inv4_input
+  output: { ref: answer, from: assess }
+types:
+  - name: inv4_input
+    schema:
+      type: object
+      required: [corpus]
+      properties: { corpus: { type: array, items: { type: string } } }
+  - name: answer
+    schema:
+      type: object
+      required: [text]
+      properties: { text: { type: string } }
+stores:
+  - { name: answers_ref, type: collection, item: answer, writer: loader, lifecycle: run,
+      retention: { max_items: 64 }, eval_input: true }
+nodes:
+  - id: loader
+    kind: task
+    uses: { tool: pkg.searchkit.corpus@1 }
+    writes: [answers_ref]
+    emits: { done: signal }
+  - id: run_map
+    kind: task
+    map:
+      over: input.corpus
+      body:
+        nodes:
+          - id: gen_a                    # 候选执行体（在 map 体内）
+            kind: task
+            uses: { model: route.main@1 }
+            reads: [answers_ref]         # E2331：候选读参考答案（兼踩 E2303：LLM 节点不该用 reads 直读）
+            emits: { draft: answer }
+        edges: []
+    emits: { items: { from_body: gen_a.draft } }
+  - id: assess
+    kind: check                        # 评估器：唯一合法读者
+    uses: { unit: pkg.searchkit.assess@1 }
+    reads: [answers_ref]
+    consumes: { items: "list<answer>" }
+    emits: { scores: answer }
+edges:
+  - { from: loader, output: done, to: run_map, input: done }
+  - { from: run_map, output: items, to: assess, input: items }

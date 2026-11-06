@@ -1,0 +1,78 @@
+id: st-b-C064
+name: "技能选择优先用传统 IR（BM25 + 小重排）而非 LLM 中介检索循环"
+tier: B
+claim: "技能选择优先用BM25+小重排而非LLM中介检索：实测持平且每trial 51.30降到27.54美元"
+claimed_value:
+  metric: "cost_per_trial"
+  direction: down
+  context: "同一批仓库任务三组：模型隐式路由 / BM25+cross-encoder 预选 / LLM 中介检索循环；质量持平看成本"
+sources: [S051, S052]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+dsl_snippet: |
+  version: 1
+  meta:
+    name: ir_first_skill_selection
+    graph_version: "1.0"
+    entry: index_skills
+    input: repo_task
+    output: { ref: skill_reply, from: answer }
+    intent: "技能选择优先传统 IR：index_skills 把技能库建为 collection（单写者）→answer 经 store retrieve 段（component pkg.ir.bm25_ce@1, args.k=5 = BM25 top-5 + cross-encoder 重排装订）取选中技能集注入上下文，替代 LLM 中介检索循环。S051/S052 口径：质量持平、每 trial 51.30 → 27.54 美元；三臂对照（模型隐式路由/LLM 中介循环）走 harness 同批任务 A/B。v0.1 ops 无 retrieve 算子，检索经 store retrieve 段 + 组件引用表达（note 登记的理想算子面属后续批）"
+  types:
+    - name: repo_task
+      schema:
+        type: object
+        required: [query]
+        properties:
+          query: { type: string }
+    - name: skill_entry
+      schema:
+        type: object
+        required: [skill_id, body_ref]
+        properties:
+          skill_id: { type: string }
+          body_ref: { type: string }
+    - name: index_done
+      schema:
+        type: object
+        required: [ok]
+        properties:
+          ok: { type: boolean }
+    - name: skill_reply
+      schema:
+        type: object
+        required: [reply]
+        properties:
+          reply: { type: string }
+  stores:
+    - name: skill_index
+      type: collection
+      item: skill_entry
+      writer: index_skills
+      lifecycle: run
+      retention: { max_items: 512 }
+  nodes:
+    - id: index_skills
+      kind: transform
+      uses: { unit: pkg.ir.indexer@1 }
+      writes: [skill_index]
+      emits: { done: index_done }
+    - id: answer
+      kind: task
+      uses: { model: route.main@1, tools: [pkg.skill.runtime@1] }
+      consumes: { done: index_done }
+      emits: { reply: skill_reply }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.agent.system, quota_tokens: 500 }
+          - { from: input, fields: [query], quota_tokens: 400 }
+          - { from: edge, port: done, quota_tokens: 100 }
+          - { from: store, store: skill_index, policy: retrieve, component: pkg.ir.bm25_ce@1, args: { k: 5 }, quota_tokens: 1500 }
+  edges:
+    - { from: index_skills, output: done, to: answer, input: done }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 300 }
+    failures:
+      - { class: budget_exhausted, terminal: true, outcome: failed }

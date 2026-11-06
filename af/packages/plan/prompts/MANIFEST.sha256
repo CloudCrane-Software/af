@@ -1,0 +1,4 @@
+# plan prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+4d9072b53019d0555f723f18c3e73d876ebb0d3a4ae10bc95e7702930a36e9a3  prompts/planner_system.md
+b4fb58e92c2528f900edb65a2c195d6810f8e49f9ffea4f6d4a6d27f52eb22a5  prompts/worker_system.md

@@ -1,0 +1,122 @@
+id: st-b-C105
+name: "harness 组件级可拆解消融：上下文管理/规划/动作空间（按模型分档）"
+tier: B
+claim: "harness 组件级消融：上下文管理价值随窗口收紧放大（32k 差距 35.7pp、128k 仅 2.7pp）；强模型 bash-only 更省"
+claimed_value:
+  metric: "component_ablation_delta"
+  direction: up
+  context: "保持主循环不动，只替换 context-management 策略（T0/T1/T2/T3…）；按模型分档、按窗口收紧分档"
+sources: [S118, S129]
+consensus: {corpora: 1, cards: 2}
+experiment: {status: none, exp_id: "-", note: "-"}
+dsl_state: compilable
+# S17 供给注册批 A（设计稿 strategies17-供给面设计-20261106.md §五）：
+# not_applicable → compilable。原 na_reason 的三态判据被 §四 的三分类
+# 复核推翻（与 st-C007/st-C019/st-b-C001 既有 compilable 先例不符），
+# 依据见 dsl_snippet 的 intent 段；组件声明见 af/packages/components.json。
+dsl_snippet: |
+  version: 1
+  meta:
+    name: component_ablation_matrix
+    graph_version: "1.0"
+    entry: sweep
+    input: ablate_input
+    output: { ref: ablate_report, from: report }
+    intent: "组件级消融矩阵投影（设计稿 §五.7）：配置矩阵 = map over cells 的臂配置枚举（每格 arm_id/model_tier/window_tokens/component_set），同图多配置消融已有 compilable 先例（st-C007 map-over-arms），原 na_reason「单图无法表达同图多组件配置矩阵」与先例不符，按先例改判 ①；窗口分档经 arg.item.window_tokens 参数化（st-C015 ctxrot.curve 按窗口分档同型），模型分档经 route.main@1/route.cheap@1 两档（已注册）→ check pkg.ablate.matrix@1 按维度算 delta_pp + best_cell → 报告。"
+  types:
+    - name: ablate_input
+      schema:
+        type: object
+        required: [question, tasks, cells]
+        properties:
+          question: { type: string }
+          tasks: { type: array, items: { type: string } }
+          cells:
+            type: array
+            items:
+              type: object
+              required: [arm_id, model_tier, window_tokens, component_set]
+              properties:
+                arm_id: { type: string }
+                model_tier: { type: string }
+                window_tokens: { type: integer }
+                component_set: { type: string }
+    - name: cell_result
+      schema:
+        type: object
+        required: [arm_id, resolved_rate_milli]
+        properties:
+          arm_id: { type: string }
+          resolved_rate_milli: { type: integer }
+    - name: dimension_delta
+      schema:
+        type: object
+        required: [dimension, level, delta_pp]
+        properties:
+          dimension: { type: string }
+          level: { type: string }
+          delta_pp: { type: integer }
+    - name: matrix_result
+      schema:
+        type: object
+        required: [per_dimension, best_cell, notes]
+        properties:
+          per_dimension:
+            type: array
+            items: { type: dimension_delta }
+          best_cell: { type: string }
+          notes: { type: string }
+    - name: ablate_report
+      schema:
+        type: object
+        required: [best_cell, dimensions, notes]
+        properties:
+          best_cell: { type: string }
+          dimensions: { type: integer }
+          notes: { type: string }
+  nodes:
+    - id: sweep
+      kind: task
+      map:
+        over: input.cells
+        body:
+          nodes:
+            - id: runner
+              kind: task
+              uses: { model: route.main@1, tools: [pkg.harness.shell@1, pkg.harness.edit@1] }
+              emits: { result: cell_result }
+              context:
+                sections:
+                  - { from: template, template_ref: pkg.sweng.ablate_arm_system, vars: { component_set: arg.item.component_set, model_tier: arg.item.model_tier, window_tokens: arg.item.window_tokens }, quota_tokens: 400 }
+                  - { from: arg, name: item, policy: project, quota_tokens: 400 }
+                  - { from: input, fields: [question, tasks], policy: project, quota_tokens: 400 }
+          edges: []
+      emits: { cells: { from_body: runner.result } }
+    - id: assess
+      kind: check
+      uses: { unit: pkg.ablate.matrix@1 }
+      consumes: { cells: "list<cell_result>" }
+      emits: { matrix: matrix_result }
+    - id: report
+      kind: task
+      uses: { model: route.cheap@1 }
+      consumes: { matrix: matrix_result }
+      emits: { report: ablate_report }
+      context:
+        sections:
+          - { from: template, template_ref: pkg.sweng.ablate_delta_system, quota_tokens: 400 }
+          - { from: edge, port: matrix, policy: project, quota_tokens: 400 }
+  edges:
+    - { from: sweep, output: cells, to: assess, input: cells }
+    - { from: assess, output: matrix, to: report, input: matrix }
+  policies:
+    budgets:
+      - { id: cost_cap, dimension: cents, scope: plan, cap: 8000 }
+      - { id: token_cap, dimension: tokens_total, scope: plan, cap: 8000000 }
+    failures:
+      - class: tool_error
+        route: same_node
+        feedback: error_observation
+      - class: budget_exhausted
+        terminal: true
+        outcome: completed

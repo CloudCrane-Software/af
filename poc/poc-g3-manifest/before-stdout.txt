@@ -1,0 +1,76 @@
+
+running 1 test
+### E1-absent-dryrun :: Ok（干跑放行）
+package_manifest 字段 = null
+checks 含 package_manifest = false
+state 残留 = 0
+
+test g3_probe_scenarios has been running for over 60 seconds
+### E2-absent-submit :: Ok（?!）
+{
+  "order_id": "E2G-G3-1",
+  "stable_id": "sid-16f461f22389d6cbb5edfe1ccba173fc48bdccb506a488eb34d77f99e988c6be",
+  "state": "Closed",
+  "replayed": false,
+  "voucher_id": "bv-E2G-G3-1",
+  "voucher_key_id": "1442faae42515a76d2995f9f23a0052e776317d78a6cd208d1c5ca970f0f5260",
+  "exec": {
+    "unit": "graph-unit",
+    "task": "E2G-demo",
+    "profile": "glm-cp",
+    "host": "anolis",
+    "max_turns": null,
+    "spend_cap_cents": null
+  },
+  "verdict": true,
+  "record": {
+    "plan_id": "plan.factory_construction_build@1.0+1ef0577a6b6f",
+    "node_id": "line-A",
+    "item_id": "E2G-demo",
+    "attempt": 1,
+    "host_alias": "anolis",
+    "unit_id": "graph-unit",
+    "unit_version": "0.1.0",
+    "status": "completed",
+    "verdict": true,
+    "evidence": {
+      "run_dir": "/tmp/g3-probe-e2-529709-1793769126732995188/state/orders/E2G-G3-1/runs/graph-E2G-demo-glm-cp-a1",
+      "evidence_digest": null
+    },
+    "gate": "ok",
+    "usage": {
+      "turns": 17,
+      "unit_calls": 17,
+      "http_retries": 0,
+      "quota": {
+        "input": 11294,
+        "output": 6416,
+        "cache_read": 89600
+      }
+    },
+    "wall_ms": 210145,
+    "note": "graph nodes=1 cents=17 tokens_total=107310"
+  },
+  "evidence": [
+    "/tmp/g3-probe-e2-529709-1793769126732995188/state/orders/E2G-G3-1/runs/graph-E2G-demo-glm-cp-a1/artifacts/build.deliverable.json"
+  ],
+  "mes_ch": null,
+  "ledger_ops_appended": 8,
+  "mes_events_emitted": 4,
+  "order_dir": "/tmp/g3-probe-e2-529709-1793769126732995188/state/orders/E2G-G3-1",
+  "engine_bin": "/data/bench/targets/g3-manifest/debug/af-engine"
+}
+
+### E3-tampered-dryrun :: Err（应拒）
+报错：OR1001: 用法错误: OR1001: 任务包内容已改（plan.json）：manifest 留档 3235de0856804cd0c900582346b2044559db361de2e437d33685c900bd8a4957 ≠ 实得 a65516c0c91cf5d5ec0b82e1cb1617f51d50c0afddbc384d3c0fa4f4ccb25f89——防重放契约违例（W2-C55 语义内置编译链）：改动任务包须清态换号重提，不得在原订单号上重放（用法: af-order submit --spec <order.json> --state <dir> | af-order admit --request <admission.json> --state <dir> | af-order list --state <dir> | af-order show <order-id> --state <dir>）
+state 残留 = 0
+
+### E4-present-dryrun :: Ok（应过）
+package_manifest.plan_id = "plan.factory_construction_build@1.0+x"
+checks 含 package_manifest = true
+state 残留 = 0
+
+test g3_probe_scenarios ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 226.78s
+

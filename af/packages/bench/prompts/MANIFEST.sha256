@@ -1,0 +1,4 @@
+# bench prompts manifest — template_ref 装载核对正本（裁决10 机制；格式见 af/packages/README）
+# manifest_version: 1
+cc89acd5e823cf09b3731fffda660c90ff92412be9ac69145cd22ac348a103d6  prompts/delta_system.md
+14d7e1d140ded03a6ff81c82110bceb4dab905ead1da3ce0880b0f7eabc3d14c  prompts/leaderboard_system.md
