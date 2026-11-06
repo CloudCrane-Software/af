@@ -84,8 +84,13 @@ jobs:
       CARGO_BUILD_JOBS: "12"
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: never
-      # target 落 runner.temp（每 job 一次性，无跨 run 持久化——不赌陈旧构件）。
-      CARGO_TARGET_DIR: ${{ runner.temp }}/af-gates-target
+      # ★ target 落盘位置**不写在本 job 级 env**：`runner` 上下文只在
+      #   jobs.<id>.steps.env 可用，job 级 env 不暴露它——写在这里 GitHub 判
+      #   「Unrecognized named-value: 'runner'」并让整件 workflow 失效
+      #   （2026-11-06 导入 PR 首跑实测：run 42190372230 annotation，
+      #    "Invalid workflow file: .github/workflows/gates.yml#L1
+      #     (Line: 88, Col: 25): Unrecognized named-value: 'runner'"，
+      #     0 job 直红）。故 CARGO_TARGET_DIR 改在各 cargo step 的 step 级 env 供给。
     steps:
       - name: 分工声明（本件跑 PR 级验收门；F2 全量门不走 Actions）
         run: |
@@ -136,6 +141,8 @@ jobs:
           cargo --version && rustc --version && cargo fmt --version
 
       - name: fmt --check + K5 判分链路径 lint（硬门；ci/run.sh step1 原样）
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-gates-target
         run: |
           set -eu
           export PATH="$HOME/.cargo/bin:$PATH"
@@ -148,6 +155,8 @@ jobs:
       - name: clippy -D warnings（硬门；不得降级成基线门——R09）
         # fmt/K5 红不遮蔽 clippy/test 判定——一次 run 收全诊断；job 结论仍任一红即红。
         if: ${{ always() }}
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-gates-target
         run: |
           set -eu
           export PATH="$HOME/.cargo/bin:$PATH"
@@ -157,6 +166,8 @@ jobs:
 
       - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
         if: ${{ always() }}
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-gates-target
         run: |
           set -eu
           export PATH="$HOME/.cargo/bin:$PATH"

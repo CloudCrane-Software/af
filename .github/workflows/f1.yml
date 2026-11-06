@@ -79,11 +79,15 @@ jobs:
       CARGO_BUILD_JOBS: "4"
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: never
-      # target 落盘位置：托管 runner 每 job 一次性 ⇒ 无跨 run 持久化
-      # （改写登记：Gitea 端 /var/lib/opch-ci/.af-f1-target 跨 run 复用；
-      #  GitHub 侧改落 runner.temp，语义损失 = 每次 run 冷编译「更慢」，非「更松」；
-      #  判据内容（跑哪些门、什么阈值）一字未改）。
-      CARGO_TARGET_DIR: ${{ runner.temp }}/af-f1-target
+      # ★ target 落盘位置**不写在本 job 级 env**：`runner` 上下文只在
+      #   jobs.<id>.steps.env 可用，job 级 env 不暴露它——写在这里 GitHub 判
+      #   「Unrecognized named-value: 'runner'」并让整件 workflow 失效
+      #   （2026-11-06 导入 PR 首跑实测：run 42188724117 同款 annotation，
+      #   0 job 直红）。托管 runner 每 job 一次性 ⇒ 无跨 run 持久化
+      #   （改写登记：Gitea 端 /var/lib/opch-ci/.af-f1-target 跨 run 复用；
+      #   GitHub 侧改落 runner.temp，语义损失 = 每次 run 冷编译「更慢」，非「更松」；
+      #   判据内容（跑哪些门、什么阈值）一字未改）。CARGO_TARGET_DIR 改在各
+      #   cargo step 的 step 级 env 供给。
     steps:
       - name: 分工声明（F1 快速门在此跑；F2 全量门不走 Actions）
         run: |
@@ -139,6 +143,8 @@ jobs:
           cargo --version && rustc --version && cargo fmt --version
 
       - name: fmt --check（硬门；主线已归零，红即如实亮红）
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-f1-target
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo fmt --check --all
@@ -147,12 +153,16 @@ jobs:
         # fmt 红不遮蔽 clippy/test 判定——一次 run 收全三路诊断（对齐 ci/run.sh
         # 「步骤失败不中断、跑完全部步骤收集完整诊断」哲学）；job 结论仍任一红即红。
         if: ${{ always() }}
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-f1-target
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo clippy --workspace --all-targets -- -D warnings
 
       - name: 快速测试（af-dsl + af-compiler；封闭子集，不碰 F2 资产面）
         if: ${{ always() }}
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/af-f1-target
         run: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cargo test -p af-dsl -p af-compiler
