@@ -1,3 +1,7 @@
+> **脱敏副本·正本坐标：gov 私档 opchadmin/af.git（gov 100.64.0.6:3300；git 仓目录 /var/lib/opch-gitea/data/git/repositories/opchadmin/af.git）product/main@5746c27 : redteam/波次0-主审-Step5.md（blob 84dfdeaf9f3d89f60d27c87a1042f9c5980e14e1）·2026-11-07 A3 裁决**
+>
+> 本件为公开版脱敏副本：口令值一律以 `sha256[:12]` 指纹呈现，宿主凭据路径与 gitea 管理员凭据位置降维为目录级/域级描述；口令明文与完整凭据路径清单仅存于上述 gov Gitea 私有正本（2026-11-07 已核验含明文）。同源口令明文（poc/poc-rekor/REPORT.md、poc/poc-cas-rust/REPORT.md）同批替换，正本同在镜像 product/main。
+
 # 波次 0（环境就绪）红队主审报告 · Step5
 
 - **审查者**：红队主审 · Step5（未参与本项目建设；立场=找会出问题的点，不判是否合格）
@@ -75,7 +79,7 @@ ls: cannot open directory '/home/anuser/': Permission denied
 **位置**：af 仓库 git 历史（PoC 种子提交 `8b07a7d` / `60f6861` 引入，`4dc1040` 已作为 main 推到 gitea 镜像）。
 
 **问题**：
-1. **私钥入库**：`poc/poc-rekor/keys/log-ed25519-priv.pem` 是**无加密** PKCS#8 ed25519 私钥（`-----BEGIN PRIVATE KEY-----`，正文即密钥材料）；4 把 cosign 密钥（`poc/poc-cas/verify-tr/tr-key.key`、`poc/poc-cas/cosign.key`、`poc/poc-cas-rust/casr-sign.key`、`poc/poc-rekor/keys/cosign-gen/trace-signer.key`）虽为 `ENCRYPTED SIGSTORE PRIVATE KEY` 头，但 `casr-sign.key` 的生成口令是**空串**（`poc/poc-cas-rust/REPORT.md:82` `COSIGN_PASSWORD=""`），`trace-signer.key` 的口令 `poc-test-pass` **明文写在仓库 REPORT.md 里**（`:35`、`:73`、`:162`）——加密形同虚设。
+1. **私钥入库**：`poc/poc-rekor/keys/log-ed25519-priv.pem` 是**无加密** PKCS#8 ed25519 私钥（`-----BEGIN PRIVATE KEY-----`，正文即密钥材料）；4 把 cosign 密钥（`poc/poc-cas/verify-tr/tr-key.key`、`poc/poc-cas/cosign.key`、`poc/poc-cas-rust/casr-sign.key`、`poc/poc-rekor/keys/cosign-gen/trace-signer.key`）虽为 `ENCRYPTED SIGSTORE PRIVATE KEY` 头，但 `casr-sign.key` 的生成口令为**空口令**（指纹 `sha256:e3b0c44298fc`——即 sha256("") 前 12 位，空串可自证；生成命令与明文仅存正本），`trace-signer.key` 的口令指纹为 `sha256:2208fd557d05`（**口令明文原写在仓库 REPORT.md 里**（`:35`、`:73`、`:162`），2026-11-07 A3 起公开面仅存指纹）——加密形同虚设。
 2. **CI 验签门（ci/run.sh step6）的证据价值失效**：gate6 用 `tr-key.pub + tr-bundle.json + trusted-root.json` 验签，而签名私钥 `tr-key.key` 就躺在同一仓库——任何有镜像读权限的人都可以伪造能过 gate6 的工件。
 3. **编译产物入库**：4243 个跟踪文件中 **3191 个（75%）在 `**/target/` 下**，其中 519 个 `.rlib/.rmeta/.so` 二进制；`.git` 已达 **1009M**；全量树 5.2G（`状态/openBao.md:378`）迫使 anolis 用 blob:none 稀疏克隆——**稀疏克隆没有 blob，不构成备份**。不可审查的旧工具链构建产物进 VCS，既是供应链面也是仓库面。
 
@@ -99,12 +103,12 @@ poc/poc-rekor/keys/log-ed25519-pub.pem
 poc/poc-sandbox/cube-rootCA.pem
 $ head -1 poc/poc-rekor/keys/log-ed25519-priv.pem
 -----BEGIN PRIVATE KEY-----
-$ grep -n 'COSIGN_PASSWORD=""' poc/poc-cas-rust/REPORT.md
-82:$ COSIGN_PASSWORD="" cosign generate-key-pair --output-key-prefix casr-sign
-$ grep -n 'poc-test-pass' poc/poc-rekor/REPORT.md | head -3
-35:…（ECDSA P-256，`COSIGN_PASSWORD=poc-test-pass`）
-73:$ COSIGN_PASSWORD=poc-test-pass cosign generate-key-pair --output-key-prefix trace-signer
-162:cosign 加密密钥当 log signer：--signer-filepath trace-signer.key --signer-password=poc-test-pass
+$ grep -n 'COSIGN_PASSWORD=sha256:e3b0c44298fc' poc/poc-cas-rust/REPORT.md   # 空口令指纹：sha256("")[:12]
+82:$ COSIGN_PASSWORD=sha256:e3b0c44298fc cosign generate-key-pair --output-key-prefix casr-sign
+$ grep -n 'COSIGN_PASSWORD=sha256:2208fd557d05' poc/poc-rekor/REPORT.md | head -3   # trace-signer 口令指纹
+35:…（ECDSA P-256，`COSIGN_PASSWORD=sha256:2208fd557d05`）
+73:$ COSIGN_PASSWORD=sha256:2208fd557d05 cosign generate-key-pair --output-key-prefix trace-signer
+162:cosign 加密密钥当 log signer：--signer-filepath trace-signer.key --signer-password=sha256:2208fd557d05
 $ git merge-base --is-ancestor 8b07a7d 4dc1040 && echo "gitea main(4dc1040) 含 PoC 种子提交"
 gitea main(4dc1040) 含 PoC 种子提交
 ```
@@ -118,6 +122,8 @@ gitea main(4dc1040) 含 PoC 种子提交
 **会出什么问题**：这些密钥目前按各 REPORT 是 PoC 一次性资产，但仓库同时是未来 release-gate/cosign 正式签名能力的来源——一旦有人图方便复用（密钥就在手边），泄漏立即生效且已无法从 git 历史与镜像中无声去除（需 history rewrite + 镜像 purge + 全部克隆作废）。缓解事实也如实记录：`.gitignore` 的 `**/target/` 规则在 `60f6861` 已加入，只是对已跟踪文件无效；poc-dspy 的 .venv 仅在工作区、未被跟踪。
 
 **2026-11-05 仓内静默子集处置（POC5，历史不动）**：五件私钥已 `git rm`（只存在于 git 历史，禁 history rewrite / force push）；配对公钥与 poc-rekor 私有信任根移入各 poc `revoked/` 档案。`ci/run.sh` step6 改为 fail-closed（可读原因 `key revoked`；在役 `tr-key.pub` 缺席；archived 链仅作验证器活性）。公开仓/镜像面止血由运营者另行处置，本批不依赖仓面动作。本段是审查结论的后续登记，不改写上方史实。
+**2026-11-07 公开面脱敏处置（A3 裁决，历史不动）**：按运营者 A3 裁决，本报告公开版（CloudCrane-Software/af）中的口令值已全部替换为 `sha256[:12]` 指纹（trace-signer 口令→`sha256:2208fd557d05`；空口令→`sha256:e3b0c44298fc`，即 sha256("") 前 12 位，空值可自证），宿主凭据路径（anolis 工厂目录内 gitea 写令牌、`~/.ssh/` 内 gitea SSH 私钥、`~/.grok/` 内 OIDC refresh token）降维为目录级描述，gitea 管理员凭据位置降维为密钥域级；口令明文与完整路径清单仅存 gov Gitea 私有正本（坐标见文件头，已核验）。同仓同源明文（`poc/poc-rekor/REPORT.md` 3 处、`poc/poc-cas-rust/REPORT.md` 2 处）同批同法替换。上方史实（发现、位置、复现逻辑）不改写，仅值以指纹代、路径以目录级代；审查时点（2026-10-19）的原始输出以上方正本为准。
+
 
 ---
 
@@ -127,7 +133,7 @@ gitea main(4dc1040) 含 PoC 种子提交
 
 **问题**：
 1. **规模已超文档一倍**：文档与变更日志都写"5 实例稳定并发 / 五实例"，实测 **i1..i9 共 9 个实例目录、17 个 grok 进程、9 张任务卡**（i6–i9 为 15:40 启动的 round2）。全部以 `--always-approve --max-turns 100 --no-plan` 运行——所有工具调用（文件写、shell 执行）无人工闸门，单实例最多 100 轮自主动作。
-2. **凭据与实例同身份同盘**：实例以 `pan-ding` 运行，而 `/data/af-factory/.git-token`（gitea `write:repository` 令牌，0600 pan-ding）、`~/.ssh/opch_gitea_ed25519`（**实测空口令**：`ssh-keygen -y -P ""` 可直接导出公钥）、`~/.grok/auth.json`（OIDC refresh token，0600）对每个实例可读。实例 origin 虽指向本地 `af-work`（不能直达 gitea），但 auto-approve 下实例可自行配置 remote/askpass 外推；凭据一旦被 `cat`，内容同时进入 TUI 转录日志（`/data/af-factory/logs/*.log`）与发往 x.ai 的模型上下文（第三方）。
+2. **凭据与实例同身份同盘**：实例以 `pan-ding` 运行，而 anolis 工厂目录 `/data/af-factory/` 内的 gitea 写令牌文件（`write:repository` 作用域，0600）、anolis `pan-ding` 用户 `~/.ssh/` 目录内的 gitea SSH 私钥（**实测空口令**：空口令指纹 `sha256:e3b0c44298fc`，可无口令直接导出公钥，验证命令见正本）、`~/.grok/` 目录内的 OIDC refresh token 文件（0600）对每个实例可读。实例 origin 虽指向本地 `af-work`（不能直达 gitea），但 auto-approve 下实例可自行配置 remote/askpass 外推；凭据一旦被 `cat`，内容同时进入 TUI 转录日志（`/data/af-factory/logs/*.log`）与发往 x.ai 的模型上下文（第三方）。
 3. **任务全文经 argv 传递**：`launch.sh` 用 `grok ... "$(cat $PROMPT)"`，`ps aux` 对任何本机用户可见任务全文。
 4. **额度今日 17:20 过期**（`计划/10:40`）：9 个实例可能同时中途死亡，留下半成品工作树；共享 `CARGO_TARGET_DIR`（2.8G）下被 kill 的 cargo 可能留锁，卡死其余实例的构建。
 
@@ -137,12 +143,12 @@ gitea main(4dc1040) 含 PoC 种子提交
 $ timeout 60 ssh -o BatchMode=yes anolis 'ls -d /data/af-factory/i* | wc -l; ps aux | grep -c "[g]rok"'
 9
 17
-$ ssh anolis 'ls -la /data/af-factory/.git-token ~/.grok/auth.json; ls -la ~/.ssh/'
--rw------- 1 pan-ding pan-ding   41 Oct 19 15:02 /data/af-factory/.git-token
--rw------- 1 pan-ding pan-ding 1757 Oct 19 12:46 /home/pan-ding/.grok/auth.json
--rw------- 1 pan-ding pan-ding  411 Oct  8 22:09 opch_gitea_ed25519        ← 私钥 411B
--rw-r--r-- 1 pan-ding pan-ding  100 Oct  8 22:09 opch_gitea_ed25519.pub    ← 对应公钥
-$ ssh anolis 'ssh-keygen -y -P "" -f ~/.ssh/opch_gitea_ed25519 >/dev/null 2>&1 && echo EMPTY-PASSPHRASE || echo NEEDS-PASSPHRASE'
+$ ssh anolis 'ls -la /data/af-factory/<gitea 写令牌文件> ~/.grok/<OIDC refresh token 文件>; ls -la ~/.ssh/'   # A3 脱敏：凭据文件名/体积/时间戳降维，完整 ls 输出见正本
+-rw------- 1 pan-ding pan-ding  <体积> <日期> /data/af-factory/<gitea 写令牌文件>            # 0600
+-rw------- 1 pan-ding pan-ding  <体积> <日期> /home/pan-ding/.grok/<OIDC refresh token 文件>   # 0600
+-rw------- 1 pan-ding pan-ding  <体积> <日期> ~/.ssh/<gitea SSH 私钥>        ← 私钥
+-rw-r--r-- 1 pan-ding pan-ding  <体积> <日期> ~/.ssh/<gitea SSH 公钥>        ← 对应公钥
+$ ssh anolis 'ssh-keygen -y -P sha256:e3b0c44298fc -f ~/.ssh/<gitea SSH 私钥> >/dev/null 2>&1 && echo EMPTY-PASSPHRASE || echo NEEDS-PASSPHRASE'   # 空口令指纹；判定串不变，原命令见正本
 EMPTY-PASSPHRASE(可无口令直接使用)
 $ ssh anolis 'ps aux | grep "[g]rok" | head -2 | cut -c1-160'
 pan-ding  329196  ... grok --always-approve --max-turns 100 --no-plan ?????? af???Agent ?...
@@ -154,13 +160,13 @@ export RUSTUP_HOME=/data/af-factory/.rustup
 export CARGO_HOME=/data/af-factory/.cargo
 export CARGO_TARGET_DIR=/data/af-factory/target
 export HTTPS_PROXY=socks5h://<内网地址>:1080 ALL_PROXY=socks5h://<内网地址>:1080
-$ grep -rlE "git-token|token.*=.*[A-Za-z0-9]{30,}" /data/af-factory/logs/    # 日志泄密扫描
+$ grep -rlE "<gitea 写令牌文件名>|token.*=.*[A-Za-z0-9]{30,}" /data/af-factory/logs/    # 日志泄密扫描（A3 脱敏：令牌文件名以占位呈现）
 （无输出——目前未发现泄漏，属运气/纪律，非机制保证）
 ```
 
 **复现步骤**：
 1. `timeout 30 ssh -o BatchMode=yes anolis 'ls -d /data/af-factory/i* | wc -l; ps aux | grep -c "[g]rok"; ps aux | grep "[g]rok" | head -1 | cut -c1-160'`
-2. `ssh anolis 'ls -la /data/af-factory/.git-token ~/.grok/auth.json ~/.ssh/; ssh-keygen -y -P "" -f ~/.ssh/opch_gitea_ed25519 >/dev/null 2>&1 && echo EMPTY-PASSPHRASE || echo NEEDS-PASSPHRASE'`
+2. `ssh anolis 'ls -la /data/af-factory/<gitea 写令牌文件> ~/.grok/<OIDC refresh token 文件> ~/.ssh/; ssh-keygen -y -P sha256:e3b0c44298fc -f ~/.ssh/<gitea SSH 私钥> >/dev/null 2>&1 && echo EMPTY-PASSPHRASE || echo NEEDS-PASSPHRASE'`（A3 脱敏：凭据文件名与口令值以占位/指纹呈现，可跑原命令见正本）
 3. `ssh anolis 'cat /data/af-factory/launch.sh /data/af-factory/env.sh'`
 
 **会出什么问题**：单个实例被任务卡里的恶意/幻觉内容诱导（或被任何能写 `/data/af-factory/tasks/`、`patches/` 的人投毒——任务卡目录无隔离，9 实例互可读写），即可外泄 gitea 写令牌或 SSH 私钥，或把带毒补丁推进 `patches/` 等主代理合流。主代理是唯一人工闸，且在额度 17:20 到点的时限压力下审查补丁。任务卡纪律头（common-header.txt：先读 RESULT.md、限定改动范围、fmt/clippy -D warnings/test 阶梯）写得很好，但执行者是自报告全绿的 grok 本身。
@@ -241,7 +247,7 @@ error: unexpected argument '--db-path' found   # cargo-deny 0.20.2 不存在该�
 **问题**：
 1. **镜像不是当前备份**：`git ls-remote origin` 显示 `refs/heads/main = 4dc1040`（fmt 提交），而本地 HEAD 审查期间已到 `751754c`（T5/T6 合流）——**本地领先 9+ 提交**（5c745d2、6bd03f7、873567b、ce475f4、5057b36、044e04a、c125885、e24bc9f、42201dc、751754c）。grok 实例的分支（task-T2/T3/T4/T56/T7）也完全不在 gitea 上（只有 main + probe 两支）。想从镜像恢复 = 回到 fmt 提交。
 2. **单点**：gitea 是 gov（<内网地址>）单机上的单容器 `opch-gitea`，与 openBao、pg、minio、temporal-ui 等 15 容器同宿主（宿主 up 23d、load ~3）。af 的完整副本只有两处：pandev-comp 工作副本 + gov gitea；anolis 侧是 `--filter=blob:none` 稀疏克隆（无 blob，不能当备份）。
-3. **暴露面**：端点 `http://<内网地址>:3300` 是**明文 HTTP**（tailnet WireGuard 缓解线上窃听，但 token/basic-auth 对 gov 宿主与链路上任何终端可见；若日后 Caddy 前置或 tailnet 被渗透即裸奔）；admin 凭据（admin_user/admin_pass/api_token）存在 `kv/company/agent-gitea-smoke/m0-round1`——一个名字像"冒烟测试"的密钥域（openBao.md:375 自述"smoke"），却承载生产镜像的管理员口令；anolis 的 scoped 令牌（write:repository）落在 9 个 auto-approve 实例可读的共享目录（F3）。
+3. **暴露面**：端点 `http://<内网地址>:3300` 是**明文 HTTP**（tailnet WireGuard 缓解线上窃听，但 token/basic-auth 对 gov 宿主与链路上任何终端可见；若日后 Caddy 前置或 tailnet 被渗透即裸奔）；admin 凭据（用户名/口令/API 令牌三要素）存于 openBao `kv/company/agent-gitea-smoke` 密钥域内承载生产镜像管理员的条目（**具体条目路径已降维，见正本**）——一个名字像"冒烟测试"的密钥域（openBao.md:375 自述"smoke"），却承载生产镜像的管理员口令；anolis 的 scoped 令牌（write:repository）落在 9 个 auto-approve 实例可读的共享目录（F3）。
 
 **证据**：
 
@@ -436,7 +442,7 @@ active
 | deny bans/sources | 净树 `cargo deny check bans sources` | **ok / ok**（仅 duplicate 警告：thiserror 1.0.69+2.0.21、unicode-width 双版——根 Cargo.toml 注释说明 thiserror 双主版本是刻意决定） |
 | git 依赖 / 通配版本 | `grep -rn 'git *=\|version *= *"\*"' crates/*/Cargo.toml Cargo.toml` | 均无 |
 | cargo registry 凭据 | `ls ~/.cargo/credentials.toml`（本机）；`ssh anolis 'ls /data/af-factory/.cargo/credentials.toml'` | 两台均**不存在**（rsync 不会带走 registry 令牌） |
-| grok 日志泄密 | `ssh anolis 'grep -rlE "git-token\|token.*=.*[A-Za-z0-9]{30,}" /data/af-factory/logs/'` | 无命中（当前未泄漏） |
+| grok 日志泄密 | `ssh anolis 'grep -rlE "<gitea 写令牌文件名>\|token.*=.*[A-Za-z0-9]{30,}" /data/af-factory/logs/'` | 无命中（当前未泄漏） |
 | anolis 工具链对齐 | `ssh anolis 'RUSTUP_HOME=… rustc --version'` | 1.99.1 与本机一致 |
 | gitea 凭据不入 URL | `git remote -v` | URL 无凭据；askpass 管道取 token（openBao.md:376 设计） |
 | gitea 往返探针真实存在 | `git ls-remote origin` | `probe/anolis-roundtrip = b5c6f1b` 在 |
@@ -457,7 +463,7 @@ active
 2. （可逆性优先）F1：补登 30 号文件删除记录；找到"已推远端"的实际位置并做一次完整性核验；若核验不了，按数据丢失预案处理。
 3. F2：私钥立即按"已泄漏"对待——不用于任何真实签名；history 清理（filter-repo + 镜像 purge + 全员 re-clone）排期；3191 个 target 文件从索引移除（`git rm -r --cached` 后提交，.gitignore 已覆盖新增）。
 4. F4：给 11 个 crate 补 `license`（workspace 继承）；对 RUSTSEC-2026-0173 做显式裁决（接受并 ignore + 记录理由，或换 biscuit 链）；把 `cargo deny --offline check …` + db 预置写进 ci/run.sh 当第七门。
-5. F3：`.git-token` / SSH 私钥 / auth.json 与实例身份隔离（专用低权用户或 per-instance 短时令牌）；`--always-approve` 至少加命令黑名单（凭据路径、网络外传）。
+5. F3：anolis 工厂目录内的 gitea 写令牌 / SSH 私钥 / OIDC refresh token 文件与实例身份隔离（专用低权用户或 per-instance 短时令牌）；`--always-approve` 至少加命令黑名单（凭据路径、网络外传）。
 6. F5：1.99.1 pin 保留可以，但 CI step0 的 `rustup component add` 加 `--offline` 优先/失败即明确报错；考虑钉一个 soak 过的版本而非 4 天前的。
 7. F6：gitea 镜像改为每次 main 合流即推（或 gov→pandev-comp 每日快照），并评估 gitea/bao 不同宿主拆分。
 

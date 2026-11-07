@@ -34,7 +34,7 @@
 4. **密钥（自生成）**：
    - log key：`openssl genpkey -algorithm ed25519` → `keys/log-ed25519-priv.pem`（PKCS#8，与官方测试 PKI 同格式）；
    - cosign 对照实测：`cosign generate-key-pair` → 仅 ECDSA P-256 加密密钥（无算法旗标）；
-   - 产物签名 key：`cosign generate-key-pair --output-key-prefix trace-signer`（ECDSA P-256，`COSIGN_PASSWORD=poc-test-pass`）。
+   - 产物签名 key：`cosign generate-key-pair --output-key-prefix trace-signer`（ECDSA P-256，口令指纹 `sha256:2208fd557d05`——2026-11-07 A3 脱敏，口令明文仅存 gov 私档正本）。
 5. **起服（端口全部落在 5230-5239）**：
    - 写 API `--http-port=5232`、gRPC `5233`、metrics `5234`；
    - tile 读路径：`python3 -m http.server 5235 --directory data/storage`（tessera 磁盘布局即 HTTP 路径：`/checkpoint`、`/tile/0/000.p/1`、`/tile/entries/000.p/1`）；
@@ -72,7 +72,7 @@ $ curl -s http://127.0.0.1:5235/checkpoint →
 
 ```
 $ cosign generate-key-pair --help        # Flags 仅 --kms / --output-key-prefix，无 key-algorithm
-$ COSIGN_PASSWORD=poc-test-pass cosign generate-key-pair --output-key-prefix trace-signer
+$ COSIGN_PASSWORD=sha256:2208fd557d05 cosign generate-key-pair --output-key-prefix trace-signer   # 2026-11-07 A3：口令值以 sha256[:12] 指纹呈现，明文仅存 gov 私档正本
 → trace-signer.key 头：-----BEGIN ENCRYPTED SIGSTORE PRIVATE KEY-----（scrypt）
 → trace-signer.pub 头：MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE…（=ECDSA P-256 SPKI）
 $ openssl genpkey -algorithm ed25519 -out keys/log-ed25519-priv.pem   # BEGIN PRIVATE KEY（PKCS#8）
@@ -161,7 +161,7 @@ $ sudo unshare -n bash -c 'cosign verify-blob --key keys/cosign-gen/trace-signer
 重启持久性：kill 后同 storage-dir 重启，0 ERROR，data/storage/checkpoint 原样（origin/size/根哈希不变）。
 重复提交（默认 --persistent-antispam=false）：重启前 409 + "an equivalent entry already exists … index 0"；
 重启后同 entry → HTTP 201、logIndex="1"、treeSize="2"（内存去重丢失，同条目占两个 index）。
-cosign 加密密钥当 log signer：--signer-filepath trace-signer.key --signer-password=poc-test-pass
+cosign 加密密钥当 log signer：--signer-filepath trace-signer.key --signer-password=sha256:2208fd557d05   # 2026-11-07 A3：同上，明文仅存 gov 私档正本
 （端口 5236/5237/5238，origin=rekor-poc-cosign.local）→ POST 201，pocverify 全链 PASS（ECDSA checkpoint 验签通过）。
 ```
 
