@@ -81,13 +81,13 @@ $ cmp work/rand-100mb.bin out/pulled-100mb.bin → IDENTICAL
 ### ②-6 cosign（v3.1.3）
 
 ```text
-$ COSIGN_PASSWORD="" cosign generate-key-pair --output-key-prefix casr-sign
+$ COSIGN_PASSWORD=sha256:e3b0c44298fc cosign generate-key-pair --output-key-prefix casr-sign   # 空口令指纹（sha256("")[:12]，可自证为空）；2026-11-07 A3 脱敏，明文仅存 gov 私档正本
 Private key written to casr-sign.key / Public key written to casr-sign.pub
 
 $ cosign sign --key casr-sign.key --tlog-upload=false …        # v3.1.3 拒绝：
 Error: --tlog-upload=false is not supported with --signing-config or --use-signing-config…
 $ cosign signing-config create --out no-tlog.json              # 产物：rekorTlogConfig:{} tsaConfig:{}（无 tlog 服务）
-$ COSIGN_PASSWORD="" cosign sign --key casr-sign.key --yes --allow-insecure-registry --signing-config no-tlog.json 127.0.0.1:5190/demo/hello:v1
+$ COSIGN_PASSWORD=sha256:e3b0c44298fc cosign sign --key casr-sign.key --yes --allow-insecure-registry --signing-config no-tlog.json 127.0.0.1:5190/demo/hello:v1   # 同上（空口令指纹）
 Signing artifact... / Pushing signature to: 127.0.0.1:5190/demo/hello     exit=0
 
 $ curl …/v2/demo/hello/tags/list
